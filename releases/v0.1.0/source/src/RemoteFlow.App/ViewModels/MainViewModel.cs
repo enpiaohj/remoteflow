@@ -1,0 +1,368 @@
+using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
+using RemoteFlow.App.Services;
+using RemoteFlow.Application.Services;
+using RemoteFlow.Core.Models;
+using RemoteFlow.Core.Sessions;
+
+namespace RemoteFlow.App.ViewModels;
+
+/// <summary>左侧导航的一级入口。</summary>
+public enum NavigationPage
+{
+    Home,
+    Connections,
+    Favorites,
+    Recent,
+    Credentials,
+    ImportExport,
+    Settings
+}
+
+/// <summary>
+/// 主窗口 ViewModel。
+/// <para>
+/// 布局职责对应产品设计文档 §7.5 的四个稳定区域：
+/// 左侧导航（6~7 个一级入口）、中央工作区（连接列表与会话共享）、
+/// 右侧详情（按需显示）、顶部两个高频动作（全局搜索 + 新建连接）。
+/// </para>
+/// </summary>
+public sealed partial class MainViewModel : ObservableObject, IDisposable
+{
+    private readonly SessionManager _sessions;
+    private readonly CredentialsPageViewModel _credentialsPage;
+    private readonly ImportExportPageViewModel _importExportPage;
+    private readonly SettingsPageViewModel _settingsPage;
+    private readonly IDialogService _dialogs;
+    private readonly ILogger<MainViewModel> _logger;
+
+    public MainViewModel(
+        SessionManager sessions,
+        HomePageViewModel homePage,
+        ConnectionsPageViewModel connectionsPage,
+        CredentialsPageViewModel credentialsPage,
+        ImportExportPageViewModel importExportPage,
+        SettingsPageViewModel settingsPage,
+        IDialogService dialogs,
+        AppSettings settings,
+        ILogger<MainViewModel> logger)
+    {
+        _sessions = sessions;
+        HomePage = homePage;
+        ConnectionsPage = connectionsPage;
+        _credentialsPage = credentialsPage;
+        _importExportPage = importExportPage;
+        _settingsPage = settingsPage;
+        _dialogs = dialogs;
+        _logger = logger;
+
+        _sessions.MaxConcurrentSessions = settings.MaxConcurrentSessions;
+
+        WorkspaceTab = new PageTabViewModel();
+        Tabs = [WorkspaceTab];
+        SelectedTab = WorkspaceTab;
+
+        // 会话由各页面通过 SessionManager 创建，主窗口只负责把它呈现为 Tab。
+        _sessions.SessionCreated += OnSessionCreated;
+        _sessions.SessionClosed += OnSessionClosed;
+
+        _importExportPage.DataImported += async (_, _) => await ReloadCurrentPageAsync();
+
+        NavigateTo(NavigationPage.Home);
+    }
+
+    public HomePageViewModel HomePage { get; }
+
+    public ConnectionsPageViewModel ConnectionsPage { get; }
+
+    /// <summary>工作区固定 Tab，承载当前导航页。</summary>
+    public PageTabViewModel WorkspaceTab { get; }
+
+    /// <summary>工作区全部 Tab：索引 0 是页面，其后为各远程会话。</summary>
+    public ObservableCollection<WorkspaceTabViewModel> Tabs { get; }
+
+    [ObservableProperty]
+    private WorkspaceTabViewModel? _selectedTab;
+
+    [ObservableProperty]
+    private NavigationPage _currentPage = NavigationPage.Home;
+
+    /// <summary>顶部全局搜索框内容。</summary>
+    [ObservableProperty]
+    private string _globalSearchText = string.Empty;
+
+    /// <summary>右侧详情面板是否展开。全屏会话时自动收起。</summary>
+    [ObservableProperty]
+    private bool _isDetailPanelVisible = true;
+
+    /// <summary>会话是否处于全屏。全屏时隐藏左侧导航与右侧详情。</summary>
+    [ObservableProperty]
+    private bool _isSessionFullScreen;
+
+    /// <summary>当前是否显示的是远程会话（而非连接列表页）。</summary>
+    public bool IsSessionSelected => SelectedTab is SessionTabViewModel;
+
+    /// <summary>
+    /// 当前页面是否是连接列表（我的连接 / 收藏 / 最近连接）。
+    /// <para>
+    /// 右侧详情面板只服务于连接列表——首页、凭据、设置等页面没有「选中的连接」可展示，
+    /// 让面板在那里空占一栏会白白挤压中央工作区。
+    /// </para>
+    /// </summary>
+    public bool IsConnectionListPage =>
+        CurrentPage is NavigationPage.Connections or NavigationPage.Favorites or NavigationPage.Recent;
+
+    partial void OnCurrentPageChanged(NavigationPage value) => OnPropertyChanged(nameof(IsConnectionListPage));
+
+    /// <summary>状态栏文案。</summary>
+    public string SessionStatusText => _sessions.ActiveSessionCount == 0
+        ? "无活动会话"
+        : $"已连接 {_sessions.ActiveSessionCount} 个会话";
+
+    partial void OnGlobalSearchTextChanged(string value)
+    {
+        // 全局搜索直接驱动连接列表，并自动切到「我的连接」以便看到结果。
+        ConnectionsPage.SearchText = value;
+
+        if (!string.IsNullOrWhiteSpace(value) && CurrentPage is not NavigationPage.Connections)
+        {
+            NavigateTo(NavigationPage.Connections);
+        }
+    }
+
+    partial void OnSelectedTabChanged(WorkspaceTabViewModel? value)
+    {
+        // 所有 Tab 内容常驻可视树，靠 IsActive 切换可见性，
+        // 这样切换 Tab 不会销毁 RDP 控件或终端 WebView。
+        foreach (var tab in Tabs)
+        {
+            tab.IsActive = ReferenceEquals(tab, value);
+        }
+
+        OnPropertyChanged(nameof(IsSessionSelected));
+
+        // 离开会话时退出全屏，避免用户回到列表却看不到导航。
+        if (value is not SessionTabViewModel && IsSessionFullScreen)
+        {
+            IsSessionFullScreen = false;
+        }
+    }
+
+    // ── 导航 ──────────────────────────────────────────────────────
+
+    [RelayCommand]
+    public void NavigateTo(NavigationPage page)
+    {
+        CurrentPage = page;
+
+        // 收藏与最近本质上是「我的连接」的两个筛选视图，
+        // 复用同一页面而不是各做一份，避免逻辑重复。
+        switch (page)
+        {
+            case NavigationPage.Home:
+                WorkspaceTab.Page = HomePage;
+                WorkspaceTab.Title = "首页";
+                break;
+
+            case NavigationPage.Connections:
+                ConnectionsPage.Filter = ConnectionFilter.All;
+                WorkspaceTab.Page = ConnectionsPage;
+                WorkspaceTab.Title = "我的连接";
+                break;
+
+            case NavigationPage.Favorites:
+                ConnectionsPage.Filter = ConnectionFilter.Favorites;
+                WorkspaceTab.Page = ConnectionsPage;
+                WorkspaceTab.Title = "收藏";
+                break;
+
+            case NavigationPage.Recent:
+                ConnectionsPage.Filter = ConnectionFilter.Recent;
+                WorkspaceTab.Page = ConnectionsPage;
+                WorkspaceTab.Title = "最近连接";
+                break;
+
+            case NavigationPage.Credentials:
+                WorkspaceTab.Page = _credentialsPage;
+                WorkspaceTab.Title = "凭据";
+                break;
+
+            case NavigationPage.ImportExport:
+                WorkspaceTab.Page = _importExportPage;
+                WorkspaceTab.Title = "导入 / 导出";
+                break;
+
+            case NavigationPage.Settings:
+                WorkspaceTab.Page = _settingsPage;
+                WorkspaceTab.Title = "设置";
+                break;
+        }
+
+        SelectedTab = WorkspaceTab;
+        _ = ReloadCurrentPageAsync();
+    }
+
+    /// <summary>首次显示与切换页面时加载对应数据。</summary>
+    public async Task ReloadCurrentPageAsync()
+    {
+        try
+        {
+            switch (CurrentPage)
+            {
+                case NavigationPage.Home:
+                    await HomePage.LoadAsync();
+                    break;
+
+                case NavigationPage.Connections:
+                case NavigationPage.Favorites:
+                case NavigationPage.Recent:
+                    await _credentialsPage.LoadAsync();
+                    await ConnectionsPage.LoadAsync();
+                    ConnectionsPage.ApplyCredentialNames(_credentialsPage.GetNameMap());
+                    break;
+
+                case NavigationPage.Credentials:
+                    await _credentialsPage.LoadAsync();
+                    break;
+
+                case NavigationPage.Settings:
+                    await _settingsPage.LoadHostKeysAsync();
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "加载页面数据失败：{Page}", CurrentPage);
+        }
+    }
+
+    // ── 顶部动作 ──────────────────────────────────────────────────
+
+    [RelayCommand]
+    private async Task NewConnectionAsync()
+    {
+        NavigateTo(NavigationPage.Connections);
+        await ConnectionsPage.CreateCommand.ExecuteAsync(null);
+    }
+
+    /// <summary>Ctrl+K：聚焦全局搜索。实际聚焦由视图处理。</summary>
+    public event EventHandler? FocusSearchRequested;
+
+    [RelayCommand]
+    private void FocusSearch() => FocusSearchRequested?.Invoke(this, EventArgs.Empty);
+
+    [RelayCommand]
+    private void ToggleDetailPanel() => IsDetailPanelVisible = !IsDetailPanelVisible;
+
+    // ── 会话 Tab 生命周期 ─────────────────────────────────────────
+
+    private void OnSessionCreated(object? sender, IRemoteSession session)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(() => OnSessionCreated(sender, session));
+            return;
+        }
+
+        var tab = new SessionTabViewModel(session, CloseSessionAsync, ReconnectAsync);
+
+        // 会话工具条里的「全屏」由主窗口层处理（隐藏导航/详情、窗口去边框铺满）；
+        // 协议专属动作（缩放、Ctrl+Alt+Del 等）由各协议视图自己订阅处理。
+        tab.ActionRequested += OnSessionActionRequested;
+
+        Tabs.Add(tab);
+        SelectedTab = tab;
+
+        OnPropertyChanged(nameof(SessionStatusText));
+    }
+
+    private void OnSessionActionRequested(object? sender, SessionAction action)
+    {
+        if (action == SessionAction.ToggleFullScreen)
+        {
+            IsSessionFullScreen = !IsSessionFullScreen;
+        }
+    }
+
+    private void OnSessionClosed(object? sender, Guid sessionId)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(() => OnSessionClosed(sender, sessionId));
+            return;
+        }
+
+        var tab = Tabs.OfType<SessionTabViewModel>().FirstOrDefault(t => t.Session.SessionId == sessionId);
+        if (tab is null)
+        {
+            return;
+        }
+
+        var wasSelected = ReferenceEquals(SelectedTab, tab);
+
+        tab.ActionRequested -= OnSessionActionRequested;
+        tab.Dispose();
+        Tabs.Remove(tab);
+
+        // 最后一个会话关闭时退出全屏，否则用户会停在没有导航的空白全屏里。
+        if (Tabs.OfType<SessionTabViewModel>().Any() is false && IsSessionFullScreen)
+        {
+            IsSessionFullScreen = false;
+        }
+
+        // 关闭当前 Tab 后回到最后一个会话，没有会话则回到工作区。
+        if (wasSelected)
+        {
+            SelectedTab = Tabs.OfType<SessionTabViewModel>().LastOrDefault() ?? (WorkspaceTabViewModel)WorkspaceTab;
+        }
+
+        OnPropertyChanged(nameof(SessionStatusText));
+    }
+
+    private async Task CloseSessionAsync(Guid sessionId) => await _sessions.CloseSessionAsync(sessionId);
+
+    private async Task ReconnectAsync(ConnectionProfile profile)
+    {
+        try
+        {
+            await _sessions.CreateSessionAsync(profile);
+        }
+        catch (ConnectionException ex)
+        {
+            await _dialogs.ShowMessageAsync("无法重新连接", ex.Message, DialogKind.Error);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await _dialogs.ShowMessageAsync("无法重新连接", ex.Message, DialogKind.Warning);
+        }
+    }
+
+    /// <summary>关闭除指定 Tab 外的全部会话。</summary>
+    [RelayCommand]
+    private async Task CloseOtherSessionsAsync(SessionTabViewModel? keep)
+    {
+        foreach (var tab in Tabs.OfType<SessionTabViewModel>().Where(t => !ReferenceEquals(t, keep)).ToList())
+        {
+            await _sessions.CloseSessionAsync(tab.Session.SessionId);
+        }
+    }
+
+    [RelayCommand]
+    private async Task CloseAllSessionsAsync() => await _sessions.CloseAllAsync();
+
+    public void Dispose()
+    {
+        _sessions.SessionCreated -= OnSessionCreated;
+        _sessions.SessionClosed -= OnSessionClosed;
+
+        foreach (var tab in Tabs.OfType<SessionTabViewModel>())
+        {
+            tab.ActionRequested -= OnSessionActionRequested;
+            tab.Dispose();
+        }
+    }
+}

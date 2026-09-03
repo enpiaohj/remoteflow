@@ -1,0 +1,672 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Threading;
+using Microsoft.Extensions.DependencyInjection;
+using RemoteFlow.App.Services;
+using RemoteFlow.App.ViewModels;
+using RemoteFlow.Core.Models;
+
+namespace RemoteFlow.App.Views.Sessions;
+
+/// <summary>
+/// 会话 Tab 的外壳：工具条 + 协议视图 + 状态层。
+/// <para>
+/// 非全屏：顶部常驻一条工具条（<c>DockedBar</c>）。
+/// 全屏：应用标题栏与 Tab 栏都隐藏了，工具条改为一条<b>悬浮药丸</b>
+/// （<c>ToolbarPopup</c>），承担会话切换、最小化 / 关闭 / 退出全屏；默认自动隐藏——
+/// 鼠标离开数秒后淡出，移到屏幕顶沿再淡入，单击远端画面立即淡出；可固定常驻，可拖动。
+/// </para>
+/// <para>
+/// 药丸用 <see cref="Popup"/> 承载：RDP 会话用
+/// <see cref="System.Windows.Forms.Integration.WindowsFormsHost"/> 承载原生 ActiveX，
+/// 普通 WPF 浮层会被这块 airspace 盖住、也收不到其上的鼠标事件。Popup 是独立顶层
+/// 窗口，能盖在原生画面之上（mstsc 连接条同理）。顶沿唤出用 <see cref="_edgeWatch"/>
+/// 轮询光标位置，单击远端隐藏用 <see cref="_mouseHook"/> 低级鼠标钩子。
+/// </para>
+/// </summary>
+public partial class SessionHostView : UserControl
+{
+    /// <summary>进入全屏后，若鼠标未落到药丸上，多久自动收起。</summary>
+    private static readonly TimeSpan InitialAutoHideDelay = TimeSpan.FromSeconds(2.5);
+
+    /// <summary>鼠标离开药丸后多久收起——比初次短，尽快让出画面。</summary>
+    private static readonly TimeSpan AwayAutoHideDelay = TimeSpan.FromMilliseconds(900);
+
+    /// <summary>光标顶沿轮询间隔。</summary>
+    private static readonly TimeSpan EdgeWatchInterval = TimeSpan.FromMilliseconds(80);
+
+    /// <summary>刚唤出后的最短驻留时间，避免鼠标掠过顶沿时一闪而过。</summary>
+    private static readonly TimeSpan MinVisibleTime = TimeSpan.FromMilliseconds(450);
+
+    /// <summary>未展开时，认定“鼠标贴到顶沿”的判定高度（DIU）。</summary>
+    private const double EdgeRevealBand = 4;
+
+    /// <summary>展开时，药丸左右各留多少 DIU 作为“停留”感应区。</summary>
+    private const double KeepZonePadX = 52;
+
+    /// <summary>展开时，药丸下沿再向下留多少 DIU 作为“停留”感应区。</summary>
+    private const double KeepZonePadY = 14;
+
+    /// <summary>拖动后药丸至少保留多少像素在可视区内。</summary>
+    private const double MinVisibleExtent = 96;
+
+    private FrameworkElement? _protocolView;
+    private SessionTabViewModel? _tab;
+    private MainViewModel? _main;
+    private Window? _window;
+
+    private readonly DispatcherTimer _autoHideTimer;
+    private readonly DispatcherTimer _edgeWatch;
+
+    /// <summary>true=药丸固定常驻；false=自动隐藏。仅全屏下有意义。</summary>
+    private bool _pinned;
+
+    /// <summary>正在以代码同步 <see cref="PinToggle"/> 的选中态，用于抑制回调递归。</summary>
+    private bool _syncingPin;
+
+    /// <summary>用户是否手动拖动过药丸——是则不再自动回到顶部居中。</summary>
+    private bool _userMoved;
+
+    private bool _dragging;
+    private Point _dragAnchorPx;
+    private double _dragStartH;
+    private double _dragStartV;
+
+    /// <summary>会话切换下拉菜单（代码构建，独立 HWND，可盖在 airspace 之上）。</summary>
+    private ContextMenu? _sessionMenu;
+
+    private DateTime _shownAt = DateTime.MinValue;
+
+    /// <summary>低级鼠标钩子：全屏未固定时，单击药丸以外区域立即收起药丸。</summary>
+    private nint _mouseHook;
+    private NativeMethods.LowLevelMouseProc? _mouseProc;
+
+    public SessionHostView()
+    {
+        InitializeComponent();
+
+        _autoHideTimer = new DispatcherTimer { Interval = InitialAutoHideDelay };
+        _autoHideTimer.Tick += OnAutoHideTick;
+
+        _edgeWatch = new DispatcherTimer { Interval = EdgeWatchInterval };
+        _edgeWatch.Tick += OnEdgeWatchTick;
+
+        DataContextChanged += OnDataContextChanged;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+        SizeChanged += (_, _) => RepositionPopup();
+
+        // Popup 是独立 HWND，其内部的 WPF 鼠标事件正常可用。
+        PillBar.MouseEnter += (_, _) => _autoHideTimer.Stop();
+        PillBar.MouseLeave += (_, _) => ScheduleAutoHide(AwayAutoHideDelay);
+        PillBar.SizeChanged += (_, _) => RepositionPopup();
+    }
+
+    // ── 生命周期 ─────────────────────────────────────────────────
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _window ??= Window.GetWindow(this);
+        _main ??= System.Windows.Application.Current?.MainWindow?.DataContext as MainViewModel
+                  ?? _window?.DataContext as MainViewModel;
+
+        if (_main is not null)
+        {
+            _main.PropertyChanged -= OnMainViewModelChanged;
+            _main.PropertyChanged += OnMainViewModelChanged;
+        }
+
+        if (_window is not null)
+        {
+            _window.LocationChanged -= OnWindowMovedOrResized;
+            _window.LocationChanged += OnWindowMovedOrResized;
+            _window.SizeChanged -= OnWindowMovedOrResized;
+            _window.SizeChanged += OnWindowMovedOrResized;
+        }
+
+        // 视图可能是在已全屏的状态下加载的；也可能加载时还不可见，
+        // 那种情况留给可见性变化时再套用。
+        if (IsVisible)
+        {
+            ApplyFullScreenMode(_main?.IsSessionFullScreen == true);
+        }
+        else
+        {
+            IsVisibleChanged += OnFirstBecameVisible;
+        }
+    }
+
+    private void OnFirstBecameVisible(object? sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (!IsVisible)
+        {
+            return;
+        }
+
+        IsVisibleChanged -= OnFirstBecameVisible;
+        ApplyFullScreenMode(_main?.IsSessionFullScreen == true);
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _autoHideTimer.Stop();
+        _edgeWatch.Stop();
+        RemoveMouseHook();
+        ToolbarPopup.IsOpen = false;
+
+        if (_window is not null)
+        {
+            _window.LocationChanged -= OnWindowMovedOrResized;
+            _window.SizeChanged -= OnWindowMovedOrResized;
+            _window = null;
+        }
+
+        if (_main is not null)
+        {
+            _main.PropertyChanged -= OnMainViewModelChanged;
+            _main = null;
+        }
+
+        if (_protocolView is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+
+        _protocolView = null;
+        SessionContent.Content = null;
+    }
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is not SessionTabViewModel tab)
+        {
+            return;
+        }
+
+        _tab = tab;
+        ShowToolsFor(tab.Protocol);
+
+        // 协议视图只创建一次；Tab 切换靠可见性，不重建视图，
+        // 否则会话会被反复销毁重连。
+        if (_protocolView is not null)
+        {
+            return;
+        }
+
+        var factory = App.Services.GetRequiredService<ISessionViewFactory>();
+        _protocolView = factory.Create(tab);
+        SessionContent.Content = _protocolView;
+    }
+
+    /// <summary>按协议显示对应的工具条分组（常驻条与悬浮药丸各一套）。</summary>
+    private void ShowToolsFor(ProtocolType protocol)
+    {
+        var rdp = protocol == ProtocolType.Rdp ? Visibility.Visible : Visibility.Collapsed;
+        var ssh = protocol == ProtocolType.Ssh ? Visibility.Visible : Visibility.Collapsed;
+        var vnc = protocol == ProtocolType.Vnc ? Visibility.Visible : Visibility.Collapsed;
+
+        RdpToolsDock.Visibility = rdp;
+        SshToolsDock.Visibility = ssh;
+        VncToolsDock.Visibility = vnc;
+        RdpToolsPill.Visibility = rdp;
+        SshToolsPill.Visibility = ssh;
+        VncToolsPill.Visibility = vnc;
+    }
+
+    // ── 全屏 <-> 非全屏 ──────────────────────────────────────────
+
+    private void OnMainViewModelChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.IsSessionFullScreen)
+            && sender is MainViewModel main)
+        {
+            ApplyFullScreenMode(main.IsSessionFullScreen);
+        }
+    }
+
+    /// <summary>只对当前可见（选中）的会话联动，避免影响后台会话。</summary>
+    private void ApplyFullScreenMode(bool fullScreen)
+    {
+        if (!IsVisible)
+        {
+            return;
+        }
+
+        if (fullScreen)
+        {
+            // 进入全屏：药丸默认自动隐藏（沉浸式），从顶部居中出现，随即排定收起。
+            _userMoved = false;
+            SetPinnedState(false);
+            ShowToolbar();
+            _edgeWatch.Start();
+            InstallMouseHook();
+            ScheduleAutoHide(InitialAutoHideDelay);
+        }
+        else
+        {
+            // 退出全屏：收起药丸，工具条回到常驻条。
+            _edgeWatch.Stop();
+            _autoHideTimer.Stop();
+            RemoveMouseHook();
+            ToolbarPopup.IsOpen = false;
+        }
+    }
+
+    private void OnPinChanged(object sender, RoutedEventArgs e)
+    {
+        if (_syncingPin)
+        {
+            return;
+        }
+
+        _pinned = PinToggle.IsChecked == true;
+
+        if (_pinned)
+        {
+            _autoHideTimer.Stop();
+            ShowToolbar();
+        }
+        else
+        {
+            ScheduleAutoHide(AwayAutoHideDelay);
+        }
+    }
+
+    private void SetPinnedState(bool pinned)
+    {
+        _pinned = pinned;
+        if (PinToggle.IsChecked != pinned)
+        {
+            _syncingPin = true;
+            PinToggle.IsChecked = pinned;
+            _syncingPin = false;
+        }
+    }
+
+    // ── 顶沿唤出 / 自动隐藏 ───────────────────────────────────────
+
+    private void OnEdgeWatchTick(object? sender, EventArgs e)
+    {
+        if (_pinned || _dragging || !IsLoaded || !IsVisible)
+        {
+            return;
+        }
+
+        var source = PresentationSource.FromVisual(RootGrid);
+        if (source?.CompositionTarget is null || !NativeMethods.GetCursorPos(out var cursor))
+        {
+            return;
+        }
+
+        // 光标（物理像素）换算到 RootGrid 左上角为原点的坐标系（DIU）。
+        var origin = RootGrid.PointToScreen(new Point(0, 0));
+        var toDiu = source.CompositionTarget.TransformFromDevice;
+        var rel = toDiu.Transform(new Point(cursor.X - origin.X, cursor.Y - origin.Y));
+
+        if (ToolbarPopup.IsOpen)
+        {
+            if (IsInKeepZone(rel))
+            {
+                _autoHideTimer.Stop();
+            }
+            else if (!_autoHideTimer.IsEnabled)
+            {
+                ScheduleAutoHide(AwayAutoHideDelay);
+            }
+        }
+        else
+        {
+            var withinX = rel.X >= 0 && rel.X <= ActualWidth;
+            if (withinX && rel.Y >= -2 && rel.Y <= EdgeRevealBand)
+            {
+                ShowToolbar();
+            }
+        }
+    }
+
+    /// <summary>光标是否处于“停留”感应区（药丸本体 + 其上到屏幕顶、四周留边）。</summary>
+    private bool IsInKeepZone(Point rel)
+    {
+        var left = ToolbarPopup.HorizontalOffset - KeepZonePadX;
+        var right = ToolbarPopup.HorizontalOffset + PillBar.ActualWidth + PillBar.Margin.Left + PillBar.Margin.Right + KeepZonePadX;
+        var bottom = ToolbarPopup.VerticalOffset + PillBar.ActualHeight + PillBar.Margin.Top + PillBar.Margin.Bottom + KeepZonePadY;
+
+        return rel.X >= left && rel.X <= right && rel.Y >= -4 && rel.Y <= bottom;
+    }
+
+    private void OnAutoHideTick(object? sender, EventArgs e)
+    {
+        _autoHideTimer.Stop();
+
+        if (_pinned || _dragging || PillBar.IsMouseOver || _sessionMenu is { IsOpen: true })
+        {
+            return;
+        }
+
+        HideToolbar(immediate: false);
+    }
+
+    private void ScheduleAutoHide(TimeSpan delay)
+    {
+        if (_pinned)
+        {
+            return;
+        }
+
+        _autoHideTimer.Stop();
+        _autoHideTimer.Interval = delay;
+        _autoHideTimer.Start();
+    }
+
+    private void ShowToolbar()
+    {
+        if (ToolbarPopup.IsOpen)
+        {
+            return;
+        }
+
+        ToolbarPopup.IsOpen = true;
+        _shownAt = DateTime.UtcNow;
+        Dispatcher.BeginInvoke(RepositionPopup, DispatcherPriority.Loaded);
+    }
+
+    private void HideToolbar(bool immediate)
+    {
+        if (!ToolbarPopup.IsOpen || _pinned || _dragging)
+        {
+            return;
+        }
+
+        // 连接中 / 断线时始终保留（状态信息与关闭入口重要）。
+        if (_tab is { IsConnected: false })
+        {
+            return;
+        }
+
+        // 定时收起时给一小段驻留期，避免顶沿掠过一闪而过；单击远端隐藏则立即。
+        if (!immediate && DateTime.UtcNow - _shownAt < MinVisibleTime)
+        {
+            ScheduleAutoHide(AwayAutoHideDelay);
+            return;
+        }
+
+        ToolbarPopup.IsOpen = false;
+    }
+
+    // ── 单击远端画面即收起（低级鼠标钩子）──────────────────────
+
+    private void InstallMouseHook()
+    {
+        if (_mouseHook != 0)
+        {
+            return;
+        }
+
+        _mouseProc ??= LowLevelMouseHook;
+        _mouseHook = NativeMethods.SetWindowsHookEx(
+            NativeMethods.WhMouseLl, _mouseProc, NativeMethods.GetModuleHandle(null), 0);
+    }
+
+    private void RemoveMouseHook()
+    {
+        if (_mouseHook != 0)
+        {
+            NativeMethods.UnhookWindowsHookEx(_mouseHook);
+            _mouseHook = 0;
+        }
+    }
+
+    private nint LowLevelMouseHook(int nCode, nint wParam, nint lParam)
+    {
+        if (nCode >= 0 && !_pinned && ToolbarPopup.IsOpen && IsButtonDown(wParam))
+        {
+            var x = Marshal.ReadInt32(lParam);
+            var y = Marshal.ReadInt32(lParam, 4);
+
+            if (!IsPointOverPill(x, y))
+            {
+                // 不吞事件——点击照常送到远端画面，只是顺手收起药丸。
+                Dispatcher.BeginInvoke(new Action(() => HideToolbar(immediate: true)));
+            }
+        }
+
+        return NativeMethods.CallNextHookEx(_mouseHook, nCode, wParam, lParam);
+    }
+
+    private static bool IsButtonDown(nint wParam)
+    {
+        var msg = (int)wParam;
+        return msg is NativeMethods.WmLButtonDown
+            or NativeMethods.WmRButtonDown
+            or NativeMethods.WmMButtonDown;
+    }
+
+    private bool IsPointOverPill(int screenX, int screenY)
+    {
+        if (!PillBar.IsVisible || PresentationSource.FromVisual(PillBar) is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var topLeft = PillBar.PointToScreen(new Point(0, 0));
+            var bottomRight = PillBar.PointToScreen(new Point(PillBar.ActualWidth, PillBar.ActualHeight));
+            return screenX >= topLeft.X - 4 && screenX <= bottomRight.X + 4
+                && screenY >= topLeft.Y - 4 && screenY <= bottomRight.Y + 4;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    // ── 拖动 ─────────────────────────────────────────────────────
+
+    private void OnToolbarDragStart(object sender, MouseButtonEventArgs e)
+    {
+        // 点在按钮 / 切换器等交互控件上时不拖动。
+        if (IsInteractive(e.OriginalSource) || !NativeMethods.GetCursorPos(out var p))
+        {
+            return;
+        }
+
+        _dragging = true;
+        _userMoved = true;
+        _dragAnchorPx = new Point(p.X, p.Y);
+        _dragStartH = ToolbarPopup.HorizontalOffset;
+        _dragStartV = ToolbarPopup.VerticalOffset;
+        _autoHideTimer.Stop();
+        PillBar.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnToolbarDragMove(object sender, MouseEventArgs e)
+    {
+        if (!_dragging)
+        {
+            return;
+        }
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            EndDrag();
+            return;
+        }
+
+        if (!NativeMethods.GetCursorPos(out var p))
+        {
+            return;
+        }
+
+        var source = PresentationSource.FromVisual(this);
+        var toDiu = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+        var delta = toDiu.Transform(new Vector(p.X - _dragAnchorPx.X, p.Y - _dragAnchorPx.Y));
+
+        ToolbarPopup.HorizontalOffset = ClampHorizontal(_dragStartH + delta.X);
+        ToolbarPopup.VerticalOffset = ClampVertical(_dragStartV + delta.Y);
+    }
+
+    private void OnToolbarDragEnd(object sender, MouseButtonEventArgs e)
+    {
+        if (_dragging)
+        {
+            EndDrag();
+            e.Handled = true;
+        }
+    }
+
+    private void EndDrag()
+    {
+        _dragging = false;
+        PillBar.ReleaseMouseCapture();
+        ScheduleAutoHide(AwayAutoHideDelay);
+    }
+
+    private static bool IsInteractive(object? source)
+    {
+        for (var d = source as DependencyObject; d is not null; d = VisualTreeHelper.GetParent(d))
+        {
+            if (d is ButtonBase or MenuItem)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // ── Popup 定位（跟随窗口、居中、限制在可视区）────────────────
+
+    private void OnWindowMovedOrResized(object? sender, EventArgs e) => RepositionPopup();
+
+    /// <summary>
+    /// Popup 默认不会随窗口移动 / 布局变化重新定位。这里重算偏移：
+    /// 未被用户拖动过则回到顶部居中，否则夹在可视区内，再轻推一下触发重排。
+    /// </summary>
+    private void RepositionPopup()
+    {
+        if (!ToolbarPopup.IsOpen)
+        {
+            return;
+        }
+
+        double h;
+        double v;
+
+        if (_userMoved)
+        {
+            h = ClampHorizontal(ToolbarPopup.HorizontalOffset);
+            v = ClampVertical(ToolbarPopup.VerticalOffset);
+        }
+        else
+        {
+            var barWidth = PillBar.ActualWidth > 0 ? PillBar.ActualWidth : 320;
+            h = Math.Max(0, (RootGrid.ActualWidth - barWidth) / 2);
+            v = 0;
+        }
+
+        ToolbarPopup.HorizontalOffset = h + 0.5;
+        ToolbarPopup.HorizontalOffset = h;
+        ToolbarPopup.VerticalOffset = v;
+    }
+
+    private double ClampHorizontal(double value)
+    {
+        var barWidth = PillBar.ActualWidth > 0 ? PillBar.ActualWidth : 320;
+        var min = MinVisibleExtent - barWidth;
+        var max = Math.Max(min, RootGrid.ActualWidth - MinVisibleExtent);
+        return Math.Clamp(value, min, max);
+    }
+
+    private double ClampVertical(double value)
+    {
+        var max = Math.Max(0, RootGrid.ActualHeight - MinVisibleExtent / 2);
+        return Math.Clamp(value, 0, max);
+    }
+
+    // ── 会话切换 / 窗口控制 ──────────────────────────────────────
+
+    private void OnSessionSwitchClick(object sender, RoutedEventArgs e)
+    {
+        if (_main is null)
+        {
+            return;
+        }
+
+        _sessionMenu ??= new ContextMenu { PlacementTarget = SessionSwitchButton, Placement = PlacementMode.Bottom };
+        _sessionMenu.Items.Clear();
+
+        var iconFont = TryFindResource("IconFont") as FontFamily ?? new FontFamily("Segoe MDL2 Assets");
+
+        foreach (var tab in _main.Tabs.OfType<SessionTabViewModel>())
+        {
+            var current = tab;
+            var item = new MenuItem
+            {
+                Header = current.Title,
+                IsChecked = ReferenceEquals(current, _main.SelectedTab),
+                Icon = new TextBlock { Text = current.Icon, FontFamily = iconFont, FontSize = 13 }
+            };
+            item.Click += (_, _) => _main.SelectedTab = current;
+            _sessionMenu.Items.Add(item);
+        }
+
+        if (_sessionMenu.Items.Count == 0)
+        {
+            return;
+        }
+
+        _autoHideTimer.Stop();
+        _sessionMenu.IsOpen = true;
+    }
+
+    private void OnMinimizeWindow(object sender, RoutedEventArgs e)
+    {
+        if (_window is not null)
+        {
+            _window.WindowState = WindowState.Minimized;
+        }
+    }
+
+    // ── 互操作 ───────────────────────────────────────────────────
+
+    private static class NativeMethods
+    {
+        public const int WhMouseLl = 14;
+        public const int WmLButtonDown = 0x0201;
+        public const int WmRButtonDown = 0x0204;
+        public const int WmMButtonDown = 0x0207;
+
+        public delegate nint LowLevelMouseProc(int nCode, nint wParam, nint lParam);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetCursorPos(out POINT point);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern nint GetModuleHandle(string? moduleName);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern nint SetWindowsHookEx(int idHook, LowLevelMouseProc proc, nint hMod, uint threadId);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool UnhookWindowsHookEx(nint hook);
+
+        [DllImport("user32.dll")]
+        public static extern nint CallNextHookEx(nint hook, int nCode, nint wParam, nint lParam);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POINT
+        {
+            public int X;
+            public int Y;
+        }
+    }
+}
