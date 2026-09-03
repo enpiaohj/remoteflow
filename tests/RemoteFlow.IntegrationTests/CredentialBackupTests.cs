@@ -97,10 +97,24 @@ public sealed class CredentialBackupTests : IDisposable
     {
         var envelope = CredentialBackup.Export(SamplePayload(), "pw");
 
-        // 把 ciphertext 字段里的某个 base64 字符换掉
-        var idx = envelope.IndexOf("\"ciphertext\"", StringComparison.Ordinal);
-        var quote = envelope.IndexOf('"', envelope.IndexOf(':', idx) + 1) + 1;
-        var tampered = envelope[..quote] + (envelope[quote] == 'A' ? 'B' : 'A') + envelope[(quote + 1)..];
+        // 解析信封，翻转 ciphertext 的最后一个字节，再原样塞回。
+        using var doc = System.Text.Json.JsonDocument.Parse(envelope);
+        var root = doc.RootElement;
+        var original = Convert.FromBase64String(root.GetProperty("ciphertext").GetString()!);
+        original[^1] ^= 0xFF;
+
+        var tampered = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            format = root.GetProperty("format").GetString(),
+            version = root.GetProperty("version").GetInt32(),
+            kdf = root.GetProperty("kdf").GetString(),
+            iterations = root.GetProperty("iterations").GetInt32(),
+            cipher = root.GetProperty("cipher").GetString(),
+            salt = root.GetProperty("salt").GetString(),
+            nonce = root.GetProperty("nonce").GetString(),
+            tag = root.GetProperty("tag").GetString(),
+            ciphertext = Convert.ToBase64String(original),
+        });
 
         var result = CredentialBackup.Import(tampered, "pw");
 
