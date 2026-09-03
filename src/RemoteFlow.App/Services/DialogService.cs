@@ -65,6 +65,9 @@ public sealed class DialogService(
     public Task<bool> ConfirmHostKeyAsync(SshHostKeyVerificationContext context)
         => InvokeOnUiAsync(() => HostKeyDialog.Show(Owner, context));
 
+    public Task<string?> PromptPasswordAsync(string title, string message, bool confirm)
+        => InvokeOnUiAsync(() => PasswordPromptDialog.Prompt(Owner, title, message, confirm));
+
     public string? PickFileToOpen(string title, string filter)
     {
         var dialog = new OpenFileDialog

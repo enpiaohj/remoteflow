@@ -203,6 +203,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<AppServices.CredentialService>();
         services.AddSingleton<AppServices.ConnectionSearchService>();
         services.AddSingleton<AppServices.ImportExportService>();
+        services.AddSingleton<AppServices.CredentialBackupService>();
         services.AddSingleton<AppServices.SessionManager>();
 
         // ── 协议 Provider：新增协议只需在此追加一行 ───────────────

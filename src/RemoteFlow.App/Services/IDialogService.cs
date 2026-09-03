@@ -37,6 +37,12 @@ public interface IDialogService
     /// </summary>
     Task<bool> ConfirmHostKeyAsync(SshHostKeyVerificationContext context);
 
+    /// <summary>
+    /// 弹出口令输入框。<paramref name="confirm"/> 为 true 时要求两次输入一致
+    /// （用于设置新口令）。返回 null 表示用户取消。
+    /// </summary>
+    Task<string?> PromptPasswordAsync(string title, string message, bool confirm);
+
     /// <summary>选择要打开的文件，取消返回 null。</summary>
     string? PickFileToOpen(string title, string filter);
 
