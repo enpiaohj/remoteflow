@@ -16,32 +16,41 @@ namespace RemoteFlow.App.Views.Sessions;
 /// <summary>
 /// 会话 Tab 的外壳：工具条 + 协议视图 + 状态层。
 /// <para>
-/// 非全屏：顶部常驻一条工具条（<c>DockedBar</c>），随窗口标题栏 / Tab 栏一起使用。
-/// 全屏：标题栏与 Tab 栏都隐藏了，工具条改为一条<b>悬浮药丸</b>（<c>ToolbarPopup</c>），
-/// 承担会话切换、最小化 / 关闭 / 退出全屏；默认自动隐藏——离开 2.5s 后淡出，
-/// 鼠标移到屏幕顶沿再淡入，可固定常驻，可拖动到任意位置。
+/// 非全屏：顶部常驻一条工具条（<c>DockedBar</c>）。
+/// 全屏：应用标题栏与 Tab 栏都隐藏了，工具条改为一条<b>悬浮药丸</b>
+/// （<c>ToolbarPopup</c>），承担会话切换、最小化 / 关闭 / 退出全屏；默认自动隐藏——
+/// 鼠标离开数秒后淡出，移到屏幕顶沿再淡入，单击远端画面立即淡出；可固定常驻，可拖动。
 /// </para>
 /// <para>
 /// 药丸用 <see cref="Popup"/> 承载：RDP 会话用
 /// <see cref="System.Windows.Forms.Integration.WindowsFormsHost"/> 承载原生 ActiveX，
 /// 普通 WPF 浮层会被这块 airspace 盖住、也收不到其上的鼠标事件。Popup 是独立顶层
-/// 窗口，能盖在原生画面之上（mstsc 连接条同理）。因收不到 airspace 上的 WPF 鼠标
-/// 事件，顶沿唤出改用 <see cref="_edgeWatch"/> 轮询光标位置实现。
+/// 窗口，能盖在原生画面之上（mstsc 连接条同理）。顶沿唤出用 <see cref="_edgeWatch"/>
+/// 轮询光标位置，单击远端隐藏用 <see cref="_mouseHook"/> 低级鼠标钩子。
 /// </para>
 /// </summary>
 public partial class SessionHostView : UserControl
 {
-    /// <summary>未固定时，鼠标离开多久后收起药丸。</summary>
-    private static readonly TimeSpan AutoHideDelay = TimeSpan.FromSeconds(2.5);
+    /// <summary>进入全屏后，若鼠标未落到药丸上，多久自动收起。</summary>
+    private static readonly TimeSpan InitialAutoHideDelay = TimeSpan.FromSeconds(2.5);
+
+    /// <summary>鼠标离开药丸后多久收起——比初次短，尽快让出画面。</summary>
+    private static readonly TimeSpan AwayAutoHideDelay = TimeSpan.FromMilliseconds(900);
 
     /// <summary>光标顶沿轮询间隔。</summary>
-    private static readonly TimeSpan EdgeWatchInterval = TimeSpan.FromMilliseconds(90);
+    private static readonly TimeSpan EdgeWatchInterval = TimeSpan.FromMilliseconds(80);
 
     /// <summary>刚唤出后的最短驻留时间，避免鼠标掠过顶沿时一闪而过。</summary>
-    private static readonly TimeSpan MinVisibleTime = TimeSpan.FromMilliseconds(600);
+    private static readonly TimeSpan MinVisibleTime = TimeSpan.FromMilliseconds(450);
 
     /// <summary>未展开时，认定“鼠标贴到顶沿”的判定高度（DIU）。</summary>
     private const double EdgeRevealBand = 4;
+
+    /// <summary>展开时，药丸左右各留多少 DIU 作为“停留”感应区。</summary>
+    private const double KeepZonePadX = 52;
+
+    /// <summary>展开时，药丸下沿再向下留多少 DIU 作为“停留”感应区。</summary>
+    private const double KeepZonePadY = 14;
 
     /// <summary>拖动后药丸至少保留多少像素在可视区内。</summary>
     private const double MinVisibleExtent = 96;
@@ -73,11 +82,15 @@ public partial class SessionHostView : UserControl
 
     private DateTime _shownAt = DateTime.MinValue;
 
+    /// <summary>低级鼠标钩子：全屏未固定时，单击药丸以外区域立即收起药丸。</summary>
+    private nint _mouseHook;
+    private NativeMethods.LowLevelMouseProc? _mouseProc;
+
     public SessionHostView()
     {
         InitializeComponent();
 
-        _autoHideTimer = new DispatcherTimer { Interval = AutoHideDelay };
+        _autoHideTimer = new DispatcherTimer { Interval = InitialAutoHideDelay };
         _autoHideTimer.Tick += OnAutoHideTick;
 
         _edgeWatch = new DispatcherTimer { Interval = EdgeWatchInterval };
@@ -90,7 +103,7 @@ public partial class SessionHostView : UserControl
 
         // Popup 是独立 HWND，其内部的 WPF 鼠标事件正常可用。
         PillBar.MouseEnter += (_, _) => _autoHideTimer.Stop();
-        PillBar.MouseLeave += (_, _) => ScheduleAutoHide();
+        PillBar.MouseLeave += (_, _) => ScheduleAutoHide(AwayAutoHideDelay);
         PillBar.SizeChanged += (_, _) => RepositionPopup();
     }
 
@@ -116,7 +129,26 @@ public partial class SessionHostView : UserControl
             _window.SizeChanged += OnWindowMovedOrResized;
         }
 
-        // 视图可能是在已全屏的状态下加载的。
+        // 视图可能是在已全屏的状态下加载的；也可能加载时还不可见，
+        // 那种情况留给可见性变化时再套用。
+        if (IsVisible)
+        {
+            ApplyFullScreenMode(_main?.IsSessionFullScreen == true);
+        }
+        else
+        {
+            IsVisibleChanged += OnFirstBecameVisible;
+        }
+    }
+
+    private void OnFirstBecameVisible(object? sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (!IsVisible)
+        {
+            return;
+        }
+
+        IsVisibleChanged -= OnFirstBecameVisible;
         ApplyFullScreenMode(_main?.IsSessionFullScreen == true);
     }
 
@@ -124,6 +156,7 @@ public partial class SessionHostView : UserControl
     {
         _autoHideTimer.Stop();
         _edgeWatch.Stop();
+        RemoveMouseHook();
         ToolbarPopup.IsOpen = false;
 
         if (_window is not null)
@@ -211,13 +244,15 @@ public partial class SessionHostView : UserControl
             SetPinnedState(false);
             ShowToolbar();
             _edgeWatch.Start();
-            ScheduleAutoHide();
+            InstallMouseHook();
+            ScheduleAutoHide(InitialAutoHideDelay);
         }
         else
         {
             // 退出全屏：收起药丸，工具条回到常驻条。
             _edgeWatch.Stop();
             _autoHideTimer.Stop();
+            RemoveMouseHook();
             ToolbarPopup.IsOpen = false;
         }
     }
@@ -238,7 +273,7 @@ public partial class SessionHostView : UserControl
         }
         else
         {
-            ScheduleAutoHide();
+            ScheduleAutoHide(AwayAutoHideDelay);
         }
     }
 
@@ -262,35 +297,46 @@ public partial class SessionHostView : UserControl
             return;
         }
 
-        var source = PresentationSource.FromVisual(this);
+        var source = PresentationSource.FromVisual(RootGrid);
         if (source?.CompositionTarget is null || !NativeMethods.GetCursorPos(out var cursor))
         {
             return;
         }
 
-        // 光标（物理像素）换算到本视图左上角为原点的坐标系（物理像素）。
-        var origin = PointToScreen(new Point(0, 0));
-        var toDevice = source.CompositionTarget.TransformToDevice;
-        var widthPx = ActualWidth * toDevice.M11;
+        // 光标（物理像素）换算到 RootGrid 左上角为原点的坐标系（DIU）。
+        var origin = RootGrid.PointToScreen(new Point(0, 0));
+        var toDiu = source.CompositionTarget.TransformFromDevice;
+        var rel = toDiu.Transform(new Point(cursor.X - origin.X, cursor.Y - origin.Y));
 
-        var relX = cursor.X - origin.X;
-        var relY = cursor.Y - origin.Y;
-        var withinX = relX >= 0 && relX <= widthPx;
-
-        // 已展开时在整条范围内都算“停留”；未展开时只认最顶几像素。
-        var bandPx = (ToolbarPopup.IsOpen
-            ? PillBar.ActualHeight + PillBar.Margin.Top + 6
-            : EdgeRevealBand) * toDevice.M22;
-
-        if (withinX && relY >= -2 && relY <= bandPx)
+        if (ToolbarPopup.IsOpen)
         {
-            ShowToolbar();
-            _autoHideTimer.Stop();
+            if (IsInKeepZone(rel))
+            {
+                _autoHideTimer.Stop();
+            }
+            else if (!_autoHideTimer.IsEnabled)
+            {
+                ScheduleAutoHide(AwayAutoHideDelay);
+            }
         }
-        else if (ToolbarPopup.IsOpen && !PillBar.IsMouseOver && relY > bandPx)
+        else
         {
-            ScheduleAutoHide();
+            var withinX = rel.X >= 0 && rel.X <= ActualWidth;
+            if (withinX && rel.Y >= -2 && rel.Y <= EdgeRevealBand)
+            {
+                ShowToolbar();
+            }
         }
+    }
+
+    /// <summary>光标是否处于“停留”感应区（药丸本体 + 其上到屏幕顶、四周留边）。</summary>
+    private bool IsInKeepZone(Point rel)
+    {
+        var left = ToolbarPopup.HorizontalOffset - KeepZonePadX;
+        var right = ToolbarPopup.HorizontalOffset + PillBar.ActualWidth + PillBar.Margin.Left + PillBar.Margin.Right + KeepZonePadX;
+        var bottom = ToolbarPopup.VerticalOffset + PillBar.ActualHeight + PillBar.Margin.Top + PillBar.Margin.Bottom + KeepZonePadY;
+
+        return rel.X >= left && rel.X <= right && rel.Y >= -4 && rel.Y <= bottom;
     }
 
     private void OnAutoHideTick(object? sender, EventArgs e)
@@ -302,10 +348,10 @@ public partial class SessionHostView : UserControl
             return;
         }
 
-        HideToolbar();
+        HideToolbar(immediate: false);
     }
 
-    private void ScheduleAutoHide()
+    private void ScheduleAutoHide(TimeSpan delay)
     {
         if (_pinned)
         {
@@ -313,6 +359,7 @@ public partial class SessionHostView : UserControl
         }
 
         _autoHideTimer.Stop();
+        _autoHideTimer.Interval = delay;
         _autoHideTimer.Start();
     }
 
@@ -328,9 +375,9 @@ public partial class SessionHostView : UserControl
         Dispatcher.BeginInvoke(RepositionPopup, DispatcherPriority.Loaded);
     }
 
-    private void HideToolbar()
+    private void HideToolbar(bool immediate)
     {
-        if (!ToolbarPopup.IsOpen || _pinned)
+        if (!ToolbarPopup.IsOpen || _pinned || _dragging)
         {
             return;
         }
@@ -341,14 +388,82 @@ public partial class SessionHostView : UserControl
             return;
         }
 
-        // 刚唤出的短暂驻留期内不收起。
-        if (DateTime.UtcNow - _shownAt < MinVisibleTime)
+        // 定时收起时给一小段驻留期，避免顶沿掠过一闪而过；单击远端隐藏则立即。
+        if (!immediate && DateTime.UtcNow - _shownAt < MinVisibleTime)
         {
-            ScheduleAutoHide();
+            ScheduleAutoHide(AwayAutoHideDelay);
             return;
         }
 
         ToolbarPopup.IsOpen = false;
+    }
+
+    // ── 单击远端画面即收起（低级鼠标钩子）──────────────────────
+
+    private void InstallMouseHook()
+    {
+        if (_mouseHook != 0)
+        {
+            return;
+        }
+
+        _mouseProc ??= LowLevelMouseHook;
+        _mouseHook = NativeMethods.SetWindowsHookEx(
+            NativeMethods.WhMouseLl, _mouseProc, NativeMethods.GetModuleHandle(null), 0);
+    }
+
+    private void RemoveMouseHook()
+    {
+        if (_mouseHook != 0)
+        {
+            NativeMethods.UnhookWindowsHookEx(_mouseHook);
+            _mouseHook = 0;
+        }
+    }
+
+    private nint LowLevelMouseHook(int nCode, nint wParam, nint lParam)
+    {
+        if (nCode >= 0 && !_pinned && ToolbarPopup.IsOpen && IsButtonDown(wParam))
+        {
+            var x = Marshal.ReadInt32(lParam);
+            var y = Marshal.ReadInt32(lParam, 4);
+
+            if (!IsPointOverPill(x, y))
+            {
+                // 不吞事件——点击照常送到远端画面，只是顺手收起药丸。
+                Dispatcher.BeginInvoke(new Action(() => HideToolbar(immediate: true)));
+            }
+        }
+
+        return NativeMethods.CallNextHookEx(_mouseHook, nCode, wParam, lParam);
+    }
+
+    private static bool IsButtonDown(nint wParam)
+    {
+        var msg = (int)wParam;
+        return msg is NativeMethods.WmLButtonDown
+            or NativeMethods.WmRButtonDown
+            or NativeMethods.WmMButtonDown;
+    }
+
+    private bool IsPointOverPill(int screenX, int screenY)
+    {
+        if (!PillBar.IsVisible || PresentationSource.FromVisual(PillBar) is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var topLeft = PillBar.PointToScreen(new Point(0, 0));
+            var bottomRight = PillBar.PointToScreen(new Point(PillBar.ActualWidth, PillBar.ActualHeight));
+            return screenX >= topLeft.X - 4 && screenX <= bottomRight.X + 4
+                && screenY >= topLeft.Y - 4 && screenY <= bottomRight.Y + 4;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     // ── 拖动 ─────────────────────────────────────────────────────
@@ -410,7 +525,7 @@ public partial class SessionHostView : UserControl
     {
         _dragging = false;
         PillBar.ReleaseMouseCapture();
-        ScheduleAutoHide();
+        ScheduleAutoHide(AwayAutoHideDelay);
     }
 
     private static bool IsInteractive(object? source)
@@ -523,9 +638,29 @@ public partial class SessionHostView : UserControl
 
     private static class NativeMethods
     {
+        public const int WhMouseLl = 14;
+        public const int WmLButtonDown = 0x0201;
+        public const int WmRButtonDown = 0x0204;
+        public const int WmMButtonDown = 0x0207;
+
+        public delegate nint LowLevelMouseProc(int nCode, nint wParam, nint lParam);
+
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetCursorPos(out POINT point);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern nint GetModuleHandle(string? moduleName);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern nint SetWindowsHookEx(int idHook, LowLevelMouseProc proc, nint hMod, uint threadId);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool UnhookWindowsHookEx(nint hook);
+
+        [DllImport("user32.dll")]
+        public static extern nint CallNextHookEx(nint hook, int nCode, nint wParam, nint lParam);
 
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT
