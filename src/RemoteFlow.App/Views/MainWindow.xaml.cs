@@ -313,6 +313,37 @@ public partial class MainWindow : Window
         }
     }
 
+    // ── 会话 Tab 右键菜单 ─────────────────────────────────────────
+
+    /// <summary>只有会话 Tab 弹右键菜单；首页 Tab 拦掉。</summary>
+    private void OnTabContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: SessionTabViewModel })
+        {
+            e.Handled = true;
+        }
+    }
+
+    private static SessionTabViewModel? ResolveTab(object sender)
+        => (sender as MenuItem)?.DataContext as SessionTabViewModel;
+
+    private void OnTabReconnectClick(object sender, RoutedEventArgs e)
+        => ResolveTab(sender)?.ReconnectCommand.Execute(null);
+
+    private void OnTabCloseClick(object sender, RoutedEventArgs e)
+        => ResolveTab(sender)?.CloseCommand.Execute(null);
+
+    private void OnTabCloseOthersClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveTab(sender) is { } tab)
+        {
+            _viewModel.CloseOtherSessionsCommand.Execute(tab);
+        }
+    }
+
+    private void OnTabCloseAllClick(object sender, RoutedEventArgs e)
+        => _viewModel.CloseAllSessionsCommand.Execute(null);
+
     // ── 键盘快捷键 ────────────────────────────────────────────────
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)

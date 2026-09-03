@@ -408,7 +408,19 @@
                                     <DataTemplate>
                                         <RadioButton Style="{StaticResource WorkspaceTabHeader}"
                                                      IsChecked="{Binding IsActive, Mode=OneWay}"
-                                                     Checked="OnTabHeaderChecked">
+                                                     Checked="OnTabHeaderChecked"
+                                                     ContextMenuOpening="OnTabContextMenuOpening">
+                                            <RadioButton.ContextMenu>
+                                                <!-- 仅会话 Tab 生效；首页 Tab 由 OnTabContextMenuOpening 拦掉。
+                                                     动作统一用 Click 在代码后置分发。 -->
+                                                <ContextMenu>
+                                                    <MenuItem Header="重新连接" Click="OnTabReconnectClick" />
+                                                    <Separator />
+                                                    <MenuItem Header="关闭会话" InputGestureText="Ctrl+W" Click="OnTabCloseClick" />
+                                                    <MenuItem Header="关闭其他会话" Click="OnTabCloseOthersClick" />
+                                                    <MenuItem Header="关闭全部会话" Click="OnTabCloseAllClick" />
+                                                </ContextMenu>
+                                            </RadioButton.ContextMenu>
                                             <StackPanel Orientation="Horizontal" Margin="12,0,8,0">
                                                 <TextBlock Text="{Binding Icon}"
                                                            FontFamily="{StaticResource IconFont}"

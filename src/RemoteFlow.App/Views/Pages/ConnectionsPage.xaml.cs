@@ -40,10 +40,11 @@ public partial class ConnectionsPage : UserControl
         await viewModel.ConnectAsync(selected);
     }
 
-    /// <summary>「更多」按钮点击时手动弹出其上下文菜单。</summary>
+    /// <summary>「更多」按钮点击时弹出所在行的右键菜单。</summary>
     private void OnMoreClick(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { ContextMenu: { } menu } button)
+        if (sender is not Button button
+            || FindAncestor<ListBoxItem>(button)?.ContextMenu is not { } menu)
         {
             return;
         }
@@ -82,6 +83,14 @@ public partial class ConnectionsPage : UserControl
         if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
         {
             await viewModel.DeleteCommand.ExecuteAsync(item);
+        }
+    }
+
+    private async void OnToggleFavoriteMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
+        {
+            await viewModel.ToggleFavoriteCommand.ExecuteAsync(item);
         }
     }
 

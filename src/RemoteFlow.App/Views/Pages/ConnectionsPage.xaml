@@ -15,6 +15,24 @@
         <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
         <conv:ColorStringToBrushConverter x:Key="ColorToBrush" />
         <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
+
+        <!-- 连接行的右键 / 「更多」菜单。ContextMenu 不在主可视树内，
+             菜单项动作统一用 Click 在代码后置分发（ResolveItem 从 DataContext 取行 VM）。 -->
+        <ContextMenu x:Key="ConnectionRowMenu" x:Shared="False">
+            <MenuItem Header="连接" InputGestureText="Enter" Click="OnConnectMenuClick" />
+            <Separator />
+            <MenuItem Header="编辑" Click="OnEditMenuClick" />
+            <MenuItem Header="复制" Click="OnDuplicateMenuClick" />
+            <MenuItem Header="收藏" IsCheckable="True"
+                      IsChecked="{Binding IsFavorite, Mode=OneWay}"
+                      Click="OnToggleFavoriteMenuClick" />
+            <Separator />
+            <MenuItem Header="删除" Click="OnDeleteMenuClick" />
+        </ContextMenu>
+
+        <Style x:Key="ConnectionRow" TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">
+            <Setter Property="ContextMenu" Value="{StaticResource ConnectionRowMenu}" />
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="24,20,24,0">
@@ -149,6 +167,7 @@
 
             <ListBox x:Name="ConnectionList"
                      Style="{StaticResource List.Plain}"
+                     ItemContainerStyle="{StaticResource ConnectionRow}"
                      ItemsSource="{Binding ItemsView}"
                      SelectedItem="{Binding SelectedItem}"
                      Margin="0,4,0,0"
@@ -293,26 +312,13 @@
                                        Text="{Binding LastConnectedDisplay}"
                                        Style="{StaticResource Text.Caption}" />
 
-                            <!-- 低频操作收进「更多」菜单 -->
+                            <!-- 低频操作：右击整行，或点这个「更多」按钮，弹同一个菜单 -->
                             <Button Grid.Column="6"
                                     Style="{StaticResource Button.Icon}"
                                     Width="30" Height="30"
                                     Content="{StaticResource Icon.More}"
                                     ToolTip="更多操作"
-                                    Click="OnMoreClick">
-                                <Button.ContextMenu>
-                                    <!-- ContextMenu 不在主可视树内，绑定祖先 DataContext 不可靠，
-                                         因此统一用 Click 事件在代码后置中分发。 -->
-                                    <ContextMenu>
-                                        <MenuItem Header="连接" InputGestureText="Enter" Click="OnConnectMenuClick" />
-                                        <Separator />
-                                        <MenuItem Header="编辑" Click="OnEditMenuClick" />
-                                        <MenuItem Header="复制" Click="OnDuplicateMenuClick" />
-                                        <Separator />
-                                        <MenuItem Header="删除" Click="OnDeleteMenuClick" />
-                                    </ContextMenu>
-                                </Button.ContextMenu>
-                            </Button>
+                                    Click="OnMoreClick" />
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>

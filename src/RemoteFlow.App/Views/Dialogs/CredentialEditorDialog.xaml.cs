@@ -47,10 +47,35 @@ public partial class CredentialEditorDialog : Window
     /// <summary>用户输入的私钥。语义同 <see cref="Password"/>。</summary>
     public string? PrivateKey { get; private set; }
 
+    /// <summary>眼睛切换：在密文框与明文框之间互传当前值并互换可见性。明文不进 ViewModel。</summary>
+    private void OnRevealToggled(object sender, RoutedEventArgs e)
+    {
+        if (RevealToggle.IsChecked == true)
+        {
+            PasswordReveal.Text = PasswordInput.Password;
+            PasswordInput.Visibility = Visibility.Collapsed;
+            PasswordReveal.Visibility = Visibility.Visible;
+            PasswordReveal.Focus();
+            PasswordReveal.CaretIndex = PasswordReveal.Text.Length;
+        }
+        else
+        {
+            PasswordInput.Password = PasswordReveal.Text;
+            PasswordReveal.Clear();
+            PasswordReveal.Visibility = Visibility.Collapsed;
+            PasswordInput.Visibility = Visibility.Visible;
+            PasswordInput.Focus();
+        }
+    }
+
+    /// <summary>取当前用户实际输入的密码（明文框显示时以它为准）。</summary>
+    private string CurrentPassword =>
+        RevealToggle.IsChecked == true ? PasswordReveal.Text : PasswordInput.Password;
+
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
         // 私钥字段参与绑定（它不是密码框），需要先回填到 ViewModel 供校验使用。
-        var enteredPassword = PasswordInput.Password;
+        var enteredPassword = CurrentPassword;
 
         if (_viewModel.Build() is not { } credential)
         {
@@ -70,6 +95,7 @@ public partial class CredentialEditorDialog : Window
 
         // 立即清空输入框，缩短明文在界面控件中的存活时间。
         PasswordInput.Clear();
+        PasswordReveal.Clear();
 
         DialogResult = true;
         Close();
@@ -78,6 +104,7 @@ public partial class CredentialEditorDialog : Window
     private void OnCancelClick(object sender, RoutedEventArgs e)
     {
         PasswordInput.Clear();
+        PasswordReveal.Clear();
         DialogResult = false;
         Close();
     }

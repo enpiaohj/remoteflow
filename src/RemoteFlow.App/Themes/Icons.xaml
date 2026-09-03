@@ -38,6 +38,8 @@
     <sys:String x:Key="Icon.Save">&#xE74E;</sys:String>
     <sys:String x:Key="Icon.Accept">&#xE73E;</sys:String>
     <sys:String x:Key="Icon.Clear">&#xE894;</sys:String>
+    <sys:String x:Key="Icon.Reveal">&#xE7B3;</sys:String>
+    <sys:String x:Key="Icon.Hide">&#xED1A;</sys:String>
 
     <!-- 会话工具条 -->
     <sys:String x:Key="Icon.FullScreen">&#xE740;</sys:String>
