@@ -101,6 +101,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isSessionFullScreen;
 
+    /// <summary>页面数据加载失败的提示。非空时中央工作区顶部显示可重试的横幅。</summary>
+    [ObservableProperty]
+    private string _pageLoadError = string.Empty;
+
     /// <summary>当前是否显示的是远程会话（而非连接列表页）。</summary>
     public bool IsSessionSelected => SelectedTab is SessionTabViewModel;
 
@@ -209,6 +213,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         try
         {
+            PageLoadError = string.Empty;
+
             switch (CurrentPage)
             {
                 case NavigationPage.Home:
@@ -235,8 +241,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "加载页面数据失败：{Page}", CurrentPage);
+            PageLoadError = "页面数据加载失败——数据库可能被占用或损坏。点「重试」；若持续，关闭所有 RemoteFlow 窗口后重开。";
         }
     }
+
+    [RelayCommand]
+    private Task RetryPageLoadAsync() => ReloadCurrentPageAsync();
 
     // ── 顶部动作 ──────────────────────────────────────────────────
 

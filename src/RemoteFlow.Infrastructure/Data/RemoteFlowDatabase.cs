@@ -129,6 +129,8 @@ public sealed class RemoteFlowDatabase
 
         var delays = new[] { 150, 300, 600, 1200, 2400 };
 
+        var triedShmRecovery = false;
+
         for (var attempt = 0; ; attempt++)
         {
             try
@@ -145,11 +147,58 @@ public sealed class RemoteFlowDatabase
             }
             catch (SqliteException ex) when (retryableCodes.Contains(ex.SqliteErrorCode))
             {
+                // 重试仍失败：多半是上一实例被强杀后留下的 -wal / -shm 与主库不一致
+                // （常见于 SQLITE_IOERR）。若这两个文件当前<b>没有被任何进程占用</b>
+                // （能独占打开即证明无人使用，也就没有另一个实例在跑），删掉让 SQLite
+                // 从主库重新生成——已提交的数据都在主库里。只尝试一次。
+                if (!triedShmRecovery && TryClearOrphanedWalFiles())
+                {
+                    triedShmRecovery = true;
+                    _logger.LogWarning("已清理疑似残留的 -wal / -shm 文件，重新尝试打开数据库");
+                    SqliteConnection.ClearAllPools();
+                    continue;
+                }
+
                 throw new InvalidOperationException(
                     $"无法打开数据库：{DatabasePath}。" +
                     "可能有另一个 RemoteFlow 实例正在运行，或上一次异常退出后文件仍被锁定。" +
                     "请关闭所有 RemoteFlow 窗口后重试；若问题持续，重启系统或从备份恢复数据目录。", ex);
             }
+        }
+    }
+
+    /// <summary>
+    /// 尝试删除孤立的 <c>-wal</c> / <c>-shm</c> 文件。仅当二者都能被独占打开
+    /// （即没有任何进程持有句柄）时才删除，避免误删正在使用中的日志。
+    /// </summary>
+    private bool TryClearOrphanedWalFiles()
+    {
+        var wal = DatabasePath + "-wal";
+        var shm = DatabasePath + "-shm";
+
+        try
+        {
+            foreach (var path in new[] { wal, shm })
+            {
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                // 能独占打开 = 无人占用；随即关闭再删。
+                using (File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                }
+
+                File.Delete(path);
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "清理 -wal / -shm 失败（文件可能仍被占用），放弃自动恢复");
+            return false;
         }
     }
 

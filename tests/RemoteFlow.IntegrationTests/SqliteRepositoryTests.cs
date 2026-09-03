@@ -234,4 +234,24 @@ public sealed class SqliteRepositoryTests : IDisposable
         });
         Assert.Equal("BBBB2222", (await repo.GetAsync("10.0.0.9", 22))!.Fingerprint);
     }
+
+    [Fact]
+    public void 残留的坏SHM文件不阻断启动_自动清理后恢复()
+    {
+        // 已初始化的库正常关掉，模拟上一实例被强杀：写一个和主库不一致的坏 -shm。
+        SqliteConnection.ClearAllPools();
+        File.WriteAllBytes(_workspace.DatabasePath + "-shm", new byte[32 * 1024]);
+        File.WriteAllBytes(_workspace.DatabasePath + "-wal", []);
+
+        // 没有任何进程占用这两个文件，Initialize 的自愈逻辑应删掉它们并成功打开。
+        var fresh = new RemoteFlowDatabase(_workspace.DatabasePath, NullLogger<RemoteFlowDatabase>.Instance);
+        var ex = Record.Exception(fresh.Initialize);
+
+        Assert.Null(ex);
+
+        using var connection = fresh.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA user_version;";
+        Assert.Equal(RemoteFlowDatabase.CurrentSchemaVersion, Convert.ToInt32(command.ExecuteScalar()));
+    }
 }

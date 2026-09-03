@@ -463,6 +463,36 @@
 
                     <!-- 内容区：所有 Tab 内容常驻，仅切换可见性，保证会话不被销毁 -->
                     <Border Grid.Row="1" Background="{DynamicResource Bg.Layer}" CornerRadius="8,8,0,0">
+                      <Grid>
+                        <!-- 页面数据加载失败横幅：静默失败会让用户对着空白页发懵 -->
+                        <Border Panel.ZIndex="20"
+                                VerticalAlignment="Top"
+                                Background="{DynamicResource Bg.Subtle}"
+                                BorderBrush="{DynamicResource Status.Warning}"
+                                BorderThickness="0,0,0,2"
+                                Padding="16,10"
+                                Visibility="{Binding PageLoadError.Length, Converter={StaticResource CountToVisibility}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{StaticResource Icon.Warning}"
+                                           FontFamily="{StaticResource IconFont}" FontSize="13"
+                                           Foreground="{DynamicResource Status.Warning}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{Binding PageLoadError}"
+                                           Style="{StaticResource Text.Caption}"
+                                           TextWrapping="Wrap"
+                                           VerticalAlignment="Center"
+                                           Margin="10,0,12,0" />
+                                <Button Grid.Column="2" Style="{StaticResource Button.Secondary}"
+                                        Content="重试" VerticalAlignment="Center"
+                                        Command="{Binding RetryPageLoadCommand}" />
+                            </Grid>
+                        </Border>
+
                         <ItemsControl ItemsSource="{Binding Tabs}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
@@ -488,6 +518,7 @@
                                 </DataTemplate>
                             </ItemsControl.Resources>
                         </ItemsControl>
+                      </Grid>
                     </Border>
                 </Grid>
 
