@@ -386,14 +386,17 @@
                 <!-- ── 中央工作区 ────────────────────────────────── -->
                 <Grid Grid.Column="1" Margin="0,0,0,0">
                     <Grid.RowDefinitions>
+                        <!-- Auto：Tab 栏 Collapsed 时该行自然收为 0，全屏把整块屏幕
+                             让给远程画面；会话工具条（带「退出全屏」按钮）保留为退出入口。 -->
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <!-- Tab 栏。工作区 Tab 始终在列，用户随时能从会话回到连接列表 -->
+                    <!-- Tab 栏。非全屏时始终在列，用户随时能从会话回到连接列表 -->
                     <Border Grid.Row="0"
                             Background="{DynamicResource Bg.Base}"
-                            Padding="8,6,8,0">
+                            Padding="8,6,8,0"
+                            Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
                         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                             <ItemsControl ItemsSource="{Binding Tabs}">
                                 <ItemsControl.ItemsPanel>
