@@ -192,13 +192,15 @@
                StaysOpen="True"
                HorizontalOffset="0"
                VerticalOffset="0">
+            <!-- 上边缘贴屏；四周留一点给投影，顶部不留（投影朝下）。
+                 顶角切平、底角圆，呈现「从屏幕顶沿拉出」的连接条观感。 -->
             <Border x:Name="PillBar"
-                    Margin="10"
+                    Margin="14,0,14,12"
                     Padding="4"
                     Background="{DynamicResource Bg.Layer}"
                     BorderBrush="{DynamicResource Stroke.Subtle}"
-                    BorderThickness="1"
-                    CornerRadius="9"
+                    BorderThickness="1,0,1,1"
+                    CornerRadius="0,0,10,10"
                     MouseLeftButtonDown="OnToolbarDragStart"
                     MouseMove="OnToolbarDragMove"
                     MouseLeftButtonUp="OnToolbarDragEnd">

@@ -332,9 +332,10 @@ public partial class SessionHostView : UserControl
     /// <summary>光标是否处于“停留”感应区（药丸本体 + 其上到屏幕顶、四周留边）。</summary>
     private bool IsInKeepZone(Point rel)
     {
-        var left = ToolbarPopup.HorizontalOffset - KeepZonePadX;
-        var right = ToolbarPopup.HorizontalOffset + PillBar.ActualWidth + PillBar.Margin.Left + PillBar.Margin.Right + KeepZonePadX;
-        var bottom = ToolbarPopup.VerticalOffset + PillBar.ActualHeight + PillBar.Margin.Top + PillBar.Margin.Bottom + KeepZonePadY;
+        var pillLeft = ToolbarPopup.HorizontalOffset + PillBar.Margin.Left;
+        var left = pillLeft - KeepZonePadX;
+        var right = pillLeft + PillBar.ActualWidth + KeepZonePadX;
+        var bottom = ToolbarPopup.VerticalOffset + PillBar.Margin.Top + PillBar.ActualHeight + KeepZonePadY;
 
         return rel.X >= left && rel.X <= right && rel.Y >= -4 && rel.Y <= bottom;
     }
@@ -566,8 +567,9 @@ public partial class SessionHostView : UserControl
         }
         else
         {
+            // 居中的是「可见的药丸本体」，需要扣掉 Border 自身的左边距。
             var barWidth = PillBar.ActualWidth > 0 ? PillBar.ActualWidth : 320;
-            h = Math.Max(0, (RootGrid.ActualWidth - barWidth) / 2);
+            h = Math.Max(0, (RootGrid.ActualWidth - barWidth) / 2 - PillBar.Margin.Left);
             v = 0;
         }
 
