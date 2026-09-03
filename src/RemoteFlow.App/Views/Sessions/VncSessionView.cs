@@ -23,6 +23,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
     private readonly VncSession _session;
     private readonly SessionTabViewModel _viewModel;
     private readonly Image _image;
+    private readonly ScrollViewer _scroll;
 
     private WriteableBitmap? _bitmap;
 
@@ -50,7 +51,20 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         RenderOptions.SetBitmapScalingMode(_image, BitmapScalingMode.NearestNeighbor);
 
-        Content = _image;
+        // 1:1 模式下远端桌面可能大于可视区，用 ScrollViewer 提供滚动；
+        // 适应窗口模式下画面已缩放贴合，滚动条自动隐藏。
+        _scroll = new ScrollViewer
+        {
+            Content = _image,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Background = Brushes.Black,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Focusable = false
+        };
+
+        Content = _scroll;
         Focusable = true;
         Background = Brushes.Black;
 
@@ -289,8 +303,20 @@ public sealed class VncSessionView : ContentControl, IDisposable
             return;
         }
 
-        // 适应窗口用 Uniform 缩放；1:1 用原始像素，超出部分由外层滚动查看。
-        _image.Stretch = _viewModel.ScaleToFit ? Stretch.Uniform : Stretch.None;
+        // 适应窗口用 Uniform 缩放、关闭滚动条；1:1 用原始像素、按需滚动。
+        if (_viewModel.ScaleToFit)
+        {
+            _image.Stretch = Stretch.Uniform;
+            _scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        }
+        else
+        {
+            _image.Stretch = Stretch.None;
+            _scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
+            _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+        }
+
         _session.Profile.Vnc.ScaleMode = _viewModel.ScaleToFit ? VncScaleMode.FitToWindow : VncScaleMode.Original;
     }
 
