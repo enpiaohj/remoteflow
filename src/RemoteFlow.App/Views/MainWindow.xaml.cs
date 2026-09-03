@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -49,67 +50,123 @@ public partial class MainWindow : Window
         SizeChanged += OnWindowSizeChanged;
         StateChanged += OnWindowStateChanged;
 
-        // RDP / VNC 会话内嵌的是原生 HWND，键盘焦点在里面时 WPF 收不到 F11/Esc。
-        // 用线程级消息预处理在消息分发到子控件之前拦下这两个键。
-        ComponentDispatcher.ThreadPreprocessMessage += OnThreadPreprocessMessage;
+        // RDP / VNC 会话内嵌原生 HWND，键盘焦点在里面时会把普通按键（含 F11）
+        // 直接转发给远端，WPF 的 OnPreviewKeyDown 与线程消息预处理都拦不到。
+        // 用低级键盘钩子在系统层拦 F11 / Esc，仅当本窗口为前台且正显示会话时消费。
+        _lowLevelKeyboardProc = LowLevelKeyboardHook;
+        SourceInitialized += (_, _) =>
+        {
+            _hwnd = new WindowInteropHelper(this).Handle;
+            InstallKeyboardHook();
+        };
     }
 
+    private const int WhKeyboardLl = 13;
+    private const int HcAction = 0;
     private const int WmKeyDown = 0x0100;
+    private const int WmSysKeyDown = 0x0104;
     private const int VkF11 = 0x7A;
     private const int VkEscape = 0x1B;
 
-    /// <summary>lParam 第 30 位：1 表示按键在此消息前已按下（自动重复）。</summary>
-    private const long KeyRepeatFlag = 1L << 30;
-
-    /// <summary>上次处理全屏热键的时刻，用于去抖——同一次物理按键可能被多次 peek。</summary>
+    /// <summary>上次处理全屏热键的时刻，用于去抖——同一次物理按键可能被多次投递。</summary>
     private DateTime _lastHotkeyAt = DateTime.MinValue;
 
-    private void OnThreadPreprocessMessage(ref MSG msg, ref bool handled)
+    private nint _hwnd;
+    private nint _keyboardHook;
+    private LowLevelKeyboardProc? _lowLevelKeyboardProc;
+
+    private delegate nint LowLevelKeyboardProc(int nCode, nint wParam, nint lParam);
+
+    private void InstallKeyboardHook()
     {
-        // 只看 WM_KEYDOWN（F11 / Esc 不带 Alt，不会是 WM_SYSKEYDOWN）。
-        if (handled || msg.message != WmKeyDown)
+        if (_keyboardHook != 0 || _lowLevelKeyboardProc is null)
         {
             return;
         }
 
-        // 仅当前台是本窗口、且正显示远程会话时才拦截，避免影响其他窗口与普通页面。
-        if (!IsActive || _viewModel.SelectedTab is not SessionTabViewModel)
+        // LL 钩子的 proc 在本进程内，hMod 传 exe 基址（GetModuleHandle(NULL)）即可。
+        _keyboardHook = NativeMethods.SetWindowsHookEx(
+            WhKeyboardLl, _lowLevelKeyboardProc, NativeMethods.GetModuleHandle(null), 0);
+    }
+
+    private void RemoveKeyboardHook()
+    {
+        if (_keyboardHook != 0)
         {
-            return;
+            NativeMethods.UnhookWindowsHookEx(_keyboardHook);
+            _keyboardHook = 0;
+        }
+    }
+
+    private nint LowLevelKeyboardHook(int nCode, nint wParam, nint lParam)
+    {
+        if (nCode != HcAction || (wParam != WmKeyDown && wParam != WmSysKeyDown))
+        {
+            return NativeMethods.CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
         }
 
-        // 忽略长按自动重复。
-        if ((msg.lParam.ToInt64() & KeyRepeatFlag) != 0)
+        var vkCode = Marshal.ReadInt32(lParam);
+        if (vkCode != VkF11 && vkCode != VkEscape)
         {
-            return;
+            return NativeMethods.CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
         }
 
-        var key = msg.wParam.ToInt32();
-        if (key != VkF11 && key != VkEscape)
+        // 仅当本窗口为前台、且当前是会话 Tab 时才拦截；否则放行给远端 / 其他应用。
+        var consume = NativeMethods.GetForegroundWindow() == _hwnd
+                      && _viewModel.SelectedTab is SessionTabViewModel
+                      && (vkCode == VkF11 || _viewModel.IsSessionFullScreen);
+
+        if (!consume)
         {
-            return;
+            return NativeMethods.CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
         }
 
-        // 去抖：同一次按键可能在预处理链里被 peek 多次。
+        // 钩子回调必须快速返回，切回 UI 线程再翻转状态。
+        Dispatcher.BeginInvoke(new Action(() => TryHandleFullScreenHotkey(vkCode)));
+        return 1;
+    }
+
+    /// <summary>
+    /// 处理会话全屏热键。仅当前选中的是会话 Tab 时响应。<see cref="OnPreviewKeyDown"/>
+    /// （焦点在 WPF 元素上时）与低级键盘钩子（焦点在内嵌 HWND 里时）共用此方法，
+    /// 靠 <see cref="_lastHotkeyAt"/> 去抖，一次按键只翻转一次。
+    /// <returns>已消费该按键返回 true。</returns>
+    /// </summary>
+    private bool TryHandleFullScreenHotkey(int virtualKey)
+    {
+        if (virtualKey != VkF11 && virtualKey != VkEscape)
+        {
+            return false;
+        }
+
+        if (_viewModel.SelectedTab is not SessionTabViewModel)
+        {
+            return false;
+        }
+
+        // 去抖：同一次物理按键可能被预处理链多次 peek，或同时被两个入口看到。
         var now = DateTime.UtcNow;
         if ((now - _lastHotkeyAt).TotalMilliseconds < 300)
         {
-            handled = true;
-            return;
+            return true;
         }
-        _lastHotkeyAt = now;
 
-        if (key == VkF11)
+        if (virtualKey == VkF11)
         {
+            _lastHotkeyAt = now;
             _viewModel.IsSessionFullScreen = !_viewModel.IsSessionFullScreen;
-            handled = true;
+            return true;
         }
-        else if (_viewModel.IsSessionFullScreen)
+
+        // Esc 仅在全屏时用于退出；其余情况放行给会话。
+        if (_viewModel.IsSessionFullScreen)
         {
-            // Esc 仅在全屏时用于退出；其余情况放行给会话。
+            _lastHotkeyAt = now;
             _viewModel.IsSessionFullScreen = false;
-            handled = true;
+            return true;
         }
+
+        return false;
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -262,11 +319,20 @@ public partial class MainWindow : Window
     {
         base.OnPreviewKeyDown(e);
 
-        // 快捷键与远程会话内部按键存在冲突风险，因此只保留最必要的几个，
+        // F11 / Esc：焦点在 WPF 元素上时走这里，焦点在内嵌 HWND 里时走
+        // OnThreadPreprocessMessage，两者共用去抖，一次按键只翻转一次。
+        if ((e.Key == Key.F11 || e.Key == Key.Escape)
+            && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            if (TryHandleFullScreenHotkey(e.Key == Key.F11 ? VkF11 : VkEscape))
+            {
+                e.Handled = true;
+                return;
+            }
+        }
+
+        // 其余快捷键与远程会话内部按键存在冲突风险，只保留最必要的几个，
         // 且都带 Ctrl 修饰，避免影响远端程序的普通输入。
-        // F11 / Esc 的全屏切换统一由 OnThreadPreprocessMessage 处理（那里在消息
-        // 分发到内嵌 HWND 之前就能拦到），此处不再重复处理，避免一次按键被
-        // 切换两次相互抵消。
         if (e.Key == Key.W && Keyboard.Modifiers == ModifierKeys.Control)
         {
             if (_viewModel.SelectedTab is SessionTabViewModel session)
@@ -310,8 +376,27 @@ public partial class MainWindow : Window
             return;
         }
 
-        ComponentDispatcher.ThreadPreprocessMessage -= OnThreadPreprocessMessage;
+        RemoveKeyboardHook();
 
         base.OnClosing(e);
+    }
+
+    private static class NativeMethods
+    {
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern nint GetModuleHandle(string? moduleName);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern nint SetWindowsHookEx(int idHook, LowLevelKeyboardProc proc, nint hMod, uint threadId);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool UnhookWindowsHookEx(nint hook);
+
+        [DllImport("user32.dll")]
+        public static extern nint CallNextHookEx(nint hook, int nCode, nint wParam, nint lParam);
+
+        [DllImport("user32.dll")]
+        public static extern nint GetForegroundWindow();
     }
 }
