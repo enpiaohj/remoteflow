@@ -46,6 +46,11 @@
     <sys:String x:Key="Icon.Clipboard">&#xE8C8;</sys:String>
     <sys:String x:Key="Icon.Keyboard">&#xE765;</sys:String>
     <sys:String x:Key="Icon.Paste">&#xE77F;</sys:String>
+    <sys:String x:Key="Icon.Pin">&#xE718;</sys:String>
+    <sys:String x:Key="Icon.Unpin">&#xE77A;</sys:String>
+    <sys:String x:Key="Icon.Sessions">&#xE71D;</sys:String>
+    <sys:String x:Key="Icon.WindowMinimize">&#xE921;</sys:String>
+    <sys:String x:Key="Icon.WindowRestore">&#xE923;</sys:String>
 
     <!-- 结构与状态 -->
     <sys:String x:Key="Icon.Folder">&#xE8B7;</sys:String>
