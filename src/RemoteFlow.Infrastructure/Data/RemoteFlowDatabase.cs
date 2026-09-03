@@ -59,10 +59,18 @@ public sealed class RemoteFlowDatabase
         return connection;
     }
 
-    /// <summary>初始化数据库并执行必要的 Schema 迁移。应用启动时调用一次。</summary>
+    /// <summary>
+    /// 初始化数据库并执行必要的 Schema 迁移。应用启动时调用一次。
+    /// <para>
+    /// 上一个实例被强制结束（崩溃、任务管理器结束进程）时，可能残留仍在校验点的
+    /// WAL / SHM 文件，导致新进程首次打开短暂拿不到锁、报 <c>SQLITE_BUSY</c> /
+    /// <c>SQLITE_IOERR</c>。此处带退避重试，让数据库在非正常退出后仍能恢复启动
+    /// （产品设计文档 §14.2）；重试仍失败才明确报错。
+    /// </para>
+    /// </summary>
     public void Initialize()
     {
-        using var connection = OpenConnection();
+        using var connection = OpenConnectionWithRetry();
 
         var currentVersion = GetSchemaVersion(connection);
         if (currentVersion > CurrentSchemaVersion)
@@ -108,6 +116,40 @@ public sealed class RemoteFlowDatabase
             transaction.Rollback();
             _logger.LogError(ex, "数据库 Schema 迁移失败，已回滚");
             throw;
+        }
+    }
+
+    /// <summary>
+    /// 带退避重试地打开连接。仅用于启动阶段，覆盖上一实例未完全释放锁的短暂窗口。
+    /// </summary>
+    private SqliteConnection OpenConnectionWithRetry()
+    {
+        // SQLITE_BUSY / SQLITE_LOCKED / SQLITE_IOERR / SQLITE_BUSY_RECOVERY / SQLITE_BUSY_SNAPSHOT
+        var retryableCodes = new HashSet<int> { 5, 6, 10, 261, 517 };
+
+        var delays = new[] { 150, 300, 600, 1200, 2400 };
+
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return OpenConnection();
+            }
+            catch (SqliteException ex) when (retryableCodes.Contains(ex.SqliteErrorCode) && attempt < delays.Length)
+            {
+                _logger.LogWarning(
+                    "打开数据库暂时失败（SQLite {Code}），{Delay}ms 后重试（第 {Attempt}/{Total} 次）",
+                    ex.SqliteErrorCode, delays[attempt], attempt + 1, delays.Length);
+
+                Thread.Sleep(delays[attempt]);
+            }
+            catch (SqliteException ex) when (retryableCodes.Contains(ex.SqliteErrorCode))
+            {
+                throw new InvalidOperationException(
+                    $"无法打开数据库：{DatabasePath}。" +
+                    "可能有另一个 RemoteFlow 实例正在运行，或上一次异常退出后文件仍被锁定。" +
+                    "请关闭所有 RemoteFlow 窗口后重试；若问题持续，重启系统或从备份恢复数据目录。", ex);
+            }
         }
     }
 

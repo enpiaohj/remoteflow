@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,6 +38,17 @@ public partial class App : System.Windows.Application
     private TrayService? _tray;
 
     /// <summary>
+    /// 单实例互斥体。两个 RemoteFlow 实例同时打开同一份 SQLite 与保险库会互相争锁，
+    /// 轻则启动报错，重则 WAL 状态错乱。这里保证同一用户会话只运行一个实例，
+    /// 已在运行时把已有窗口带到前台。
+    /// </summary>
+    private static readonly Mutex SingleInstanceMutex = new(initiallyOwned: false, @"Local\RemoteFlow.SingleInstance");
+    private bool _ownsMutex;
+
+    /// <summary>进入退出流程的标记：此后界面异常处理器不再尝试弹窗。</summary>
+    private bool _isShuttingDown;
+
+    /// <summary>
     /// 供 XAML 创建的视图按需解析依赖。
     /// 视图由 WPF 实例化、无法构造注入，这是 WPF 下的惯用折中。
     /// </summary>
@@ -49,6 +62,13 @@ public partial class App : System.Windows.Application
         // 异常处理必须最先装好，否则启动过程中的失败会以无提示崩溃收场。
         RegisterGlobalExceptionHandlers();
 
+        if (!TryAcquireSingleInstance())
+        {
+            ActivateExistingInstance();
+            Shutdown(0);
+            return;
+        }
+
         try
         {
             var paths = ResolvePaths();
@@ -59,6 +79,7 @@ public partial class App : System.Windows.Application
 
             _logger.LogInformation("RemoteFlow 启动，数据目录 {DataDirectory}", paths.DataDirectory);
 
+            ApplyLanguage();
             InitializeDatabase();
             ApplyTheme();
 
@@ -76,6 +97,57 @@ public partial class App : System.Windows.Application
 
             Shutdown(1);
         }
+    }
+
+    // ── 单实例 ────────────────────────────────────────────────────
+
+    private bool TryAcquireSingleInstance()
+    {
+        try
+        {
+            // 已有实例持有互斥体时立即返回 false，不阻塞等待。
+            _ownsMutex = SingleInstanceMutex.WaitOne(TimeSpan.Zero, exitContext: false);
+        }
+        catch (AbandonedMutexException)
+        {
+            // 上一个实例崩溃时未释放互斥体——本实例接管即可。
+            _ownsMutex = true;
+        }
+
+        return _ownsMutex;
+    }
+
+    /// <summary>把已在运行的实例窗口带到前台。</summary>
+    private static void ActivateExistingInstance()
+    {
+        try
+        {
+            var current = System.Diagnostics.Process.GetCurrentProcess();
+            var other = System.Diagnostics.Process
+                .GetProcessesByName(current.ProcessName)
+                .FirstOrDefault(p => p.Id != current.Id && p.MainWindowHandle != nint.Zero);
+
+            if (other?.MainWindowHandle is { } handle && handle != nint.Zero)
+            {
+                NativeMethods.ShowWindow(handle, NativeMethods.SW_RESTORE);
+                NativeMethods.SetForegroundWindow(handle);
+            }
+        }
+        catch
+        {
+            // 激活失败无关紧要：至少本实例不会重复启动。
+        }
+    }
+
+    private static class NativeMethods
+    {
+        public const int SW_RESTORE = 9;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool SetForegroundWindow(nint hWnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool ShowWindow(nint hWnd, int nCmdShow);
     }
 
     /// <summary>
@@ -204,6 +276,40 @@ public partial class App : System.Windows.Application
         _logger?.LogInformation("已创建默认分组与标签");
     }
 
+    /// <summary>
+    /// 按设置中的语言配置界面文化。
+    /// <para>
+    /// V0.1 只内置简体中文；<see cref="AppSettings.Language"/> 已预留，
+    /// 后续新增 <c>Strings.&lt;culture&gt;.resx</c> 后此处即可切换 UI 语言，无需改调用点。
+    /// </para>
+    /// </summary>
+    private void ApplyLanguage()
+    {
+        var settings = Services.GetRequiredService<AppSettings>();
+
+        var language = string.IsNullOrWhiteSpace(settings.Language) ? "zh-CN" : settings.Language;
+
+        try
+        {
+            var culture = System.Globalization.CultureInfo.GetCultureInfo(language);
+            System.Globalization.CultureInfo.CurrentUICulture = culture;
+            System.Globalization.CultureInfo.CurrentCulture = culture;
+            System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = culture;
+            System.Globalization.CultureInfo.DefaultThreadCurrentCulture = culture;
+        }
+        catch (CultureNotFoundException ex)
+        {
+            _logger?.LogWarning(ex, "无法识别的界面语言 {Language}，回退到简体中文", language);
+        }
+
+        // 让 WPF 文本元素继承当前文化（影响日期、数字等格式化）。
+        FrameworkElement.LanguageProperty.OverrideMetadata(
+            typeof(FrameworkElement),
+            new FrameworkPropertyMetadata(
+                System.Windows.Markup.XmlLanguage.GetLanguage(
+                    System.Globalization.CultureInfo.CurrentUICulture.IetfLanguageTag)));
+    }
+
     private void ApplyTheme()
     {
         var theme = Services.GetRequiredService<ThemeService>();
@@ -227,10 +333,24 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // 进入退出流程后，界面异常处理不再尝试弹窗（此时资源系统已开始拆除）。
+        _isShuttingDown = true;
+
         try
         {
-            // 退出前关闭全部会话，确保 ActiveX 控件、SSH 连接、VNC 线程被完整释放。
-            _services?.GetService<AppServices.SessionManager>()?.CloseAllAsync().GetAwaiter().GetResult();
+            // 退出前关闭全部会话，尽量让 RDP ActiveX 控件、SSH 连接、VNC 线程正常释放。
+            // 放到后台线程并设上限：极端情况下（例如 RDP 控件正卡在自身的模态证书
+            // 对话框上）Disconnect 会长时间占住 UI 线程，此时超时后交由进程退出兜底，
+            // 不让整个应用卡死在关闭流程里。
+            var sessions = _services?.GetService<AppServices.SessionManager>();
+            if (sessions is not null)
+            {
+                var closed = Task.Run(() => sessions.CloseAllAsync()).Wait(TimeSpan.FromSeconds(5));
+                if (!closed)
+                {
+                    _logger?.LogWarning("关闭会话超时，进入强制退出");
+                }
+            }
 
             _tray?.Dispose();
             _services?.GetService<MainViewModel>()?.Dispose();
@@ -243,8 +363,30 @@ public partial class App : System.Windows.Application
         }
         finally
         {
-            _services?.Dispose();
+            // SessionManager 只实现 IAsyncDisposable，容器同步 Dispose 会抛异常，
+            // 因此走异步释放路径；同样设上限，避免卡住的会话拖住退出。
+            try
+            {
+                if (_services is not null)
+                {
+                    Task.Run(async () => await _services.DisposeAsync()).Wait(TimeSpan.FromSeconds(5));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "释放服务容器时出现异常");
+            }
+
+            // 关闭连接池里所有 SQLite 连接，触发 WAL 校验点，
+            // 让 -wal / -shm 文件不残留到下次启动（配合数据库层的启动重试）。
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
             LoggingSetup.Shutdown();
+
+            if (_ownsMutex)
+            {
+                SingleInstanceMutex.ReleaseMutex();
+            }
         }
 
         base.OnExit(e);
@@ -282,6 +424,12 @@ public partial class App : System.Windows.Application
 
         // 标记为已处理，避免单个界面错误导致整个应用退出、连带断开所有会话。
         e.Handled = true;
+
+        // 退出流程中资源系统正在拆除，此时再弹窗会二次抛异常；仅记录即可。
+        if (_isShuttingDown)
+        {
+            return;
+        }
 
         MessageDialog.ShowMessage(
             MainWindow,
