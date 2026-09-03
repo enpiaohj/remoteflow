@@ -65,6 +65,12 @@ public sealed class SshSessionView : ContentControl, IDisposable
         _webView = new WebView2 { DefaultBackgroundColor = System.Drawing.Color.FromArgb(30, 30, 30) };
         Content = _webView;
 
+        // 视图与终端一并铺满容器，全屏时终端跟随扩展。
+        HorizontalAlignment = HorizontalAlignment.Stretch;
+        VerticalAlignment = VerticalAlignment.Stretch;
+        HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        VerticalContentAlignment = VerticalAlignment.Stretch;
+
         _flushTimer = new DispatcherTimer { Interval = FlushInterval };
         _flushTimer.Tick += OnFlushTick;
 

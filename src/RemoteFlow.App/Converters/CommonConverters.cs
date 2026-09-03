@@ -166,3 +166,43 @@ public sealed class MaximizedPaddingConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+/// <summary>
+/// 全屏会话时把应用标题栏那一行的高度收为 0（否则即使 Visibility=Collapsed，
+/// 行定义的固定高度仍会留白）。false → 48，true → 0。
+/// </summary>
+public sealed class FullScreenRowHeightConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is true ? new GridLength(0) : new GridLength(48);
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// 全屏会话时把某个 Grid 行/列的尺寸收为 0；否则取 ConverterParameter 指定的常态尺寸
+/// （数值，缺省 216）。只让内容 Collapsed 不够——行/列定义的固定尺寸仍会留白，
+/// 这正是「全屏后左边一条空带」的成因。
+/// </summary>
+public sealed class FullScreenSizeConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is true)
+        {
+            return new GridLength(0);
+        }
+
+        var normal = 216d;
+        if (parameter is string text && double.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+        {
+            normal = parsed;
+        }
+
+        return new GridLength(normal);
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}

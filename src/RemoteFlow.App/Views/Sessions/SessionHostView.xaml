@@ -99,8 +99,13 @@
 
         <!-- ══ 会话内容 ═════════════════════════════════════════════ -->
         <Grid Grid.Row="1">
-            <!-- 协议视图由代码后置按会话类型注入 -->
-            <ContentControl x:Name="SessionContent" />
+            <!-- 协议视图由代码后置按会话类型注入；必须拉伸填满，否则全屏后
+                 RDP/VNC 画面会缩在左上角、四周留黑边。 -->
+            <ContentControl x:Name="SessionContent"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch" />
 
             <!-- 连接中：轻量遮罩，不打断用户 -->
             <Border Background="{DynamicResource Bg.Session}"

@@ -52,7 +52,13 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         Content = _image;
         Focusable = true;
-        Background = Brushes.Transparent;
+        Background = Brushes.Black;
+
+        // 视图铺满容器；画面本身在其中按 Uniform 居中缩放，超出部分留黑边。
+        HorizontalAlignment = HorizontalAlignment.Stretch;
+        VerticalAlignment = VerticalAlignment.Stretch;
+        HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        VerticalContentAlignment = VerticalAlignment.Stretch;
 
         _session.RenderTarget.FramebufferSizeChanged += OnFramebufferSizeChanged;
         _viewModel.ActionRequested += OnActionRequested;

@@ -34,6 +34,8 @@
         <conv:ColorStringToBrushConverter x:Key="ColorToBrush" />
         <conv:MaximizedPaddingConverter x:Key="MaximizedPadding" />
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
+        <conv:FullScreenRowHeightConverter x:Key="FullScreenRowHeight" />
+        <conv:FullScreenSizeConverter x:Key="FullScreenSize" />
 
         <!-- 页面 ViewModel → 页面视图 -->
         <DataTemplate DataType="{x:Type vm:HomePageViewModel}">
@@ -131,17 +133,22 @@
         <KeyBinding Key="N" Modifiers="Ctrl" Command="{Binding NewConnectionCommand}" />
     </Window.InputBindings>
 
-    <!-- 最大化时补偿 WindowChrome 的边缘溢出，避免内容被屏幕边缘裁切 -->
-    <Border Padding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource MaximizedPadding}}">
+    <!--
+        最大化时补偿 WindowChrome 的边缘溢出，避免内容被屏幕边缘裁切；
+        但全屏会话（WindowStyle=None）没有 Chrome，不能再补 8px，否则四周留边。
+    -->
+    <Border x:Name="RootPadding">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="48" />
+                <!-- 全屏会话时隐藏应用标题栏，只留会话工具条；靠工具条的全屏按钮或 Esc 退出 -->
+                <RowDefinition Height="{Binding IsSessionFullScreen, Converter={StaticResource FullScreenRowHeight}}" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <!-- ══ 标题栏 ══════════════════════════════════════════ -->
-            <Grid Grid.Row="0" Background="{DynamicResource Bg.Base}">
+            <Grid Grid.Row="0" Background="{DynamicResource Bg.Base}"
+                  Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -269,7 +276,9 @@
             <!-- ══ 主体 ════════════════════════════════════════════ -->
             <Grid Grid.Row="1">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="NavColumn" Width="216" />
+                    <!-- 全屏会话时把导航列宽收为 0，否则会在左侧留下一条空白带 -->
+                    <ColumnDefinition x:Name="NavColumn"
+                                      Width="{Binding IsSessionFullScreen, Converter={StaticResource FullScreenSize}, ConverterParameter=216}" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition x:Name="DetailColumn" Width="Auto" />
                 </Grid.ColumnDefinitions>
@@ -496,7 +505,8 @@
             </Grid>
 
             <!-- ══ 状态栏 ══════════════════════════════════════════ -->
-            <Border Grid.Row="2" Height="26" Background="{DynamicResource Bg.Base}">
+            <Border Grid.Row="2" Height="26" Background="{DynamicResource Bg.Base}"
+                    Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
                 <Grid Margin="16,0">
                     <TextBlock Style="{StaticResource Text.Caption}"
                                Text="{Binding SessionStatusText}"

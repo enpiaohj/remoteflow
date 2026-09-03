@@ -268,10 +268,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         var tab = new SessionTabViewModel(session, CloseSessionAsync, ReconnectAsync);
+
+        // 会话工具条里的「全屏」由主窗口层处理（隐藏导航/详情、窗口去边框铺满）；
+        // 协议专属动作（缩放、Ctrl+Alt+Del 等）由各协议视图自己订阅处理。
+        tab.ActionRequested += OnSessionActionRequested;
+
         Tabs.Add(tab);
         SelectedTab = tab;
 
         OnPropertyChanged(nameof(SessionStatusText));
+    }
+
+    private void OnSessionActionRequested(object? sender, SessionAction action)
+    {
+        if (action == SessionAction.ToggleFullScreen)
+        {
+            IsSessionFullScreen = !IsSessionFullScreen;
+        }
     }
 
     private void OnSessionClosed(object? sender, Guid sessionId)
@@ -291,8 +304,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         var wasSelected = ReferenceEquals(SelectedTab, tab);
 
+        tab.ActionRequested -= OnSessionActionRequested;
         tab.Dispose();
         Tabs.Remove(tab);
+
+        // 最后一个会话关闭时退出全屏，否则用户会停在没有导航的空白全屏里。
+        if (Tabs.OfType<SessionTabViewModel>().Any() is false && IsSessionFullScreen)
+        {
+            IsSessionFullScreen = false;
+        }
 
         // 关闭当前 Tab 后回到最后一个会话，没有会话则回到工作区。
         if (wasSelected)
@@ -341,6 +361,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         foreach (var tab in Tabs.OfType<SessionTabViewModel>())
         {
+            tab.ActionRequested -= OnSessionActionRequested;
             tab.Dispose();
         }
     }

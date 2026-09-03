@@ -43,6 +43,12 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
             VerticalAlignment = VerticalAlignment.Stretch
         };
 
+        // 视图自身也必须拉伸，否则全屏后 RDP 画面缩在左上角。
+        HorizontalAlignment = HorizontalAlignment.Stretch;
+        VerticalAlignment = VerticalAlignment.Stretch;
+        HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        VerticalContentAlignment = VerticalAlignment.Stretch;
+
         Content = _host;
 
         _resizeTimer = new DispatcherTimer { Interval = ResizeDebounce };
