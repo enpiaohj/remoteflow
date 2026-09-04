@@ -7,15 +7,6 @@
 
 ---
 
-## [0.1.1] — 2026-09-04
-
-### 修复
-- SSH 主机密钥确认对话框被握手超时吞掉——弹窗改到握手中止后的异步流程里，
-  用户接受则记录指纹并自动重试；指纹变化仍是强警告。
-- 连接 CSV 导入不去重——以名称 + 主机 + 端口 + 协议为身份，重复导入不再产生副本。
-
-详见 [`releases/v0.1.1/CHANGELOG.md`](releases/v0.1.1/CHANGELOG.md)。
-
 ## [0.1.0] — 2026-09-04
 
 首个正式版本（Unified Connection MVP）。先把「连接」这件事做扎实。
@@ -48,5 +39,4 @@
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
-[0.1.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.1.1
-[0.1.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.1.0
+[0.1.0]: https://example.invalid/remoteflow/releases/tag/v0.1.0
