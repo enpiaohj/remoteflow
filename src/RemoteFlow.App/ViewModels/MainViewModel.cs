@@ -67,6 +67,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // 设置页的「数据与备份」改动了本地数据时刷新当前页。
         _settingsPage.DataChanged += async (_, _) => await ReloadCurrentPageAsync();
 
+        // 首页的「查看全部」等入口请求跳转。
+        HomePage.NavigationRequested += (_, page) => NavigateTo(page);
+
         NavigateTo(settings.DefaultLandingPage switch
         {
             LandingPage.Connections => NavigationPage.Connections,

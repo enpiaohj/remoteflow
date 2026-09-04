@@ -39,6 +39,9 @@ public sealed class AppSettings
     /// <summary>启动或新建连接后默认打开的页面。</summary>
     public LandingPage DefaultLandingPage { get; set; } = LandingPage.Home;
 
+    /// <summary>用户是否已关闭首页底部的安全提示横幅。</summary>
+    public bool HomeSecurityTipDismissed { get; set; }
+
     // ── RDP 默认值 ────────────────────────────────────────
     public RdpDisplayMode RdpDefaultDisplayMode { get; set; } = RdpDisplayMode.FitToWindow;
     public bool RdpDefaultRedirectClipboard { get; set; } = true;

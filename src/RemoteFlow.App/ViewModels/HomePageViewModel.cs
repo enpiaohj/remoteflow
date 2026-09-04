@@ -6,13 +6,14 @@ using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
+using RemoteFlow.Infrastructure.Settings;
 
 namespace RemoteFlow.App.ViewModels;
 
 /// <summary>
 /// 首页。只解决一件事：让用户尽快回到工作状态。
 /// <para>
-/// 因此这里只呈现最近连接、收藏与当前会话，
+/// 因此这里只呈现最近连接、收藏与最近活动，
 /// 不做资产统计看板或复杂图表（产品设计文档 §7.6）。
 /// </para>
 /// </summary>
@@ -20,10 +21,18 @@ public sealed partial class HomePageViewModel(
     ConnectionService connections,
     IHistoryRepository history,
     SessionManager sessions,
-    IDialogService dialogs) : ObservableObject
+    IDialogService dialogs,
+    AppSettings settings,
+    JsonSettingsStore settingsStore) : ObservableObject
 {
-    /// <summary>首页每个分区最多展示的条目数，超出请到「我的连接」查看。</summary>
+    /// <summary>收藏 / 最近活动分区最多展示的条目数，超出请到对应页面查看。</summary>
     private const int SectionLimit = 6;
+
+    /// <summary>「最近连接」快捷卡片的数量。</summary>
+    private const int RecentCardLimit = 3;
+
+    /// <summary>请求主窗口切换到某个一级页面（「查看全部」等）。</summary>
+    public event EventHandler<NavigationPage>? NavigationRequested;
 
     public ObservableCollection<ConnectionItemViewModel> RecentItems { get; } = [];
 
@@ -40,9 +49,15 @@ public sealed partial class HomePageViewModel(
     [ObservableProperty]
     private string _greeting = string.Empty;
 
+    /// <summary>底部安全提示横幅是否可见（用户可关闭，选择记入设置）。</summary>
+    [ObservableProperty]
+    private bool _showSecurityTip;
+
     public bool HasRecent => RecentItems.Count > 0;
 
     public bool HasFavorites => FavoriteItems.Count > 0;
+
+    public bool HasActivity => RecentHistory.Count > 0;
 
     public bool IsFirstRun => TotalConnections == 0;
 
@@ -61,14 +76,19 @@ public sealed partial class HomePageViewModel(
 
         TotalConnections = profiles.Count;
         ActiveSessions = sessions.ActiveSessionCount;
+        ShowSecurityTip = !settings.HomeSecurityTipDismissed && profiles.Count > 0;
+
+        var activeProfileIds = sessions.ActiveSessions.Select(s => s.Profile.Id).ToHashSet();
 
         RecentItems.Clear();
         foreach (var profile in profiles
                      .Where(p => p.LastConnectedAt is not null)
                      .OrderByDescending(p => p.LastConnectedAt)
-                     .Take(SectionLimit))
+                     .Take(RecentCardLimit))
         {
-            RecentItems.Add(BuildItem(profile, groups));
+            var item = BuildItem(profile, groups);
+            item.HasActiveSession = activeProfileIds.Contains(profile.Id);
+            RecentItems.Add(item);
         }
 
         FavoriteItems.Clear();
@@ -88,7 +108,35 @@ public sealed partial class HomePageViewModel(
 
         OnPropertyChanged(nameof(HasRecent));
         OnPropertyChanged(nameof(HasFavorites));
+        OnPropertyChanged(nameof(HasActivity));
         OnPropertyChanged(nameof(IsFirstRun));
+    }
+
+    [RelayCommand]
+    private void ViewAllRecent() => NavigationRequested?.Invoke(this, NavigationPage.Recent);
+
+    [RelayCommand]
+    private void ViewAllFavorites() => NavigationRequested?.Invoke(this, NavigationPage.Favorites);
+
+    [RelayCommand]
+    private void ViewAllActivity() => NavigationRequested?.Invoke(this, NavigationPage.Recent);
+
+    [RelayCommand]
+    private void ViewCredentials() => NavigationRequested?.Invoke(this, NavigationPage.Credentials);
+
+    [RelayCommand]
+    private async Task DismissSecurityTipAsync()
+    {
+        ShowSecurityTip = false;
+        settings.HomeSecurityTipDismissed = true;
+        try
+        {
+            await settingsStore.SaveAsync(settings);
+        }
+        catch
+        {
+            // 关闭提示只是界面偏好，保存失败不影响使用，下次启动会再出现。
+        }
     }
 
     private static ConnectionItemViewModel BuildItem(ConnectionProfile profile, IReadOnlyDictionary<Guid, string> groups)
@@ -125,7 +173,13 @@ public sealed class HistoryItemViewModel(ConnectionHistoryEntry entry)
 {
     public string ConnectionName => entry.ConnectionName;
 
+    /// <summary>「最近活动」列表里的一行描述。</summary>
+    public string ActivityText => $"连接到 {entry.ConnectionName}";
+
     public string Host => entry.Host;
+
+    /// <summary>主机 + 协议，用于活动列表的副标题。</summary>
+    public string HostProtocolLine => $"{entry.Host} · {ProtocolName}";
 
     public string ProtocolName => entry.Protocol switch
     {

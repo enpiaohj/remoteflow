@@ -14,194 +14,330 @@
         <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
         <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
 
-        <!-- 连接快捷卡片。首页用卡片而非表格，因为这里的目标是「一眼认出并点开」 -->
-        <DataTemplate x:Key="ConnectionCard" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Button Width="228" Height="76" Margin="0,0,12,12"
-                    Cursor="Hand"
-                    Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                    CommandParameter="{Binding}">
-                <Button.Template>
+        <!-- 区块标题 + 右侧「查看全部」链接 -->
+        <Style x:Key="Home.LinkButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+            <Setter Property="Template">
+                <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Root"
-                                Background="{DynamicResource Bg.Layer}"
-                                BorderBrush="{DynamicResource Stroke.Subtle}"
-                                BorderThickness="1"
-                                CornerRadius="{StaticResource Radius.Large}"
-                                Padding="14,12">
+                        <Border Background="Transparent" Padding="4,2">
                             <ContentPresenter />
                         </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
-                                <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Default}" />
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Pressed}" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
-                </Button.Template>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brand.Hover}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
+        <!-- 最近连接：大号快捷卡片 -->
+        <DataTemplate x:Key="RecentCard" DataType="{x:Type vm:ConnectionItemViewModel}">
+            <Grid Margin="0,0,12,0">
+                <Button Cursor="Hand" HorizontalContentAlignment="Stretch"
+                        Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Root"
+                                    Background="{DynamicResource Bg.Layer}"
+                                    BorderBrush="{DynamicResource Stroke.Subtle}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource Radius.Large}"
+                                    Padding="16,14">
+                                <ContentPresenter />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <DataTrigger Binding="{Binding HasActiveSession}" Value="True">
+                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Selected}" />
+                                </DataTrigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Default}" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Pressed}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
 
-                    <Grid Grid.RowSpan="2" Width="30" Height="30" VerticalAlignment="Top">
-                        <Border CornerRadius="7"
-                                Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
-                                Opacity="0.16" />
-                        <TextBlock Text="{Binding ProtocolIcon}"
-                                   FontFamily="{StaticResource IconFont}"
-                                   FontSize="14"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="28" />
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Grid.Column="0" Width="40" Height="40" VerticalAlignment="Top">
+                            <Border CornerRadius="9"
+                                    Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                    Opacity="0.16" />
+                            <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="17"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                        </Grid>
+
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" />
+                            <TextBlock Text="{Binding HostDisplay}" Style="{StaticResource Text.Caption}"
+                                       FontFamily="{StaticResource MonoFont}" Margin="0,3,0,0" HorizontalAlignment="Left" />
+                            <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                         Fill="{DynamicResource Status.Success}"
+                                         Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Text="进行中" Style="{StaticResource Text.Caption}"
+                                           Foreground="{DynamicResource Status.Success}" Margin="6,0,0,0"
+                                           Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Text="{Binding LastConnectedDisplay}" Style="{StaticResource Text.Caption}"
+                                           Visibility="{Binding HasActiveSession, Converter={StaticResource InverseBoolToVisibility}}" />
+                            </StackPanel>
+                        </StackPanel>
                     </Grid>
+                </Button>
 
-                    <TextBlock Grid.Column="1" Grid.Row="0"
-                               Text="{Binding Name}"
-                               Style="{StaticResource Text.Body}"
-                               FontWeight="SemiBold"
-                               Margin="12,0,0,0"
-                               HorizontalAlignment="Left" />
+                <Button Grid.Column="2" Style="{StaticResource Button.Icon}"
+                        Width="26" Height="26" FontSize="12"
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,10,0"
+                        Content="{StaticResource Icon.More}"
+                        Click="OnItemMenuClick" Tag="{Binding}">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="连接" Click="OnItemConnectClick" />
+                            <Separator />
+                            <MenuItem Header="在「我的连接」中管理" Click="OnItemManageClick" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+            </Grid>
+        </DataTemplate>
 
-                    <StackPanel Grid.Column="1" Grid.Row="1" Margin="12,3,0,0" HorizontalAlignment="Left">
-                        <TextBlock Text="{Binding HostDisplay}"
-                                   Style="{StaticResource Text.Caption}"
-                                   FontFamily="{StaticResource MonoFont}"
-                                   HorizontalAlignment="Left" />
-                        <TextBlock Text="{Binding LastConnectedDisplay}"
-                                   Style="{StaticResource Text.Caption}"
-                                   Margin="0,2,0,0"
-                                   HorizontalAlignment="Left" />
-                    </StackPanel>
+        <!-- 收藏 / 最近活动 卡片里的一行 -->
+        <DataTemplate x:Key="FavoriteRow" DataType="{x:Type vm:ConnectionItemViewModel}">
+            <Grid Height="44">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="26" />
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0" Width="28" Height="28" VerticalAlignment="Center">
+                    <Border CornerRadius="7"
+                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.16" />
+                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="12"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                 </Grid>
-            </Button>
+
+                <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding HostDisplay}" Style="{StaticResource Text.Caption}"
+                               FontFamily="{StaticResource MonoFont}" Margin="0,1,0,0" />
+                </StackPanel>
+
+                <Grid Grid.Column="2" VerticalAlignment="Center" Margin="8,0">
+                    <Border CornerRadius="4"
+                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
+                    <TextBlock Text="{Binding ProtocolName}" FontSize="10" Margin="7,2"
+                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                </Grid>
+
+                <Button Grid.Column="3" Style="{StaticResource Button.Icon}"
+                        Width="24" Height="24" FontSize="11" VerticalAlignment="Center"
+                        Content="{StaticResource Icon.More}"
+                        Click="OnItemMenuClick" Tag="{Binding}">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="连接" Click="OnItemConnectClick" />
+                            <Separator />
+                            <MenuItem Header="在「我的连接」中管理" Click="OnItemManageClick" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ActivityRow" DataType="{x:Type vm:HistoryItemViewModel}">
+            <Grid Height="44">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0" Width="28" Height="28" VerticalAlignment="Center">
+                    <Border CornerRadius="7" Background="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
+                    <TextBlock Text="{Binding ResultIcon}" FontFamily="{StaticResource IconFont}" FontSize="12"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Foreground="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" />
+                </Grid>
+
+                <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ActivityText}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding HostProtocolLine}" Style="{StaticResource Text.Caption}" Margin="0,1,0,0" />
+                </StackPanel>
+
+                <TextBlock Grid.Column="2" Text="{Binding StartedAtDisplay}" Style="{StaticResource Text.Caption}"
+                           VerticalAlignment="Center" Margin="12,0,4,0" />
+            </Grid>
         </DataTemplate>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="24,20,24,24">
+        <Grid Margin="24,20,24,24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
             <!-- 问候语 -->
-            <TextBlock Style="{StaticResource Text.PageTitle}" Margin="0,0,0,4">
-                <Run Text="{Binding Greeting, Mode=OneWay}" />
-            </TextBlock>
-            <TextBlock Style="{StaticResource Text.BodySecondary}" Margin="0,0,0,24">
-                <Run Text="共" />
-                <Run Text="{Binding TotalConnections, Mode=OneWay}" FontWeight="SemiBold" />
-                <Run Text="个连接 ·" />
-                <Run Text="{Binding ActiveSessions, Mode=OneWay}" FontWeight="SemiBold" />
-                <Run Text="个会话进行中" />
-            </TextBlock>
+            <StackPanel Grid.Row="0" Margin="0,0,0,20">
+                <TextBlock Style="{StaticResource Text.PageTitle}" Text="{Binding Greeting, Mode=OneWay}" />
+                <TextBlock Style="{StaticResource Text.BodySecondary}" Margin="0,6,0,0">
+                    <Run Text="共 " /><Run Text="{Binding TotalConnections, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" 个连接" />
+                    <Run Text="  ·  " Foreground="{DynamicResource Text.Tertiary}" />
+                    <Run Text="{Binding ActiveSessions, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource Brand.Default}" /><Run Text=" 个会话进行中" Foreground="{DynamicResource Brand.Default}" />
+                </TextBlock>
+            </StackPanel>
 
             <!-- 首次使用引导 -->
-            <Border Style="{StaticResource Surface.Card}"
-                    Padding="24"
-                    Margin="0,0,0,24"
+            <Border Grid.Row="1" Style="{StaticResource Surface.Card}" Padding="24" Margin="0,0,0,24"
                     Visibility="{Binding IsFirstRun, Converter={StaticResource BoolToVisibility}}">
                 <StackPanel>
                     <TextBlock Text="欢迎使用 RemoteFlow" Style="{StaticResource Text.SectionTitle}" />
-                    <TextBlock Style="{StaticResource Text.BodySecondary}"
-                               TextWrapping="Wrap"
-                               Margin="0,8,0,0"
-                               Text="把 RDP、SSH、VNC 连接统一到一个工作台。先创建一个连接，或从 CSV 导入既有的服务器清单。" />
-                    <TextBlock Style="{StaticResource Text.Caption}"
-                               TextWrapping="Wrap"
-                               Margin="0,10,0,0"
+                    <TextBlock Style="{StaticResource Text.BodySecondary}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Text="把 RDP、SSH、VNC 连接统一到一个工作台。先创建一个连接，或从设置的「数据与备份」导入既有的服务器清单。" />
+                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,10,0,0"
                                Text="密码与私钥由 Windows DPAPI 加密后单独保存，不会写入连接数据库，也不会随导出文件带走。" />
                 </StackPanel>
             </Border>
 
             <!-- 最近连接 -->
-            <StackPanel Margin="0,0,0,8" Visibility="{Binding HasRecent, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="最近连接" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,14" />
-                <ItemsControl ItemsSource="{Binding RecentItems}" ItemTemplate="{StaticResource ConnectionCard}">
+            <StackPanel Grid.Row="2" Margin="0,0,0,24"
+                        Visibility="{Binding HasRecent, Converter={StaticResource BoolToVisibility}}">
+                <Grid Margin="0,0,0,12">
+                    <TextBlock Text="最近连接" Style="{StaticResource Text.SectionTitle}" />
+                    <Button Content="查看全部" Style="{StaticResource Home.LinkButton}"
+                            HorizontalAlignment="Right" Command="{Binding ViewAllRecentCommand}" />
+                </Grid>
+                <ItemsControl ItemsSource="{Binding RecentItems}" ItemTemplate="{StaticResource RecentCard}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <WrapPanel />
+                            <UniformGrid Columns="3" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>
             </StackPanel>
 
-            <!-- 收藏 -->
-            <StackPanel Margin="0,12,0,8" Visibility="{Binding HasFavorites, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="收藏" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,14" />
-                <ItemsControl ItemsSource="{Binding FavoriteItems}" ItemTemplate="{StaticResource ConnectionCard}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
-            </StackPanel>
+            <!-- 收藏 + 最近活动 -->
+            <Grid Grid.Row="3" Margin="0,0,0,24">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="24" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-            <!-- 连接历史 -->
-            <StackPanel Margin="0,12,0,0"
-                        Visibility="{Binding RecentHistory.Count, Converter={StaticResource CountToVisibility}}">
-                <TextBlock Text="连接历史" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,10" />
-                <Border Style="{StaticResource Surface.Card}" Padding="4">
-                    <ItemsControl ItemsSource="{Binding RecentHistory}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type vm:HistoryItemViewModel}">
-                                <Grid Height="38" Margin="10,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="20" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" MinWidth="16" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
+                <!-- 收藏 -->
+                <Border Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="18,16" VerticalAlignment="Top">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{StaticResource Icon.Favorite}" FontFamily="{StaticResource IconFont}"
+                                           FontSize="14" Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
+                                <TextBlock Text="收藏" Style="{StaticResource Text.SectionTitle}" Margin="8,0,0,0" />
+                            </StackPanel>
+                            <Button Content="查看全部" Style="{StaticResource Home.LinkButton}"
+                                    HorizontalAlignment="Right" Command="{Binding ViewAllFavoritesCommand}" />
+                        </Grid>
 
-                                    <TextBlock Grid.Column="0"
-                                               Text="{Binding ResultIcon}"
-                                               FontFamily="{StaticResource IconFont}"
-                                               FontSize="12"
-                                               VerticalAlignment="Center"
-                                               Foreground="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}"
-                                               ToolTip="{Binding ResultText}" />
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding ConnectionName}"
-                                               Style="{StaticResource Text.Body}"
-                                               Margin="8,0,0,0"
-                                               MaxWidth="220"
-                                               TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="2"
-                                               Text="{Binding Host}"
-                                               Style="{StaticResource Text.Caption}"
-                                               FontFamily="{StaticResource MonoFont}"
-                                               Margin="12,0,0,0"
-                                               MaxWidth="240"
-                                               TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="3"
-                                               Text="{Binding ProtocolName}"
-                                               Style="{StaticResource Text.Caption}"
-                                               Margin="12,0,0,0" />
-                                    <TextBlock Grid.Column="5"
-                                               Text="{Binding StartedAtDisplay}"
-                                               Style="{StaticResource Text.Caption}"
-                                               Margin="16,0,0,0" />
-                                    <TextBlock Grid.Column="6"
-                                               Text="{Binding DurationDisplay}"
-                                               Style="{StaticResource Text.Caption}"
-                                               Margin="16,0,0,0"
-                                               MinWidth="56"
-                                               TextAlignment="Right" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                        <ItemsControl ItemsSource="{Binding FavoriteItems}" ItemTemplate="{StaticResource FavoriteRow}"
+                                      Visibility="{Binding HasFavorites, Converter={StaticResource BoolToVisibility}}" />
+
+                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10"
+                                   Text="还没有收藏的连接。在「我的连接」里点星标即可加入。"
+                                   Visibility="{Binding HasFavorites, Converter={StaticResource InverseBoolToVisibility}}" />
+
+                        <Border Style="{StaticResource Surface.Divider}" Margin="0,8" />
+                        <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Stretch"
+                                Command="{Binding ViewAllFavoritesCommand}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="{StaticResource Icon.Favorite}" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" />
+                                <TextBlock Text="管理收藏" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </Border>
-            </StackPanel>
-        </StackPanel>
+
+                <!-- 最近活动 -->
+                <Border Grid.Column="2" Style="{StaticResource Surface.Card}" Padding="18,16" VerticalAlignment="Top">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{StaticResource Icon.Recent}" FontFamily="{StaticResource IconFont}"
+                                           FontSize="14" Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
+                                <TextBlock Text="最近活动" Style="{StaticResource Text.SectionTitle}" Margin="8,0,0,0" />
+                            </StackPanel>
+                            <Button Content="查看全部" Style="{StaticResource Home.LinkButton}"
+                                    HorizontalAlignment="Right" Command="{Binding ViewAllActivityCommand}" />
+                        </Grid>
+
+                        <ItemsControl ItemsSource="{Binding RecentHistory}" ItemTemplate="{StaticResource ActivityRow}"
+                                      Visibility="{Binding HasActivity, Converter={StaticResource BoolToVisibility}}" />
+
+                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10"
+                                   Text="还没有连接记录。"
+                                   Visibility="{Binding HasActivity, Converter={StaticResource InverseBoolToVisibility}}" />
+
+                        <Border Style="{StaticResource Surface.Divider}" Margin="0,8" />
+                        <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Stretch"
+                                Command="{Binding ViewAllActivityCommand}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="{StaticResource Icon.Recent}" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" />
+                                <TextBlock Text="查看所有活动" Margin="8,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 安全提示 -->
+            <Border Grid.Row="4" Background="{DynamicResource Bg.Subtle}"
+                    CornerRadius="{StaticResource Radius.Large}" Padding="16,14"
+                    Visibility="{Binding ShowSecurityTip, Converter={StaticResource BoolToVisibility}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}"
+                               FontSize="16" Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Margin="12,0,12,0" VerticalAlignment="Center">
+                        <TextBlock Text="安全提示" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                        <TextBlock Text="为保障连接安全，请定期更新密码，并为关键账号启用双因素认证。"
+                                   Style="{StaticResource Text.Caption}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Style="{StaticResource Button.Secondary}" Content="了解更多"
+                            VerticalAlignment="Center" Command="{Binding ViewCredentialsCommand}" />
+                    <Button Grid.Column="3" Style="{StaticResource Button.Icon}"
+                            Width="28" Height="28" FontSize="10" Margin="6,0,0,0" VerticalAlignment="Center"
+                            Content="{StaticResource Icon.Close}" ToolTip="不再提示"
+                            Command="{Binding DismissSecurityTipCommand}" />
+                </Grid>
+            </Border>
+        </Grid>
     </ScrollViewer>
 </UserControl>

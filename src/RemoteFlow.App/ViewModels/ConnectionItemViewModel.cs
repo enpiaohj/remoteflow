@@ -65,6 +65,10 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
     [ObservableProperty]
     private bool _isFavorite = profile.Favorite;
 
+    /// <summary>该连接当前是否有进行中的会话。首页最近连接卡片据此高亮。</summary>
+    [ObservableProperty]
+    private bool _hasActiveSession;
+
     public DateTimeOffset? LastConnectedAt => Profile.LastConnectedAt;
 
     /// <summary>最近连接时间的相对描述，比绝对时间更利于快速扫读。</summary>
