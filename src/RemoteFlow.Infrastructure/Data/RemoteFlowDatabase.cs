@@ -17,7 +17,7 @@ namespace RemoteFlow.Infrastructure.Data;
 public sealed class RemoteFlowDatabase
 {
     /// <summary>当前 Schema 版本。新增迁移时递增，并在 <see cref="Migrations"/> 中追加脚本。</summary>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     private readonly string _connectionString;
     private readonly ILogger<RemoteFlowDatabase> _logger;
@@ -289,6 +289,18 @@ public sealed class RemoteFlowDatabase
             fingerprint   TEXT NOT NULL,
             trusted_at    TEXT NOT NULL
         );
+        """,
+
+        // v2：分组模型正式化。
+        //  - connection_groups 增加 is_system 列，显式区分系统兜底分组。
+        //  - 插入唯一系统分组「未分组」（固定 Id），新连接未指定分组时归入这里。
+        //  - 默认用户分组「我的设备」的种子由服务层按「库中无用户分组」条件补齐，不写死在迁移里
+        //    （既有库里可能已有 Windows / Linux 等普通分组，此时不应再造「我的设备」）。
+        [2] = """
+        ALTER TABLE connection_groups ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0;
+
+        INSERT OR IGNORE INTO connection_groups (id, name, parent_id, sort_order, icon, is_system)
+        VALUES ('00000000-0000-0000-0000-0000000000ff', '未分组', NULL, 2147483647, '', 1);
         """
     };
 }

@@ -200,6 +200,7 @@ public partial class App : System.Windows.Application
 
         // ── 应用服务 ──────────────────────────────────────────────
         services.AddSingleton<AppServices.ConnectionService>();
+        services.AddSingleton<AppServices.GroupService>();
         services.AddSingleton<AppServices.CredentialService>();
         services.AddSingleton<AppServices.ConnectionSearchService>();
         services.AddSingleton<AppServices.ImportExportService>();
@@ -242,41 +243,35 @@ public partial class App : System.Windows.Application
     }
 
     /// <summary>
-    /// 首次运行时创建几个常用分组与标签。
+    /// 首次运行时补齐必要的种子数据。
     /// <para>
-    /// 目的不是塞演示数据，而是让「新建连接」对话框的分组/标签下拉不至于空白，
-    /// 降低首次使用的门槛。不创建任何示例连接或凭据。
+    /// 分组：保证系统「未分组」存在；库中没有任何用户分组时创建默认分组「我的设备」
+    /// （不再造 Windows / Linux 等业务含义分组，见 UI 分组优化提示词 §9 / §13）。
+    /// 标签：库中没有标签时补几个常用标签，避免「新建连接」对话框的标签选择空白。
+    /// 不创建任何示例连接或凭据。
     /// </para>
     /// </summary>
     private async Task SeedDefaultsIfEmptyAsync()
     {
-        var groups = Services.GetRequiredService<IGroupRepository>();
+        await Services.GetRequiredService<AppServices.GroupService>().EnsureSeedAsync();
+
         var tags = Services.GetRequiredService<ITagRepository>();
-
-        if ((await groups.GetAllAsync()).Count > 0)
+        if ((await tags.GetAllAsync()).Count == 0)
         {
-            return;
+            var defaultTags = new (string Name, string Color)[]
+            {
+                ("生产", "#C42B1C"),
+                ("测试", "#9D5D00"),
+                ("开发", "#0F7B0F")
+            };
+
+            foreach (var (name, color) in defaultTags)
+            {
+                await tags.AddAsync(new Tag { Name = name, Color = color });
+            }
         }
 
-        var defaultGroups = new[] { "Windows", "Linux", "macOS", "网络设备" };
-        for (var i = 0; i < defaultGroups.Length; i++)
-        {
-            await groups.AddAsync(new ConnectionGroup { Name = defaultGroups[i], SortOrder = i });
-        }
-
-        var defaultTags = new (string Name, string Color)[]
-        {
-            ("生产", "#C42B1C"),
-            ("测试", "#9D5D00"),
-            ("开发", "#0F7B0F")
-        };
-
-        foreach (var (name, color) in defaultTags)
-        {
-            await tags.AddAsync(new Tag { Name = name, Color = color });
-        }
-
-        _logger?.LogInformation("已创建默认分组与标签");
+        _logger?.LogInformation("种子数据检查完成");
     }
 
     /// <summary>

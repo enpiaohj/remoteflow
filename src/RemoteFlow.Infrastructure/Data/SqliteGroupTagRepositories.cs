@@ -11,7 +11,8 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
     {
         await using var connection = database.OpenConnection();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id, name, parent_id, sort_order, icon FROM connection_groups ORDER BY sort_order, name COLLATE NOCASE;";
+        command.CommandText =
+            "SELECT id, name, parent_id, sort_order, icon, is_system FROM connection_groups ORDER BY sort_order, name COLLATE NOCASE;";
 
         var groups = new List<ConnectionGroup>();
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -23,7 +24,8 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
                 Name = reader.GetString(1),
                 ParentId = reader.IsDBNull(2) ? null : Guid.Parse(reader.GetString(2)),
                 SortOrder = reader.GetInt32(3),
-                Icon = reader.GetString(4)
+                Icon = reader.GetString(4),
+                IsSystem = reader.GetInt32(5) != 0
             });
         }
         return groups;
@@ -34,8 +36,8 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
         await using var connection = database.OpenConnection();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            INSERT INTO connection_groups (id, name, parent_id, sort_order, icon)
-            VALUES ($id, $name, $parentId, $sortOrder, $icon);
+            INSERT INTO connection_groups (id, name, parent_id, sort_order, icon, is_system)
+            VALUES ($id, $name, $parentId, $sortOrder, $icon, $isSystem);
             """;
         Bind(command, group);
         await command.ExecuteNonQueryAsync(ct);
@@ -47,7 +49,7 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
         await using var command = connection.CreateCommand();
         command.CommandText = """
             UPDATE connection_groups
-            SET name = $name, parent_id = $parentId, sort_order = $sortOrder, icon = $icon
+            SET name = $name, parent_id = $parentId, sort_order = $sortOrder, icon = $icon, is_system = $isSystem
             WHERE id = $id;
             """;
         Bind(command, group);
@@ -55,38 +57,53 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
     }
 
     /// <summary>
-    /// 删除分组。组内连接与子分组会先迁移到 <paramref name="moveConnectionsTo"/>
-    /// （null 表示移动到「未分组」），绝不随分组一并删除。
+    /// 删除分组：组内连接迁移到 <paramref name="moveConnectionsTo"/>（null → 「未分组」），
+    /// 子分组提升到被删除分组的父级（§16）。绝不随分组一并删除连接。
     /// </summary>
     public async Task DeleteAsync(Guid id, Guid? moveConnectionsTo, CancellationToken ct = default)
     {
         await using var connection = database.OpenConnection();
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
 
-        var target = (object?)moveConnectionsTo?.ToString() ?? DBNull.Value;
+        var connectionTarget = (object?)moveConnectionsTo?.ToString() ?? DBNull.Value;
+
+        // 先取被删除分组自己的 parent_id——子分组要提升到这里。
+        object? parentTarget = DBNull.Value;
+        await using (var readParent = connection.CreateCommand())
+        {
+            readParent.Transaction = transaction;
+            readParent.CommandText = "SELECT parent_id FROM connection_groups WHERE id = $id;";
+            readParent.Parameters.AddWithValue("$id", id.ToString());
+            var result = await readParent.ExecuteScalarAsync(ct);
+            if (result is string parent)
+            {
+                parentTarget = parent;
+            }
+        }
 
         await using (var moveConnections = connection.CreateCommand())
         {
             moveConnections.Transaction = transaction;
             moveConnections.CommandText = "UPDATE connections SET group_id = $target WHERE group_id = $id;";
-            moveConnections.Parameters.AddWithValue("$target", target);
+            moveConnections.Parameters.AddWithValue("$target", connectionTarget);
             moveConnections.Parameters.AddWithValue("$id", id.ToString());
             await moveConnections.ExecuteNonQueryAsync(ct);
         }
 
-        await using (var moveChildren = connection.CreateCommand())
+        await using (var promoteChildren = connection.CreateCommand())
         {
-            moveChildren.Transaction = transaction;
-            moveChildren.CommandText = "UPDATE connection_groups SET parent_id = $target WHERE parent_id = $id;";
-            moveChildren.Parameters.AddWithValue("$target", target);
-            moveChildren.Parameters.AddWithValue("$id", id.ToString());
-            await moveChildren.ExecuteNonQueryAsync(ct);
+            promoteChildren.Transaction = transaction;
+            promoteChildren.CommandText = "UPDATE connection_groups SET parent_id = $target WHERE parent_id = $id;";
+            promoteChildren.Parameters.AddWithValue("$target", parentTarget);
+            promoteChildren.Parameters.AddWithValue("$id", id.ToString());
+            await promoteChildren.ExecuteNonQueryAsync(ct);
         }
 
         await using (var delete = connection.CreateCommand())
         {
             delete.Transaction = transaction;
-            delete.CommandText = "DELETE FROM connection_groups WHERE id = $id;";
+            // 系统分组永不删除，这里加一道防线。
+            delete.CommandText = "DELETE FROM connection_groups WHERE id = $id AND is_system = 0;";
             delete.Parameters.AddWithValue("$id", id.ToString());
             await delete.ExecuteNonQueryAsync(ct);
         }
@@ -101,6 +118,7 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
         command.Parameters.AddWithValue("$parentId", (object?)group.ParentId?.ToString() ?? DBNull.Value);
         command.Parameters.AddWithValue("$sortOrder", group.SortOrder);
         command.Parameters.AddWithValue("$icon", group.Icon);
+        command.Parameters.AddWithValue("$isSystem", group.IsSystem ? 1 : 0);
     }
 }
 
