@@ -95,6 +95,13 @@ public sealed class SshSession : IRemoteSession
                 {
                     await CleanupAsync();
 
+                    // 只在失败路径打印（正常连接不经过这里），信息量小但对排查
+                    // 「未按预期弹出信任确认框」这类问题至关重要，保留在 Information 级别。
+                    _logger.LogInformation(
+                        "SSH 会话 {SessionId} 第 {Attempt} 轮握手异常，PendingHostKey={HasPending}，" +
+                        "异常类型={ExceptionType}：{Message}",
+                        SessionId, attempt, _pendingHostKey is not null, ex.GetType().Name, ex.Message);
+
                     // 首轮握手被我方中止（主机密钥未信任），且还没弹过窗——现在弹。
                     if (attempt == 0 && _pendingHostKey is { } pending && _request.HostKeyPolicy is { } policy)
                     {
@@ -333,10 +340,14 @@ public sealed class SshSession : IRemoteSession
     /// </summary>
     private void OnHostKeyReceived(object? sender, HostKeyEventArgs e)
     {
+        _logger.LogDebug(
+            "SSH 会话 {SessionId} 收到 HostKeyReceived，调用线程={ThreadId}", SessionId, Environment.CurrentManagedThreadId);
+
         var policy = _request.HostKeyPolicy;
         if (policy is null)
         {
             // 没有配置校验策略时必须拒绝，绝不静默信任任意主机密钥。
+            _logger.LogWarning("SSH 会话 {SessionId} 未配置 HostKeyPolicy，直接拒绝主机密钥", SessionId);
             _hostKeyFailure = ConnectionErrorCode.HostKeyRejected;
             e.CanTrust = false;
             return;
@@ -359,6 +370,9 @@ public sealed class SshSession : IRemoteSession
             }
 
             // 未信任 / 指纹变化：中止本次握手，稍后弹窗。
+            _logger.LogDebug(
+                "SSH 会话 {SessionId} 主机密钥未信任，中止握手待确认，IsMismatch={IsMismatch}",
+                SessionId, context.IsMismatch);
             _pendingHostKey = context;
             e.CanTrust = false;
         }

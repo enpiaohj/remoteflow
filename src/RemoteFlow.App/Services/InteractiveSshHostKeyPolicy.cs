@@ -16,9 +16,13 @@ namespace RemoteFlow.App.Services;
 /// </list>
 /// </para>
 /// <para>
-/// <see cref="Lookup"/> 在 SSH 握手线程上跑，只查库、不弹 UI；
-/// <see cref="ConfirmAndRememberAsync"/> 在握手中止后的异步流程里弹窗，
-/// 避免在握手线程上阻塞等待用户（会话超时会先到，把弹窗结果吞掉）。
+/// <see cref="Lookup"/> 在 SSH.NET 触发 <c>HostKeyReceived</c> 的那个调用线程上跑，
+/// 只查库、不弹 UI；<see cref="ConfirmAndRememberAsync"/> 在握手中止后的异步流程里
+/// 弹窗，避免在握手回调里阻塞等待用户（会话超时会先到，把弹窗结果吞掉）。
+/// <b>调用线程不保证是无 SynchronizationContext 的线程池线程</b>——SSH 会话的连接
+/// 发起方（例如 UI 线程的 async void 事件处理器）在某些库版本/路径下可能就是
+/// 触发该事件的线程，因此 <see cref="Lookup"/> 内部用 <c>Task.Run</c> 隔离 DB 查询，
+/// 不直接在调用线程上做 sync-over-async。
 /// </para>
 /// </summary>
 public sealed class InteractiveSshHostKeyPolicy(
@@ -28,11 +32,21 @@ public sealed class InteractiveSshHostKeyPolicy(
 {
     public SshHostKeyVerificationContext Lookup(SshHostKeyVerificationContext context)
     {
-        // 握手线程（线程池线程）上没有 SynchronizationContext，这里的 sync-over-async
-        // 是安全的；查询是主键索引命中，很快。
-        var known = repository
-            .GetAsync(context.Host, context.Port, CancellationToken.None)
+        // SSH.NET 触发 HostKeyReceived 的调用线程不受我们控制——不同版本/不同调用路径
+        // （例如从 UI 线程的 async void 事件处理器里发起 ConnectAsync）都可能导致这里
+        // 实际跑在持有 SynchronizationContext 的线程上。用 Task.Run 把 DB 查询丢到线程池、
+        // 在纯线程池上下文里 GetResult，无论调用线程是谁都不会因为等待自己而死锁。
+        var threadId = Environment.CurrentManagedThreadId;
+        var hasSyncContext = SynchronizationContext.Current is not null;
+
+        var known = Task.Run(() =>
+                repository.GetAsync(context.Host, context.Port, CancellationToken.None))
             .GetAwaiter().GetResult();
+
+        logger.LogDebug(
+            "SSH Host Key Lookup {Host}:{Port} 调用线程={ThreadId} 有SyncContext={HasSyncContext} " +
+            "已知指纹={KnownFingerprint} 本次指纹={Fingerprint}",
+            context.Host, context.Port, threadId, hasSyncContext, known?.Fingerprint, context.Fingerprint);
 
         return new SshHostKeyVerificationContext
         {
@@ -47,6 +61,10 @@ public sealed class InteractiveSshHostKeyPolicy(
     public async Task<bool> ConfirmAndRememberAsync(
         SshHostKeyVerificationContext context, CancellationToken cancellationToken)
     {
+        logger.LogInformation(
+            "SSH Host Key 待确认 {Host}:{Port} IsMismatch={IsMismatch} 调用线程={ThreadId}",
+            context.Host, context.Port, context.IsMismatch, Environment.CurrentManagedThreadId);
+
         if (context.IsMismatch)
         {
             logger.LogWarning(
@@ -55,6 +73,9 @@ public sealed class InteractiveSshHostKeyPolicy(
         }
 
         var accepted = await dialogs.ConfirmHostKeyAsync(context);
+
+        logger.LogInformation(
+            "SSH Host Key 确认框返回 {Host}:{Port} Accepted={Accepted}", context.Host, context.Port, accepted);
 
         if (!accepted)
         {
