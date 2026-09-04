@@ -86,8 +86,8 @@ RDP / SSH / VNC 三种协议的会话体验，以及凭据安全与迁移。
 
 | 文件 | 说明 | SHA256 |
 | --- | --- | --- |
-| `RemoteFlow-v0.1.0-win-x64.zip` | 完整发布包（含 `Assets/Terminal/`），**推荐** | 见下方发布报告 |
-| `RemoteFlow-v0.1.0-win-x64.exe` | 单文件（RDP / VNC 可用，SSH 终端需 zip 包） | 见下方发布报告 |
+| `RemoteFlow-v0.1.0-win-x64.zip` | 完整发布包（含 `Assets/Terminal/`），**推荐** | `063ad28c9629bd986c521c9b9fc980456bb46e2e17abe5850d0e188bfcc0e48a` |
+| `RemoteFlow-v0.1.0-win-x64.exe` | 单文件（RDP / VNC 可用，SSH 终端需 zip 包） | `aca840de4fed3ba1b74177a3619f3f02f50d2ba38a705c8f69df5ada03fc40b2` |
 
 产物为本地磁盘不可变快照，不入库；`source/` 与本文件入库。
 
@@ -95,4 +95,4 @@ RDP / SSH / VNC 三种协议的会话体验，以及凭据安全与迁移。
 
 - Commit：`release: RemoteFlow v0.1.0`
 - Tag：`v0.1.0`
-- 快照对应源码：发布二进制 ProductVersion 内嵌同一 commit。
+- 快照对应源码：父提交 `c520a96`（发布二进制 ProductVersion 内嵌 `0.1.0+c520a96`）。
