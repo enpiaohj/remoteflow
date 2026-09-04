@@ -95,7 +95,7 @@
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Text" Value="{Binding Converter={StaticResource EnumDisplay}}" />
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                        <DataTrigger Binding="{Binding}" Value="All">
                                             <Setter Property="Text" Value="全部协议" />
                                         </DataTrigger>
                                     </Style.Triggers>

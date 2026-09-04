@@ -36,6 +36,15 @@ public enum ConnectionSortMode
     Protocol
 }
 
+/// <summary>协议筛选选项。<see cref="All"/> 表示不筛选。</summary>
+public enum ProtocolFilterOption
+{
+    All,
+    Rdp,
+    Ssh,
+    Vnc
+}
+
 /// <summary>
 /// 「我的连接」页面。承担搜索、筛选、分组与发起连接，
 /// 不承担凭据密码编辑（页面职责单一，见产品设计文档 §7.6）。
@@ -167,9 +176,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     [ObservableProperty]
     private string _pageFilterText = string.Empty;
 
-    /// <summary>协议筛选。null 表示全部协议。</summary>
+    /// <summary>协议筛选。</summary>
     [ObservableProperty]
-    private ProtocolType? _protocolFilter;
+    private ProtocolFilterOption _protocolFilter = ProtocolFilterOption.All;
 
     /// <summary>排序方式。</summary>
     [ObservableProperty]
@@ -179,8 +188,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     [ObservableProperty]
     private RecentRange _recentRange = RecentRange.Today;
 
-    public IReadOnlyList<ProtocolType?> ProtocolFilterOptions { get; } =
-        [null, ProtocolType.Rdp, ProtocolType.Ssh, ProtocolType.Vnc];
+    public IReadOnlyList<ProtocolFilterOption> ProtocolFilterOptions { get; } =
+        [ProtocolFilterOption.All, ProtocolFilterOption.Rdp, ProtocolFilterOption.Ssh, ProtocolFilterOption.Vnc];
 
     public IReadOnlyList<ConnectionSortMode> SortModeOptions { get; } =
         [ConnectionSortMode.Name, ConnectionSortMode.LastConnected, ConnectionSortMode.Protocol];
@@ -201,7 +210,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     partial void OnPageFilterTextChanged(string value) => ApplyFilter();
 
-    partial void OnProtocolFilterChanged(ProtocolType? value) => ApplyFilter();
+    partial void OnProtocolFilterChanged(ProtocolFilterOption value) => ApplyFilter();
 
     partial void OnSortModeChanged(ConnectionSortMode value) => ApplyFilter();
 
@@ -303,8 +312,14 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         // 「我的连接」页内筛选：协议 + 名称 / IP / 标签关键词（「最近连接」不用这套）。
         if (Filter != ConnectionFilter.Recent)
         {
-            if (ProtocolFilter is { } protocol)
+            if (ProtocolFilter != ProtocolFilterOption.All)
             {
+                var protocol = ProtocolFilter switch
+                {
+                    ProtocolFilterOption.Ssh => ProtocolType.Ssh,
+                    ProtocolFilterOption.Vnc => ProtocolType.Vnc,
+                    _ => ProtocolType.Rdp
+                };
                 source = source.Where(i => i.Profile.Protocol == protocol);
             }
 
