@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using RemoteFlow.App.Services;
 using RemoteFlow.Application.Services;
+using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 
@@ -19,6 +20,22 @@ public enum ConnectionFilter
     Recent
 }
 
+/// <summary>「最近连接」的时间范围筛选。</summary>
+public enum RecentRange
+{
+    Today,
+    Week,
+    All
+}
+
+/// <summary>连接列表的排序方式。</summary>
+public enum ConnectionSortMode
+{
+    Name,
+    LastConnected,
+    Protocol
+}
+
 /// <summary>
 /// 「我的连接」页面。承担搜索、筛选、分组与发起连接，
 /// 不承担凭据密码编辑（页面职责单一，见产品设计文档 §7.6）。
@@ -28,8 +45,12 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     private readonly ConnectionService _connections;
     private readonly ConnectionSearchService _search;
     private readonly SessionManager _sessions;
+    private readonly IHistoryRepository _history;
     private readonly IDialogService _dialogs;
     private readonly ILogger<ConnectionsPageViewModel> _logger;
+
+    /// <summary>详情面板迷你图表展示的历史条数。</summary>
+    private const int SparkCount = 10;
 
     /// <summary>全量数据。搜索与筛选都在其之上进行，避免每次都回数据库。</summary>
     private readonly List<ConnectionItemViewModel> _allItems = [];
@@ -42,12 +63,14 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         ConnectionService connections,
         ConnectionSearchService search,
         SessionManager sessions,
+        IHistoryRepository history,
         IDialogService dialogs,
         ILogger<ConnectionsPageViewModel> logger)
     {
         _connections = connections;
         _search = search;
         _sessions = sessions;
+        _history = history;
         _dialogs = dialogs;
         _logger = logger;
 
@@ -55,6 +78,70 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         ItemsView = CollectionViewSource.GetDefaultView(Items);
         ApplyGrouping();
     }
+
+    // ── 详情面板：按连接的历史与迷你图表 ─────────────────────────
+
+    /// <summary>当前选中连接的历史记录（倒序），供详情面板「连接历史」列表。</summary>
+    public ObservableCollection<HistoryItemViewModel> SelectedItemHistory { get; } = [];
+
+    /// <summary>迷你柱状图的柱子（最近 10 次，按时间正序），高度已归一化到 0~1。</summary>
+    public ObservableCollection<SparkBar> SelectedItemSparkline { get; } = [];
+
+    public bool SelectedItemHasHistory => SelectedItemHistory.Count > 0;
+
+    partial void OnSelectedItemChanged(ConnectionItemViewModel? value) => _ = LoadSelectedHistoryAsync(value);
+
+    private async Task LoadSelectedHistoryAsync(ConnectionItemViewModel? item)
+    {
+        SelectedItemHistory.Clear();
+        SelectedItemSparkline.Clear();
+
+        if (item is null)
+        {
+            OnPropertyChanged(nameof(SelectedItemHasHistory));
+            return;
+        }
+
+        try
+        {
+            var entries = await _history.GetByConnectionAsync(item.Id, 50);
+
+            foreach (var entry in entries)
+            {
+                SelectedItemHistory.Add(new HistoryItemViewModel(entry));
+            }
+
+            // 迷你图：最近 10 次，按时间正序；柱高按时长归一化，无时长（未完成 / 失败）取一个最小值。
+            var recent = entries.Take(SparkCount).Reverse().ToList();
+            var maxMinutes = recent
+                .Select(e => e.Duration?.TotalMinutes ?? 0)
+                .DefaultIfEmpty(0)
+                .Max();
+
+            foreach (var entry in recent)
+            {
+                var minutes = entry.Duration?.TotalMinutes ?? 0;
+                var ratio = maxMinutes > 0 ? minutes / maxMinutes : 0;
+                SelectedItemSparkline.Add(new SparkBar(
+                    Math.Max(0.12, ratio),
+                    entry.Result == ConnectionResult.Success ? "Status.Success" : "Status.Danger",
+                    $"{entry.StartedAt:MM-dd HH:mm} · {(entry.Duration is { } d ? FormatDuration(d) : "未完成")}"));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "加载连接历史失败：{ConnectionId}", item.Id);
+        }
+
+        OnPropertyChanged(nameof(SelectedItemHasHistory));
+    }
+
+    private static string FormatDuration(TimeSpan d) => d switch
+    {
+        { TotalMinutes: < 1 } => $"{(int)d.TotalSeconds} 秒",
+        { TotalHours: < 1 } => $"{(int)d.TotalMinutes} 分钟",
+        _ => $"{(int)d.TotalHours} 小时 {d.Minutes} 分"
+    };
 
     /// <summary>当前显示的连接（已应用搜索与筛选）。</summary>
     public ObservableCollection<ConnectionItemViewModel> Items { get; }
@@ -76,6 +163,28 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     [ObservableProperty]
     private bool _groupByFolder = true;
 
+    /// <summary>「我的连接」页内的名称 / IP / 标签筛选（独立于顶部全局搜索）。</summary>
+    [ObservableProperty]
+    private string _pageFilterText = string.Empty;
+
+    /// <summary>协议筛选。null 表示全部协议。</summary>
+    [ObservableProperty]
+    private ProtocolType? _protocolFilter;
+
+    /// <summary>排序方式。</summary>
+    [ObservableProperty]
+    private ConnectionSortMode _sortMode = ConnectionSortMode.Name;
+
+    /// <summary>「最近连接」的时间范围。</summary>
+    [ObservableProperty]
+    private RecentRange _recentRange = RecentRange.Today;
+
+    public IReadOnlyList<ProtocolType?> ProtocolFilterOptions { get; } =
+        [null, ProtocolType.Rdp, ProtocolType.Ssh, ProtocolType.Vnc];
+
+    public IReadOnlyList<ConnectionSortMode> SortModeOptions { get; } =
+        [ConnectionSortMode.Name, ConnectionSortMode.LastConnected, ConnectionSortMode.Protocol];
+
     [ObservableProperty]
     private bool _isLoading;
 
@@ -85,9 +194,25 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     public bool IsEmpty => Items.Count == 0;
 
+    /// <summary>「最近连接」视图专属：日期分组 + 时间范围筛选。</summary>
+    public bool IsRecentView => Filter == ConnectionFilter.Recent;
+
     partial void OnSearchTextChanged(string value) => ApplyFilter();
 
-    partial void OnFilterChanged(ConnectionFilter value) => ApplyFilter();
+    partial void OnPageFilterTextChanged(string value) => ApplyFilter();
+
+    partial void OnProtocolFilterChanged(ProtocolType? value) => ApplyFilter();
+
+    partial void OnSortModeChanged(ConnectionSortMode value) => ApplyFilter();
+
+    partial void OnRecentRangeChanged(RecentRange value) => ApplyFilter();
+
+    partial void OnFilterChanged(ConnectionFilter value)
+    {
+        OnPropertyChanged(nameof(IsRecentView));
+        ApplyGrouping();
+        ApplyFilter();
+    }
 
     partial void OnGroupByFolderChanged(bool value) => ApplyGrouping();
 
@@ -162,20 +287,59 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         source = Filter switch
         {
             ConnectionFilter.Favorites => source.Where(i => i.IsFavorite),
-            ConnectionFilter.Recent => source
-                .Where(i => i.LastConnectedAt is not null)
-                .OrderByDescending(i => i.LastConnectedAt),
+            ConnectionFilter.Recent => source.Where(i => i.LastConnectedAt is not null),
             _ => source
         };
 
+        // 「最近连接」的时间范围筛选。
+        if (Filter == ConnectionFilter.Recent && RecentRange != RecentRange.All)
+        {
+            var cutoff = RecentRange == RecentRange.Today
+                ? DateTimeOffset.Now.Date
+                : DateTimeOffset.Now.Date.AddDays(-6);
+            source = source.Where(i => i.LastConnectedAt >= cutoff);
+        }
+
+        // 「我的连接」页内筛选：协议 + 名称 / IP / 标签关键词（「最近连接」不用这套）。
+        if (Filter != ConnectionFilter.Recent)
+        {
+            if (ProtocolFilter is { } protocol)
+            {
+                source = source.Where(i => i.Profile.Protocol == protocol);
+            }
+
+            if (!string.IsNullOrWhiteSpace(PageFilterText))
+            {
+                var q = PageFilterText.Trim();
+                source = source.Where(i =>
+                    i.Name.Contains(q, StringComparison.CurrentCultureIgnoreCase)
+                    || i.Host.Contains(q, StringComparison.CurrentCultureIgnoreCase)
+                    || i.Tags.Any(t => t.Name.Contains(q, StringComparison.CurrentCultureIgnoreCase)));
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(SearchText))
         {
-            // 搜索结果已按相关度排序，此处保持该顺序。
+            // 顶部全局搜索结果已按相关度排序，此处保持该顺序。
             var matched = _search.Search(
                 source.Select(i => i.Profile), SearchText, _groupNames, _tagNames);
 
             var order = matched.Select((p, index) => (p.Id, index)).ToDictionary(x => x.Id, x => x.index);
             source = source.Where(i => order.ContainsKey(i.Id)).OrderBy(i => order[i.Id]);
+        }
+        else
+        {
+            // 「最近连接」固定按时间倒序；其余视图按用户选择的排序方式。
+            source = Filter == ConnectionFilter.Recent
+                ? source.OrderByDescending(i => i.LastConnectedAt)
+                : SortMode switch
+                {
+                    ConnectionSortMode.LastConnected => source
+                        .OrderByDescending(i => i.LastConnectedAt ?? DateTimeOffset.MinValue),
+                    ConnectionSortMode.Protocol => source
+                        .OrderBy(i => i.Profile.Protocol).ThenBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase),
+                    _ => source.OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase)
+                };
         }
 
         var previousSelection = SelectedItem?.Id;
@@ -184,6 +348,10 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         foreach (var item in source)
         {
             item.RefreshComputed();
+            if (Filter == ConnectionFilter.Recent)
+            {
+                item.RecentBucket = BucketFor(item.LastConnectedAt);
+            }
             Items.Add(item);
         }
 
@@ -192,8 +360,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             : Filter switch
             {
                 ConnectionFilter.Favorites when string.IsNullOrWhiteSpace(SearchText) => "还没有收藏的连接。在列表中点击星标即可收藏。",
-                ConnectionFilter.Recent when string.IsNullOrWhiteSpace(SearchText) => "还没有连接记录。",
-                _ => $"没有找到与「{SearchText}」匹配的连接。"
+                ConnectionFilter.Recent when string.IsNullOrWhiteSpace(SearchText) =>
+                    RecentRange == RecentRange.Today ? "今天还没有连接记录。" : "这段时间还没有连接记录。",
+                _ => $"没有找到匹配的连接。"
             };
 
         // 尽量保留原选中项，避免刷新后右侧详情面板闪烁。
@@ -204,12 +373,33 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         OnPropertyChanged(nameof(IsEmpty));
     }
 
+    /// <summary>把最近连接时间归入「今天 / 昨天 / 更早」三个桶。</summary>
+    private static string BucketFor(DateTimeOffset? when)
+    {
+        if (when is not { } time)
+        {
+            return "更早";
+        }
+
+        var today = DateTimeOffset.Now.Date;
+        var day = time.LocalDateTime.Date;
+        if (day == today)
+        {
+            return "今天";
+        }
+        return day == today.AddDays(-1) ? "昨天" : "更早";
+    }
+
     private void ApplyGrouping()
     {
         ItemsView.GroupDescriptions.Clear();
 
-        // 「最近连接」按时间排序更有意义，此时不做分组折叠。
-        if (GroupByFolder && Filter != ConnectionFilter.Recent)
+        if (Filter == ConnectionFilter.Recent)
+        {
+            // 「最近连接」按日期分组（今天 / 昨天 / 更早），不按文件夹。
+            ItemsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ConnectionItemViewModel.RecentBucket)));
+        }
+        else if (GroupByFolder)
         {
             ItemsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ConnectionItemViewModel.GroupName)));
         }

@@ -122,7 +122,7 @@
             <Grid>
 
                 <!-- ── 常规 ── -->
-                <StackPanel MaxWidth="900" HorizontalAlignment="Left"
+                <StackPanel HorizontalAlignment="Stretch"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=General}">
 
                     <!-- 外观与行为 -->
@@ -293,7 +293,7 @@
                 </StackPanel>
 
                 <!-- ── RDP ── -->
-                <StackPanel MaxWidth="820" HorizontalAlignment="Left"
+                <StackPanel HorizontalAlignment="Stretch"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Rdp}">
                     <TextBlock Text="新建 RDP 连接时的默认值" Style="{StaticResource Text.BodySecondary}" Margin="0,0,0,12" />
                     <Border Style="{StaticResource Surface.Card}" Padding="20,16">
@@ -319,7 +319,7 @@
                 </StackPanel>
 
                 <!-- ── SSH ── -->
-                <StackPanel MaxWidth="820" HorizontalAlignment="Left"
+                <StackPanel HorizontalAlignment="Stretch"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Ssh}">
                     <Border Style="{StaticResource Surface.Card}" Padding="20,16">
                         <StackPanel>
@@ -369,7 +369,7 @@
                 </StackPanel>
 
                 <!-- ── VNC ── -->
-                <StackPanel MaxWidth="820" HorizontalAlignment="Left"
+                <StackPanel HorizontalAlignment="Stretch"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Vnc}">
                     <TextBlock Text="新建 VNC 连接时的默认值" Style="{StaticResource Text.BodySecondary}" Margin="0,0,0,12" />
                     <Border Style="{StaticResource Surface.Card}" Padding="20,16">
@@ -397,7 +397,7 @@
                 </StackPanel>
 
                 <!-- ── 安全 ── -->
-                <StackPanel MaxWidth="820" HorizontalAlignment="Left"
+                <StackPanel HorizontalAlignment="Stretch"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Security}">
                     <Border Style="{StaticResource Surface.Card}" Padding="20,16">
                         <StackPanel>
@@ -453,7 +453,7 @@
                 </StackPanel>
 
                 <!-- ── 数据与备份 ── -->
-                <Grid MaxWidth="1120" HorizontalAlignment="Left"
+                <Grid HorizontalAlignment="Stretch"
                       Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Data}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />

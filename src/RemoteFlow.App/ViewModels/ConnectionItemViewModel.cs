@@ -69,6 +69,10 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
     [ObservableProperty]
     private bool _hasActiveSession;
 
+    /// <summary>「最近连接」视图下的日期分组名（今天 / 昨天 / 更早）。</summary>
+    [ObservableProperty]
+    private string _recentBucket = "更早";
+
     public DateTimeOffset? LastConnectedAt => Profile.LastConnectedAt;
 
     /// <summary>最近连接时间的相对描述，比绝对时间更利于快速扫读。</summary>
@@ -108,3 +112,11 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
 
 /// <summary>标签展示单元。</summary>
 public sealed record TagChip(string Name, string Color);
+
+/// <summary>
+/// 详情面板迷你柱状图的一根柱子。
+/// </summary>
+/// <param name="Height">归一化高度，0~1。</param>
+/// <param name="BrushKey">柱色语义键（成功 / 失败）。</param>
+/// <param name="Tooltip">悬停提示：时间 + 时长。</param>
+public sealed record SparkBar(double Height, string BrushKey, string Tooltip);

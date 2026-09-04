@@ -59,6 +59,10 @@ public interface ICredentialRepository
 public interface IHistoryRepository
 {
     Task<IReadOnlyList<ConnectionHistoryEntry>> GetRecentAsync(int limit, CancellationToken ct = default);
+
+    /// <summary>取指定连接的历史记录，按开始时间倒序。用于连接详情面板的历史与迷你图表。</summary>
+    Task<IReadOnlyList<ConnectionHistoryEntry>> GetByConnectionAsync(Guid connectionId, int limit, CancellationToken ct = default);
+
     Task AddAsync(ConnectionHistoryEntry entry, CancellationToken ct = default);
 
     /// <summary>会话结束时补写结束时间与结果。</summary>

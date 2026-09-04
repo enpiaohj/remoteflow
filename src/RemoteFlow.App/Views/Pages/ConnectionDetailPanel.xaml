@@ -14,6 +14,7 @@
         <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
         <conv:ColorStringToBrushConverter x:Key="ColorToBrush" />
         <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
+        <conv:RatioToHeightConverter x:Key="RatioToHeight" />
 
         <!-- 详情面板的字段行：标签在左、值在右，保持稳定的视觉节奏 -->
         <Style x:Key="FieldRow" TargetType="Grid">
@@ -232,6 +233,60 @@
                     <TextBlock Grid.Column="0" Text="最近连接" Style="{StaticResource Text.Caption}" />
                     <TextBlock Grid.Column="1" Text="{Binding LastConnectedDisplay}" Style="{StaticResource Text.Caption}" />
                 </Grid>
+
+                <!-- ── 迷你图表 + 连接历史（数据来自页面 VM，非当前行 VM）── -->
+                <StackPanel Margin="0,4,0,0"
+                            Visibility="{Binding DataContext.SelectedItemHasHistory, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}">
+
+                    <Border Style="{StaticResource Surface.Divider}" Margin="0,14,0,16" />
+
+                    <TextBlock Text="最近 10 次连接" Style="{StaticResource Text.Caption}" Margin="0,0,0,8" />
+                    <ItemsControl Height="44"
+                                  ItemsSource="{Binding DataContext.SelectedItemSparkline, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Width="16" Margin="0,0,4,0" VerticalAlignment="Bottom" CornerRadius="2"
+                                        Height="{Binding Height, Converter={StaticResource RatioToHeight}, ConverterParameter=40}"
+                                        Background="{Binding BrushKey, Converter={StaticResource KeyToBrush}}"
+                                        ToolTip="{Binding Tooltip}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border Style="{StaticResource Surface.Divider}" Margin="0,16,0,14" />
+
+                    <TextBlock Text="连接历史" Style="{StaticResource Text.Caption}" Margin="0,0,0,6" />
+                    <ItemsControl ItemsSource="{Binding DataContext.SelectedItemHistory, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  MaxHeight="240">
+                        <ItemsControl.Template>
+                            <ControlTemplate TargetType="ItemsControl">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"><ItemsPresenter /></ScrollViewer>
+                            </ControlTemplate>
+                        </ItemsControl.Template>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:HistoryItemViewModel}">
+                                <Grid Height="32">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="14" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Grid.Column="0" Width="6" Height="6" VerticalAlignment="Center"
+                                             Fill="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding StartedAtDisplay}" Style="{StaticResource Text.Caption}"
+                                               VerticalAlignment="Center" Margin="4,0,0,0" />
+                                    <TextBlock Grid.Column="2" Text="{Binding DurationDisplay}" Style="{StaticResource Text.Caption}"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
     </Grid>

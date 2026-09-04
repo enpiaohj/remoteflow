@@ -341,29 +341,28 @@
                                     <TextBlock Text="凭据" Margin="12,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </RadioButton>
+
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Settings, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Settings}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Settings}" Style="{StaticResource IconText}" Width="20" />
+                                    <TextBlock Text="设置" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
                         </StackPanel>
                     </ScrollViewer>
 
-                    <!-- 底部：会话状态一行 + 设置入口 -->
-                    <StackPanel Grid.Row="1" Margin="0,4,0,10">
-                        <StackPanel Orientation="Horizontal" Margin="21,0,12,10">
+                    <!-- 底部：会话状态一行 -->
+                    <StackPanel Grid.Row="1" Margin="0,4,0,12">
+                        <Border Style="{StaticResource Surface.Divider}" Margin="12,0,12,10" />
+                        <StackPanel Orientation="Horizontal" Margin="21,0,12,0">
                             <Ellipse Width="8" Height="8" VerticalAlignment="Center"
                                      Fill="{Binding SessionStatusBrushKey, Converter={StaticResource KeyToBrush}}" />
                             <TextBlock Text="{Binding SessionStatusText}"
                                        Style="{StaticResource Text.Caption}"
                                        Margin="8,0,0,0" />
                         </StackPanel>
-
-                        <Border Style="{StaticResource Surface.Divider}" Margin="12,0,12,6" />
-
-                        <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
-                                     IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Settings, Mode=TwoWay}"
-                                     Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Settings}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.Settings}" Style="{StaticResource IconText}" Width="20" />
-                                <TextBlock Text="设置" Margin="12,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </RadioButton>
                     </StackPanel>
                 </Grid>
 
@@ -538,9 +537,6 @@
             <Border Grid.Row="2" Height="26" Background="{DynamicResource Bg.Base}"
                     Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
                 <Grid Margin="16,0">
-                    <TextBlock Style="{StaticResource Text.Caption}"
-                               Text="{Binding SessionStatusText}"
-                               HorizontalAlignment="Left" />
                     <TextBlock Style="{StaticResource Text.Caption}"
                                Text="本地优先 · 凭据由 Windows DPAPI 保护"
                                HorizontalAlignment="Right" />

@@ -15,6 +15,8 @@
         <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
         <conv:ColorStringToBrushConverter x:Key="ColorToBrush" />
         <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
+        <conv:EnumToBoolConverter x:Key="EnumToBool" />
+        <conv:EnumDisplayNameConverter x:Key="EnumDisplay" />
 
         <!-- 连接行的右键 / 「更多」菜单。ContextMenu 不在主可视树内，
              菜单项动作统一用 Click 在代码后置分发（ResolveItem 从 DataContext 取行 VM）。 -->
@@ -40,8 +42,105 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
+
+        <!-- ── 页内工具条 / 日期范围 ─────────────────────────── -->
+        <Grid Grid.Row="1" Margin="0,0,0,12" Visibility="{Binding IsRecentView, Converter={StaticResource InverseBoolToVisibility}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="320" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Height="34"
+                    Background="{DynamicResource Bg.Layer}" BorderBrush="{DynamicResource Stroke.Default}"
+                    BorderThickness="1" CornerRadius="6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{StaticResource Icon.Search}" FontFamily="{StaticResource IconFont}"
+                               FontSize="12" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                    <TextBox x:Name="PageFilterBox" Grid.Column="1"
+                             Text="{Binding PageFilterText, UpdateSourceTrigger=PropertyChanged, Delay=120}"
+                             Background="Transparent" BorderThickness="0" FontSize="12"
+                             VerticalContentAlignment="Center" Margin="8,0,10,0" />
+                    <TextBlock Grid.Column="1" Text="筛选名称、IP 或标签" IsHitTestVisible="False"
+                               Foreground="{DynamicResource Text.Tertiary}" FontSize="12" VerticalAlignment="Center" Margin="9,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=PageFilterBox}" Value="">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
+            </Border>
+
+            <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" MinWidth="120" Height="34" Margin="8,0,0,0"
+                      VerticalAlignment="Center"
+                      ItemsSource="{Binding ProtocolFilterOptions}" SelectedItem="{Binding ProtocolFilter}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock>
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="{Binding Converter={StaticResource EnumDisplay}}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                            <Setter Property="Text" Value="全部协议" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <ComboBox Grid.Column="3" Style="{StaticResource Input.ComboBox}" MinWidth="132" Height="34"
+                      VerticalAlignment="Center"
+                      ItemsSource="{Binding SortModeOptions}" SelectedItem="{Binding SortMode}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock>
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="按名称排序" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding}" Value="LastConnected">
+                                            <Setter Property="Text" Value="按最近连接排序" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding}" Value="Protocol">
+                                            <Setter Property="Text" Value="按协议排序" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </Grid>
+
+        <!-- 最近连接：时间范围 chip -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12"
+                    Visibility="{Binding IsRecentView, Converter={StaticResource BoolToVisibility}}">
+            <RadioButton Style="{StaticResource Segment}" GroupName="RecentRange" Content="今天"
+                         IsChecked="{Binding RecentRange, Converter={StaticResource EnumToBool}, ConverterParameter=Today, Mode=TwoWay}" />
+            <RadioButton Style="{StaticResource Segment}" GroupName="RecentRange" Content="7 天"
+                         IsChecked="{Binding RecentRange, Converter={StaticResource EnumToBool}, ConverterParameter=Week, Mode=TwoWay}" />
+            <RadioButton Style="{StaticResource Segment}" GroupName="RecentRange" Content="全部" Margin="0"
+                         IsChecked="{Binding RecentRange, Converter={StaticResource EnumToBool}, ConverterParameter=All, Mode=TwoWay}" />
+        </StackPanel>
 
         <!-- ── 页面标题与工具条 ──────────────────────────────── -->
         <Grid Grid.Row="0" Margin="0,0,0,16">
@@ -111,7 +210,7 @@
         </Grid>
 
         <!-- ── 搜索结果提示 ──────────────────────────────────── -->
-        <Border Grid.Row="1"
+        <Border Grid.Row="2"
                 Background="{DynamicResource Brand.Subtle}"
                 CornerRadius="{StaticResource Radius.Medium}"
                 Padding="12,8"
@@ -141,7 +240,7 @@
         </Border>
 
         <!-- ── 列头 ──────────────────────────────────────────── -->
-        <Grid Grid.Row="2" Height="32" Margin="4,0,4,0"
+        <Grid Grid.Row="3" Height="32" Margin="4,0,4,0"
               Visibility="{Binding IsEmpty, Converter={StaticResource InverseBoolToVisibility}}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="36" />
@@ -160,10 +259,10 @@
             <TextBlock Grid.Column="5" Text="最近连接" Style="{StaticResource Text.Caption}" />
         </Grid>
 
-        <Border Grid.Row="2" Style="{StaticResource Surface.Divider}" VerticalAlignment="Bottom" Margin="4,0" />
+        <Border Grid.Row="3" Style="{StaticResource Surface.Divider}" VerticalAlignment="Bottom" Margin="4,0" />
 
         <!-- ── 连接列表 ──────────────────────────────────────── -->
-        <Grid Grid.Row="3">
+        <Grid Grid.Row="4">
 
             <ListBox x:Name="ConnectionList"
                      Style="{StaticResource List.Plain}"
@@ -186,11 +285,27 @@
                                             <Expander IsExpanded="True" Background="Transparent" BorderThickness="0">
                                                 <Expander.Header>
                                                     <StackPanel Orientation="Horizontal" Margin="0,6,0,2">
-                                                        <TextBlock Text="{StaticResource Icon.Folder}"
-                                                                   FontFamily="{StaticResource IconFont}"
+                                                        <TextBlock FontFamily="{StaticResource IconFont}"
                                                                    FontSize="13"
                                                                    Foreground="{DynamicResource Text.Secondary}"
-                                                                   VerticalAlignment="Center" />
+                                                                   VerticalAlignment="Center">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Text" Value="{StaticResource Icon.Folder}" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Name}" Value="今天">
+                                                                            <Setter Property="Text" Value="{StaticResource Icon.Recent}" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Name}" Value="昨天">
+                                                                            <Setter Property="Text" Value="{StaticResource Icon.Recent}" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding Name}" Value="更早">
+                                                                            <Setter Property="Text" Value="{StaticResource Icon.Recent}" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
                                                         <TextBlock Text="{Binding Name}"
                                                                    FontWeight="SemiBold"
                                                                    FontSize="13"

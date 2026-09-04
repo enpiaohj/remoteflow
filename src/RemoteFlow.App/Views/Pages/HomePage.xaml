@@ -312,7 +312,8 @@
             </Grid>
 
             <!-- 安全提示 -->
-            <Border Grid.Row="4" Background="{DynamicResource Bg.Subtle}"
+            <Border Grid.Row="4" Background="{DynamicResource Brand.Subtle}"
+                    BorderBrush="{DynamicResource Brand.Default}" BorderThickness="0,0,0,0"
                     CornerRadius="{StaticResource Radius.Large}" Padding="16,14"
                     Visibility="{Binding ShowSecurityTip, Converter={StaticResource BoolToVisibility}}">
                 <Grid>

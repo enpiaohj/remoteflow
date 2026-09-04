@@ -138,6 +138,20 @@ public sealed class EnumToVisibilityConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>把 0~1 的比值乘以 <c>ConverterParameter</c>（像素高度），用于迷你柱状图。</summary>
+public sealed class RatioToHeightConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var ratio = value is double d ? d : 0;
+        var max = parameter is string s && double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var m) ? m : 40;
+        return Math.Max(2, ratio * max);
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>把枚举转换为中文显示名。</summary>
 public sealed class EnumDisplayNameConverter : IValueConverter
 {

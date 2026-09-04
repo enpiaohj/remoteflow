@@ -124,7 +124,23 @@ public sealed class SqliteHistoryRepository(RemoteFlowDatabase database) : IHist
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT * FROM connection_history ORDER BY started_at DESC LIMIT $limit;";
         command.Parameters.AddWithValue("$limit", limit);
+        return await ReadEntriesAsync(command, ct);
+    }
 
+    public async Task<IReadOnlyList<ConnectionHistoryEntry>> GetByConnectionAsync(
+        Guid connectionId, int limit, CancellationToken ct = default)
+    {
+        await using var connection = database.OpenConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT * FROM connection_history WHERE connection_id = $cid ORDER BY started_at DESC LIMIT $limit;";
+        command.Parameters.AddWithValue("$cid", connectionId.ToString());
+        command.Parameters.AddWithValue("$limit", limit);
+        return await ReadEntriesAsync(command, ct);
+    }
+
+    private static async Task<IReadOnlyList<ConnectionHistoryEntry>> ReadEntriesAsync(SqliteCommand command, CancellationToken ct)
+    {
         var entries = new List<ConnectionHistoryEntry>();
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
