@@ -82,7 +82,16 @@ public partial class TagEditorDialog : Window
                 BorderBrush = System.Windows.Media.Brushes.Transparent,
                 Tag = hex,
             };
-            swatch.MouseLeftButtonUp += (_, _) => SelectColor(hex, fromSwatchClick: true);
+            // 用 MouseLeftButtonDown（而不是 Up）并显式 Handled=true：
+            // Border 不像 Button 会自动吞掉这个事件，不拦截的话它会一路冒泡到
+            // 窗口级的 MouseLeftButtonDown（那个是用来拖动无边框窗口的），
+            // DragMove() 一旦被触发就会整段接管这次按下-释放，色板的点击
+            // 永远等不到 MouseUp——这正是「颜色无法选择」的真根因。
+            swatch.MouseLeftButtonDown += (_, e) =>
+            {
+                SelectColor(hex, fromSwatchClick: true);
+                e.Handled = true;
+            };
             _swatches.Add(swatch);
             SwatchList.Items.Add(swatch);
         }
