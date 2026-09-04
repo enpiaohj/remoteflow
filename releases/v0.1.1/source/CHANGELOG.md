@@ -7,24 +7,6 @@
 
 ---
 
-## [0.1.1] — 2026-09-04
-
-### 新增
-- 凭据加密备份（`.rfbackup`）：口令加密的凭据导入 / 导出，AES-256-GCM + PBKDF2
-  600k 迭代；明文密钥只在内存、绝不落盘；导入按名称跳过已存在。
-- 凭据编辑框密码 / Passphrase 字段加「眼睛」显隐切换。
-- 右键菜单：连接列表行、凭据列表行、顶部会话 Tab（重新连接 / 关闭其他 / 全部）。
-- 首次进全屏给一次性提示：工具条会自动隐藏、鼠标移到屏幕顶部再唤出。
-
-### 修复
-- 全屏悬浮工具条固定 / 显示时贴齐屏幕上边缘。
-- 启动 DB 自愈：残留的 `-wal` / `-shm` 与主库不一致（`SQLITE_IOERR`）且无人占用时
-  自动清理并重开。
-- 页面数据加载失败改为顶部可重试横幅，不再静默。
-- 种子数据创建脱离 UI 线程 sync-over-async；会话 Tab 关闭按钮放大。
-
-详见 [`releases/v0.1.1/CHANGELOG.md`](releases/v0.1.1/CHANGELOG.md)。
-
 ## [0.1.0] — 2026-09-04
 
 Unified Connection MVP。首版目标：先把「连接」做好。
@@ -44,5 +26,4 @@ Unified Connection MVP。首版目标：先把「连接」做好。
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
-[0.1.1]: https://example.invalid/remoteflow/releases/tag/v0.1.1
 [0.1.0]: https://example.invalid/remoteflow/releases/tag/v0.1.0
