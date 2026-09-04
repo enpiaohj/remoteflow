@@ -48,7 +48,7 @@ public partial class HostKeyDialog : Window
 
         if (context.IsMismatch)
         {
-            dialog.IconGlyph.Text = "";
+            dialog.IconGlyph.Text = (string)System.Windows.Application.Current.FindResource("Icon.Warning");
             dialog.IconGlyph.Foreground = (Brush)System.Windows.Application.Current.FindResource("Status.Danger");
             dialog.TitleText.Text = "主机密钥已变更";
             dialog.MessageText.Text =
@@ -68,7 +68,7 @@ public partial class HostKeyDialog : Window
         }
         else
         {
-            dialog.IconGlyph.Text = "";
+            dialog.IconGlyph.Text = (string)System.Windows.Application.Current.FindResource("Icon.Info");
             dialog.IconGlyph.Foreground = (Brush)System.Windows.Application.Current.FindResource("Status.Info");
             dialog.TitleText.Text = "首次连接该主机";
             dialog.MessageText.Text =

@@ -29,11 +29,12 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
         _ => "VNC"
     };
 
+    // Segoe Fluent Icons：与 Icons.xaml 的 Icon.Rdp/Ssh/Vnc 一致。
     public string ProtocolIcon => Profile.Protocol switch
     {
-        ProtocolType.Rdp => "",
-        ProtocolType.Ssh => "",
-        _ => ""
+        ProtocolType.Rdp => "\uE7F4",
+        ProtocolType.Ssh => "\uE756",
+        _ => "\uE7F8"
     };
 
     public string ProtocolBrushKey => Profile.Protocol switch

@@ -31,9 +31,9 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         Title = session.Profile.Name;
         Icon = session.Protocol switch
         {
-            ProtocolType.Rdp => "",
-            ProtocolType.Ssh => "",
-            _ => ""
+            ProtocolType.Rdp => "\uE7F4",
+            ProtocolType.Ssh => "\uE756",
+            _ => "\uE7F8"
         };
 
         session.StateChanged += OnSessionStateChanged;
@@ -55,7 +55,7 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     /// 确保不单靠颜色传达信息（可访问性要求）。
     /// </summary>
     [ObservableProperty]
-    private string _stateIcon = "";
+    private string _stateIcon = "\uE895";
 
     /// <summary>状态色资源键。</summary>
     [ObservableProperty]
@@ -144,39 +144,39 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         {
             case ConnectionState.Idle:
                 StateText = "准备中";
-                StateIcon = "";
+                StateIcon = "\uE895";
                 StateBrushKey = "Status.Idle";
                 break;
 
             case ConnectionState.Connecting:
                 StateText = "正在连接…";
-                StateIcon = "";
+                StateIcon = "\uE895";
                 StateBrushKey = "Status.Info";
                 break;
 
             case ConnectionState.Connected:
                 StateText = "已连接";
-                StateIcon = "";
+                StateIcon = "\uE930";
                 StateBrushKey = "Status.Success";
                 InterruptionMessage = string.Empty;
                 break;
 
             case ConnectionState.Disconnecting:
                 StateText = "正在断开…";
-                StateIcon = "";
+                StateIcon = "\uE895";
                 StateBrushKey = "Status.Idle";
                 break;
 
             case ConnectionState.Disconnected:
                 StateText = "已断开";
-                StateIcon = "";
+                StateIcon = "\uE7BA";
                 StateBrushKey = "Status.Warning";
                 InterruptionMessage = "会话已断开。";
                 break;
 
             case ConnectionState.Failed:
                 StateText = "连接失败";
-                StateIcon = "";
+                StateIcon = "\uEA39";
                 StateBrushKey = "Status.Danger";
                 InterruptionMessage = errorMessage ?? ConnectionException.Describe(errorCode);
                 break;

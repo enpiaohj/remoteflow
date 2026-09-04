@@ -152,11 +152,12 @@ public sealed partial class CredentialItemViewModel(Credential credential, int u
         _ => "VNC 口令"
     };
 
+    // Segoe Fluent Icons，\uXXXX 转义写死（直接贴字形会被文本编码吞掉）。
     public string TypeIcon => Credential.Type switch
     {
-        CredentialType.WindowsDomain or CredentialType.LocalPassword => "",
-        CredentialType.SshPassword or CredentialType.SshPrivateKey => "",
-        _ => ""
+        CredentialType.WindowsDomain or CredentialType.LocalPassword => "\uE77B", // Contact
+        CredentialType.SshPassword or CredentialType.SshPrivateKey => "\uE756",   // CommandPrompt
+        _ => "\uE8D7"                                                             // Permissions
     };
 
     /// <summary>是否已在保险库中保存了 Secret。只显示「有/无」，绝不显示内容。</summary>

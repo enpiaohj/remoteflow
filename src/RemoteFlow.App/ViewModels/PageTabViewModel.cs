@@ -15,7 +15,7 @@ public sealed partial class PageTabViewModel : WorkspaceTabViewModel
     public PageTabViewModel()
     {
         Title = "连接";
-        Icon = "";
+        Icon = "\uE968";
     }
 
     public override bool CanClose => false;

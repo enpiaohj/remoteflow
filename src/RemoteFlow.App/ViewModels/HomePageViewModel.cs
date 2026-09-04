@@ -151,11 +151,12 @@ public sealed class HistoryItemViewModel(ConnectionHistoryEntry entry)
         _ => ConnectionException.Describe(entry.ErrorCode)
     };
 
+    // Segoe Fluent Icons，\uXXXX 转义写死。与 SessionTabViewModel.StateIcon 语义一致。
     public string ResultIcon => entry.Result switch
     {
-        ConnectionResult.Success => "",
-        ConnectionResult.Cancelled => "",
-        _ => ""
+        ConnectionResult.Success => "\uE930",   // CompletedSolid
+        ConnectionResult.Cancelled => "\uE895", // 中性圆点
+        _ => "\uEA39"                            // ErrorBadge
     };
 
     public string ResultBrushKey => entry.Result switch

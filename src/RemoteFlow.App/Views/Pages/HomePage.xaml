@@ -52,19 +52,17 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <Border Grid.RowSpan="2" Width="30" Height="30" CornerRadius="7"
-                            VerticalAlignment="Top"
-                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
-                            Opacity="0.16" />
-                    <TextBlock Grid.RowSpan="2"
-                               Text="{Binding ProtocolIcon}"
-                               FontFamily="{StaticResource IconFont}"
-                               FontSize="14"
-                               Width="30" Height="30"
-                               TextAlignment="Center"
-                               Padding="0,7,0,0"
-                               VerticalAlignment="Top"
-                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    <Grid Grid.RowSpan="2" Width="30" Height="30" VerticalAlignment="Top">
+                        <Border CornerRadius="7"
+                                Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                Opacity="0.16" />
+                        <TextBlock Text="{Binding ProtocolIcon}"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="14"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    </Grid>
 
                     <TextBlock Grid.Column="1" Grid.Row="0"
                                Text="{Binding Name}"
@@ -156,11 +154,12 @@
                                 <Grid Height="38" Margin="10,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="20" />
-                                        <ColumnDefinition Width="*" MinWidth="120" />
-                                        <ColumnDefinition Width="160" />
-                                        <ColumnDefinition Width="60" />
-                                        <ColumnDefinition Width="100" />
-                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" MinWidth="16" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
                                     <TextBlock Grid.Column="0"
@@ -170,11 +169,33 @@
                                                VerticalAlignment="Center"
                                                Foreground="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}"
                                                ToolTip="{Binding ResultText}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding ConnectionName}" Style="{StaticResource Text.Body}" Margin="8,0,0,0" />
-                                    <TextBlock Grid.Column="2" Text="{Binding Host}" Style="{StaticResource Text.Caption}" FontFamily="{StaticResource MonoFont}" />
-                                    <TextBlock Grid.Column="3" Text="{Binding ProtocolName}" Style="{StaticResource Text.Caption}" />
-                                    <TextBlock Grid.Column="4" Text="{Binding StartedAtDisplay}" Style="{StaticResource Text.Caption}" />
-                                    <TextBlock Grid.Column="5" Text="{Binding DurationDisplay}" Style="{StaticResource Text.Caption}" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding ConnectionName}"
+                                               Style="{StaticResource Text.Body}"
+                                               Margin="8,0,0,0"
+                                               MaxWidth="220"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding Host}"
+                                               Style="{StaticResource Text.Caption}"
+                                               FontFamily="{StaticResource MonoFont}"
+                                               Margin="12,0,0,0"
+                                               MaxWidth="240"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="3"
+                                               Text="{Binding ProtocolName}"
+                                               Style="{StaticResource Text.Caption}"
+                                               Margin="12,0,0,0" />
+                                    <TextBlock Grid.Column="5"
+                                               Text="{Binding StartedAtDisplay}"
+                                               Style="{StaticResource Text.Caption}"
+                                               Margin="16,0,0,0" />
+                                    <TextBlock Grid.Column="6"
+                                               Text="{Binding DurationDisplay}"
+                                               Style="{StaticResource Text.Caption}"
+                                               Margin="16,0,0,0"
+                                               MinWidth="56"
+                                               TextAlignment="Right" />
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
