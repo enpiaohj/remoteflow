@@ -467,13 +467,24 @@
 
                     <!-- 内容区：所有 Tab 内容常驻，仅切换可见性，保证会话不被销毁。
                          这是浮在机身灰底上的那张「白纸」——描边 + 大圆角把边界交代清楚，
-                         不用投影（投影会让整棵子树进入位图缓存，影响 RDP ActiveX 的 airspace）。 -->
+                         不用投影（投影会让整棵子树进入位图缓存，影响 RDP ActiveX 的 airspace）。
+                         会话全屏时必须去掉描边和圆角：否则远程画面四周会露出一圈边框。 -->
                     <Border Grid.Row="1"
                             Background="{DynamicResource Bg.Layer}"
-                            BorderBrush="{DynamicResource Stroke.Subtle}"
-                            BorderThickness="1,1,1,0"
-                            CornerRadius="12,12,0,0"
                             SnapsToDevicePixels="True">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="BorderBrush" Value="{DynamicResource Stroke.Subtle}" />
+                                <Setter Property="BorderThickness" Value="1,1,1,0" />
+                                <Setter Property="CornerRadius" Value="12,12,0,0" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSessionFullScreen}" Value="True">
+                                        <Setter Property="BorderThickness" Value="0" />
+                                        <Setter Property="CornerRadius" Value="0" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                       <Grid>
                         <!-- 页面数据加载失败横幅：静默失败会让用户对着空白页发懵 -->
                         <Border Panel.ZIndex="20"

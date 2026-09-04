@@ -7,43 +7,45 @@
         因此切换主题时无需改动任何控件模板。
 
         结构原则「机身 + 纸张」：
-        标题栏 / 侧栏 / 标签条同属机身（Bg.Base，冷调蓝灰），
-        中央工作区是浮在机身之上的一张白纸（Bg.Layer）。
+        标题栏 / 侧栏 / 标签条同属机身（Bg.Base），中央工作区是浮在机身之上的
+        一张纸（Bg.Layer，靠描边 + 卡片投影分层，不靠色差）。
 
-        v2 调整（2026-09）：
-        - 机身改用**微暖的中性灰**（#EFEEEB），中央白纸偏冷，冷暖对比让界面
-          不再是一色到底的「SaaS 蓝灰」，更接近成熟编辑器 / 笔记类工具的质感
-        - 品牌色由通用蓝 #2B62D9 换成更深、略偏靛的 #3352CE，在暖灰底上更「跳」
-        - 描边整体调柔，靠色阶和间距分层，而不是靠明显的线
+        v3 调整（2026-09，修正 v2 的冷暖打架问题）：
+        v2 曾把机身改成暖灰、纸面留冷白，想靠冷暖对比出「质感」，
+        结果文字 / 描边 / 品牌色全是冷调，只有机身一处发暖，两套色温在
+        同一屏里打架，观感是「不对」而不是「精致」。
+        v3 统一回**一套冷调中性色**，机身与纸面只做**明度**上的细分（机身
+        更暗一格），色相完全一致——这才是「同一个界面」该有的样子；
+        主要靠卡片投影和分区间距去建立层次，不再依赖色相反差。
     -->
 
-    <!-- 机身：标题栏、侧栏、标签条。微暖的中性灰，与冷白内容区形成对比 -->
-    <SolidColorBrush x:Key="Bg.Base" Color="#EEEDEA" />
-    <SolidColorBrush x:Key="Bg.Sidebar" Color="#EEEDEA" />
-    <!-- 纸张：中央内容区，保持纯白以保证数据清晰 -->
+    <!-- 机身：标题栏、侧栏、标签条。比纸面略深一格的冷灰，色相与纸面完全同源 -->
+    <SolidColorBrush x:Key="Bg.Base" Color="#EAEDF3" />
+    <SolidColorBrush x:Key="Bg.Sidebar" Color="#EAEDF3" />
+    <!-- 纸张：中央内容区，同一色相里最亮的一级 -->
     <SolidColorBrush x:Key="Bg.Layer" Color="#FFFFFF" />
-    <!-- 纸张之上的凹陷区（表头、内嵌块、图标块底）。近中性、极轻微偏暖，配白纸也配暖灰机身 -->
-    <SolidColorBrush x:Key="Bg.Subtle" Color="#F4F3F1" />
-    <SolidColorBrush x:Key="Bg.Hover" Color="#EBEAE7" />
-    <SolidColorBrush x:Key="Bg.Pressed" Color="#E1E0DC" />
+    <!-- 纸张之上的凹陷区（表头、内嵌块、图标块底） -->
+    <SolidColorBrush x:Key="Bg.Subtle" Color="#F3F5F9" />
+    <SolidColorBrush x:Key="Bg.Hover" Color="#E8EBF2" />
+    <SolidColorBrush x:Key="Bg.Pressed" Color="#DCE1EA" />
     <SolidColorBrush x:Key="Bg.Selected" Color="#E7EDFB" />
     <SolidColorBrush x:Key="Bg.SelectedHover" Color="#DAE3F8" />
     <SolidColorBrush x:Key="Bg.Session" Color="#12131A" />
 
-    <!-- 文字层级：3 级灰度 + 反色。灰度带一点冷调，与背景同源 -->
+    <!-- 文字层级：3 级灰度 + 反色，与背景同一套冷调 -->
     <SolidColorBrush x:Key="Text.Primary" Color="#15171F" />
     <SolidColorBrush x:Key="Text.Secondary" Color="#555D70" />
-    <SolidColorBrush x:Key="Text.Tertiary" Color="#868EA1" />
+    <SolidColorBrush x:Key="Text.Tertiary" Color="#828AA0" />
     <SolidColorBrush x:Key="Text.OnAccent" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="Text.Disabled" Color="#AAB1C0" />
+    <SolidColorBrush x:Key="Text.Disabled" Color="#A8AFC0" />
 
-    <!-- 描边：优先用间距与色阶分隔区域，描边调柔、只在必要处使用。近中性微暖 -->
-    <SolidColorBrush x:Key="Stroke.Subtle" Color="#E8E6E2" />
-    <SolidColorBrush x:Key="Stroke.Default" Color="#DAD8D3" />
-    <SolidColorBrush x:Key="Stroke.Strong" Color="#C2BFB8" />
+    <!-- 描边：优先用间距与卡片投影分层，描边只在必要处使用，同一套冷调 -->
+    <SolidColorBrush x:Key="Stroke.Subtle" Color="#E3E7F0" />
+    <SolidColorBrush x:Key="Stroke.Default" Color="#D2D7E3" />
+    <SolidColorBrush x:Key="Stroke.Strong" Color="#B7BECF" />
     <SolidColorBrush x:Key="Stroke.Focus" Color="#3352CE" />
 
-    <!-- 品牌色：全应用唯一主操作色。深、略偏靛，一眼能看出是「挑过的颜色」 -->
+    <!-- 品牌色：全应用唯一主操作色。深、略偏靛，比通用蓝更「挑过」 -->
     <Color x:Key="Brand.Color">#3352CE</Color>
     <SolidColorBrush x:Key="Brand.Default" Color="#3352CE" />
     <SolidColorBrush x:Key="Brand.Hover" Color="#2C46B4" />
@@ -56,7 +58,7 @@
     <SolidColorBrush x:Key="Status.Danger" Color="#C4342A" />
     <SolidColorBrush x:Key="Status.DangerHover" Color="#A62B22" />
     <SolidColorBrush x:Key="Status.Info" Color="#3352CE" />
-    <SolidColorBrush x:Key="Status.Idle" Color="#868EA1" />
+    <SolidColorBrush x:Key="Status.Idle" Color="#828AA0" />
 
     <!-- 协议标识色：三色相互拉开，同时都能落在浅色底上保持可读 -->
     <SolidColorBrush x:Key="Protocol.Rdp" Color="#3352CE" />
@@ -64,7 +66,7 @@
     <SolidColorBrush x:Key="Protocol.Vnc" Color="#7A4FC4" />
 
     <!-- 卡片投影颜色（DropShadowEffect.Color 需要 Color 而非 Brush） -->
-    <Color x:Key="Shadow.Cast">#1A1B2A</Color>
-    <SolidColorBrush x:Key="Shadow.Color" Color="#16141C33" />
+    <Color x:Key="Shadow.Cast">#1A1F33</Color>
+    <SolidColorBrush x:Key="Shadow.Color" Color="#161B2E33" />
 
 </ResourceDictionary>

@@ -15,10 +15,10 @@
 
         <!-- 悬浮条上的紧凑图标按钮 -->
         <Style x:Key="Session.BarButton" TargetType="Button" BasedOn="{StaticResource Button.Subtle}">
-            <Setter Property="Width" Value="30" />
-            <Setter Property="Height" Value="28" />
-            <Setter Property="MinWidth" Value="30" />
-            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="MinWidth" Value="32" />
+            <Setter Property="MinHeight" Value="32" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
             <Setter Property="FontSize" Value="13" />
@@ -192,20 +192,21 @@
                StaysOpen="True"
                HorizontalOffset="0"
                VerticalOffset="0">
-            <!-- 上边缘贴屏；四周留一点给投影，顶部不留（投影朝下）。
-                 顶角切平、底角圆，呈现「从屏幕顶沿拉出」的连接条观感。 -->
+            <!-- 与屏幕顶沿留一点空隙、四周整圆，做成真正悬浮的胶囊——
+                 而不是「从顶边拉出来的标签」。投影四周都留，让它看起来是
+                 浮在会话画面之上的一层，不是贴在屏幕边缘的附属物。 -->
             <Border x:Name="PillBar"
-                    Margin="14,0,14,12"
-                    Padding="4"
+                    Margin="16,14,16,16"
+                    Padding="5"
                     Background="{DynamicResource Bg.Layer}"
                     BorderBrush="{DynamicResource Stroke.Subtle}"
-                    BorderThickness="1,0,1,1"
-                    CornerRadius="0,0,10,10"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource Radius.Pill}"
                     MouseLeftButtonDown="OnToolbarDragStart"
                     MouseMove="OnToolbarDragMove"
                     MouseLeftButtonUp="OnToolbarDragEnd">
                 <Border.Effect>
-                    <DropShadowEffect BlurRadius="14" ShadowDepth="2" Direction="270" Opacity="0.28" Color="#000000" />
+                    <DropShadowEffect BlurRadius="28" ShadowDepth="6" Direction="270" Opacity="0.22" Color="#000000" />
                 </Border.Effect>
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -232,7 +233,7 @@
 
                     <!-- 固定 / 取消固定 -->
                     <ToggleButton x:Name="PinToggle"
-                                  Height="30" Width="30"
+                                  Height="32" Width="32"
                                   Cursor="Hand"
                                   Background="Transparent"
                                   BorderThickness="0"
