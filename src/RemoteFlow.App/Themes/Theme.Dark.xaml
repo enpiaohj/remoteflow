@@ -4,45 +4,48 @@
     <!--
         深色主题调色板。键名与 Theme.Light.xaml 完全一致，
         切换主题只是替换这一个字典，控件模板无需任何改动。
+
+        沿用浅色的「机身 + 纸张」结构：机身更暗，中央工作区更亮。
+        中性色带一点蓝，避免纯灰在大面积深色下发闷。
     -->
 
-    <SolidColorBrush x:Key="Bg.Base" Color="#202020" />
-    <SolidColorBrush x:Key="Bg.Layer" Color="#2B2B2B" />
-    <SolidColorBrush x:Key="Bg.Sidebar" Color="#252525" />
-    <SolidColorBrush x:Key="Bg.Subtle" Color="#303030" />
-    <SolidColorBrush x:Key="Bg.Hover" Color="#383838" />
-    <SolidColorBrush x:Key="Bg.Pressed" Color="#404040" />
-    <SolidColorBrush x:Key="Bg.Selected" Color="#0E3A5F" />
-    <SolidColorBrush x:Key="Bg.SelectedHover" Color="#12466F" />
-    <SolidColorBrush x:Key="Bg.Session" Color="#141414" />
+    <SolidColorBrush x:Key="Bg.Base" Color="#15171C" />
+    <SolidColorBrush x:Key="Bg.Sidebar" Color="#15171C" />
+    <SolidColorBrush x:Key="Bg.Layer" Color="#1D2027" />
+    <SolidColorBrush x:Key="Bg.Subtle" Color="#23272F" />
+    <SolidColorBrush x:Key="Bg.Hover" Color="#2A2F38" />
+    <SolidColorBrush x:Key="Bg.Pressed" Color="#333944" />
+    <SolidColorBrush x:Key="Bg.Selected" Color="#1B2C50" />
+    <SolidColorBrush x:Key="Bg.SelectedHover" Color="#243863" />
+    <SolidColorBrush x:Key="Bg.Session" Color="#0E1013" />
 
-    <SolidColorBrush x:Key="Text.Primary" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="Text.Secondary" Color="#C7C7C7" />
-    <SolidColorBrush x:Key="Text.Tertiary" Color="#969696" />
+    <SolidColorBrush x:Key="Text.Primary" Color="#F2F4F8" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="#A8B1C1" />
+    <SolidColorBrush x:Key="Text.Tertiary" Color="#78818F" />
     <SolidColorBrush x:Key="Text.OnAccent" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="Text.Disabled" Color="#6E6E6E" />
+    <SolidColorBrush x:Key="Text.Disabled" Color="#5A6270" />
 
-    <SolidColorBrush x:Key="Stroke.Subtle" Color="#333333" />
-    <SolidColorBrush x:Key="Stroke.Default" Color="#3D3D3D" />
-    <SolidColorBrush x:Key="Stroke.Strong" Color="#525252" />
-    <SolidColorBrush x:Key="Stroke.Focus" Color="#479EF5" />
+    <SolidColorBrush x:Key="Stroke.Subtle" Color="#282D36" />
+    <SolidColorBrush x:Key="Stroke.Default" Color="#333944" />
+    <SolidColorBrush x:Key="Stroke.Strong" Color="#4A5261" />
+    <SolidColorBrush x:Key="Stroke.Focus" Color="#5B8DEF" />
 
-    <Color x:Key="Brand.Color">#479EF5</Color>
-    <SolidColorBrush x:Key="Brand.Default" Color="#479EF5" />
-    <SolidColorBrush x:Key="Brand.Hover" Color="#62ABF5" />
-    <SolidColorBrush x:Key="Brand.Pressed" Color="#2886DE" />
-    <SolidColorBrush x:Key="Brand.Subtle" Color="#1B3A54" />
+    <Color x:Key="Brand.Color">#5B8DEF</Color>
+    <SolidColorBrush x:Key="Brand.Default" Color="#5B8DEF" />
+    <SolidColorBrush x:Key="Brand.Hover" Color="#7BA4F3" />
+    <SolidColorBrush x:Key="Brand.Pressed" Color="#4477DB" />
+    <SolidColorBrush x:Key="Brand.Subtle" Color="#1B2C50" />
 
-    <SolidColorBrush x:Key="Status.Success" Color="#6CCB5F" />
-    <SolidColorBrush x:Key="Status.Warning" Color="#FCE100" />
-    <SolidColorBrush x:Key="Status.Danger" Color="#FF99A4" />
-    <SolidColorBrush x:Key="Status.DangerHover" Color="#FFB3BC" />
-    <SolidColorBrush x:Key="Status.Info" Color="#479EF5" />
-    <SolidColorBrush x:Key="Status.Idle" Color="#969696" />
+    <SolidColorBrush x:Key="Status.Success" Color="#3FBF7F" />
+    <SolidColorBrush x:Key="Status.Warning" Color="#E0A030" />
+    <SolidColorBrush x:Key="Status.Danger" Color="#F2726A" />
+    <SolidColorBrush x:Key="Status.DangerHover" Color="#F58F88" />
+    <SolidColorBrush x:Key="Status.Info" Color="#5B8DEF" />
+    <SolidColorBrush x:Key="Status.Idle" Color="#78818F" />
 
-    <SolidColorBrush x:Key="Protocol.Rdp" Color="#479EF5" />
-    <SolidColorBrush x:Key="Protocol.Ssh" Color="#6CCB5F" />
-    <SolidColorBrush x:Key="Protocol.Vnc" Color="#B4A0FF" />
+    <SolidColorBrush x:Key="Protocol.Rdp" Color="#5B8DEF" />
+    <SolidColorBrush x:Key="Protocol.Ssh" Color="#35BE8C" />
+    <SolidColorBrush x:Key="Protocol.Vnc" Color="#A98BEA" />
 
     <SolidColorBrush x:Key="Shadow.Color" Color="#40000000" />
 

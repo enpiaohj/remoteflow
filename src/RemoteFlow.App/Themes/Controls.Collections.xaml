@@ -94,6 +94,16 @@
         <Setter Property="Margin" Value="19,0,12,6" />
     </Style>
 
+    <!-- 导航图标：刻意不设 Foreground，好让它继承导航项的前景色，
+         选中时随文字一起变成品牌色。 -->
+    <Style x:Key="Nav.Icon" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="Width" Value="20" />
+        <Setter Property="TextAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
     <!--
         导航项高度 40，满足「点击目标不小于 40px」的要求。
         选中态用左侧 3px 强调条 + 浅色底，而不是整块高饱和填充，
@@ -111,18 +121,22 @@
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
                     <Grid>
+                        <!-- 选中态 = 一小块「纸」浮在机身灰底上：白底 + 细描边 + 左侧强调条。
+                             比整块蓝色填充安静，也和中央工作区的白纸呼应。 -->
                         <Border x:Name="Root"
                                 Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
                                 CornerRadius="{StaticResource Radius.Medium}"
                                 SnapsToDevicePixels="True" />
                         <Border x:Name="Accent"
-                                Width="3" Height="18"
+                                Width="3" Height="16"
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
-                                Margin="1,0,0,0"
                                 Background="{DynamicResource Brand.Default}"
-                                CornerRadius="2"
-                                Visibility="Collapsed" />
+                                CornerRadius="0,2,2,0"
+                                Opacity="0"
+                                SnapsToDevicePixels="True" />
                         <ContentPresenter Margin="12,0" VerticalAlignment="Center" />
                     </Grid>
                     <ControlTemplate.Triggers>
@@ -130,12 +144,14 @@
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Selected}" />
-                            <Setter TargetName="Accent" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Layer}" />
+                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Subtle}" />
+                            <Setter TargetName="Accent" Property="Opacity" Value="1" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
                             <Setter Property="FontWeight" Value="SemiBold" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Focus}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -153,7 +169,9 @@
         <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
         <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-        <Setter Property="Height" Value="40" />
+        <!-- 行高由行模板决定，这里只保证一个最小点击目标。
+             注意：不要在这里写死 Height，否则模板里更高的行会被裁掉。 -->
+        <Setter Property="MinHeight" Value="40" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Margin" Value="4,1" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -165,7 +183,19 @@
                             Background="Transparent"
                             CornerRadius="{StaticResource Radius.Small}"
                             SnapsToDevicePixels="True">
-                        <ContentPresenter VerticalAlignment="Center" />
+                        <Grid>
+                            <!-- 选中行左侧一条强调条：长列表里比单纯换底色更好定位 -->
+                            <Border x:Name="Accent"
+                                    Width="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Stretch"
+                                    Margin="0,6"
+                                    Background="{DynamicResource Brand.Default}"
+                                    CornerRadius="0,2,2,0"
+                                    Opacity="0"
+                                    SnapsToDevicePixels="True" />
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -173,6 +203,7 @@
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Selected}" />
+                            <Setter TargetName="Accent" Property="Opacity" Value="1" />
                         </Trigger>
                         <MultiTrigger>
                             <MultiTrigger.Conditions>

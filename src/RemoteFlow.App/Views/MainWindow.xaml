@@ -103,9 +103,13 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
+                        <!-- 选中的标签与下方白纸连成一体：同底色 + 同描边，底边留空，
+                             视觉上「标签是纸的一个凸起」，而不是飘在灰底上的一块白。 -->
                         <Border x:Name="Root"
                                 Background="Transparent"
-                                CornerRadius="6,6,0,0"
+                                BorderBrush="Transparent"
+                                BorderThickness="1,1,1,0"
+                                CornerRadius="8,8,0,0"
                                 Margin="0,0,2,0"
                                 SnapsToDevicePixels="True">
                             <ContentPresenter VerticalAlignment="Center" />
@@ -116,6 +120,7 @@
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Layer}" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Subtle}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -173,14 +178,15 @@
                 </StackPanel>
 
                 <!-- 全局搜索：标题栏两个高频动作之一 -->
-                <Border Grid.Column="1"
-                        MaxWidth="560"
-                        Height="32"
+                <Border x:Name="SearchSurface"
+                        Grid.Column="1"
+                        MaxWidth="520"
+                        Height="34"
                         Margin="24,0"
                         Background="{DynamicResource Bg.Layer}"
                         BorderBrush="{DynamicResource Stroke.Default}"
                         BorderThickness="1"
-                        CornerRadius="6"
+                        CornerRadius="{StaticResource Radius.Medium}"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -210,7 +216,7 @@
 
                         <!-- 占位提示 -->
                         <TextBlock Grid.Column="1"
-                                   Text="搜索服务器、IP、标签、备注…  Ctrl+K"
+                                   Text="搜索服务器、IP、标签、备注…"
                                    Foreground="{DynamicResource Text.Tertiary}"
                                    FontSize="13"
                                    VerticalAlignment="Center"
@@ -228,9 +234,32 @@
                             </TextBlock.Style>
                         </TextBlock>
 
+                        <!-- 空态显示 Ctrl+K 键帽，有内容时换成清除按钮 -->
+                        <Border Grid.Column="2"
+                                Margin="0,0,6,0"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource Bg.Subtle}"
+                                BorderBrush="{DynamicResource Stroke.Subtle}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="6,2"
+                                IsHitTestVisible="False">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock Text="Ctrl K" Style="{StaticResource Text.Label}" />
+                        </Border>
+
                         <Button Grid.Column="2"
                                 Width="28" Height="28"
-                                Margin="0,0,2,0"
+                                Margin="0,0,3,0"
                                 Style="{StaticResource Button.Icon}"
                                 Content="{StaticResource Icon.Close}"
                                 FontSize="10"
@@ -281,9 +310,10 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- ── 左侧导航：分「连接 / 管理」两组，设置固定在底部 ── -->
-                <Grid Grid.Column="0"
-                      Background="{DynamicResource Bg.Sidebar}"
-                      Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
+                <Border Grid.Column="0"
+                        Background="{DynamicResource Bg.Sidebar}"
+                        Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
+                  <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
@@ -297,7 +327,7 @@
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Home, Mode=TwoWay}"
                                          Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Home}">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{StaticResource Icon.Home}" Style="{StaticResource IconText}" Width="20" />
+                                    <TextBlock Text="{StaticResource Icon.Home}" Style="{StaticResource Nav.Icon}" />
                                     <TextBlock Text="首页" Margin="12,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </RadioButton>
@@ -306,7 +336,7 @@
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Connections, Mode=TwoWay}"
                                          Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Connections}">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{StaticResource Icon.Connections}" Style="{StaticResource IconText}" Width="20" />
+                                    <TextBlock Text="{StaticResource Icon.Connections}" Style="{StaticResource Nav.Icon}" />
                                     <TextBlock Text="我的连接" Margin="12,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </RadioButton>
@@ -315,7 +345,7 @@
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Favorites, Mode=TwoWay}"
                                          Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Favorites}">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{StaticResource Icon.Favorite}" Style="{StaticResource IconText}" Width="20" />
+                                    <TextBlock Text="{StaticResource Icon.Favorite}" Style="{StaticResource Nav.Icon}" />
                                     <TextBlock Text="收藏" Margin="12,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </RadioButton>
@@ -324,7 +354,7 @@
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Recent, Mode=TwoWay}"
                                          Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Recent}">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{StaticResource Icon.Recent}" Style="{StaticResource IconText}" Width="20" />
+                                    <TextBlock Text="{StaticResource Icon.Recent}" Style="{StaticResource Nav.Icon}" />
                                     <TextBlock Text="最近连接" Margin="12,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </RadioButton>
@@ -337,7 +367,7 @@
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Credentials, Mode=TwoWay}"
                                          Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Credentials}">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{StaticResource Icon.Credential}" Style="{StaticResource IconText}" Width="20" />
+                                    <TextBlock Text="{StaticResource Icon.Credential}" Style="{StaticResource Nav.Icon}" />
                                     <TextBlock Text="凭据" Margin="12,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </RadioButton>
@@ -346,25 +376,38 @@
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Settings, Mode=TwoWay}"
                                          Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Settings}">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{StaticResource Icon.Settings}" Style="{StaticResource IconText}" Width="20" />
+                                    <TextBlock Text="{StaticResource Icon.Settings}" Style="{StaticResource Nav.Icon}" />
                                     <TextBlock Text="设置" Margin="12,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </RadioButton>
                         </StackPanel>
                     </ScrollViewer>
 
-                    <!-- 底部：会话状态一行 -->
-                    <StackPanel Grid.Row="1" Margin="0,4,0,12">
-                        <Border Style="{StaticResource Surface.Divider}" Margin="12,0,12,10" />
-                        <StackPanel Orientation="Horizontal" Margin="21,0,12,0">
+                    <!-- 底部信息区：会话状态 + 本地优先说明。
+                         原先底部另有一条 26px 状态栏，只放同一句话，纯属浪费一行，已并入此处。 -->
+                    <StackPanel Grid.Row="1" Margin="0,4,0,14">
+                        <Border Style="{StaticResource Surface.Divider}" Margin="14,0,14,12" />
+                        <StackPanel Orientation="Horizontal" Margin="20,0,14,0">
                             <Ellipse Width="8" Height="8" VerticalAlignment="Center"
                                      Fill="{Binding SessionStatusBrushKey, Converter={StaticResource KeyToBrush}}" />
                             <TextBlock Text="{Binding SessionStatusText}"
+                                       Style="{StaticResource Text.Body}"
+                                       Foreground="{DynamicResource Text.Secondary}"
+                                       Margin="9,0,0,0" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="20,9,14,0">
+                            <TextBlock Text="{StaticResource Icon.Shield}"
+                                       FontFamily="{StaticResource IconFont}" FontSize="12"
+                                       Foreground="{DynamicResource Text.Tertiary}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="本地优先 · DPAPI 保护"
                                        Style="{StaticResource Text.Caption}"
+                                       ToolTip="所有数据仅保存在本机；密码与私钥由 Windows DPAPI 加密后单独存放"
                                        Margin="8,0,0,0" />
                         </StackPanel>
                     </StackPanel>
-                </Grid>
+                  </Grid>
+                </Border>
 
                 <!-- ── 中央工作区 ────────────────────────────────── -->
                 <Grid Grid.Column="1" Margin="0,0,0,0">
@@ -444,8 +487,15 @@
                         </ScrollViewer>
                     </Border>
 
-                    <!-- 内容区：所有 Tab 内容常驻，仅切换可见性，保证会话不被销毁 -->
-                    <Border Grid.Row="1" Background="{DynamicResource Bg.Layer}" CornerRadius="8,8,0,0">
+                    <!-- 内容区：所有 Tab 内容常驻，仅切换可见性，保证会话不被销毁。
+                         这是浮在机身灰底上的那张「白纸」——描边 + 大圆角把边界交代清楚，
+                         不用投影（投影会让整棵子树进入位图缓存，影响 RDP ActiveX 的 airspace）。 -->
+                    <Border Grid.Row="1"
+                            Background="{DynamicResource Bg.Layer}"
+                            BorderBrush="{DynamicResource Stroke.Subtle}"
+                            BorderThickness="1,1,1,0"
+                            CornerRadius="12,12,0,0"
+                            SnapsToDevicePixels="True">
                       <Grid>
                         <!-- 页面数据加载失败横幅：静默失败会让用户对着空白页发懵 -->
                         <Border Panel.ZIndex="20"
@@ -539,15 +589,8 @@
                 </Border>
             </Grid>
 
-            <!-- ══ 状态栏 ══════════════════════════════════════════ -->
-            <Border Grid.Row="2" Height="26" Background="{DynamicResource Bg.Base}"
-                    Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
-                <Grid Margin="16,0">
-                    <TextBlock Style="{StaticResource Text.Caption}"
-                               Text="本地优先 · 凭据由 Windows DPAPI 保护"
-                               HorizontalAlignment="Right" />
-                </Grid>
-            </Border>
+            <!-- 底部状态栏已移除：它只承载一句「本地优先 · DPAPI 保护」，
+                 却占掉整行宽度。该信息已并入左侧栏底部，那里本就是状态区。 -->
         </Grid>
     </Border>
 </Window>

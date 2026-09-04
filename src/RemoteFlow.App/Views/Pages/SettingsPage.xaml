@@ -121,7 +121,7 @@
         </Grid>
 
         <!-- ══ 标签内容 ══ -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,20,0,32">
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,20,14,32">
             <Grid>
 
                 <!-- ── 常规 ── -->
@@ -432,7 +432,7 @@
                                           Visibility="{Binding TrustedHostKeys.Count, Converter={StaticResource CountToVisibility}}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type vm:HostKeyItemViewModel}">
-                                        <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="6" Padding="12,10" Margin="0,0,0,6">
+                                        <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="{StaticResource Radius.Medium}" Padding="12,10" Margin="0,0,0,6">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*" />

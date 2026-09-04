@@ -43,13 +43,20 @@
                         CommandParameter="{Binding}">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
+                            <!-- 左缘一条协议色竖条：一眼分辨 RDP / SSH / VNC，
+                                 也给这张卡片一个视觉锚点，不再是一块空白方框。 -->
                             <Border x:Name="Root"
                                     Background="{DynamicResource Bg.Layer}"
                                     BorderBrush="{DynamicResource Stroke.Subtle}"
                                     BorderThickness="1"
                                     CornerRadius="{StaticResource Radius.Large}"
-                                    Padding="20,20">
-                                <ContentPresenter />
+                                    SnapsToDevicePixels="True">
+                                <Grid>
+                                    <Border Width="3" HorizontalAlignment="Left" Margin="0,14"
+                                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                            CornerRadius="0,2,2,0" />
+                                    <ContentPresenter Margin="18,16,16,16" />
+                                </Grid>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <DataTrigger Binding="{Binding HasActiveSession}" Value="True">
@@ -57,8 +64,8 @@
                                     <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Selected}" />
                                 </DataTrigger>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
-                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Default}" />
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Subtle}" />
+                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Strong}" />
                                 </Trigger>
                                 <Trigger Property="IsPressed" Value="True">
                                     <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Pressed}" />
@@ -68,37 +75,53 @@
                     </Button.Template>
 
                     <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="28" />
+                            <ColumnDefinition Width="26" />
                         </Grid.ColumnDefinitions>
 
-                        <Grid Grid.Column="0" Width="42" Height="42" VerticalAlignment="Top">
-                            <Border CornerRadius="11"
+                        <Grid Grid.Row="0" Grid.Column="0" Width="40" Height="40" VerticalAlignment="Top">
+                            <Border CornerRadius="{StaticResource Radius.Medium}"
                                     Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
-                                    Opacity="0.16" />
-                            <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="19"
+                                    Opacity="0.14" />
+                            <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                         </Grid>
 
-                        <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="14,1,0,0" VerticalAlignment="Top">
                             <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontWeight="SemiBold" FontSize="14"
                                        TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" />
                             <TextBlock Text="{Binding HostDisplay}" Style="{StaticResource Text.Caption}"
-                                       FontFamily="{StaticResource MonoFont}" Margin="0,5,0,0" HorizontalAlignment="Left" />
-                            <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
+                                       FontFamily="{StaticResource MonoFont}" Margin="0,4,0,0" HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <!-- 卡片底行：协议徽章 + 状态 / 上次连接时间 -->
+                        <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,16,0,0">
+                            <Grid HorizontalAlignment="Left">
+                                <Border CornerRadius="5"
+                                        Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                        Opacity="0.13" />
+                                <TextBlock Text="{Binding ProtocolName}" FontSize="11" FontWeight="SemiBold" Margin="8,3"
+                                           Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                            </Grid>
+
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <Ellipse Width="7" Height="7" VerticalAlignment="Center"
                                          Fill="{DynamicResource Status.Success}"
                                          Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}" />
-                                <TextBlock Text="进行中" Style="{StaticResource Text.Caption}"
+                                <TextBlock Text="进行中" Style="{StaticResource Text.Caption}" FontWeight="SemiBold"
                                            Foreground="{DynamicResource Status.Success}" Margin="6,0,0,0"
                                            Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}" />
                                 <TextBlock Text="{Binding LastConnectedDisplay}" Style="{StaticResource Text.Caption}"
                                            Visibility="{Binding HasActiveSession, Converter={StaticResource InverseBoolToVisibility}}" />
                             </StackPanel>
-                        </StackPanel>
+                        </Grid>
                     </Grid>
                 </Button>
 
@@ -172,11 +195,22 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
+                <!-- 图标块显示协议（与收藏 / 连接列表同一套语言）；
+                     只有失败或取消才在右下角打一个状态点，成功是常态不必强调。 -->
                 <Grid Grid.Column="0" Width="36" Height="36" VerticalAlignment="Center">
-                    <Border CornerRadius="9" Background="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
-                    <TextBlock Text="{Binding ResultIcon}" FontFamily="{StaticResource IconFont}" FontSize="16"
+                    <Border CornerRadius="9" Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
+                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="16"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
-                               Foreground="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" />
+                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    <Border Width="13" Height="13" CornerRadius="7"
+                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                            Margin="0,0,-2,-2"
+                            Background="{DynamicResource Bg.Layer}"
+                            Visibility="{Binding ShowResultBadge, Converter={StaticResource BoolToVisibility}}">
+                        <Ellipse Width="9" Height="9"
+                                 Fill="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}"
+                                 ToolTip="{Binding ResultText}" />
+                    </Border>
                 </Grid>
 
                 <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
@@ -251,8 +285,14 @@
 
                 <!-- 收藏 -->
                 <Border Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="18,16" VerticalAlignment="Top">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{StaticResource Icon.Favorite}" FontFamily="{StaticResource IconFont}"
                                            FontSize="15" Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
@@ -262,28 +302,37 @@
                                     HorizontalAlignment="Right" Command="{Binding ViewAllFavoritesCommand}" />
                         </Grid>
 
-                        <ItemsControl ItemsSource="{Binding FavoriteItems}" ItemTemplate="{StaticResource FavoriteRow}"
-                                      Visibility="{Binding HasFavorites, Converter={StaticResource BoolToVisibility}}" />
+                        <StackPanel Grid.Row="1" VerticalAlignment="Top">
+                            <ItemsControl ItemsSource="{Binding FavoriteItems}" ItemTemplate="{StaticResource FavoriteRow}"
+                                          Visibility="{Binding HasFavorites, Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10" TextWrapping="Wrap"
+                                       Text="还没有收藏的连接。在「我的连接」里点星标即可加入。"
+                                       Visibility="{Binding HasFavorites, Converter={StaticResource InverseBoolToVisibility}}" />
+                        </StackPanel>
 
-                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10"
-                                   Text="还没有收藏的连接。在「我的连接」里点星标即可加入。"
-                                   Visibility="{Binding HasFavorites, Converter={StaticResource InverseBoolToVisibility}}" />
-
-                        <Border Style="{StaticResource Surface.Divider}" Margin="0,8" />
-                        <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Stretch"
-                                Command="{Binding ViewAllFavoritesCommand}">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <TextBlock Text="{StaticResource Icon.Favorite}" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" />
-                                <TextBlock Text="管理收藏" Margin="8,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
+                        <StackPanel Grid.Row="2">
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,8" />
+                            <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Stretch"
+                                    Command="{Binding ViewAllFavoritesCommand}">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="{StaticResource Icon.Favorite}" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Text="管理收藏" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
                 </Border>
 
                 <!-- 最近活动 -->
                 <Border Grid.Column="2" Style="{StaticResource Surface.Card}" Padding="18,16" VerticalAlignment="Top">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{StaticResource Icon.Recent}" FontFamily="{StaticResource IconFont}"
                                            FontSize="15" Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
@@ -293,22 +342,25 @@
                                     HorizontalAlignment="Right" Command="{Binding ViewAllActivityCommand}" />
                         </Grid>
 
-                        <ItemsControl ItemsSource="{Binding RecentHistory}" ItemTemplate="{StaticResource ActivityRow}"
-                                      Visibility="{Binding HasActivity, Converter={StaticResource BoolToVisibility}}" />
+                        <StackPanel Grid.Row="1" VerticalAlignment="Top">
+                            <ItemsControl ItemsSource="{Binding RecentHistory}" ItemTemplate="{StaticResource ActivityRow}"
+                                          Visibility="{Binding HasActivity, Converter={StaticResource BoolToVisibility}}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10" TextWrapping="Wrap"
+                                       Text="还没有连接记录。"
+                                       Visibility="{Binding HasActivity, Converter={StaticResource InverseBoolToVisibility}}" />
+                        </StackPanel>
 
-                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10"
-                                   Text="还没有连接记录。"
-                                   Visibility="{Binding HasActivity, Converter={StaticResource InverseBoolToVisibility}}" />
-
-                        <Border Style="{StaticResource Surface.Divider}" Margin="0,8" />
-                        <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Stretch"
-                                Command="{Binding ViewAllActivityCommand}">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <TextBlock Text="{StaticResource Icon.Recent}" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" />
-                                <TextBlock Text="查看所有活动" Margin="8,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
+                        <StackPanel Grid.Row="2">
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,8" />
+                            <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Stretch"
+                                    Command="{Binding ViewAllActivityCommand}">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="{StaticResource Icon.Recent}" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Text="查看所有活动" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
                 </Border>
             </Grid>
 

@@ -219,4 +219,23 @@ public sealed class HistoryItemViewModel(ConnectionHistoryEntry entry)
         ConnectionResult.Cancelled => "Status.Idle",
         _ => "Status.Danger"
     };
+
+    /// <summary>活动行的图标块统一显示协议，与收藏 / 连接列表保持同一套视觉语言；
+    /// 成功与否用右下角的小状态点表示，而不是整块红绿圆。</summary>
+    public string ProtocolIcon => entry.Protocol switch
+    {
+        ProtocolType.Rdp => "\uE7F4",
+        ProtocolType.Ssh => "\uE756",
+        _ => "\uE7F8"
+    };
+
+    public string ProtocolBrushKey => entry.Protocol switch
+    {
+        ProtocolType.Rdp => "Protocol.Rdp",
+        ProtocolType.Ssh => "Protocol.Ssh",
+        _ => "Protocol.Vnc"
+    };
+
+    /// <summary>失败 / 取消才需要在图标块上打状态点，成功是常态不必强调。</summary>
+    public bool ShowResultBadge => entry.Result != ConnectionResult.Success;
 }

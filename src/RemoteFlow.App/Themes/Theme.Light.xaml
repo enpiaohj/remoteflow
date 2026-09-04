@@ -3,55 +3,62 @@
 
     <!--
         浅色主题调色板（默认主题）。
-        取值参考 Windows 11 / Fluent 语义色，保证与系统观感一致。
         所有控件样式只引用这里的语义键（Bg.* / Text.* / Stroke.* / Brand.*），
         因此切换主题时无需改动任何控件模板。
+
+        结构原则「机身 + 纸张」：
+        标题栏 / 侧栏 / 标签条同属机身（Bg.Chrome），是同一块冷中性底；
+        中央工作区是浮在机身之上的一张白纸（Bg.Layer）。
+        两者拉开足够色差，界面才有「一台工具」而不是「一片白」的观感。
+        中性色统一偏冷（带一点蓝），比纯灰更耐看、也更像专业工具。
     -->
 
-    <!-- 背景层级：Base 是窗口底色，Layer 是内容面板，越靠上层越亮 -->
-    <SolidColorBrush x:Key="Bg.Base" Color="#F3F3F3" />
+    <!-- 机身：标题栏、侧栏、标签条 -->
+    <SolidColorBrush x:Key="Bg.Base" Color="#EDEFF3" />
+    <SolidColorBrush x:Key="Bg.Sidebar" Color="#EDEFF3" />
+    <!-- 纸张：中央内容区 -->
     <SolidColorBrush x:Key="Bg.Layer" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="Bg.Sidebar" Color="#FAFAFA" />
-    <SolidColorBrush x:Key="Bg.Subtle" Color="#F5F5F5" />
-    <SolidColorBrush x:Key="Bg.Hover" Color="#EDEDED" />
-    <SolidColorBrush x:Key="Bg.Pressed" Color="#E4E4E4" />
-    <SolidColorBrush x:Key="Bg.Selected" Color="#E8F1FB" />
-    <SolidColorBrush x:Key="Bg.SelectedHover" Color="#DCEAF8" />
-    <SolidColorBrush x:Key="Bg.Session" Color="#1E1E1E" />
+    <!-- 纸张之上的凹陷区（表头、内嵌块） -->
+    <SolidColorBrush x:Key="Bg.Subtle" Color="#F4F6F9" />
+    <SolidColorBrush x:Key="Bg.Hover" Color="#EBEEF3" />
+    <SolidColorBrush x:Key="Bg.Pressed" Color="#E1E5EC" />
+    <SolidColorBrush x:Key="Bg.Selected" Color="#E8EEFD" />
+    <SolidColorBrush x:Key="Bg.SelectedHover" Color="#DCE6FB" />
+    <SolidColorBrush x:Key="Bg.Session" Color="#141619" />
 
-    <!-- 文字层级：最多 3 级灰度 + 反色，避免层级过多造成视觉噪音 -->
-    <SolidColorBrush x:Key="Text.Primary" Color="#1B1B1B" />
-    <SolidColorBrush x:Key="Text.Secondary" Color="#5D5D5D" />
-    <SolidColorBrush x:Key="Text.Tertiary" Color="#8A8A8A" />
+    <!-- 文字层级：3 级灰度 + 反色。灰度同样偏冷，与背景同源 -->
+    <SolidColorBrush x:Key="Text.Primary" Color="#171A1F" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="#596273" />
+    <SolidColorBrush x:Key="Text.Tertiary" Color="#8A93A3" />
     <SolidColorBrush x:Key="Text.OnAccent" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="Text.Disabled" Color="#A6A6A6" />
+    <SolidColorBrush x:Key="Text.Disabled" Color="#AEB6C2" />
 
-    <!-- 描边：优先用间距分隔区域，描边只在必要处使用 -->
-    <SolidColorBrush x:Key="Stroke.Subtle" Color="#EBEBEB" />
-    <SolidColorBrush x:Key="Stroke.Default" Color="#DCDCDC" />
-    <SolidColorBrush x:Key="Stroke.Strong" Color="#C4C4C4" />
-    <SolidColorBrush x:Key="Stroke.Focus" Color="#0F6CBD" />
+    <!-- 描边：优先用间距与色阶分隔区域，描边只在必要处使用 -->
+    <SolidColorBrush x:Key="Stroke.Subtle" Color="#E7EAEF" />
+    <SolidColorBrush x:Key="Stroke.Default" Color="#D8DDE5" />
+    <SolidColorBrush x:Key="Stroke.Strong" Color="#BFC7D2" />
+    <SolidColorBrush x:Key="Stroke.Focus" Color="#2B62D9" />
 
-    <!-- 品牌色：全应用唯一主操作色 -->
-    <Color x:Key="Brand.Color">#0F6CBD</Color>
-    <SolidColorBrush x:Key="Brand.Default" Color="#0F6CBD" />
-    <SolidColorBrush x:Key="Brand.Hover" Color="#115EA3" />
-    <SolidColorBrush x:Key="Brand.Pressed" Color="#0E4A78" />
-    <SolidColorBrush x:Key="Brand.Subtle" Color="#EFF6FC" />
+    <!-- 品牌色：全应用唯一主操作色。比系统蓝更深更纯，避免「默认控件」感 -->
+    <Color x:Key="Brand.Color">#2B62D9</Color>
+    <SolidColorBrush x:Key="Brand.Default" Color="#2B62D9" />
+    <SolidColorBrush x:Key="Brand.Hover" Color="#2453BE" />
+    <SolidColorBrush x:Key="Brand.Pressed" Color="#1C4299" />
+    <SolidColorBrush x:Key="Brand.Subtle" Color="#EDF2FD" />
 
     <!-- 状态色。注意：状态绝不单独依赖颜色传达，必须同时有文字或图标 -->
-    <SolidColorBrush x:Key="Status.Success" Color="#0F7B0F" />
-    <SolidColorBrush x:Key="Status.Warning" Color="#9D5D00" />
-    <SolidColorBrush x:Key="Status.Danger" Color="#C42B1C" />
-    <SolidColorBrush x:Key="Status.DangerHover" Color="#A82217" />
-    <SolidColorBrush x:Key="Status.Info" Color="#0F6CBD" />
-    <SolidColorBrush x:Key="Status.Idle" Color="#8A8A8A" />
+    <SolidColorBrush x:Key="Status.Success" Color="#14804A" />
+    <SolidColorBrush x:Key="Status.Warning" Color="#A25B00" />
+    <SolidColorBrush x:Key="Status.Danger" Color="#C4342A" />
+    <SolidColorBrush x:Key="Status.DangerHover" Color="#A82B22" />
+    <SolidColorBrush x:Key="Status.Info" Color="#2B62D9" />
+    <SolidColorBrush x:Key="Status.Idle" Color="#8A93A3" />
 
-    <!-- 协议标识色：用于连接列表中快速区分协议 -->
-    <SolidColorBrush x:Key="Protocol.Rdp" Color="#0F6CBD" />
-    <SolidColorBrush x:Key="Protocol.Ssh" Color="#0F7B0F" />
-    <SolidColorBrush x:Key="Protocol.Vnc" Color="#8764B8" />
+    <!-- 协议标识色：三色相互拉开，同时都能落在浅色底上保持可读 -->
+    <SolidColorBrush x:Key="Protocol.Rdp" Color="#2B62D9" />
+    <SolidColorBrush x:Key="Protocol.Ssh" Color="#0E7C57" />
+    <SolidColorBrush x:Key="Protocol.Vnc" Color="#7A4FC4" />
 
-    <SolidColorBrush x:Key="Shadow.Color" Color="#20000000" />
+    <SolidColorBrush x:Key="Shadow.Color" Color="#14101828" />
 
 </ResourceDictionary>

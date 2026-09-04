@@ -15,15 +15,21 @@
     <FontFamily x:Key="UiFontDisplay">Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Microsoft YaHei UI</FontFamily>
 
-    <!-- 概念图页面标题约 36px @125%，折合 100% 约 28；正文 / 区块标题与概念图一致。 -->
+    <!-- 字号阶梯：28 / 17 / 15 / 13 / 12 / 11。
+         Title 与 Section 之间补一级 Subtitle，避免整个应用只有 3px 的层级跨度。 -->
     <sys:Double x:Key="FontSize.Title">28</sys:Double>
+    <sys:Double x:Key="FontSize.Subtitle">17</sys:Double>
     <sys:Double x:Key="FontSize.Section">15</sys:Double>
     <sys:Double x:Key="FontSize.Body">13</sys:Double>
     <sys:Double x:Key="FontSize.Caption">12</sys:Double>
+    <sys:Double x:Key="FontSize.Label">11</sys:Double>
 
-    <CornerRadius x:Key="Radius.Small">4</CornerRadius>
-    <CornerRadius x:Key="Radius.Medium">6</CornerRadius>
-    <CornerRadius x:Key="Radius.Large">8</CornerRadius>
+    <!-- 圆角语言：控件 6 / 图标块与小面板 8 / 卡片与工作区 12。
+         同一界面里控件比容器更方，层级才不会糊在一起。 -->
+    <CornerRadius x:Key="Radius.Small">6</CornerRadius>
+    <CornerRadius x:Key="Radius.Medium">8</CornerRadius>
+    <CornerRadius x:Key="Radius.Large">12</CornerRadius>
+    <CornerRadius x:Key="Radius.Pill">999</CornerRadius>
 
     <Duration x:Key="Duration.Fast">0:0:0.12</Duration>
 
@@ -37,12 +43,30 @@
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
 
+    <!-- 页面标题下的一句说明，替代「标题孤零零杵在那」的排版 -->
+    <Style x:Key="Text.PageSubtitle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Tertiary}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
     <Style x:Key="Text.SectionTitle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
         <Setter Property="FontSize" Value="{StaticResource FontSize.Section}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- 列表表头 / 分区标签：小字号 + 半粗 + 三级灰，安静但可辨认 -->
+    <Style x:Key="Text.Label" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Label}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Tertiary}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
     <Style x:Key="Text.Body" TargetType="TextBlock">
@@ -100,32 +124,43 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Root"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{StaticResource Radius.Small}"
-                            SnapsToDevicePixels="True">
-                        <ContentPresenter x:Name="Content"
-                                          Margin="{TemplateBinding Padding}"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          RecognizesAccessKey="True" />
-                    </Border>
+                    <!-- 焦点环画在控件外侧 2px，聚焦时不改变边框粗细，避免布局跳动 -->
+                    <Grid Margin="-3">
+                        <Border x:Name="FocusRing"
+                                BorderBrush="{DynamicResource Stroke.Focus}"
+                                BorderThickness="2"
+                                CornerRadius="{StaticResource Radius.Medium}"
+                                Opacity="0"
+                                SnapsToDevicePixels="True" />
+                        <Border x:Name="Root"
+                                Margin="3"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius.Small}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter x:Name="Content"
+                                              Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
+                        </Border>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Strong}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Pressed}" />
                             <Setter TargetName="Content" Property="Opacity" Value="0.7" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Focus}" />
-                            <Setter TargetName="Root" Property="BorderThickness" Value="2" />
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Subtle}" />
+                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Subtle}" />
                             <Setter Property="Foreground" Value="{DynamicResource Text.Disabled}" />
                             <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
@@ -143,18 +178,40 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Root"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{StaticResource Radius.Small}"
-                            SnapsToDevicePixels="True">
-                        <ContentPresenter x:Name="Content"
-                                          Margin="{TemplateBinding Padding}"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          RecognizesAccessKey="True" />
-                    </Border>
+                    <Grid Margin="-3">
+                        <Border x:Name="FocusRing"
+                                BorderBrush="{DynamicResource Stroke.Focus}"
+                                BorderThickness="2"
+                                CornerRadius="{StaticResource Radius.Medium}"
+                                Opacity="0"
+                                SnapsToDevicePixels="True" />
+                        <Border x:Name="Root"
+                                Margin="3"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource Radius.Small}"
+                                SnapsToDevicePixels="True">
+                            <!-- 顶部一道极淡的高光，让实色按钮有一点立体感而不是一块死色 -->
+                            <Grid>
+                                <Border x:Name="Sheen"
+                                        CornerRadius="{StaticResource Radius.Small}"
+                                        VerticalAlignment="Stretch">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#26FFFFFF" Offset="0" />
+                                            <GradientStop Color="#00FFFFFF" Offset="0.55" />
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                                <ContentPresenter x:Name="Content"
+                                                  Margin="{TemplateBinding Padding}"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  RecognizesAccessKey="True" />
+                            </Grid>
+                        </Border>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brand.Hover}" />
@@ -162,11 +219,16 @@
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brand.Pressed}" />
+                            <Setter TargetName="Sheen" Property="Opacity" Value="0" />
                             <Setter TargetName="Content" Property="Opacity" Value="0.75" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Subtle}" />
-                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Default}" />
+                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Subtle}" />
+                            <Setter TargetName="Sheen" Property="Opacity" Value="0" />
                             <Setter Property="Foreground" Value="{DynamicResource Text.Disabled}" />
                             <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
