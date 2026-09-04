@@ -94,6 +94,12 @@ public sealed class ImportExportService(
         var existingCredentials = (await credentials.GetAllAsync(ct))
             .ToDictionary(c => c.Name, c => c.Id, StringComparer.CurrentCultureIgnoreCase);
 
+        // 去重：名称 + 主机 + 端口 + 协议完全相同视为同一条连接，跳过。
+        // 同时把本次导入已写入的键也计入，处理 CSV 内部自带的重复行。
+        var seenConnections = (await connections.GetAllAsync(ct))
+            .Select(ConnectionKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var imported = 0;
         var skipped = 0;
         var errors = new List<string>();
@@ -120,6 +126,13 @@ public sealed class ImportExportService(
 
                 var protocol = ParseProtocol(Field(row, protocolIndex));
                 var port = ParsePort(Field(row, portIndex), protocol);
+
+                if (!seenConnections.Add(ConnectionKey(name, host, port, protocol)))
+                {
+                    skipped++;
+                    errors.Add($"第 {displayRow} 行：连接「{name}」（{host}:{port}）已存在，已跳过。");
+                    continue;
+                }
 
                 var profile = new ConnectionProfile
                 {
@@ -166,6 +179,12 @@ public sealed class ImportExportService(
         logger.LogInformation("CSV 导入完成：成功 {Imported} 条，跳过 {Skipped} 条", imported, skipped);
         return new ImportResult(imported, skipped, errors);
     }
+
+    /// <summary>连接去重键：名称 + 主机 + 端口 + 协议。</summary>
+    private static string ConnectionKey(ConnectionProfile p) => ConnectionKey(p.Name, p.Host, p.Port, p.Protocol);
+
+    private static string ConnectionKey(string name, string host, int port, ProtocolType protocol)
+        => $"{name.Trim()}|{host.Trim()}|{port}|{protocol}";
 
     private async Task<Guid> EnsureGroupAsync(string name, Dictionary<string, Guid> cache, CancellationToken ct)
     {
