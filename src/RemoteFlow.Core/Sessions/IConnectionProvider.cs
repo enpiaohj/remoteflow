@@ -50,14 +50,26 @@ public sealed class SessionRequest
 
 /// <summary>
 /// SSH Host Key 校验策略。由 UI 层实现，负责在首次连接或指纹变化时向用户确认。
+/// <para>
+/// 拆成「同步查询」与「异步确认」两步：SSH 握手事件在协议库线程上同步触发，
+/// 不能在那里阻塞等待 UI（会话超时会先到，弹窗结果被吞）。因此握手线程只做
+/// <see cref="Lookup"/> 快速判断，未信任就中止握手（不发凭据）；连接失败后再由
+/// 正常异步流程调用 <see cref="ConfirmAndRememberAsync"/> 弹窗，用户接受则记录并重试。
+/// </para>
 /// </summary>
 public interface ISshHostKeyPolicy
 {
     /// <summary>
-    /// 校验 Host Key。返回 true 表示接受并继续连接。
+    /// 查询本机对该主机已记录的指纹，返回补全 <see cref="SshHostKeyVerificationContext.KnownFingerprint"/>
+    /// 的上下文。在握手线程上调用，<b>不弹任何 UI</b>。
+    /// </summary>
+    SshHostKeyVerificationContext Lookup(SshHostKeyVerificationContext context);
+
+    /// <summary>
+    /// 向用户确认 Host Key；接受则记录指纹并返回 true。握手已中止后在正常异步上下文中调用。
     /// <para>实现必须做到：首次连接提示并记录指纹；指纹变化时明确警告，不得静默接受。</para>
     /// </summary>
-    Task<bool> VerifyAsync(SshHostKeyVerificationContext context, CancellationToken cancellationToken);
+    Task<bool> ConfirmAndRememberAsync(SshHostKeyVerificationContext context, CancellationToken cancellationToken);
 }
 
 public sealed class SshHostKeyVerificationContext
@@ -74,4 +86,7 @@ public sealed class SshHostKeyVerificationContext
 
     /// <summary>指纹是否与已记录值不一致——这是必须强警告的中间人风险场景。</summary>
     public bool IsMismatch => KnownFingerprint is not null && KnownFingerprint != Fingerprint;
+
+    /// <summary>指纹与已记录值一致——可以静默放行，无需打扰用户。</summary>
+    public bool IsKnownGood => KnownFingerprint is not null && KnownFingerprint == Fingerprint;
 }

@@ -15,47 +15,51 @@ namespace RemoteFlow.App.Services;
 ///   <item>指纹不一致：<b>必须明确警告</b>，用户显式确认后才继续，绝不静默接受。</item>
 /// </list>
 /// </para>
+/// <para>
+/// <see cref="Lookup"/> 在 SSH 握手线程上跑，只查库、不弹 UI；
+/// <see cref="ConfirmAndRememberAsync"/> 在握手中止后的异步流程里弹窗，
+/// 避免在握手线程上阻塞等待用户（会话超时会先到，把弹窗结果吞掉）。
+/// </para>
 /// </summary>
 public sealed class InteractiveSshHostKeyPolicy(
     IHostKeyRepository repository,
     IDialogService dialogs,
     ILogger<InteractiveSshHostKeyPolicy> logger) : ISshHostKeyPolicy
 {
-    public async Task<bool> VerifyAsync(SshHostKeyVerificationContext context, CancellationToken cancellationToken)
+    public SshHostKeyVerificationContext Lookup(SshHostKeyVerificationContext context)
     {
-        var known = await repository.GetAsync(context.Host, context.Port, cancellationToken);
+        // 握手线程（线程池线程）上没有 SynchronizationContext，这里的 sync-over-async
+        // 是安全的；查询是主键索引命中，很快。
+        var known = repository
+            .GetAsync(context.Host, context.Port, CancellationToken.None)
+            .GetAwaiter().GetResult();
 
-        // 指纹与记录一致：这是绝大多数情况，直接放行，不打扰用户。
-        if (known is not null && known.Fingerprint == context.Fingerprint)
-        {
-            return true;
-        }
-
-        var enriched = new SshHostKeyVerificationContext
+        return new SshHostKeyVerificationContext
         {
             Host = context.Host,
             Port = context.Port,
             KeyAlgorithm = context.KeyAlgorithm,
             Fingerprint = context.Fingerprint,
-            KnownFingerprint = known?.Fingerprint
+            KnownFingerprint = known?.Fingerprint,
         };
+    }
 
-        if (enriched.IsMismatch)
+    public async Task<bool> ConfirmAndRememberAsync(
+        SshHostKeyVerificationContext context, CancellationToken cancellationToken)
+    {
+        if (context.IsMismatch)
         {
             logger.LogWarning(
                 "主机 {Host}:{Port} 的密钥指纹与记录不一致，已提示用户确认",
                 context.Host, context.Port);
         }
 
-        var accepted = await dialogs.ConfirmHostKeyAsync(enriched);
+        var accepted = await dialogs.ConfirmHostKeyAsync(context);
 
         if (!accepted)
         {
             logger.LogInformation("用户拒绝了 {Host}:{Port} 的主机密钥", context.Host, context.Port);
-
-            // 指纹不一致时用更精确的错误码，让历史记录能区分「用户拒绝」与「疑似中间人」。
-            throw ConnectionException.FromCode(
-                enriched.IsMismatch ? ConnectionErrorCode.HostKeyMismatch : ConnectionErrorCode.HostKeyRejected);
+            return false;
         }
 
         await repository.SaveAsync(new SshHostKeyRecord
@@ -63,7 +67,7 @@ public sealed class InteractiveSshHostKeyPolicy(
             HostKey = SshHostKeyRecord.BuildHostKey(context.Host, context.Port),
             KeyAlgorithm = context.KeyAlgorithm,
             Fingerprint = context.Fingerprint,
-            TrustedAt = DateTimeOffset.Now
+            TrustedAt = DateTimeOffset.Now,
         }, cancellationToken);
 
         logger.LogInformation("已记录 {Host}:{Port} 的主机密钥指纹", context.Host, context.Port);

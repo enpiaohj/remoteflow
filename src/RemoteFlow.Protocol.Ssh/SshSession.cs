@@ -39,6 +39,9 @@ public sealed class SshSession : IRemoteSession
     /// <summary>Host Key 校验失败的具体原因，用于在连接异常时给出准确错误码。</summary>
     private ConnectionErrorCode _hostKeyFailure = ConnectionErrorCode.None;
 
+    /// <summary>握手时发现的、尚未被本机信任的主机密钥。连接失败后据此弹窗确认。</summary>
+    private SshHostKeyVerificationContext? _pendingHostKey;
+
     public SshSession(SessionRequest request, ILogger logger)
     {
         _request = request;
@@ -74,55 +77,92 @@ public sealed class SshSession : IRemoteSession
 
         try
         {
-            var connectionInfo = BuildConnectionInfo();
-            _client = new SshClient(connectionInfo);
-            _client.HostKeyReceived += OnHostKeyReceived;
-
-            if (Profile.Ssh.KeepAliveSeconds > 0)
+            // 最多两轮：首轮若因主机密钥未信任被我方中止握手，弹窗确认后再来一轮。
+            for (var attempt = 0; attempt < 2; attempt++)
             {
-                _client.KeepAliveInterval = TimeSpan.FromSeconds(Profile.Ssh.KeepAliveSeconds);
+                try
+                {
+                    await ConnectOnceAsync(cancellationToken);
+                    return;
+                }
+                catch (OperationCanceledException)
+                {
+                    await CleanupAsync();
+                    Fail(ConnectionErrorCode.Cancelled, null);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    await CleanupAsync();
+
+                    // 首轮握手被我方中止（主机密钥未信任），且还没弹过窗——现在弹。
+                    if (attempt == 0 && _pendingHostKey is { } pending && _request.HostKeyPolicy is { } policy)
+                    {
+                        var accepted = await policy.ConfirmAndRememberAsync(pending, cancellationToken);
+                        _pendingHostKey = null;
+
+                        if (accepted)
+                        {
+                            _hostKeyFailure = ConnectionErrorCode.None;
+                            continue; // 指纹已记录，重试；这轮 Lookup 会静默通过
+                        }
+
+                        Fail(pending.IsMismatch
+                            ? ConnectionErrorCode.HostKeyMismatch
+                            : ConnectionErrorCode.HostKeyRejected, null);
+                        return;
+                    }
+
+                    Fail(MapError(ex), ex);
+                    return;
+                }
             }
-
-            await _client.ConnectAsync(cancellationToken);
-
-            // 初始终端尺寸只是占位：UI 完成布局后会立即调用 Resize 传入真实行列数。
-            _shell = _client.CreateShellStream(
-                terminalName: string.IsNullOrWhiteSpace(Profile.Ssh.TerminalType) ? "xterm-256color" : Profile.Ssh.TerminalType,
-                columns: 80,
-                rows: 24,
-                width: 800,
-                height: 600,
-                bufferSize: 16 * 1024);
-
-            _readLoopCts = new CancellationTokenSource();
-            _readLoopTask = Task.Run(() => ReadLoopAsync(_shell, _readLoopCts.Token), CancellationToken.None);
-
-            SetState(ConnectionState.Connected);
-
-            _logger.LogInformation(
-                "SSH 会话 {SessionId} 已连接 {Host}:{Port}", SessionId, Profile.Host, Profile.Port);
-
-            if (!string.IsNullOrWhiteSpace(Profile.Ssh.InitialCommand))
-            {
-                SendInput(Profile.Ssh.InitialCommand + "\n");
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            await CleanupAsync();
-            Fail(ConnectionErrorCode.Cancelled, null);
-        }
-        catch (Exception ex)
-        {
-            await CleanupAsync();
-            var code = MapError(ex);
-            Fail(code, ex);
         }
         finally
         {
             // 无论成功失败，凭据都不再需要，立即释放以缩短明文存活时间。
             _credential?.Dispose();
             _credential = null;
+        }
+    }
+
+    /// <summary>单次连接尝试。失败抛异常，由 <see cref="ConnectAsync"/> 决定是否重试。</summary>
+    private async Task ConnectOnceAsync(CancellationToken cancellationToken)
+    {
+        _pendingHostKey = null;
+        _hostKeyFailure = ConnectionErrorCode.None;
+
+        var connectionInfo = BuildConnectionInfo();
+        _client = new SshClient(connectionInfo);
+        _client.HostKeyReceived += OnHostKeyReceived;
+
+        if (Profile.Ssh.KeepAliveSeconds > 0)
+        {
+            _client.KeepAliveInterval = TimeSpan.FromSeconds(Profile.Ssh.KeepAliveSeconds);
+        }
+
+        await _client.ConnectAsync(cancellationToken);
+
+        // 初始终端尺寸只是占位：UI 完成布局后会立即调用 Resize 传入真实行列数。
+        _shell = _client.CreateShellStream(
+            terminalName: string.IsNullOrWhiteSpace(Profile.Ssh.TerminalType) ? "xterm-256color" : Profile.Ssh.TerminalType,
+            columns: 80,
+            rows: 24,
+            width: 800,
+            height: 600,
+            bufferSize: 16 * 1024);
+
+        _readLoopCts = new CancellationTokenSource();
+        _readLoopTask = Task.Run(() => ReadLoopAsync(_shell, _readLoopCts.Token), CancellationToken.None);
+
+        SetState(ConnectionState.Connected);
+
+        _logger.LogInformation(
+            "SSH 会话 {SessionId} 已连接 {Host}:{Port}", SessionId, Profile.Host, Profile.Port);
+
+        if (!string.IsNullOrWhiteSpace(Profile.Ssh.InitialCommand))
+        {
+            SendInput(Profile.Ssh.InitialCommand + "\n");
         }
     }
 
@@ -198,6 +238,11 @@ public sealed class SshSession : IRemoteSession
 
         _disposed = true;
         await CleanupAsync();
+
+        // ConnectAsync 从未跑完（或根本没调用）时凭据还在，这里兜底释放。
+        _credential?.Dispose();
+        _credential = null;
+
         _lifecycleMutex.Dispose();
     }
 
@@ -281,8 +326,10 @@ public sealed class SshSession : IRemoteSession
     // ── Host Key 校验 ─────────────────────────────────────────────
 
     /// <summary>
-    /// SSH.NET 在连接线程上同步触发本事件。此处同步等待 UI 的确认结果：
-    /// 阻塞的是 SSH 后台线程而非 UI 线程，因此不会死锁。
+    /// SSH.NET 在握手线程上同步触发本事件。<b>这里绝不阻塞等待 UI</b>——会话超时会先到，
+    /// 把弹窗结果吞掉。只做一次快速的本机指纹比对：一致则放行；否则中止握手
+    /// （<c>CanTrust = false</c>，此时凭据尚未发送），把待确认的密钥记下来，
+    /// 由 <see cref="ConnectAsync"/> 在握手失败后弹窗、用户接受则记录并重试。
     /// </summary>
     private void OnHostKeyReceived(object? sender, HostKeyEventArgs e)
     {
@@ -295,33 +342,29 @@ public sealed class SshSession : IRemoteSession
             return;
         }
 
-        var context = new SshHostKeyVerificationContext
-        {
-            Host = Profile.Host,
-            Port = Profile.Port,
-            KeyAlgorithm = e.HostKeyName,
-            Fingerprint = e.FingerPrintSHA256
-        };
-
         try
         {
-            var trusted = policy.VerifyAsync(context, CancellationToken.None).GetAwaiter().GetResult();
-            e.CanTrust = trusted;
-
-            if (!trusted)
+            var context = policy.Lookup(new SshHostKeyVerificationContext
             {
-                _hostKeyFailure = ConnectionErrorCode.HostKeyRejected;
+                Host = Profile.Host,
+                Port = Profile.Port,
+                KeyAlgorithm = e.HostKeyName,
+                Fingerprint = e.FingerPrintSHA256,
+            });
+
+            if (context.IsKnownGood)
+            {
+                e.CanTrust = true;
+                return;
             }
-        }
-        catch (ConnectionException ex)
-        {
-            // 指纹不一致等强风险场景由策略以 ConnectionException 抛出，这里保留其错误码。
-            _hostKeyFailure = ex.ErrorCode;
+
+            // 未信任 / 指纹变化：中止本次握手，稍后弹窗。
+            _pendingHostKey = context;
             e.CanTrust = false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "SSH 会话 {SessionId} 校验主机密钥时发生异常", SessionId);
+            _logger.LogError(ex, "SSH 会话 {SessionId} 查询主机密钥时发生异常", SessionId);
             _hostKeyFailure = ConnectionErrorCode.HostKeyRejected;
             e.CanTrust = false;
         }
@@ -411,8 +454,8 @@ public sealed class SshSession : IRemoteSession
                 _client = null;
             }
 
-            _credential?.Dispose();
-            _credential = null;
+            // 凭据不在这里释放：首轮握手因主机密钥未信任被中止后要重试，仍需凭据。
+            // 由 ConnectAsync 的 finally（所有尝试结束后）和 DisposeAsync 统一释放。
         }
         catch (Exception ex)
         {
