@@ -494,9 +494,9 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Download}" FontFamily="{StaticResource IconFont}" FontSize="18"
-                                                   Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Download}" Style="{StaticResource IconTile.Glyph}"
+                                                   Foreground="{DynamicResource Brand.Default}" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="导入连接 CSV" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -516,9 +516,9 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Upload}" FontFamily="{StaticResource IconFont}" FontSize="18"
-                                                   Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Upload}" Style="{StaticResource IconTile.Glyph}"
+                                                   Foreground="{DynamicResource Brand.Default}" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="导出连接 CSV" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -547,9 +547,9 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Download}" FontFamily="{StaticResource IconFont}" FontSize="18"
-                                                   Foreground="{DynamicResource Status.Success}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Download}" Style="{StaticResource IconTile.Glyph}"
+                                                   Foreground="{DynamicResource Status.Success}" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="导入 .rfbackup" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -569,9 +569,9 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Upload}" FontFamily="{StaticResource IconFont}" FontSize="18"
-                                                   Foreground="{DynamicResource Status.Success}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Upload}" Style="{StaticResource IconTile.Glyph}"
+                                                   Foreground="{DynamicResource Status.Success}" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="导出 .rfbackup" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -600,9 +600,9 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Folder}" FontFamily="{StaticResource IconFont}" FontSize="18"
-                                                   Foreground="{DynamicResource Text.Secondary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Folder}" Style="{StaticResource IconTile.Glyph}"
+                                                   Foreground="{DynamicResource Text.Secondary}" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="数据存储位置" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -623,9 +623,9 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.ImportExport}" FontFamily="{StaticResource IconFont}" FontSize="18"
-                                                   Foreground="{DynamicResource Text.Secondary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.ImportExport}" Style="{StaticResource IconTile.Glyph}"
+                                                   Foreground="{DynamicResource Text.Secondary}" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="打开日志目录" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -644,9 +644,9 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
-                                    <TextBlock Text="{StaticResource Icon.Database}" FontFamily="{StaticResource IconFont}" FontSize="18"
-                                               Foreground="{DynamicResource Text.Secondary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                    <TextBlock Text="{StaticResource Icon.Database}" Style="{StaticResource IconTile.Glyph}"
+                                               Foreground="{DynamicResource Text.Secondary}" />
                                 </Border>
                                 <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
                                     <TextBlock Text="备份数据" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -666,9 +666,9 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
-                                    <TextBlock Text="{StaticResource Icon.Delete}" FontFamily="{StaticResource IconFont}" FontSize="18"
-                                               Foreground="{DynamicResource Status.Danger}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                    <TextBlock Text="{StaticResource Icon.Delete}" Style="{StaticResource IconTile.Glyph}"
+                                               Foreground="{DynamicResource Status.Danger}" />
                                 </Border>
                                 <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
                                     <TextBlock Text="清理连接历史" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />

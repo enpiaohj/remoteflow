@@ -61,7 +61,7 @@
 
         <!-- 连接行（分组视图与扁平视图共用）-->
         <DataTemplate x:Key="ConnRowTemplate" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Grid Height="58">
+            <Grid Height="64">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="36" />
                     <ColumnDefinition Width="Auto" MinWidth="200" MaxWidth="460" SharedSizeGroup="ColName" />
@@ -92,13 +92,15 @@
                 </Button>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <!-- 与首页收藏 / 最近活动行同一套图标尺度（44px 一族），
-                         列表本身更密，取 38px 折中，不再明显偏小 -->
-                    <Border Width="38" Height="38" CornerRadius="10"
-                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
-                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="17"
-                               Margin="-38,0,0,0" Width="38" TextAlignment="Center" VerticalAlignment="Center"
-                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    <!-- 图标系统标准尺寸（44），与首页收藏 / 最近活动行同一套规格 -->
+                    <Grid>
+                        <Border Style="{StaticResource IconTile.Background}"
+                                Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                        <TextBlock Style="{StaticResource IconTile.Glyph}"
+                                   Text="{Binding ProtocolIcon}"
+                                   Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    </Grid>
                     <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" Margin="14,0,8,0"
                                MaxWidth="360" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
@@ -201,7 +203,6 @@
 
     <Grid Margin="24,20,24,0" Grid.IsSharedSizeScope="True">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -394,10 +395,21 @@
             </StackPanel>
         </Border>
 
-        <!-- ── 列头 ──────────────────────────────────────────── -->
-        <!-- 列头只在扁平视图（收藏 / 最近连接）出现。
-             分组视图是一棵带缩进的树，再压一行表头既对不齐也没必要。 -->
-        <Grid Grid.Row="3" Height="30" Margin="4,0,4,0">
+        <!-- 列表卡片：机身与内容同一基色（Windows 11 默认配色思路）之后，
+             列表需要一个显式的白卡片边界才不会跟机身糊在一起。列头 / 分隔线 /
+             列表都装进这一张卡片。 -->
+        <Border Grid.Row="3" Style="{StaticResource Surface.Card}" Padding="6,4,6,8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- ── 列头 ──────────────────────────────────────────── -->
+                <!-- 列头只在扁平视图（收藏 / 最近连接）出现。
+                     分组视图是一棵带缩进的树，再压一行表头既对不齐也没必要。 -->
+                <Grid Grid.Row="0" Height="30" Margin="4,0,4,0">
             <Grid.Style>
                 <Style TargetType="Grid">
                     <Setter Property="Visibility" Value="Collapsed" />
@@ -431,25 +443,25 @@
             <TextBlock Grid.Column="6" Text="最近连接" Style="{StaticResource Text.Label}" />
         </Grid>
 
-        <Border Grid.Row="3" VerticalAlignment="Bottom" Margin="4,0">
-            <Border.Style>
-                <Style TargetType="Border" BasedOn="{StaticResource Surface.Divider}">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Style.Triggers>
-                        <MultiDataTrigger>
-                            <MultiDataTrigger.Conditions>
-                                <Condition Binding="{Binding IsGroupedView}" Value="False" />
-                                <Condition Binding="{Binding IsEmpty}" Value="False" />
-                            </MultiDataTrigger.Conditions>
-                            <Setter Property="Visibility" Value="Visible" />
-                        </MultiDataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Border.Style>
-        </Border>
+                <Border Grid.Row="1" VerticalAlignment="Bottom" Margin="4,0">
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource Surface.Divider}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsGroupedView}" Value="False" />
+                                        <Condition Binding="{Binding IsEmpty}" Value="False" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
 
-        <!-- ── 连接列表 ──────────────────────────────────────── -->
-        <Grid Grid.Row="4">
+                <!-- ── 连接列表 ──────────────────────────────────────── -->
+                <Grid Grid.Row="2">
 
             <!-- 收藏 / 最近连接：扁平列表（最近连接按日期桶分组）-->
             <ListBox x:Name="ConnectionList"
@@ -582,7 +594,9 @@
                            TextWrapping="Wrap" TextAlignment="Center" Margin="0,16,0,0" />
                 <Button Style="{StaticResource Button.Primary}" Content="新建连接" HorizontalAlignment="Center"
                         Margin="0,20,0,0" Command="{Binding CreateCommand}" />
-            </StackPanel>
+                </StackPanel>
+            </Grid>
         </Grid>
+        </Border>
     </Grid>
 </UserControl>

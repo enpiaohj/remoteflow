@@ -466,11 +466,14 @@
                     </Border>
 
                     <!-- 内容区：所有 Tab 内容常驻，仅切换可见性，保证会话不被销毁。
-                         这是浮在机身灰底上的那张「白纸」——描边 + 大圆角把边界交代清楚，
-                         不用投影（投影会让整棵子树进入位图缓存，影响 RDP ActiveX 的 airspace）。
+                         Windows 11 默认配色思路：内容区底色跟机身**同一个灰**（Bg.Base），
+                         不再是一整块纯白——具体内容靠各页面自己的 Surface.Card 卡片来
+                         呈现白色，而不是让中央变成一大块跟机身撞色的纯白矩形。
+                         会话 Tab（RDP/SSH/VNC）自己在 SessionHostView 里画深色背景，
+                         会盖住这里的灰色，互不影响。
                          会话全屏时必须去掉描边和圆角：否则远程画面四周会露出一圈边框。 -->
                     <Border Grid.Row="1"
-                            Background="{DynamicResource Bg.Layer}"
+                            Background="{DynamicResource Bg.Base}"
                             SnapsToDevicePixels="True">
                         <Border.Style>
                             <Style TargetType="Border">

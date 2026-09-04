@@ -80,13 +80,14 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- 概念图里最近连接的图标是刻意放大的，用来突显这块快捷入口 -->
-                        <Grid Grid.Column="0" Width="64" Height="64" VerticalAlignment="Center">
-                            <Border CornerRadius="{StaticResource Radius.Large}"
+                        <!-- 首页「最近连接」是图标系统里唯一放大到 64 的例外，突显这块快捷入口 -->
+                        <Grid Grid.Column="0" VerticalAlignment="Center">
+                            <Border Style="{StaticResource IconTile.Background}"
+                                    Width="64" Height="64" CornerRadius="{StaticResource Radius.Large}"
                                     Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
-                                    Opacity="0.14" />
-                            <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="30"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                            <TextBlock Style="{StaticResource IconTile.Glyph}" FontSize="28"
+                                       Text="{Binding ProtocolIcon}"
                                        Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                         </Grid>
 
@@ -144,11 +145,12 @@
                     <ColumnDefinition Width="26" />
                 </Grid.ColumnDefinitions>
 
-                <Grid Grid.Column="0" Width="44" Height="44" VerticalAlignment="Center">
-                    <Border CornerRadius="11"
-                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.16" />
-                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="19"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                <Grid Grid.Column="0" VerticalAlignment="Center">
+                    <Border Style="{StaticResource IconTile.Background}"
+                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                            Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                    <TextBlock Style="{StaticResource IconTile.Glyph}"
+                               Text="{Binding ProtocolIcon}"
                                Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                 </Grid>
 
@@ -190,10 +192,12 @@
 
                 <!-- 图标块显示协议（与收藏 / 连接列表同一套语言）；
                      只有失败或取消才在右下角打一个状态点，成功是常态不必强调。 -->
-                <Grid Grid.Column="0" Width="36" Height="36" VerticalAlignment="Center">
-                    <Border CornerRadius="9" Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
-                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="19"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                <Grid Grid.Column="0" VerticalAlignment="Center">
+                    <Border Style="{StaticResource IconTile.Background}"
+                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                            Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                    <TextBlock Style="{StaticResource IconTile.Glyph}"
+                               Text="{Binding ProtocolIcon}"
                                Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                     <Border Width="13" Height="13" CornerRadius="7"
                             HorizontalAlignment="Right" VerticalAlignment="Bottom"

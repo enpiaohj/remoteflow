@@ -73,16 +73,12 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Width="38" Height="38" CornerRadius="9"
+                    <!-- 图标系统标准尺寸（44） -->
+                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}"
                             Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
-                            Opacity="0.16" />
-                    <TextBlock Grid.Column="0"
+                            Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                    <TextBlock Grid.Column="0" Style="{StaticResource IconTile.Glyph}"
                                Text="{Binding ProtocolIcon}"
-                               FontFamily="{StaticResource IconFont}"
-                               FontSize="18"
-                               Width="38"
-                               TextAlignment="Center"
-                               VerticalAlignment="Center"
                                Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
 
                     <TextBlock Grid.Column="1"

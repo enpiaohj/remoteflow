@@ -33,6 +33,47 @@
 
     <Duration x:Key="Duration.Fast">0:0:0.12</Duration>
 
+    <!-- ══ RemoteFlow 图标系统 ═══════════════════════════════════════
+         之前每个页面各写一套图标块数字（30/34/36/38/40…、圆角 5~19、
+         背景不透明度 0.13~0.18 不等），是「零散替换」的根源。统一成一套：
+
+         · 字体固定 Segoe Fluent Icons（回退 Segoe MDL2 Assets）——这是
+           Windows 11 系统自带、当前机器已确认可用的 Fluent 风格图标字体。
+           独立分发的「Microsoft Fluent System Icons」开源字体文件本机
+           没有、也没有网络环境下载安装，无法作为应用内嵌字体使用；
+           两者视觉语言一致（同属 Fluent，多数字形是描边 / Regular 粗细），
+           这里退而求其次，但图标"系统"本身（尺寸/圆角/透明度/语义/取色
+           规则）与用哪个字体文件无关，一样统一管理。
+         · 标准尺寸 44，对齐首页「收藏 / 最近活动」行的图标尺度——这也是
+           除首页「最近连接」大卡片（64，唯一的放大例外）外全应用统一
+           使用的「列表项图标」规格。
+         · 背景不再是显眼的高饱和色块，统一压到 12% 不透明度；
+           真正传达「这是什么类型」的是图标本身的颜色，不是背景色块。
+         · 圆角统一用 Radius.Medium（8），不再各页面各挑一个数字。
+    -->
+    <sys:Double x:Key="IconTile.Size">44</sys:Double>
+    <sys:Double x:Key="IconTile.GlyphSize">19</sys:Double>
+    <!-- 彩色背景（协议色 / 类型色）统一按这个不透明度冲淡，中性背景
+         （Bg.Subtle 等本就很浅的灰）不套这个值，在使用处不设 Opacity 即可 -->
+    <sys:Double x:Key="IconTile.ColorBgOpacity">0.12</sys:Double>
+
+    <!-- 图标块背景：Width/Height/CornerRadius 统一，Background/Opacity 按
+         语义在使用处设置（协议色/类型色要配 IconTile.ColorBgOpacity 冲淡；
+         Bg.Subtle 这类本就浅的中性背景不设 Opacity，否则会淡到看不见） -->
+    <Style x:Key="IconTile.Background" TargetType="Border">
+        <Setter Property="Width" Value="{StaticResource IconTile.Size}" />
+        <Setter Property="Height" Value="{StaticResource IconTile.Size}" />
+        <Setter Property="CornerRadius" Value="{StaticResource Radius.Medium}" />
+    </Style>
+
+    <!-- 图标块字形：字体 / 字号 / 对齐统一，Foreground 同上按语义绑定 -->
+    <Style x:Key="IconTile.Glyph" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+        <Setter Property="FontSize" Value="{StaticResource IconTile.GlyphSize}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
     <!-- ── 排版 ───────────────────────────────────────────────── -->
 
     <Style x:Key="Text.PageTitle" TargetType="TextBlock">
