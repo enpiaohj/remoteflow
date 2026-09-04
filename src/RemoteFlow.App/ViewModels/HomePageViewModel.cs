@@ -25,8 +25,9 @@ public sealed partial class HomePageViewModel(
     AppSettings settings,
     JsonSettingsStore settingsStore) : ObservableObject
 {
-    /// <summary>收藏 / 最近活动分区最多展示的条目数，超出请到对应页面查看。</summary>
-    private const int SectionLimit = 6;
+    /// <summary>收藏 / 最近活动分区最多展示的条目数。卡片会占满竖向空间并内部滚动，
+    /// 所以取一个偏大的值，大屏下也有内容可看，超出的到对应页面查看全部。</summary>
+    private const int SectionLimit = 12;
 
     /// <summary>「最近连接」快捷卡片的数量。</summary>
     private const int RecentCardLimit = 3;

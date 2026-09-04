@@ -224,16 +224,17 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <!-- 内容随窗口拉宽：最近连接卡片 3 等分铺满，收藏 / 活动两列各占一半。
-             1760 封顶只是防止在超宽屏上行内文字离得太散。 -->
-        <Grid Margin="24,22,24,24" MaxWidth="1760">
+    <ScrollViewer x:Name="HomeScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <!-- 内容随窗口自适应：横向卡片 3 等分铺满（封顶 1920）；
+             纵向 Grid 至少撑满视口，收藏 / 最近活动两张卡片吃掉剩余高度，
+             卡片内部列表自行滚动，页面整体不再在大屏下留出大片空白。 -->
+        <Grid Margin="24,22,24,24" MaxWidth="1920"
+              MinHeight="{Binding ViewportHeight, ElementName=HomeScroll}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" MinHeight="240" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
@@ -287,8 +288,8 @@
                 </ItemsControl>
             </StackPanel>
 
-            <!-- 收藏 + 最近活动 -->
-            <Grid Grid.Row="3" Margin="0,0,0,24">
+            <!-- 收藏 + 最近活动：占据剩余竖向空间 -->
+            <Grid Grid.Row="3" Margin="0,0,0,20">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="24" />
@@ -296,7 +297,7 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- 收藏 -->
-                <Border Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="18,16" VerticalAlignment="Top">
+                <Border Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="18,16">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -314,13 +315,16 @@
                                     HorizontalAlignment="Right" Command="{Binding ViewAllFavoritesCommand}" />
                         </Grid>
 
-                        <StackPanel Grid.Row="1" VerticalAlignment="Top">
-                            <ItemsControl ItemsSource="{Binding FavoriteItems}" ItemTemplate="{StaticResource FavoriteRow}"
-                                          Visibility="{Binding HasFavorites, Converter={StaticResource BoolToVisibility}}" />
-                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10" TextWrapping="Wrap"
-                                       Text="还没有收藏的连接。在「我的连接」里点星标即可加入。"
-                                       Visibility="{Binding HasFavorites, Converter={StaticResource InverseBoolToVisibility}}" />
-                        </StackPanel>
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Padding="0,0,4,0">
+                            <StackPanel>
+                                <ItemsControl ItemsSource="{Binding FavoriteItems}" ItemTemplate="{StaticResource FavoriteRow}"
+                                              Visibility="{Binding HasFavorites, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10" TextWrapping="Wrap"
+                                           Text="还没有收藏的连接。在「我的连接」里点星标即可加入。"
+                                           Visibility="{Binding HasFavorites, Converter={StaticResource InverseBoolToVisibility}}" />
+                            </StackPanel>
+                        </ScrollViewer>
 
                         <StackPanel Grid.Row="2">
                             <Border Style="{StaticResource Surface.Divider}" Margin="0,8" />
@@ -336,7 +340,7 @@
                 </Border>
 
                 <!-- 最近活动 -->
-                <Border Grid.Column="2" Style="{StaticResource Surface.Card}" Padding="18,16" VerticalAlignment="Top">
+                <Border Grid.Column="2" Style="{StaticResource Surface.Card}" Padding="18,16">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -354,13 +358,16 @@
                                     HorizontalAlignment="Right" Command="{Binding ViewAllActivityCommand}" />
                         </Grid>
 
-                        <StackPanel Grid.Row="1" VerticalAlignment="Top">
-                            <ItemsControl ItemsSource="{Binding RecentHistory}" ItemTemplate="{StaticResource ActivityRow}"
-                                          Visibility="{Binding HasActivity, Converter={StaticResource BoolToVisibility}}" />
-                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10" TextWrapping="Wrap"
-                                       Text="还没有连接记录。"
-                                       Visibility="{Binding HasActivity, Converter={StaticResource InverseBoolToVisibility}}" />
-                        </StackPanel>
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Padding="0,0,4,0">
+                            <StackPanel>
+                                <ItemsControl ItemsSource="{Binding RecentHistory}" ItemTemplate="{StaticResource ActivityRow}"
+                                              Visibility="{Binding HasActivity, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10" TextWrapping="Wrap"
+                                           Text="还没有连接记录。"
+                                           Visibility="{Binding HasActivity, Converter={StaticResource InverseBoolToVisibility}}" />
+                            </StackPanel>
+                        </ScrollViewer>
 
                         <StackPanel Grid.Row="2">
                             <Border Style="{StaticResource Surface.Divider}" Margin="0,8" />
