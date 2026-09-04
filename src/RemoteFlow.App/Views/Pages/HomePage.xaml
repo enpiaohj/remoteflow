@@ -85,20 +85,21 @@
                             <ColumnDefinition Width="26" />
                         </Grid.ColumnDefinitions>
 
-                        <Grid Grid.Row="0" Grid.Column="0" Width="40" Height="40" VerticalAlignment="Top">
-                            <Border CornerRadius="{StaticResource Radius.Medium}"
+                        <!-- 概念图里最近连接的图标是刻意放大的，用来突显这块快捷入口 -->
+                        <Grid Grid.Row="0" Grid.Column="0" Width="50" Height="50" VerticalAlignment="Top">
+                            <Border CornerRadius="{StaticResource Radius.Large}"
                                     Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
                                     Opacity="0.14" />
-                            <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="18"
+                            <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="23"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                         </Grid>
 
-                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="14,1,0,0" VerticalAlignment="Top">
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="16,3,0,0" VerticalAlignment="Top">
                             <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontWeight="SemiBold" FontSize="14"
                                        TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" />
                             <TextBlock Text="{Binding HostDisplay}" Style="{StaticResource Text.Caption}"
-                                       FontFamily="{StaticResource MonoFont}" Margin="0,4,0,0" HorizontalAlignment="Left" />
+                                       FontFamily="{StaticResource MonoFont}" Margin="0,5,0,0" HorizontalAlignment="Left" />
                         </StackPanel>
 
                         <!-- 卡片底行：协议徽章 + 状态 / 上次连接时间 -->
@@ -225,26 +226,16 @@
     </UserControl.Resources>
 
     <ScrollViewer x:Name="HomeScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <!-- 定宽内容列、水平居中：首页信息量本就不大，大屏下靠拉伸填满只会
-             把卡片撑空。用一个 ~1180 的居中容器，两侧留白是有意为之的版式，
-             读起来是「设计过的」而不是「没做完」。
-             列权重 100*/100* + 中列 MaxWidth：小窗口中列≈占满，宽窗口封顶居中，
-             且中列宽度确定，内部 * 布局不塌陷。 -->
-        <Grid MinHeight="{Binding ViewportHeight, ElementName=HomeScroll}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1*" MinWidth="24" />
-                <ColumnDefinition Width="1000*" MaxWidth="1180" />
-                <ColumnDefinition Width="1*" MinWidth="24" />
-            </Grid.ColumnDefinitions>
-
-            <!-- 内容量小于视口时整体垂直居中，留白上下均衡，读起来是「刚好这么多」；
-                 内容超过视口时这个居中退化为顶端对齐，外层 ScrollViewer 接管滚动。 -->
-            <Grid Grid.Column="1" Margin="0,28,0,28" VerticalAlignment="Center">
+        <!-- 内容铺满整个工作区：横向到页边距，纵向撑满视口。
+             「收藏 / 最近活动」行占 *，两张卡片一起吃掉剩余高度，且右缘与
+             上方「最近连接」卡片对齐；卡片内列表自带滚动。 -->
+        <Grid Margin="28,26,28,24"
+              MinHeight="{Binding ViewportHeight, ElementName=HomeScroll}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="260" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
@@ -307,11 +298,11 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- 收藏 -->
-                <Border Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="18,16" VerticalAlignment="Top">
+                <Border Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="18,16">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
@@ -325,13 +316,16 @@
                                     HorizontalAlignment="Right" Command="{Binding ViewAllFavoritesCommand}" />
                         </Grid>
 
-                        <StackPanel Grid.Row="1">
-                            <ItemsControl ItemsSource="{Binding FavoriteItems}" ItemTemplate="{StaticResource FavoriteRow}"
-                                          Visibility="{Binding HasFavorites, Converter={StaticResource BoolToVisibility}}" />
-                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10" TextWrapping="Wrap"
-                                       Text="还没有收藏的连接。在「我的连接」里点星标即可加入。"
-                                       Visibility="{Binding HasFavorites, Converter={StaticResource InverseBoolToVisibility}}" />
-                        </StackPanel>
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Padding="0,0,4,0">
+                            <StackPanel>
+                                <ItemsControl ItemsSource="{Binding FavoriteItems}" ItemTemplate="{StaticResource FavoriteRow}"
+                                              Visibility="{Binding HasFavorites, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10" TextWrapping="Wrap"
+                                           Text="还没有收藏的连接。在「我的连接」里点星标即可加入。"
+                                           Visibility="{Binding HasFavorites, Converter={StaticResource InverseBoolToVisibility}}" />
+                            </StackPanel>
+                        </ScrollViewer>
 
                         <StackPanel Grid.Row="2">
                             <Border Style="{StaticResource Surface.Divider}" Margin="0,8" />
@@ -347,11 +341,11 @@
                 </Border>
 
                 <!-- 最近活动 -->
-                <Border Grid.Column="2" Style="{StaticResource Surface.Card}" Padding="18,16" VerticalAlignment="Top">
+                <Border Grid.Column="2" Style="{StaticResource Surface.Card}" Padding="18,16">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
@@ -365,13 +359,16 @@
                                     HorizontalAlignment="Right" Command="{Binding ViewAllActivityCommand}" />
                         </Grid>
 
-                        <StackPanel Grid.Row="1">
-                            <ItemsControl ItemsSource="{Binding RecentHistory}" ItemTemplate="{StaticResource ActivityRow}"
-                                          Visibility="{Binding HasActivity, Converter={StaticResource BoolToVisibility}}" />
-                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10" TextWrapping="Wrap"
-                                       Text="还没有连接记录。"
-                                       Visibility="{Binding HasActivity, Converter={StaticResource InverseBoolToVisibility}}" />
-                        </StackPanel>
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Padding="0,0,4,0">
+                            <StackPanel>
+                                <ItemsControl ItemsSource="{Binding RecentHistory}" ItemTemplate="{StaticResource ActivityRow}"
+                                              Visibility="{Binding HasActivity, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10" TextWrapping="Wrap"
+                                           Text="还没有连接记录。"
+                                           Visibility="{Binding HasActivity, Converter={StaticResource InverseBoolToVisibility}}" />
+                            </StackPanel>
+                        </ScrollViewer>
 
                         <StackPanel Grid.Row="2">
                             <Border Style="{StaticResource Surface.Divider}" Margin="0,8" />
@@ -415,7 +412,6 @@
                             Command="{Binding DismissSecurityTipCommand}" />
                 </Grid>
             </Border>
-            </Grid>
         </Grid>
     </ScrollViewer>
 </UserControl>
