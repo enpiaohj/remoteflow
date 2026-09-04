@@ -121,3 +121,15 @@ public enum VncScaleMode
     /// <summary>1:1 原始像素显示。</summary>
     Original = 1
 }
+
+/// <summary>
+/// 启动后默认打开的页面。对应左侧导航的一级入口子集。
+/// </summary>
+public enum LandingPage
+{
+    Home = 0,
+    Connections = 1,
+    Favorites = 2,
+    Recent = 3,
+    Credentials = 4
+}

@@ -67,7 +67,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // 设置页的「数据与备份」改动了本地数据时刷新当前页。
         _settingsPage.DataChanged += async (_, _) => await ReloadCurrentPageAsync();
 
-        NavigateTo(NavigationPage.Home);
+        NavigateTo(settings.DefaultLandingPage switch
+        {
+            LandingPage.Connections => NavigationPage.Connections,
+            LandingPage.Favorites => NavigationPage.Favorites,
+            LandingPage.Recent => NavigationPage.Recent,
+            LandingPage.Credentials => NavigationPage.Credentials,
+            _ => NavigationPage.Home
+        });
     }
 
     public HomePageViewModel HomePage { get; }

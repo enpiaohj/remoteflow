@@ -107,6 +107,18 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     public IReadOnlyList<AppTheme> ThemeOptions { get; } = [AppTheme.System, AppTheme.Light, AppTheme.Dark];
 
+    [ObservableProperty]
+    private LandingPage _defaultLandingPage;
+
+    public IReadOnlyList<LandingPage> LandingPageOptions { get; } =
+        [LandingPage.Home, LandingPage.Connections, LandingPage.Favorites, LandingPage.Recent, LandingPage.Credentials];
+
+    /// <summary>界面语言。V0.1 仅简体中文，保留列表以便后续扩展。</summary>
+    public IReadOnlyList<string> LanguageOptions { get; } = ["zh-CN"];
+
+    [ObservableProperty]
+    private string _language = "zh-CN";
+
     // ── RDP ───────────────────────────────────────────────────────
 
     [ObservableProperty]
@@ -185,6 +197,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         LaunchOnStartup = _settings.LaunchOnStartup;
         MinimizeToTrayOnClose = _settings.CloseBehavior == WindowCloseBehavior.MinimizeToTray;
         SelectedTheme = _settings.Theme;
+        DefaultLandingPage = _settings.DefaultLandingPage;
+        Language = string.IsNullOrWhiteSpace(_settings.Language) ? "zh-CN" : _settings.Language;
 
         RdpFitToWindow = _settings.RdpDefaultDisplayMode == RdpDisplayMode.FitToWindow;
         RdpRedirectClipboard = _settings.RdpDefaultRedirectClipboard;
@@ -227,6 +241,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         Save();
     }
 
+    partial void OnDefaultLandingPageChanged(LandingPage value) => Save();
+    partial void OnLanguageChanged(string value) => Save();
+
     partial void OnRdpFitToWindowChanged(bool value) => Save();
     partial void OnRdpRedirectClipboardChanged(bool value) => Save();
     partial void OnRdpRedirectAudioChanged(bool value) => Save();
@@ -250,6 +267,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         _settings.LaunchOnStartup = LaunchOnStartup;
         _settings.CloseBehavior = MinimizeToTrayOnClose ? WindowCloseBehavior.MinimizeToTray : WindowCloseBehavior.Exit;
         _settings.Theme = SelectedTheme;
+        _settings.DefaultLandingPage = DefaultLandingPage;
+        _settings.Language = Language;
 
         _settings.RdpDefaultDisplayMode = RdpFitToWindow ? RdpDisplayMode.FitToWindow : RdpDisplayMode.FixedResolution;
         _settings.RdpDefaultRedirectClipboard = RdpRedirectClipboard;
@@ -587,10 +606,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         }
     }
 
-    // ── 数据库完整备份 ────────────────────────────────────────────
+    // ── 本地数据完整备份 ──────────────────────────────────────────
 
     [RelayCommand]
-    private async Task BackupDatabaseAsync()
+    private async Task BackupDataAsync()
     {
         var folder = _dialogs.PickFolder("选择备份保存位置");
         if (folder is null)
@@ -611,7 +630,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "备份数据库失败");
+            _logger.LogError(ex, "备份本地数据失败");
             StatusMessage = "备份失败。";
             await _dialogs.ShowMessageAsync("备份失败", $"无法完成备份：{ex.Message}", DialogKind.Error);
         }

@@ -394,6 +394,80 @@
         </Setter>
     </Style>
 
+    <!-- ── 开关 / 分段 ────────────────────────────────────────── -->
+
+    <!-- iOS 风格开关。用于「是/否」类设置，比复选框更贴近 Fluent 的设置界面。 -->
+    <Style x:Key="Toggle.Switch" TargetType="CheckBox">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Border x:Name="Track" Width="40" Height="22" CornerRadius="11"
+                            Background="{DynamicResource Bg.Subtle}"
+                            BorderBrush="{DynamicResource Stroke.Strong}"
+                            BorderThickness="1"
+                            SnapsToDevicePixels="True">
+                        <Ellipse x:Name="Knob" Width="14" Height="14"
+                                 Fill="{DynamicResource Text.Secondary}"
+                                 HorizontalAlignment="Left" Margin="3,0,0,0" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Track" Property="Background" Value="{DynamicResource Brand.Default}" />
+                            <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
+                            <Setter TargetName="Knob" Property="Fill" Value="White" />
+                            <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right" />
+                            <Setter TargetName="Knob" Property="Margin" Value="0,0,3,0" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Track" Property="Opacity" Value="0.5" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 分段选择：一组互斥的按钮，用于主题这类 2~4 个取值的选择 -->
+    <Style x:Key="Segment" TargetType="RadioButton">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+        <Setter Property="Margin" Value="0,0,8,0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Root"
+                            Background="{DynamicResource Bg.Layer}"
+                            BorderBrush="{DynamicResource Stroke.Default}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="16,7"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Selected}" />
+                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ── 卡片 / 分隔 ────────────────────────────────────────── -->
 
     <Style x:Key="Surface.Card" TargetType="Border">

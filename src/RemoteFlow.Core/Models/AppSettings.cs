@@ -36,6 +36,9 @@ public sealed class AppSettings
     /// <summary>是否已展示过「全屏工具条自动隐藏」的首次提示。</summary>
     public bool SessionFullScreenHintShown { get; set; }
 
+    /// <summary>启动或新建连接后默认打开的页面。</summary>
+    public LandingPage DefaultLandingPage { get; set; } = LandingPage.Home;
+
     // ── RDP 默认值 ────────────────────────────────────────
     public RdpDisplayMode RdpDefaultDisplayMode { get; set; } = RdpDisplayMode.FitToWindow;
     public bool RdpDefaultRedirectClipboard { get; set; } = true;
