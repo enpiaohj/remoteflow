@@ -18,7 +18,10 @@ public sealed partial class CredentialsPageViewModel(
     ConnectionService connections,
     IDialogService dialogs) : ObservableObject
 {
+    /// <summary>过滤后展示的行。完整集合保存在 <see cref="_all"/>。</summary>
     public ObservableCollection<CredentialItemViewModel> Items { get; } = [];
+
+    private readonly List<CredentialItemViewModel> _all = [];
 
     [ObservableProperty]
     private CredentialItemViewModel? _selectedItem;
@@ -26,7 +29,17 @@ public sealed partial class CredentialsPageViewModel(
     [ObservableProperty]
     private bool _isLoading;
 
-    public bool IsEmpty => Items.Count == 0;
+    /// <summary>按名称 / 用户名 / 类型筛选。</summary>
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+
+    /// <summary>一条凭据都没有（与「筛选无结果」区分）。</summary>
+    public bool IsEmpty => _all.Count == 0;
+
+    /// <summary>有凭据，但当前筛选没有命中任何一条。</summary>
+    public bool HasNoMatch => _all.Count > 0 && Items.Count == 0;
+
+    partial void OnSearchTextChanged(string value) => ApplyFilter();
 
     public async Task LoadAsync(CancellationToken ct = default)
     {
@@ -36,15 +49,15 @@ public sealed partial class CredentialsPageViewModel(
             var all = await credentials.GetAllAsync(ct);
             var previousSelection = SelectedItem?.Id;
 
-            Items.Clear();
+            _all.Clear();
             foreach (var credential in all)
             {
                 var usageCount = await connections.CountConnectionsUsingCredentialAsync(credential.Id, ct);
-                Items.Add(new CredentialItemViewModel(credential, usageCount));
+                _all.Add(new CredentialItemViewModel(credential, usageCount));
             }
 
+            ApplyFilter();
             SelectedItem = previousSelection is { } id ? Items.FirstOrDefault(i => i.Id == id) : null;
-            OnPropertyChanged(nameof(IsEmpty));
         }
         finally
         {
@@ -52,9 +65,32 @@ public sealed partial class CredentialsPageViewModel(
         }
     }
 
+    private void ApplyFilter()
+    {
+        var q = SearchText?.Trim() ?? string.Empty;
+
+        IEnumerable<CredentialItemViewModel> matches = _all;
+        if (q.Length > 0)
+        {
+            matches = _all.Where(i =>
+                i.Name.Contains(q, StringComparison.CurrentCultureIgnoreCase)
+                || i.Username.Contains(q, StringComparison.CurrentCultureIgnoreCase)
+                || i.TypeName.Contains(q, StringComparison.CurrentCultureIgnoreCase));
+        }
+
+        Items.Clear();
+        foreach (var item in matches)
+        {
+            Items.Add(item);
+        }
+
+        OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(HasNoMatch));
+    }
+
     /// <summary>凭据名称映射，供连接列表显示「凭据」列。</summary>
     public IReadOnlyDictionary<Guid, string> GetNameMap()
-        => Items.ToDictionary(i => i.Id, i => i.Name);
+        => _all.ToDictionary(i => i.Id, i => i.Name);
 
     [RelayCommand]
     private async Task CreateAsync()
@@ -160,8 +196,22 @@ public sealed partial class CredentialItemViewModel(Credential credential, int u
         _ => "\uE8D7"                                                             // Permissions
     };
 
+    /// <summary>类型徽章的语义色键。与协议色系保持一致，便于扫读。</summary>
+    public string TypeAccentBrushKey => Credential.Type switch
+    {
+        CredentialType.WindowsDomain => "Protocol.Rdp",
+        CredentialType.LocalPassword => "Text.Secondary",
+        CredentialType.SshPassword or CredentialType.SshPrivateKey => "Protocol.Ssh",
+        _ => "Protocol.Vnc"
+    };
+
     /// <summary>是否已在保险库中保存了 Secret。只显示「有/无」，绝不显示内容。</summary>
     public string SecretStateDisplay => Credential.Type == CredentialType.SshPrivateKey
         ? Credential.KeyReference is not null ? "已保存私钥" : "未保存私钥"
         : Credential.SecretReference is not null ? "已保存密码" : "未保存密码";
+
+    /// <summary>Secret 是否已保存——控制列表里锁图标是否点亮。</summary>
+    public bool HasSecret => Credential.Type == CredentialType.SshPrivateKey
+        ? Credential.KeyReference is not null
+        : Credential.SecretReference is not null;
 }
