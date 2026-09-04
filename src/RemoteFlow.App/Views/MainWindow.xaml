@@ -380,6 +380,15 @@
                                     <TextBlock Text="设置" Margin="12,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </RadioButton>
+
+                            <!-- 点一下就弹「关于」对话框，不是要停留的页面，所以不用 Nav.Item
+                                 那套 RadioButton + IsChecked 常驻选中态，用 Nav.ItemButton。 -->
+                            <Button Style="{StaticResource Nav.ItemButton}" Click="OnHelpClick">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Info}" Style="{StaticResource Nav.Icon}" />
+                                    <TextBlock Text="帮助与关于" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </ScrollViewer>
 
@@ -592,8 +601,10 @@
                         <TextBlock Text="{Binding SessionStatusText}" Style="{StaticResource Text.Caption}" Margin="8,0,0,0" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding AppVersion}" Style="{StaticResource Text.Caption}"
+                                   ToolTip="点侧栏「帮助与关于」查看更多" />
                         <TextBlock Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}" FontSize="11"
-                                   Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                                   Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="12,0,0,0" />
                         <TextBlock Text="本地优先 · 凭据由 Windows DPAPI 保护"
                                    Style="{StaticResource Text.Caption}" Margin="7,0,0,0" />
                     </StackPanel>

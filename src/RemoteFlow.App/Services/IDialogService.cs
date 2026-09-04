@@ -65,6 +65,9 @@ public interface IDialogService
 
     /// <summary>选择一个目录，取消返回 null。</summary>
     string? PickFolder(string title);
+
+    /// <summary>「关于 RemoteFlow」+ 快捷键速查对话框。</summary>
+    Task ShowAboutAsync();
 }
 
 /// <summary>

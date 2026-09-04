@@ -137,6 +137,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ? "Status.Idle"
         : "Status.Success";
 
+    /// <summary>
+    /// 版本号，放底部状态栏常驻显示——之前只在设置页「常规」标签最底下才能看到，
+    /// 每次要看都得点进设置，不方便。
+    /// </summary>
+    public string AppVersion { get; } =
+        "v" + (typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.1.0");
+
     partial void OnGlobalSearchTextChanged(string value)
     {
         // 全局搜索直接驱动连接列表，并自动切到「我的连接」以便看到结果。

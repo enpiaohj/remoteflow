@@ -110,6 +110,20 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
+    <!--
+        键帽徽标：搜索框的「Ctrl K」提示、关于对话框的快捷键列表都用这个外观。
+        只定容器视觉（背景/描边/圆角/内边距），内容自己放 TextBlock，
+        字号/字重跟着放进去的 Text.Label 走，这里不重复定义。
+    -->
+    <Style x:Key="Kbd" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Bg.Subtle}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Stroke.Subtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="6,2" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
     <Style x:Key="Text.Body" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
         <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />

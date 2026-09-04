@@ -74,6 +74,13 @@ public sealed class DialogService(
     public Task<TagEditorResult?> EditTagAsync(TagEditorPrompt prompt)
         => InvokeOnUiAsync(() => TagEditorDialog.Prompt(Owner, prompt));
 
+    public Task ShowAboutAsync() => InvokeOnUiAsync(() =>
+    {
+        var version = typeof(DialogService).Assembly.GetName().Version?.ToString(3) ?? "0.1.0";
+        AboutDialog.Show(Owner, version);
+        return true;
+    });
+
     public async Task<IReadOnlyList<Tag>> ManageTagsAsync()
     {
         var initialTags = await connections.GetTagsAsync();

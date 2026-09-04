@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using RemoteFlow.App.Services;
 using RemoteFlow.App.ViewModels;
 using RemoteFlow.Core.Models;
 
@@ -20,6 +21,7 @@ public partial class MainWindow : Window
 
     private readonly MainViewModel _viewModel;
     private readonly AppSettings _settings;
+    private readonly IDialogService _dialogs;
 
     /// <summary>是否为真正的退出（而非最小化到托盘）。</summary>
     private bool _isExiting;
@@ -27,12 +29,13 @@ public partial class MainWindow : Window
     /// <summary>进入全屏前的窗口状态，退出全屏时还原。</summary>
     private (WindowStyle Style, WindowState State, ResizeMode Resize)? _preFullScreen;
 
-    public MainWindow(MainViewModel viewModel, AppSettings settings)
+    public MainWindow(MainViewModel viewModel, AppSettings settings, IDialogService dialogs)
     {
         InitializeComponent();
 
         _viewModel = viewModel;
         _settings = settings;
+        _dialogs = dialogs;
         DataContext = viewModel;
 
         UpdateRootPadding();
@@ -276,6 +279,8 @@ public partial class MainWindow : Window
         => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
+
+    private async void OnHelpClick(object sender, RoutedEventArgs e) => await _dialogs.ShowAboutAsync();
 
     private void OnWindowStateChanged(object? sender, EventArgs e)
     {
