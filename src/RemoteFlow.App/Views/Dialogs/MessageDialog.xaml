@@ -16,7 +16,7 @@
     <Border Background="{DynamicResource Bg.Layer}"
             BorderBrush="{DynamicResource Stroke.Default}"
             BorderThickness="1"
-            CornerRadius="10"
+            CornerRadius="12"
             Margin="16">
         <Border.Effect>
             <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.24" Direction="270" />
@@ -43,7 +43,7 @@
             </StackPanel>
 
             <Border Background="{DynamicResource Bg.Subtle}"
-                    CornerRadius="0,0,9,9"
+                    CornerRadius="0,0,11,11"
                     Margin="0,26,0,0"
                     Padding="24,16">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

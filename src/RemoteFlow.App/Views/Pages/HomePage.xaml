@@ -226,7 +226,7 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <!-- 内容封顶 1440、居中：放大窗口时卡片不会被拉成空荡长条 -->
-        <Grid Margin="24,20,24,24" MaxWidth="1440">
+        <Grid Margin="24,22,24,24" MaxWidth="1520">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -237,7 +237,7 @@
             </Grid.RowDefinitions>
 
             <!-- 问候语 -->
-            <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <StackPanel Grid.Row="0" Margin="0,0,0,26">
                 <TextBlock Style="{StaticResource Text.PageTitle}" Text="{Binding Greeting, Mode=OneWay}" />
                 <TextBlock Style="{StaticResource Text.BodySecondary}" Margin="0,6,0,0">
                     <Run Text="共 " /><Run Text="{Binding TotalConnections, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" 个连接" />
@@ -262,7 +262,7 @@
             <StackPanel Grid.Row="2" Margin="0,0,0,24"
                         Visibility="{Binding HasRecent, Converter={StaticResource BoolToVisibility}}">
                 <Grid Margin="0,0,0,12">
-                    <TextBlock Text="最近连接" Style="{StaticResource Text.SectionTitle}" />
+                    <TextBlock Text="最近连接" Style="{StaticResource Text.SectionTitle}" FontSize="{StaticResource FontSize.Subtitle}" />
                     <Button Content="查看全部" Style="{StaticResource Home.LinkButton}"
                             HorizontalAlignment="Right" Command="{Binding ViewAllRecentCommand}" />
                 </Grid>

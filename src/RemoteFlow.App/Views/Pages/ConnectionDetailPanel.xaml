@@ -186,13 +186,17 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="0,0,5,5">
-                                    <Border CornerRadius="5"
-                                            Background="{Binding Color, Converter={StaticResource ColorToBrush}}"
-                                            Opacity="0.13" />
-                                    <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" Margin="7,3"
-                                               Foreground="{Binding Color, Converter={StaticResource ColorToBrush}}" />
-                                </Grid>
+                                <Border CornerRadius="5" Margin="0,0,5,5"
+                                        Background="{DynamicResource Bg.Subtle}"
+                                        BorderBrush="{DynamicResource Stroke.Subtle}"
+                                        BorderThickness="1">
+                                    <StackPanel Orientation="Horizontal" Margin="6,3">
+                                        <Ellipse Width="6" Height="6" VerticalAlignment="Center"
+                                                 Fill="{Binding Color, Converter={StaticResource ColorToBrush}}" />
+                                        <TextBlock Text="{Binding Name}" FontSize="11" Margin="5,0,1,0"
+                                                   Foreground="{DynamicResource Text.Secondary}" />
+                                    </StackPanel>
+                                </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
