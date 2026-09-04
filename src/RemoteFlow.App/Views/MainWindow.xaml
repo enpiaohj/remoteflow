@@ -7,8 +7,8 @@
         xmlns:pages="clr-namespace:RemoteFlow.App.Views.Pages"
         xmlns:sessions="clr-namespace:RemoteFlow.App.Views.Sessions"
         Title="RemoteFlow"
-        Height="820" Width="1440"
-        MinHeight="600" MinWidth="900"
+        Height="940" Width="1560"
+        MinHeight="640" MinWidth="960"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource Bg.Base}"
         UseLayoutRounding="True"
@@ -383,29 +383,7 @@
                         </StackPanel>
                     </ScrollViewer>
 
-                    <!-- 底部信息区：会话状态 + 本地优先说明。
-                         原先底部另有一条 26px 状态栏，只放同一句话，纯属浪费一行，已并入此处。 -->
-                    <StackPanel Grid.Row="1" Margin="0,4,0,14">
-                        <Border Style="{StaticResource Surface.Divider}" Margin="14,0,14,12" />
-                        <StackPanel Orientation="Horizontal" Margin="20,0,14,0">
-                            <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                                     Fill="{Binding SessionStatusBrushKey, Converter={StaticResource KeyToBrush}}" />
-                            <TextBlock Text="{Binding SessionStatusText}"
-                                       Style="{StaticResource Text.Body}"
-                                       Foreground="{DynamicResource Text.Secondary}"
-                                       Margin="9,0,0,0" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="20,9,14,0">
-                            <TextBlock Text="{StaticResource Icon.Shield}"
-                                       FontFamily="{StaticResource IconFont}" FontSize="12"
-                                       Foreground="{DynamicResource Text.Tertiary}"
-                                       VerticalAlignment="Center" />
-                            <TextBlock Text="本地优先 · DPAPI 保护"
-                                       Style="{StaticResource Text.Caption}"
-                                       ToolTip="所有数据仅保存在本机；密码与私钥由 Windows DPAPI 加密后单独存放"
-                                       Margin="8,0,0,0" />
-                        </StackPanel>
-                    </StackPanel>
+                    <!-- 会话状态放到底部状态栏，这里不再重复 -->
                   </Grid>
                 </Border>
 
@@ -589,8 +567,24 @@
                 </Border>
             </Grid>
 
-            <!-- 底部状态栏已移除：它只承载一句「本地优先 · DPAPI 保护」，
-                 却占掉整行宽度。该信息已并入左侧栏底部，那里本就是状态区。 -->
+            <!-- ══ 底部状态栏：一条细条，与内容区拉开、给窗口一个明确的下边界 ══ -->
+            <Border Grid.Row="2" Height="24" Background="{DynamicResource Bg.Base}"
+                    BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,1,0,0"
+                    Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
+                <Grid Margin="16,0,14,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                 Fill="{Binding SessionStatusBrushKey, Converter={StaticResource KeyToBrush}}" />
+                        <TextBlock Text="{Binding SessionStatusText}" Style="{StaticResource Text.Caption}" Margin="8,0,0,0" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <TextBlock Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}" FontSize="11"
+                                   Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                        <TextBlock Text="本地优先 · 凭据由 Windows DPAPI 保护"
+                                   Style="{StaticResource Text.Caption}" Margin="7,0,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
     </Border>
 </Window>

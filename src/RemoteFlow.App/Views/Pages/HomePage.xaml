@@ -35,9 +35,9 @@
             </Style.Triggers>
         </Style>
 
-        <!-- 最近连接：大号快捷卡片 -->
+        <!-- 最近连接：大号快捷卡片。是首页最突出的快捷入口，给足高度和图标尺寸 -->
         <DataTemplate x:Key="RecentCard" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Grid Margin="0,0,14,0">
+            <Grid Margin="0,0,14,0" MinHeight="132">
                 <Button Cursor="Hand" HorizontalContentAlignment="Stretch"
                         Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                         CommandParameter="{Binding}">
@@ -52,10 +52,10 @@
                                     CornerRadius="{StaticResource Radius.Large}"
                                     SnapsToDevicePixels="True">
                                 <Grid>
-                                    <Border Width="3" HorizontalAlignment="Left" Margin="0,14"
+                                    <Border Width="3" HorizontalAlignment="Left" Margin="0,18"
                                             Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
                                             CornerRadius="0,2,2,0" />
-                                    <ContentPresenter Margin="18,16,16,16" />
+                                    <ContentPresenter Margin="22,22,18,20" />
                                 </Grid>
                             </Border>
                             <ControlTemplate.Triggers>
@@ -75,60 +75,52 @@
                     </Button.Template>
 
                     <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="26" />
                         </Grid.ColumnDefinitions>
 
                         <!-- 概念图里最近连接的图标是刻意放大的，用来突显这块快捷入口 -->
-                        <Grid Grid.Row="0" Grid.Column="0" Width="50" Height="50" VerticalAlignment="Top">
+                        <Grid Grid.Column="0" Width="64" Height="64" VerticalAlignment="Center">
                             <Border CornerRadius="{StaticResource Radius.Large}"
                                     Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
                                     Opacity="0.14" />
-                            <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="23"
+                            <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="30"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                         </Grid>
 
-                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="16,3,0,0" VerticalAlignment="Top">
-                            <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontWeight="SemiBold" FontSize="14"
+                        <StackPanel Grid.Column="1" Margin="18,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontWeight="SemiBold" FontSize="15"
                                        TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" />
                             <TextBlock Text="{Binding HostDisplay}" Style="{StaticResource Text.Caption}"
                                        FontFamily="{StaticResource MonoFont}" Margin="0,5,0,0" HorizontalAlignment="Left" />
-                        </StackPanel>
-
-                        <!-- 卡片底行：协议徽章 + 状态 / 上次连接时间 -->
-                        <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,16,0,0">
-                            <Grid HorizontalAlignment="Left">
-                                <Border CornerRadius="5"
-                                        Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
-                                        Opacity="0.13" />
-                                <TextBlock Text="{Binding ProtocolName}" FontSize="11" FontWeight="SemiBold" Margin="8,3"
-                                           Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
-                            </Grid>
-
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                            <!-- 协议徽章紧跟主机，和图标 / 名称贴在一起 -->
+                            <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
+                                <Grid>
+                                    <Border CornerRadius="5"
+                                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                            Opacity="0.13" />
+                                    <TextBlock Text="{Binding ProtocolName}" FontSize="11" FontWeight="SemiBold" Margin="8,3"
+                                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                                </Grid>
+                                <Ellipse Width="7" Height="7" VerticalAlignment="Center" Margin="10,0,0,0"
                                          Fill="{DynamicResource Status.Success}"
                                          Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}" />
                                 <TextBlock Text="进行中" Style="{StaticResource Text.Caption}" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource Status.Success}" Margin="6,0,0,0"
+                                           Foreground="{DynamicResource Status.Success}" Margin="6,0,0,0" VerticalAlignment="Center"
                                            Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}" />
-                                <TextBlock Text="{Binding LastConnectedDisplay}" Style="{StaticResource Text.Caption}"
+                                <TextBlock Text="{Binding LastConnectedDisplay}" Style="{StaticResource Text.Caption}" Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
                                            Visibility="{Binding HasActiveSession, Converter={StaticResource InverseBoolToVisibility}}" />
                             </StackPanel>
-                        </Grid>
+                        </StackPanel>
                     </Grid>
                 </Button>
 
-                <Button Grid.Column="2" Style="{StaticResource Button.Icon}"
+                <Button Style="{StaticResource Button.Icon}"
                         Width="26" Height="26" FontSize="12"
-                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,10,0"
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,12,12,0"
                         Content="{StaticResource Icon.More}"
                         Click="OnItemMenuClick" Tag="{Binding}">
                     <Button.ContextMenu>
@@ -144,7 +136,7 @@
 
         <!-- 收藏 / 最近活动 卡片里的一行 -->
         <DataTemplate x:Key="FavoriteRow" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Grid Height="56">
+            <Grid Height="60">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -152,15 +144,15 @@
                     <ColumnDefinition Width="26" />
                 </Grid.ColumnDefinitions>
 
-                <Grid Grid.Column="0" Width="36" Height="36" VerticalAlignment="Center">
-                    <Border CornerRadius="9"
+                <Grid Grid.Column="0" Width="44" Height="44" VerticalAlignment="Center">
+                    <Border CornerRadius="11"
                             Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.16" />
-                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="16"
+                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="19"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                 </Grid>
 
-                <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding HostDisplay}" Style="{StaticResource Text.Caption}"
                                FontFamily="{StaticResource MonoFont}" Margin="0,1,0,0" />
@@ -189,7 +181,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="ActivityRow" DataType="{x:Type vm:HistoryItemViewModel}">
-            <Grid Height="56">
+            <Grid Height="60">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -200,7 +192,7 @@
                      只有失败或取消才在右下角打一个状态点，成功是常态不必强调。 -->
                 <Grid Grid.Column="0" Width="36" Height="36" VerticalAlignment="Center">
                     <Border CornerRadius="9" Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
-                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="16"
+                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="19"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                     <Border Width="13" Height="13" CornerRadius="7"
@@ -214,7 +206,7 @@
                     </Border>
                 </Grid>
 
-                <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding ActivityText}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding HostProtocolLine}" Style="{StaticResource Text.Caption}" Margin="0,1,0,0" />
                 </StackPanel>
@@ -225,19 +217,17 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <ScrollViewer x:Name="HomeScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <!-- 内容铺满整个工作区：横向到页边距，纵向撑满视口。
-             「收藏 / 最近活动」行占 *，两张卡片一起吃掉剩余高度，且右缘与
-             上方「最近连接」卡片对齐；卡片内列表自带滚动。 -->
-        <Grid Margin="28,26,28,24"
-              MinHeight="{Binding ViewportHeight, ElementName=HomeScroll}">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" MinHeight="260" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+    <!-- 内容铺满整个工作区：横向到页边距，纵向由「收藏 / 最近活动」行吃满。
+         直接用一个填充视口的 Grid，不套外层 ScrollViewer——套了会因为 MinHeight
+         与滚动条的相互作用把问候语顶出可视区。溢出交给两张卡片内部各自的 ScrollViewer。 -->
+    <Grid Margin="28,28,28,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" MinHeight="220" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
             <!-- 问候语 + 概览。会话数为 0 时不喧宾夺主（走三级灰），
                  有活动会话时整段染成品牌色并加一个状态点。 -->
@@ -412,6 +402,5 @@
                             Command="{Binding DismissSecurityTipCommand}" />
                 </Grid>
             </Border>
-        </Grid>
-    </ScrollViewer>
+    </Grid>
 </UserControl>
