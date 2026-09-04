@@ -46,8 +46,9 @@ if ($LASTEXITCODE) { throw "发布失败。" }
 
 Write-Host "== 7/8 创建 Release Snapshot ==" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force "$rel/source" | Out-Null
-# 源码快照 = 当前 HEAD 的精确跟踪状态（天然排除 bin/obj/.git/releases）
-git archive --format=tar HEAD | tar -x -C "$rel/source"
+# 源码快照 = 当前 HEAD 的精确跟踪状态；显式排除 releases/ 防止快照里再套一层
+# 历史发布目录（递归嵌套），源码快照只放源码。
+git archive --format=tar HEAD -- ':(exclude)releases' | tar -x -C "$rel/source"
 # 规范命名的 Binary Artifact（本地磁盘保留，.gitignore 已排除大文件，改上传 GitHub Releases）
 Copy-Item "$pub/RemoteFlow.exe" "$rel/RemoteFlow-$tag-win-x64.exe"
 Compress-Archive -Path "$pub/*" -DestinationPath "$rel/RemoteFlow-$tag-win-x64.zip" -Force -CompressionLevel Optimal
