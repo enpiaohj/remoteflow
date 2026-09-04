@@ -42,6 +42,12 @@ public sealed class AppSettings
     /// <summary>用户是否已关闭首页底部的安全提示横幅。</summary>
     public bool HomeSecurityTipDismissed { get; set; }
 
+    /// <summary>
+    /// 「我的连接」里被折叠的分组 Id（字符串形式）。分组默认展开，只记录例外，
+    /// 这样新建的分组自然是展开状态。
+    /// </summary>
+    public List<string> CollapsedGroupIds { get; set; } = [];
+
     // ── RDP 默认值 ────────────────────────────────────────
     public RdpDisplayMode RdpDefaultDisplayMode { get; set; } = RdpDisplayMode.FitToWindow;
     public bool RdpDefaultRedirectClipboard { get; set; } = true;
@@ -71,5 +77,10 @@ public sealed class AppSettings
     /// <summary>会话区最大并发 Tab 数，用于防止异常情况下无限创建重复连接。</summary>
     public int MaxConcurrentSessions { get; set; } = 20;
 
-    public AppSettings Clone() => (AppSettings)MemberwiseClone();
+    public AppSettings Clone()
+    {
+        var copy = (AppSettings)MemberwiseClone();
+        copy.CollapsedGroupIds = [.. CollapsedGroupIds];
+        return copy;
+    }
 }

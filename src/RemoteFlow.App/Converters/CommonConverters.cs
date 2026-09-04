@@ -138,6 +138,26 @@ public sealed class EnumToVisibilityConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>值是分组节点（<c>ConnectionGroupNodeViewModel</c>）时返回 true——混合行列表按类型分流。</summary>
+public sealed class IsGroupNodeConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is ViewModels.ConnectionGroupNodeViewModel;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>分组嵌套层级 → 左缩进（每级 20px）。</summary>
+public sealed class DepthToMarginConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => new Thickness(value is int depth ? depth * 20 : 0, 0, 0, 0);
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>把 0~1 的比值乘以 <c>ConverterParameter</c>（像素高度），用于迷你柱状图。</summary>
 public sealed class RatioToHeightConverter : IValueConverter
 {

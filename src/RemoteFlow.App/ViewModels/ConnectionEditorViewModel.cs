@@ -25,7 +25,8 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         IReadOnlyList<Credential> credentials,
         IReadOnlyList<ConnectionGroup> groups,
         IReadOnlyList<Tag> tags,
-        AppSettings defaults)
+        AppSettings defaults,
+        Guid? defaultGroupId = null)
     {
         _isNew = existing is null;
         _profile = existing is null ? new ConnectionProfile() : existing.Clone(existing.Name);
@@ -53,6 +54,8 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
             _profile.Vnc.ScaleMode = defaults.VncDefaultScaleMode;
             _profile.Vnc.ViewOnly = defaults.VncDefaultViewOnly;
             _profile.Vnc.SharedConnection = defaults.VncDefaultSharedConnection;
+            // 新建连接默认进入默认分组「我的设备」（§9）。
+            _profile.GroupId = defaultGroupId;
         }
 
         Title = _isNew ? "新建连接" : "编辑连接";
@@ -60,8 +63,11 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         // 「未指定」与「未分组」用 null 作为哨兵项，避免额外的可空判断散落在界面里。
         AvailableCredentials = [new CredentialOption(null, "未指定"),
             .. credentials.Select(c => new CredentialOption(c.Id, c.Name))];
+        // 「未分组」用 null 哨兵项表示；数据库里的系统「未分组」行不重复列出。
         AvailableGroups = [new GroupOption(null, "未分组"),
-            .. groups.Select(g => new GroupOption(g.Id, g.Name))];
+            .. groups.Where(g => !g.IsSystem)
+                     .OrderBy(g => g.SortOrder).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
+                     .Select(g => new GroupOption(g.Id, g.Name))];
 
         AvailableTags = [.. tags.Select(t => new TagSelection(t.Id, t.Name, t.Color)
         {

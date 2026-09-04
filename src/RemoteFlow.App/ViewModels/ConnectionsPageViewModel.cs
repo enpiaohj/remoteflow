@@ -9,6 +9,7 @@ using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
+using RemoteFlow.Infrastructure.Settings;
 
 namespace RemoteFlow.App.ViewModels;
 
@@ -45,6 +46,10 @@ public enum ProtocolFilterOption
     Vnc
 }
 
+/// <summary>「移动到分组」子菜单里的一个目标分组。</summary>
+/// <param name="GroupId">null 表示「未分组」。</param>
+public sealed record GroupTargetOption(Guid? GroupId, string Name, int Depth);
+
 /// <summary>
 /// 「我的连接」页面。承担搜索、筛选、分组与发起连接，
 /// 不承担凭据密码编辑（页面职责单一，见产品设计文档 §7.6）。
@@ -52,10 +57,13 @@ public enum ProtocolFilterOption
 public sealed partial class ConnectionsPageViewModel : ObservableObject
 {
     private readonly ConnectionService _connections;
+    private readonly GroupService _groupService;
     private readonly ConnectionSearchService _search;
     private readonly SessionManager _sessions;
     private readonly IHistoryRepository _history;
     private readonly IDialogService _dialogs;
+    private readonly AppSettings _settings;
+    private readonly JsonSettingsStore _settingsStore;
     private readonly ILogger<ConnectionsPageViewModel> _logger;
 
     /// <summary>详情面板迷你图表展示的历史条数。</summary>
@@ -64,29 +72,61 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// <summary>全量数据。搜索与筛选都在其之上进行，避免每次都回数据库。</summary>
     private readonly List<ConnectionItemViewModel> _allItems = [];
 
+    private IReadOnlyList<ConnectionGroup> _groups = [];
     private IReadOnlyDictionary<Guid, string> _groupNames = new Dictionary<Guid, string>();
     private IReadOnlyDictionary<Guid, string> _tagNames = new Dictionary<Guid, string>();
     private IReadOnlyDictionary<Guid, string> _tagColors = new Dictionary<Guid, string>();
 
+    /// <summary>搜索开始前的折叠分组集合。搜索期间临时全展开，清空后据此还原。</summary>
+    private HashSet<string>? _collapsedBeforeSearch;
+
     public ConnectionsPageViewModel(
         ConnectionService connections,
+        GroupService groupService,
         ConnectionSearchService search,
         SessionManager sessions,
         IHistoryRepository history,
         IDialogService dialogs,
+        AppSettings settings,
+        JsonSettingsStore settingsStore,
         ILogger<ConnectionsPageViewModel> logger)
     {
         _connections = connections;
+        _groupService = groupService;
         _search = search;
         _sessions = sessions;
         _history = history;
         _dialogs = dialogs;
+        _settings = settings;
+        _settingsStore = settingsStore;
         _logger = logger;
 
         Items = [];
         ItemsView = CollectionViewSource.GetDefaultView(Items);
         ApplyGrouping();
     }
+
+    // ── 分组树（「我的连接」视图）─────────────────────────────────
+
+    /// <summary>根级分组节点。仅 <see cref="ConnectionFilter.All"/> 视图使用。</summary>
+    public ObservableCollection<ConnectionGroupNodeViewModel> GroupNodes { get; } = [];
+
+    /// <summary>
+    /// 「我的连接」视图渲染用的扁平行：<see cref="ConnectionGroupNodeViewModel"/>（分组标题）
+    /// 与 <see cref="ConnectionItemViewModel"/>（连接行）交替，折叠的分组不展开其内容。
+    /// 用一个 ListBox + DataTemplateSelector 承载，复用选中 / 双击 / 键盘逻辑。
+    /// </summary>
+    public ObservableCollection<object> GroupedRows { get; } = [];
+
+    /// <summary>是否用分组树呈现（我的连接）。收藏 / 最近连接用扁平列表。</summary>
+    public bool IsGroupedView => Filter == ConnectionFilter.All;
+
+    /// <summary>「移动到分组」子菜单用的扁平分组列表（含「未分组」）。</summary>
+    [ObservableProperty]
+    private IReadOnlyList<GroupTargetOption> _groupTargets = [];
+
+    /// <summary>新建连接对话框「分组」的默认值——默认落在「我的设备」。</summary>
+    public Guid? DefaultGroupId { get; private set; }
 
     // ── 详情面板：按连接的历史与迷你图表 ─────────────────────────
 
@@ -206,7 +246,25 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// <summary>「最近连接」视图专属：日期分组 + 时间范围筛选。</summary>
     public bool IsRecentView => Filter == ConnectionFilter.Recent;
 
-    partial void OnSearchTextChanged(string value) => ApplyFilter();
+    partial void OnSearchTextChanged(string value)
+    {
+        var searchingNow = !string.IsNullOrWhiteSpace(value);
+        if (searchingNow && !_isSearching)
+        {
+            // 进入搜索：记住当前折叠状态，搜索期间树临时全展开。
+            _collapsedBeforeSearch = [.. _settings.CollapsedGroupIds];
+        }
+        else if (!searchingNow && _isSearching && _collapsedBeforeSearch is not null)
+        {
+            // 退出搜索：还原用户原本的展开 / 折叠状态。
+            _settings.CollapsedGroupIds.Clear();
+            _settings.CollapsedGroupIds.AddRange(_collapsedBeforeSearch);
+            _collapsedBeforeSearch = null;
+        }
+        _isSearching = searchingNow;
+
+        ApplyFilter();
+    }
 
     partial void OnPageFilterTextChanged(string value) => ApplyFilter();
 
@@ -219,6 +277,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     partial void OnFilterChanged(ConnectionFilter value)
     {
         OnPropertyChanged(nameof(IsRecentView));
+        OnPropertyChanged(nameof(IsGroupedView));
+        OnPropertyChanged(nameof(IsGroupedEmpty));
         ApplyGrouping();
         ApplyFilter();
     }
@@ -232,13 +292,17 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         IsLoading = true;
         try
         {
+            DefaultGroupId = await _groupService.EnsureSeedAsync(ct);
+
             var profiles = await _connections.GetAllAsync(ct);
             var groups = await _connections.GetGroupsAsync(ct);
             var tags = await _connections.GetTagsAsync(ct);
 
+            _groups = groups;
             _groupNames = groups.ToDictionary(g => g.Id, g => g.Name);
             _tagNames = tags.ToDictionary(t => t.Id, t => t.Name);
             _tagColors = tags.ToDictionary(t => t.Id, t => t.Color);
+            RebuildGroupTargets();
 
             _allItems.Clear();
             foreach (var profile in profiles)
@@ -252,6 +316,25 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         {
             IsLoading = false;
         }
+    }
+
+    /// <summary>「移动到分组」子菜单：用户分组按层级展开 + 末尾「未分组」。</summary>
+    private void RebuildGroupTargets()
+    {
+        var options = new List<GroupTargetOption>();
+        void Walk(Guid? parentId, int depth)
+        {
+            foreach (var g in _groups
+                         .Where(g => g.ParentId == parentId && !g.IsSystem)
+                         .OrderBy(g => g.SortOrder).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase))
+            {
+                options.Add(new GroupTargetOption(g.Id, g.Name, depth));
+                Walk(g.Id, depth + 1);
+            }
+        }
+        Walk(null, 0);
+        options.Add(new GroupTargetOption(null, "未分组", 0));
+        GroupTargets = options;
     }
 
     /// <summary>凭据名称由外部注入，避免本页面直接依赖凭据服务。</summary>
@@ -358,9 +441,10 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         }
 
         var previousSelection = SelectedItem?.Id;
+        var filtered = source.ToList();
 
         Items.Clear();
-        foreach (var item in source)
+        foreach (var item in filtered)
         {
             item.RefreshComputed();
             if (Filter == ConnectionFilter.Recent)
@@ -368,6 +452,11 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                 item.RecentBucket = BucketFor(item.LastConnectedAt);
             }
             Items.Add(item);
+        }
+
+        if (IsGroupedView)
+        {
+            BuildGroupTree(filtered);
         }
 
         EmptyMessage = _allItems.Count == 0
@@ -409,14 +498,194 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     {
         ItemsView.GroupDescriptions.Clear();
 
+        // 只有「最近连接」用 ICollectionView 分组（按日期桶）。
+        // 「我的连接」用 GroupNodes 树，「收藏」是扁平列表。
         if (Filter == ConnectionFilter.Recent)
         {
-            // 「最近连接」按日期分组（今天 / 昨天 / 更早），不按文件夹。
             ItemsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ConnectionItemViewModel.RecentBucket)));
         }
-        else if (GroupByFolder)
+    }
+
+    // ── 分组树构建 ────────────────────────────────────────────────
+
+    private bool _isSearching;
+
+    /// <summary>「我的连接」视图下，分组树是否一条连接都没有。</summary>
+    public bool IsGroupedEmpty => IsGroupedView && GroupNodes.Count == 0;
+
+    private void BuildGroupTree(IReadOnlyList<ConnectionItemViewModel> visibleItems)
+    {
+        var collapsed = _settings.CollapsedGroupIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var byGroup = new Dictionary<Guid, List<ConnectionItemViewModel>>();
+        var ungroupedItems = new List<ConnectionItemViewModel>();
+        foreach (var item in visibleItems.OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase))
         {
-            ItemsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ConnectionItemViewModel.GroupName)));
+            if (item.Profile.GroupId is { } gid && gid != ConnectionGroup.UngroupedId)
+            {
+                (byGroup.TryGetValue(gid, out var list) ? list : byGroup[gid] = []).Add(item);
+            }
+            else
+            {
+                ungroupedItems.Add(item);
+            }
+        }
+
+        GroupNodes.Clear();
+
+        ConnectionGroupNodeViewModel? Build(ConnectionGroup group, int depth)
+        {
+            var node = new ConnectionGroupNodeViewModel
+            {
+                GroupId = group.Id,
+                Name = group.Name,
+                Depth = depth,
+                IsExpanded = _isSearching || !collapsed.Contains(group.Id.ToString())
+            };
+
+            foreach (var child in _groups
+                         .Where(g => g.ParentId == group.Id && !g.IsSystem)
+                         .OrderBy(g => g.SortOrder).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase))
+            {
+                var childNode = Build(child, depth + 1);
+                if (childNode is not null)
+                {
+                    node.ChildGroups.Add(childNode);
+                }
+            }
+
+            if (byGroup.TryGetValue(group.Id, out var conns))
+            {
+                foreach (var c in conns)
+                {
+                    node.Connections.Add(c);
+                }
+            }
+
+            node.TotalCount = node.Connections.Count + node.ChildGroups.Sum(c => c.TotalCount);
+
+            // 搜索时：命中或子孙命中的分组自动展开；无命中的分组隐藏。
+            if (_isSearching && node.TotalCount == 0)
+            {
+                return null;
+            }
+
+            return node;
+        }
+
+        foreach (var root in _groups
+                     .Where(g => g.ParentId is null && !g.IsSystem)
+                     .OrderBy(g => g.SortOrder).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var node = Build(root, 0);
+            if (node is not null)
+            {
+                GroupNodes.Add(node);
+            }
+        }
+
+        // 「未分组」：仅当有未归类连接时追加到末尾。
+        if (ungroupedItems.Count > 0)
+        {
+            var node = new ConnectionGroupNodeViewModel
+            {
+                GroupId = null,
+                Name = "未分组",
+                Depth = 0,
+                IsUngrouped = true,
+                IsExpanded = _isSearching || !collapsed.Contains("ungrouped"),
+                TotalCount = ungroupedItems.Count
+            };
+            foreach (var c in ungroupedItems)
+            {
+                node.Connections.Add(c);
+            }
+            GroupNodes.Add(node);
+        }
+
+        WireExpandPersistence(GroupNodes);
+        FlattenGroupRows();
+        OnPropertyChanged(nameof(IsGroupedEmpty));
+    }
+
+    /// <summary>把分组树摊平成 GroupedRows；折叠的分组只留标题行。</summary>
+    private void FlattenGroupRows()
+    {
+        GroupedRows.Clear();
+
+        void Emit(ConnectionGroupNodeViewModel node)
+        {
+            GroupedRows.Add(node);
+            if (!node.IsExpanded)
+            {
+                return;
+            }
+            foreach (var child in node.ChildGroups)
+            {
+                Emit(child);
+            }
+            foreach (var conn in node.Connections)
+            {
+                GroupedRows.Add(conn);
+            }
+        }
+
+        foreach (var root in GroupNodes)
+        {
+            Emit(root);
+        }
+    }
+
+    private void WireExpandPersistence(IEnumerable<ConnectionGroupNodeViewModel> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            node.PropertyChanged -= OnNodeExpandedChanged;
+            node.PropertyChanged += OnNodeExpandedChanged;
+            WireExpandPersistence(node.ChildGroups);
+        }
+    }
+
+    private void OnNodeExpandedChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(ConnectionGroupNodeViewModel.IsExpanded)
+            || sender is not ConnectionGroupNodeViewModel node
+            || _isSearching)
+        {
+            return;
+        }
+
+        // 展开 / 折叠即时反映到摊平列表。
+        FlattenGroupRows();
+
+        var key = node.IsUngrouped ? "ungrouped" : node.GroupId?.ToString();
+        if (key is null)
+        {
+            return;
+        }
+
+        var set = _settings.CollapsedGroupIds;
+        if (node.IsExpanded)
+        {
+            set.RemoveAll(x => string.Equals(x, key, StringComparison.OrdinalIgnoreCase));
+        }
+        else if (!set.Contains(key, StringComparer.OrdinalIgnoreCase))
+        {
+            set.Add(key);
+        }
+
+        _ = PersistSettingsAsync();
+    }
+
+    private async Task PersistSettingsAsync()
+    {
+        try
+        {
+            await _settingsStore.SaveAsync(_settings);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "保存分组展开状态失败");
         }
     }
 
@@ -562,4 +831,116 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     [RelayCommand]
     private async Task RefreshAsync() => await LoadAsync();
+
+    // ── 分组命令 ──────────────────────────────────────────────────
+
+    /// <summary>新建根级分组（工具条「新建 ▾ → 新建分组」）。</summary>
+    [RelayCommand]
+    private Task CreateGroupAsync() => CreateGroupUnderAsync(null, null);
+
+    /// <summary>在指定分组下新建子分组（分组右键菜单）。</summary>
+    [RelayCommand]
+    private Task CreateChildGroupAsync(ConnectionGroupNodeViewModel? parent)
+        => CreateGroupUnderAsync(parent?.GroupId, parent?.Name);
+
+    private async Task CreateGroupUnderAsync(Guid? parentId, string? parentName)
+    {
+        var name = await _dialogs.EditGroupNameAsync(new GroupNamePrompt("新建分组", ParentName: parentName));
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        try
+        {
+            await _groupService.CreateAsync(name, parentId);
+            await LoadAsync();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            await _dialogs.ShowMessageAsync("无法创建分组", ex.Message, DialogKind.Warning);
+        }
+    }
+
+    [RelayCommand]
+    private async Task RenameGroupAsync(ConnectionGroupNodeViewModel? node)
+    {
+        if (node?.GroupId is not { } groupId)
+        {
+            return;
+        }
+
+        var name = await _dialogs.EditGroupNameAsync(new GroupNamePrompt("重命名分组", node.Name));
+        if (string.IsNullOrWhiteSpace(name) || name == node.Name)
+        {
+            return;
+        }
+
+        try
+        {
+            await _groupService.RenameAsync(groupId, name);
+            await LoadAsync();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            await _dialogs.ShowMessageAsync("无法重命名分组", ex.Message, DialogKind.Warning);
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteGroupAsync(ConnectionGroupNodeViewModel? node)
+    {
+        if (node?.GroupId is not { } groupId)
+        {
+            return;
+        }
+
+        var confirmed = await _dialogs.ConfirmAsync(
+            "删除分组",
+            $"确定要删除分组「{node.Name}」吗？\n\n" +
+            "组内连接会移动到「未分组」，子分组会提升到上一级——不会删除任何连接。",
+            "删除",
+            isDanger: true);
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        try
+        {
+            await _groupService.DeleteAsync(groupId);
+            await LoadAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            await _dialogs.ShowMessageAsync("无法删除分组", ex.Message, DialogKind.Warning);
+        }
+    }
+
+    /// <summary>把连接移动到目标分组（连接右键「移动到分组 &gt;」）。</summary>
+    public async Task MoveConnectionToGroupAsync(ConnectionItemViewModel? item, Guid? targetGroupId)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        var currentGroup = item.Profile.GroupId == ConnectionGroup.UngroupedId ? null : item.Profile.GroupId;
+        if (currentGroup == targetGroupId)
+        {
+            return;
+        }
+
+        try
+        {
+            await _groupService.MoveConnectionAsync(item.Id, targetGroupId);
+            await LoadAsync();
+            SelectedItem = Items.FirstOrDefault(i => i.Id == item.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await _dialogs.ShowMessageAsync("无法移动连接", ex.Message, DialogKind.Warning);
+        }
+    }
 }

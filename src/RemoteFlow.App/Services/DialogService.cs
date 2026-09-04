@@ -15,6 +15,7 @@ namespace RemoteFlow.App.Services;
 /// </summary>
 public sealed class DialogService(
     ConnectionService connections,
+    GroupService groupService,
     ICredentialRepository credentials,
     AppSettings settings) : IDialogService
 {
@@ -39,10 +40,12 @@ public sealed class DialogService(
         var credentialList = await credentials.GetAllAsync();
         var groups = await connections.GetGroupsAsync();
         var tags = await connections.GetTagsAsync();
+        // 新建连接默认落在「我的设备」（或既有库里的第一个用户分组）。
+        var defaultGroupId = existing is null ? await groupService.EnsureSeedAsync() : (Guid?)null;
 
         return await InvokeOnUiAsync<ConnectionEditorResult?>(() =>
         {
-            var viewModel = new ConnectionEditorViewModel(existing, credentialList, groups, tags, settings);
+            var viewModel = new ConnectionEditorViewModel(existing, credentialList, groups, tags, settings, defaultGroupId);
             var dialog = new ConnectionEditorDialog(viewModel) { Owner = Owner };
 
             return dialog.ShowDialog() == true && dialog.Result is { } profile
@@ -64,6 +67,9 @@ public sealed class DialogService(
 
     public Task<bool> ConfirmHostKeyAsync(SshHostKeyVerificationContext context)
         => InvokeOnUiAsync(() => HostKeyDialog.Show(Owner, context));
+
+    public Task<string?> EditGroupNameAsync(GroupNamePrompt prompt)
+        => InvokeOnUiAsync(() => GroupNameDialog.Prompt(Owner, prompt));
 
     public Task<string?> PromptPasswordAsync(string title, string message, bool confirm)
         => InvokeOnUiAsync(() => PasswordPromptDialog.Prompt(Owner, title, message, confirm));

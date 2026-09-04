@@ -33,6 +33,11 @@ public interface IDialogService
     Task<CredentialEditorResult?> EditCredentialAsync(Credential? existing);
 
     /// <summary>
+    /// 新建 / 重命名分组的小对话框。返回用户填写的分组名（已 Trim），取消返回 null。
+    /// </summary>
+    Task<string?> EditGroupNameAsync(GroupNamePrompt prompt);
+
+    /// <summary>
     /// SSH 主机密钥确认。首次连接询问是否信任；指纹变化时必须以强警告呈现。
     /// </summary>
     Task<bool> ConfirmHostKeyAsync(SshHostKeyVerificationContext context);
@@ -57,6 +62,12 @@ public interface IDialogService
 /// 连接编辑结果。
 /// </summary>
 public sealed record ConnectionEditorResult(ConnectionProfile Profile, bool ConnectImmediately);
+
+/// <summary>分组名输入对话框的上下文。</summary>
+/// <param name="Title">对话框标题，如「新建分组」/「重命名分组」。</param>
+/// <param name="InitialName">重命名时的原名；新建时为空。</param>
+/// <param name="ParentName">上级分组名，用于副标题提示；根级时为 null。</param>
+public sealed record GroupNamePrompt(string Title, string InitialName = "", string? ParentName = null);
 
 /// <summary>
 /// 凭据编辑结果。
