@@ -99,7 +99,7 @@
 
                 <!-- 协议选择 -->
                 <StackPanel Grid.Column="0" Margin="12,16,6,16">
-                    <TextBlock Text="协议" Style="{StaticResource Text.Caption}" Margin="12,0,0,8" />
+                    <TextBlock Text="协议" Style="{StaticResource Text.Label}" Margin="12,0,0,8" />
 
                     <RadioButton Style="{StaticResource ProtocolOption}"
                                  IsChecked="{Binding Protocol, Converter={StaticResource EnumToBool}, ConverterParameter=Rdp, Mode=TwoWay}">
