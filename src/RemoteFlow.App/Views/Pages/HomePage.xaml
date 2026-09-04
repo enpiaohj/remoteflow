@@ -237,14 +237,23 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <!-- 问候语 -->
+            <!-- 问候语 + 概览。会话数为 0 时不喧宾夺主（走三级灰），
+                 有活动会话时整段染成品牌色并加一个状态点。 -->
             <StackPanel Grid.Row="0" Margin="0,0,0,26">
                 <TextBlock Style="{StaticResource Text.PageTitle}" Text="{Binding Greeting, Mode=OneWay}" />
-                <TextBlock Style="{StaticResource Text.BodySecondary}" Margin="0,6,0,0">
-                    <Run Text="共 " /><Run Text="{Binding TotalConnections, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" 个连接" />
-                    <Run Text="  ·  " Foreground="{DynamicResource Text.Tertiary}" />
-                    <Run Text="{Binding ActiveSessions, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource Brand.Default}" /><Run Text=" 个会话进行中" Foreground="{DynamicResource Brand.Default}" />
-                </TextBlock>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <TextBlock Style="{StaticResource Text.PageSubtitle}">
+                        <Run Text="共 " /><Run Text="{Binding TotalConnections, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource Text.Secondary}" /><Run Text=" 个连接" />
+                    </TextBlock>
+                    <StackPanel Orientation="Horizontal" Margin="12,0,0,0"
+                                Visibility="{Binding HasActiveSessions, Converter={StaticResource BoolToVisibility}}">
+                        <Ellipse Width="6" Height="6" VerticalAlignment="Center" Fill="{DynamicResource Status.Success}" />
+                        <TextBlock Margin="7,0,0,0" FontSize="{StaticResource FontSize.Body}"
+                                   Foreground="{DynamicResource Status.Success}">
+                            <Run Text="{Binding ActiveSessions, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" 个会话进行中" />
+                        </TextBlock>
+                    </StackPanel>
+                </StackPanel>
             </StackPanel>
 
             <!-- 首次使用引导 -->
@@ -263,7 +272,7 @@
             <StackPanel Grid.Row="2" Margin="0,0,0,24"
                         Visibility="{Binding HasRecent, Converter={StaticResource BoolToVisibility}}">
                 <Grid Margin="0,0,0,12">
-                    <TextBlock Text="最近连接" Style="{StaticResource Text.SectionTitle}" FontSize="{StaticResource FontSize.Subtitle}" />
+                    <TextBlock Text="最近连接" Style="{StaticResource Text.SectionTitle}" />
                     <Button Content="查看全部" Style="{StaticResource Home.LinkButton}"
                             HorizontalAlignment="Right" Command="{Binding ViewAllRecentCommand}" />
                 </Grid>

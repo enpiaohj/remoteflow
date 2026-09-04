@@ -44,7 +44,10 @@ public sealed partial class HomePageViewModel(
     private int _totalConnections;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveSessions))]
     private int _activeSessions;
+
+    public bool HasActiveSessions => ActiveSessions > 0;
 
     [ObservableProperty]
     private string _greeting = string.Empty;
