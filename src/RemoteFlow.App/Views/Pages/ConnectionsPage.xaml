@@ -61,7 +61,7 @@
 
         <!-- 连接行（分组视图与扁平视图共用）-->
         <DataTemplate x:Key="ConnRowTemplate" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Grid Height="44">
+            <Grid Height="52">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="36" />
                     <ColumnDefinition Width="Auto" MinWidth="200" MaxWidth="460" />

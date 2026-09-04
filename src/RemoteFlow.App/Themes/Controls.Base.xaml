@@ -15,7 +15,8 @@
     <FontFamily x:Key="UiFontDisplay">Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Microsoft YaHei UI</FontFamily>
 
-    <sys:Double x:Key="FontSize.Title">20</sys:Double>
+    <!-- 概念图页面标题约 36px @125%，折合 100% 约 28；正文 / 区块标题与概念图一致。 -->
+    <sys:Double x:Key="FontSize.Title">28</sys:Double>
     <sys:Double x:Key="FontSize.Section">15</sys:Double>
     <sys:Double x:Key="FontSize.Body">13</sys:Double>
     <sys:Double x:Key="FontSize.Caption">12</sys:Double>

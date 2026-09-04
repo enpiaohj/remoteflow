@@ -37,7 +37,7 @@
 
         <!-- 最近连接：大号快捷卡片 -->
         <DataTemplate x:Key="RecentCard" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Grid Margin="0,0,12,0">
+            <Grid Width="330" Margin="0,0,14,14">
                 <Button Cursor="Hand" HorizontalContentAlignment="Stretch"
                         Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                         CommandParameter="{Binding}">
@@ -48,7 +48,7 @@
                                     BorderBrush="{DynamicResource Stroke.Subtle}"
                                     BorderThickness="1"
                                     CornerRadius="{StaticResource Radius.Large}"
-                                    Padding="16,14">
+                                    Padding="20,20">
                                 <ContentPresenter />
                             </Border>
                             <ControlTemplate.Triggers>
@@ -74,21 +74,21 @@
                             <ColumnDefinition Width="28" />
                         </Grid.ColumnDefinitions>
 
-                        <Grid Grid.Column="0" Width="38" Height="38" VerticalAlignment="Top">
-                            <Border CornerRadius="10"
+                        <Grid Grid.Column="0" Width="42" Height="42" VerticalAlignment="Top">
+                            <Border CornerRadius="11"
                                     Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
                                     Opacity="0.16" />
-                            <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="17"
+                            <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="19"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                         </Grid>
 
                         <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                            <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontWeight="SemiBold" FontSize="14"
                                        TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" />
                             <TextBlock Text="{Binding HostDisplay}" Style="{StaticResource Text.Caption}"
-                                       FontFamily="{StaticResource MonoFont}" Margin="0,3,0,0" HorizontalAlignment="Left" />
-                            <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                       FontFamily="{StaticResource MonoFont}" Margin="0,5,0,0" HorizontalAlignment="Left" />
+                            <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
                                 <Ellipse Width="7" Height="7" VerticalAlignment="Center"
                                          Fill="{DynamicResource Status.Success}"
                                          Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}" />
@@ -120,7 +120,7 @@
 
         <!-- 收藏 / 最近活动 卡片里的一行 -->
         <DataTemplate x:Key="FavoriteRow" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Grid Height="46">
+            <Grid Height="56">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -128,10 +128,10 @@
                     <ColumnDefinition Width="26" />
                 </Grid.ColumnDefinitions>
 
-                <Grid Grid.Column="0" Width="32" Height="32" VerticalAlignment="Center">
-                    <Border CornerRadius="8"
+                <Grid Grid.Column="0" Width="36" Height="36" VerticalAlignment="Center">
+                    <Border CornerRadius="9"
                             Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.16" />
-                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="14"
+                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="16"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                 </Grid>
@@ -165,16 +165,16 @@
         </DataTemplate>
 
         <DataTemplate x:Key="ActivityRow" DataType="{x:Type vm:HistoryItemViewModel}">
-            <Grid Height="46">
+            <Grid Height="56">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <Grid Grid.Column="0" Width="32" Height="32" VerticalAlignment="Center">
-                    <Border CornerRadius="8" Background="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
-                    <TextBlock Text="{Binding ResultIcon}" FontFamily="{StaticResource IconFont}" FontSize="14"
+                <Grid Grid.Column="0" Width="36" Height="36" VerticalAlignment="Center">
+                    <Border CornerRadius="9" Background="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
+                    <TextBlock Text="{Binding ResultIcon}" FontFamily="{StaticResource IconFont}" FontSize="16"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                Foreground="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" />
                 </Grid>
@@ -235,7 +235,7 @@
                 <ItemsControl ItemsSource="{Binding RecentItems}" ItemTemplate="{StaticResource RecentCard}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <UniformGrid Columns="3" />
+                            <WrapPanel />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>

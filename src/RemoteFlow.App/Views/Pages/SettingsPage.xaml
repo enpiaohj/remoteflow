@@ -66,7 +66,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Root" Background="Transparent" CornerRadius="8" Padding="8,10">
+                        <Border x:Name="Root" Background="Transparent" CornerRadius="8" Padding="10,13">
                             <ContentPresenter />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -85,14 +85,14 @@
         <!-- 卡片标题：小图标 + 名称 -->
         <Style x:Key="Settings.CardHeader" TargetType="StackPanel">
             <Setter Property="Orientation" Value="Horizontal" />
-            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Margin" Value="0,0,0,12" />
         </Style>
     </UserControl.Resources>
 
-    <!-- 内容封顶、居中：窗口放大时不被无限拉伸，字段与控件间距保持概念图比例。
-         概念图中卡片铺满内容区（标题靠左、控件靠右），封顶取一个较宽的值，
-         让最大化后设置区域仍随窗口拉宽，只是不至于宽到左右脱节。 -->
-    <Grid Margin="24,20,24,0" MaxWidth="1560">
+    <!-- 概念图中设置卡片铺满内容区（实测占内容宽 92%），标题靠左、控件靠右，
+         不做宽度封顶——窗口放大时卡片跟着变宽。左侧说明文字自身封顶 560，
+         保证行文长度可读，右侧控件始终贴齐卡片右缘。 -->
+    <Grid Margin="24,20,24,0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -129,7 +129,7 @@
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=General}">
 
                     <!-- 外观与行为 -->
-                    <Border Style="{StaticResource Surface.Card}" Padding="20,16" Margin="0,0,0,20">
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
                                 <TextBlock Text="{StaticResource Icon.Appearance}" FontFamily="{StaticResource IconFont}" FontSize="15"
@@ -137,7 +137,7 @@
                                 <TextBlock Text="外观与行为" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
                             </StackPanel>
 
-                            <Grid Margin="0,6,0,0">
+                            <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
@@ -175,7 +175,7 @@
                     </Border>
 
                     <!-- 启动与托盘 -->
-                    <Border Style="{StaticResource Surface.Card}" Padding="20,16" Margin="0,0,0,20">
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
                                 <TextBlock Text="{StaticResource Icon.Power}" FontFamily="{StaticResource IconFont}" FontSize="15"
@@ -183,7 +183,7 @@
                                 <TextBlock Text="启动与托盘" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
                             </StackPanel>
 
-                            <Grid Margin="0,6,0,0">
+                            <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
@@ -196,7 +196,7 @@
                                 <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" IsChecked="{Binding LaunchOnStartup}" />
                             </Grid>
 
-                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,18" />
 
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -211,7 +211,7 @@
                                 <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" IsChecked="{Binding MinimizeToTrayOnClose}" />
                             </Grid>
 
-                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,18" />
 
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -233,7 +233,7 @@
                                 </ComboBox>
                             </Grid>
 
-                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,18" />
 
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -252,7 +252,7 @@
                     </Border>
 
                     <!-- 语言 -->
-                    <Border Style="{StaticResource Surface.Card}" Padding="20,16" Margin="0,0,0,20">
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
                                 <TextBlock Text="{StaticResource Icon.Language}" FontFamily="{StaticResource IconFont}" FontSize="15"
@@ -260,7 +260,7 @@
                                 <TextBlock Text="语言" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
                             </StackPanel>
 
-                            <Grid Margin="0,6,0,0">
+                            <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="220" />
@@ -283,7 +283,7 @@
                     </Border>
 
                     <!-- 关于 -->
-                    <Border Style="{StaticResource Surface.Card}" Padding="20,16">
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20">
                         <StackPanel Orientation="Horizontal">
                             <Border Width="32" Height="32" CornerRadius="8" Background="{DynamicResource Brand.Default}">
                                 <TextBlock Text="{StaticResource Icon.Connect}" FontFamily="{StaticResource IconFont}"
@@ -302,10 +302,10 @@
                 </StackPanel>
 
                 <!-- ── RDP ── -->
-                <StackPanel MaxWidth="1120"
+                <StackPanel
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Rdp}">
                     <TextBlock Text="新建 RDP 连接时的默认值" Style="{StaticResource Text.BodySecondary}" Margin="0,0,0,12" />
-                    <Border Style="{StaticResource Surface.Card}" Padding="20,16">
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20">
                         <StackPanel>
                             <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding RdpFitToWindow}">
                                 <StackPanel>
@@ -328,9 +328,9 @@
                 </StackPanel>
 
                 <!-- ── SSH ── -->
-                <StackPanel MaxWidth="1120"
+                <StackPanel
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Ssh}">
-                    <Border Style="{StaticResource Surface.Card}" Padding="20,16">
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20">
                         <StackPanel>
                             <Grid Style="{StaticResource SettingRow}">
                                 <Grid.ColumnDefinitions>
@@ -379,10 +379,10 @@
                 </StackPanel>
 
                 <!-- ── VNC ── -->
-                <StackPanel MaxWidth="1120"
+                <StackPanel
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Vnc}">
                     <TextBlock Text="新建 VNC 连接时的默认值" Style="{StaticResource Text.BodySecondary}" Margin="0,0,0,12" />
-                    <Border Style="{StaticResource Surface.Card}" Padding="20,16">
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20">
                         <StackPanel>
                             <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding VncFitToWindow}">
                                 <StackPanel>
@@ -407,9 +407,9 @@
                 </StackPanel>
 
                 <!-- ── 安全 ── -->
-                <StackPanel MaxWidth="1120"
+                <StackPanel
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Security}">
-                    <Border Style="{StaticResource Surface.Card}" Padding="20,16">
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20">
                         <StackPanel>
                             <TextBlock Text="已信任的 SSH 主机密钥" Style="{StaticResource Text.Body}" />
                             <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,10"
@@ -477,7 +477,7 @@
                     </Grid.RowDefinitions>
 
                     <!-- 连接数据 -->
-                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="20,16" Margin="0,0,0,24">
+                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,24">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
                                 <TextBlock Text="{StaticResource Icon.Database}" FontFamily="{StaticResource IconFont}" FontSize="15"
@@ -494,7 +494,7 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
                                         <TextBlock Text="{StaticResource Icon.Download}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                    Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
@@ -516,7 +516,7 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
                                         <TextBlock Text="{StaticResource Icon.Upload}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                    Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
@@ -532,7 +532,7 @@
                     </Border>
 
                     <!-- 凭据备份 -->
-                    <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource Surface.Card}" Padding="20,16" Margin="0,0,0,24">
+                    <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,24">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
                                 <TextBlock Text="{StaticResource Icon.Credential}" FontFamily="{StaticResource IconFont}" FontSize="15"
@@ -547,7 +547,7 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
                                         <TextBlock Text="{StaticResource Icon.Download}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                    Foreground="{DynamicResource Status.Success}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
@@ -569,7 +569,7 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
                                         <TextBlock Text="{StaticResource Icon.Upload}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                    Foreground="{DynamicResource Status.Success}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
@@ -585,7 +585,7 @@
                     </Border>
 
                     <!-- 应用数据 -->
-                    <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="20,16" Margin="0,0,0,24">
+                    <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,24">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
                                 <TextBlock Text="{StaticResource Icon.Database}" FontFamily="{StaticResource IconFont}" FontSize="15"
@@ -600,7 +600,7 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
                                         <TextBlock Text="{StaticResource Icon.Folder}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                    Foreground="{DynamicResource Text.Secondary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
@@ -623,7 +623,7 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                    <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
                                         <TextBlock Text="{StaticResource Icon.ImportExport}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                    Foreground="{DynamicResource Text.Secondary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
@@ -644,7 +644,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
                                     <TextBlock Text="{StaticResource Icon.Database}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                Foreground="{DynamicResource Text.Secondary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
@@ -666,7 +666,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                <Border Grid.Column="0" Width="44" Height="44" CornerRadius="11" Background="{DynamicResource Bg.Subtle}">
                                     <TextBlock Text="{StaticResource Icon.Delete}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                Foreground="{DynamicResource Status.Danger}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
@@ -705,7 +705,7 @@
                     </Border>
 
                     <!-- 导入提示（跳过的重复项等）-->
-                    <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource Surface.Card}" Padding="20,16"
+                    <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource Surface.Card}" Padding="24,20"
                             Visibility="{Binding HasMessages, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel>
                             <TextBlock Text="导入提示" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,10" />
