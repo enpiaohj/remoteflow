@@ -89,7 +89,9 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Margin="24,20,24,0">
+    <!-- 内容封顶、居中：窗口放大时不被无限拉伸，字段与控件间距保持概念图比例。
+         「数据与备份」是双列，用满 1360；其余单列表单收窄到 1000 / 860。 -->
+    <Grid Margin="24,20,24,0" MaxWidth="1360">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -118,11 +120,11 @@
         </Grid>
 
         <!-- ══ 标签内容 ══ -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="0,20,0,32">
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,20,0,32">
             <Grid>
 
                 <!-- ── 常规 ── -->
-                <StackPanel HorizontalAlignment="Stretch"
+                <StackPanel MaxWidth="1000"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=General}">
 
                     <!-- 外观与行为 -->
@@ -139,7 +141,8 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="420" HorizontalAlignment="Left">
                                     <TextBlock Text="主题" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="更改应用外观主题，当前主题将应用到所有页面。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
@@ -184,7 +187,8 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="420" HorizontalAlignment="Left">
                                     <TextBlock Text="开机时启动 RemoteFlow" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="登录 Windows 后自动运行。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
@@ -198,7 +202,8 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="420" HorizontalAlignment="Left">
                                     <TextBlock Text="关闭窗口时最小化到通知区域" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="关闭主窗口时，程序将最小化到系统托盘，方便快速访问。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
@@ -212,7 +217,8 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="220" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="420" HorizontalAlignment="Left">
                                     <TextBlock Text="默认进入页面" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="启动或新建连接后，默认打开的页面。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
@@ -233,7 +239,8 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="220" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="420" HorizontalAlignment="Left">
                                     <TextBlock Text="并发会话上限" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="达到上限后将拒绝新建会话，防止异常情况下重复创建连接。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
@@ -257,7 +264,8 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="220" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="420" HorizontalAlignment="Left">
                                     <TextBlock Text="界面语言" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="选择 RemoteFlow 的用户界面语言，重启后生效。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
@@ -293,7 +301,7 @@
                 </StackPanel>
 
                 <!-- ── RDP ── -->
-                <StackPanel HorizontalAlignment="Stretch"
+                <StackPanel MaxWidth="860"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Rdp}">
                     <TextBlock Text="新建 RDP 连接时的默认值" Style="{StaticResource Text.BodySecondary}" Margin="0,0,0,12" />
                     <Border Style="{StaticResource Surface.Card}" Padding="20,16">
@@ -319,7 +327,7 @@
                 </StackPanel>
 
                 <!-- ── SSH ── -->
-                <StackPanel HorizontalAlignment="Stretch"
+                <StackPanel MaxWidth="860"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Ssh}">
                     <Border Style="{StaticResource Surface.Card}" Padding="20,16">
                         <StackPanel>
@@ -357,9 +365,10 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="200" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" MaxWidth="420" HorizontalAlignment="Left">
                                     <TextBlock Text="KeepAlive 间隔（秒）" Style="{StaticResource Text.Body}" />
-                                    <TextBlock Text="0 表示关闭。用于避免空闲会话被网络设备断开" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    <TextBlock Text="0 表示关闭。用于避免空闲会话被网络设备断开" Style="{StaticResource Text.Caption}"
+                                               TextWrapping="Wrap" Margin="0,2,0,0" />
                                 </StackPanel>
                                 <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
                                          Text="{Binding SshKeepAliveSeconds, UpdateSourceTrigger=LostFocus}" />
@@ -369,7 +378,7 @@
                 </StackPanel>
 
                 <!-- ── VNC ── -->
-                <StackPanel HorizontalAlignment="Stretch"
+                <StackPanel MaxWidth="860"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Vnc}">
                     <TextBlock Text="新建 VNC 连接时的默认值" Style="{StaticResource Text.BodySecondary}" Margin="0,0,0,12" />
                     <Border Style="{StaticResource Surface.Card}" Padding="20,16">
@@ -397,7 +406,7 @@
                 </StackPanel>
 
                 <!-- ── 安全 ── -->
-                <StackPanel HorizontalAlignment="Stretch"
+                <StackPanel MaxWidth="860"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Security}">
                     <Border Style="{StaticResource Surface.Card}" Padding="20,16">
                         <StackPanel>

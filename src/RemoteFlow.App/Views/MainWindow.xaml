@@ -476,7 +476,9 @@
                             </Grid>
                         </Border>
 
-                        <ItemsControl ItemsSource="{Binding Tabs}">
+                        <ItemsControl ItemsSource="{Binding Tabs}"
+                                      HorizontalContentAlignment="Stretch"
+                                      VerticalContentAlignment="Stretch">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <Grid />
@@ -484,6 +486,8 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemContainerStyle>
                                 <Style TargetType="ContentPresenter">
+                                    <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                    <Setter Property="VerticalAlignment" Value="Stretch" />
                                     <Setter Property="Visibility" Value="Collapsed" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsActive}" Value="True">
@@ -494,7 +498,9 @@
                             </ItemsControl.ItemContainerStyle>
                             <ItemsControl.Resources>
                                 <DataTemplate DataType="{x:Type vm:PageTabViewModel}">
-                                    <ContentControl Content="{Binding Page}" />
+                                    <ContentControl Content="{Binding Page}"
+                                                    HorizontalContentAlignment="Stretch"
+                                                    VerticalContentAlignment="Stretch" />
                                 </DataTemplate>
                                 <DataTemplate DataType="{x:Type vm:SessionTabViewModel}">
                                     <sessions:SessionHostView />

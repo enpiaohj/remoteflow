@@ -244,19 +244,20 @@
               Visibility="{Binding IsEmpty, Converter={StaticResource InverseBoolToVisibility}}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="36" />
-                <ColumnDefinition Width="*" MinWidth="160" />
-                <ColumnDefinition Width="200" />
-                <ColumnDefinition Width="72" />
-                <ColumnDefinition Width="180" />
-                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="Auto" MinWidth="200" MaxWidth="460" />
+                <ColumnDefinition Width="Auto" MinWidth="140" />
+                <ColumnDefinition Width="Auto" MinWidth="56" />
+                <ColumnDefinition Width="Auto" MinWidth="80" />
+                <ColumnDefinition Width="*" MinWidth="24" />
+                <ColumnDefinition Width="Auto" MinWidth="90" />
                 <ColumnDefinition Width="44" />
             </Grid.ColumnDefinitions>
 
             <TextBlock Grid.Column="1" Text="名称" Style="{StaticResource Text.Caption}" Margin="34,0,0,0" />
-            <TextBlock Grid.Column="2" Text="IP / 主机" Style="{StaticResource Text.Caption}" />
-            <TextBlock Grid.Column="3" Text="协议" Style="{StaticResource Text.Caption}" />
-            <TextBlock Grid.Column="4" Text="标签" Style="{StaticResource Text.Caption}" />
-            <TextBlock Grid.Column="5" Text="最近连接" Style="{StaticResource Text.Caption}" />
+            <TextBlock Grid.Column="2" Text="IP / 主机" Style="{StaticResource Text.Caption}" Margin="16,0,0,0" />
+            <TextBlock Grid.Column="3" Text="协议" Style="{StaticResource Text.Caption}" Margin="16,0,0,0" />
+            <TextBlock Grid.Column="4" Text="标签" Style="{StaticResource Text.Caption}" Margin="16,0,0,0" />
+            <TextBlock Grid.Column="6" Text="最近连接" Style="{StaticResource Text.Caption}" />
         </Grid>
 
         <Border Grid.Row="3" Style="{StaticResource Surface.Divider}" VerticalAlignment="Bottom" Margin="4,0" />
@@ -337,11 +338,12 @@
                         <Grid Height="40">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="36" />
-                                <ColumnDefinition Width="*" MinWidth="160" />
-                                <ColumnDefinition Width="200" />
-                                <ColumnDefinition Width="72" />
-                                <ColumnDefinition Width="180" />
-                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="Auto" MinWidth="200" MaxWidth="460" />
+                                <ColumnDefinition Width="Auto" MinWidth="140" />
+                                <ColumnDefinition Width="Auto" MinWidth="56" />
+                                <ColumnDefinition Width="Auto" MinWidth="80" />
+                                <ColumnDefinition Width="*" MinWidth="24" />
+                                <ColumnDefinition Width="Auto" MinWidth="90" />
                                 <ColumnDefinition Width="44" />
                             </Grid.ColumnDefinitions>
 
@@ -388,15 +390,18 @@
                                        Text="{Binding HostDisplay}"
                                        Style="{StaticResource Text.BodySecondary}"
                                        FontFamily="{StaticResource MonoFont}"
-                                       FontSize="12" />
+                                       FontSize="12"
+                                       Margin="16,0,0,0"
+                                       TextTrimming="CharacterEllipsis" />
 
                             <TextBlock Grid.Column="3"
                                        Text="{Binding ProtocolName}"
                                        Style="{StaticResource Text.BodySecondary}"
-                                       FontSize="12" />
+                                       FontSize="12"
+                                       Margin="16,0,0,0" />
 
                             <!-- 标签：最多 3 个，超出以 +N 表示 -->
-                            <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+                            <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
                                 <ItemsControl ItemsSource="{Binding Tags}">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
@@ -423,12 +428,12 @@
                                            Visibility="{Binding OverflowTagCount, Converter={StaticResource CountToVisibility}}" />
                             </StackPanel>
 
-                            <TextBlock Grid.Column="5"
+                            <TextBlock Grid.Column="6"
                                        Text="{Binding LastConnectedDisplay}"
                                        Style="{StaticResource Text.Caption}" />
 
                             <!-- 低频操作：右击整行，或点这个「更多」按钮，弹同一个菜单 -->
-                            <Button Grid.Column="6"
+                            <Button Grid.Column="7"
                                     Style="{StaticResource Button.Icon}"
                                     Width="30" Height="30"
                                     Content="{StaticResource Icon.More}"

@@ -190,8 +190,9 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <Grid Margin="24,20,24,24">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <!-- 内容封顶 1440、居中：放大窗口时卡片不会被拉成空荡长条 -->
+        <Grid Margin="24,20,24,24" MaxWidth="1440">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
