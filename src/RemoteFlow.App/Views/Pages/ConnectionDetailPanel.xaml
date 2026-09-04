@@ -73,11 +73,10 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <!-- 图标系统标准尺寸（44） -->
-                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}"
-                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
-                            Opacity="{StaticResource IconTile.ColorBgOpacity}" />
-                    <TextBlock Grid.Column="0" Style="{StaticResource IconTile.Glyph}"
+                    <!-- RemoteFlow A+：首页 Hero Card 是唯一保留背景色块的例外，
+                         详情面板标题也改成无容器协议 Glyph，只是尺寸比密集列表大一些 -->
+                    <TextBlock Grid.Column="0" Style="{StaticResource Icon.ProtocolGlyph}"
+                               FontSize="26" Width="32"
                                Text="{Binding ProtocolIcon}"
                                Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
 

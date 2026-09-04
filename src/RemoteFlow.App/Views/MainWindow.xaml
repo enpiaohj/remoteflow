@@ -466,14 +466,14 @@
                     </Border>
 
                     <!-- 内容区：所有 Tab 内容常驻，仅切换可见性，保证会话不被销毁。
-                         Windows 11 默认配色思路：内容区底色跟机身**同一个灰**（Bg.Base），
-                         不再是一整块纯白——具体内容靠各页面自己的 Surface.Card 卡片来
-                         呈现白色，而不是让中央变成一大块跟机身撞色的纯白矩形。
+                         按最新反馈还原为白色内容区（Bg.Layer），不再跟随 Windows 11
+                         灰机身配色思路——这条改动是应用级的，覆盖首页在内的所有页面，
+                         不能只在某一页面单独还原。
                          会话 Tab（RDP/SSH/VNC）自己在 SessionHostView 里画深色背景，
-                         会盖住这里的灰色，互不影响。
+                         互不影响。
                          会话全屏时必须去掉描边和圆角：否则远程画面四周会露出一圈边框。 -->
                     <Border Grid.Row="1"
-                            Background="{DynamicResource Bg.Base}"
+                            Background="{DynamicResource Bg.Layer}"
                             SnapsToDevicePixels="True">
                         <Border.Style>
                             <Style TargetType="Border">
