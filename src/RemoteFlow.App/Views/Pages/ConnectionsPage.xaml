@@ -61,7 +61,7 @@
 
         <!-- 连接行（分组视图与扁平视图共用）-->
         <DataTemplate x:Key="ConnRowTemplate" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Grid Height="52">
+            <Grid Height="58">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="36" />
                     <ColumnDefinition Width="Auto" MinWidth="200" MaxWidth="460" SharedSizeGroup="ColName" />
@@ -92,12 +92,14 @@
                 </Button>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="30" Height="30" CornerRadius="7"
+                    <!-- 与首页收藏 / 最近活动行同一套图标尺度（44px 一族），
+                         列表本身更密，取 38px 折中，不再明显偏小 -->
+                    <Border Width="38" Height="38" CornerRadius="10"
                             Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
-                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="14"
-                               Margin="-30,0,0,0" Width="30" TextAlignment="Center" VerticalAlignment="Center"
+                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="17"
+                               Margin="-38,0,0,0" Width="38" TextAlignment="Center" VerticalAlignment="Center"
                                Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
-                    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" Margin="12,0,8,0"
+                    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" Margin="14,0,8,0"
                                MaxWidth="360" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
