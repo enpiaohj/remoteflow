@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using RemoteFlow.App.Services;
 using RemoteFlow.App.ViewModels;
 using RemoteFlow.Core.Models;
+using RemoteFlow.Infrastructure.Settings;
 
 namespace RemoteFlow.App.Views.Sessions;
 
@@ -36,6 +37,9 @@ public partial class SessionHostView : UserControl
 
     /// <summary>鼠标离开药丸后多久收起——比初次短，尽快让出画面。</summary>
     private static readonly TimeSpan AwayAutoHideDelay = TimeSpan.FromMilliseconds(900);
+
+    /// <summary>首次进全屏、带提示时药丸的驻留时间。</summary>
+    private static readonly TimeSpan HintVisibleDelay = TimeSpan.FromSeconds(5);
 
     /// <summary>光标顶沿轮询间隔。</summary>
     private static readonly TimeSpan EdgeWatchInterval = TimeSpan.FromMilliseconds(80);
@@ -245,7 +249,7 @@ public partial class SessionHostView : UserControl
             ShowToolbar();
             _edgeWatch.Start();
             InstallMouseHook();
-            ScheduleAutoHide(InitialAutoHideDelay);
+            ScheduleAutoHide(MaybeShowFirstRunHint() ? HintVisibleDelay : InitialAutoHideDelay);
         }
         else
         {
@@ -253,8 +257,27 @@ public partial class SessionHostView : UserControl
             _edgeWatch.Stop();
             _autoHideTimer.Stop();
             RemoveMouseHook();
+            FullScreenHint.Visibility = Visibility.Collapsed;
             ToolbarPopup.IsOpen = false;
         }
+    }
+
+    /// <summary>
+    /// 首次进全屏时展示一次性提示：工具条会自动隐藏、鼠标移到顶沿再唤出。
+    /// <returns>本次展示了提示返回 true（调用方据此延长驻留时间）。</returns>
+    /// </summary>
+    private bool MaybeShowFirstRunHint()
+    {
+        var settings = App.Services.GetService<AppSettings>();
+        if (settings is null || settings.SessionFullScreenHintShown)
+        {
+            return false;
+        }
+
+        FullScreenHint.Visibility = Visibility.Visible;
+        settings.SessionFullScreenHintShown = true;
+        _ = App.Services.GetService<JsonSettingsStore>()?.SaveAsync(settings);
+        return true;
     }
 
     private void OnPinChanged(object sender, RoutedEventArgs e)
@@ -396,6 +419,7 @@ public partial class SessionHostView : UserControl
             return;
         }
 
+        FullScreenHint.Visibility = Visibility.Collapsed;
         ToolbarPopup.IsOpen = false;
     }
 

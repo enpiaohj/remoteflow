@@ -33,6 +33,9 @@ public sealed class AppSettings
     /// <summary>界面语言。V0.1 仅提供简体中文，保留字段以便后续 i18n。</summary>
     public string Language { get; set; } = "zh-CN";
 
+    /// <summary>是否已展示过「全屏工具条自动隐藏」的首次提示。</summary>
+    public bool SessionFullScreenHintShown { get; set; }
+
     // ── RDP 默认值 ────────────────────────────────────────
     public RdpDisplayMode RdpDefaultDisplayMode { get; set; } = RdpDisplayMode.FitToWindow;
     public bool RdpDefaultRedirectClipboard { get; set; } = true;

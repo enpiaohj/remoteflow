@@ -235,7 +235,10 @@ public partial class App : System.Windows.Application
         var database = Services.GetRequiredService<RemoteFlowDatabase>();
         database.Initialize();
 
-        SeedDefaultsIfEmpty();
+        // 种子数据走仓储的 async API。此刻在 UI 线程上，直接 .GetResult() 属于
+        // sync-over-async（SQLite 的 async 目前是同步实现，暂不死锁，但不依赖这个
+        // 巧合）：丢到线程池线程上跑，那里没有 DispatcherSynchronizationContext。
+        Task.Run(SeedDefaultsIfEmptyAsync).GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -245,12 +248,12 @@ public partial class App : System.Windows.Application
     /// 降低首次使用的门槛。不创建任何示例连接或凭据。
     /// </para>
     /// </summary>
-    private void SeedDefaultsIfEmpty()
+    private async Task SeedDefaultsIfEmptyAsync()
     {
         var groups = Services.GetRequiredService<IGroupRepository>();
         var tags = Services.GetRequiredService<ITagRepository>();
 
-        if (groups.GetAllAsync().GetAwaiter().GetResult().Count > 0)
+        if ((await groups.GetAllAsync()).Count > 0)
         {
             return;
         }
@@ -258,8 +261,7 @@ public partial class App : System.Windows.Application
         var defaultGroups = new[] { "Windows", "Linux", "macOS", "网络设备" };
         for (var i = 0; i < defaultGroups.Length; i++)
         {
-            groups.AddAsync(new ConnectionGroup { Name = defaultGroups[i], SortOrder = i })
-                .GetAwaiter().GetResult();
+            await groups.AddAsync(new ConnectionGroup { Name = defaultGroups[i], SortOrder = i });
         }
 
         var defaultTags = new (string Name, string Color)[]
@@ -271,7 +273,7 @@ public partial class App : System.Windows.Application
 
         foreach (var (name, color) in defaultTags)
         {
-            tags.AddAsync(new Tag { Name = name, Color = color }).GetAwaiter().GetResult();
+            await tags.AddAsync(new Tag { Name = name, Color = color });
         }
 
         _logger?.LogInformation("已创建默认分组与标签");

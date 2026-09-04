@@ -336,6 +336,20 @@
                             Content="{StaticResource Icon.Close}"
                             ToolTip="关闭会话 (Ctrl+W)"
                             Command="{Binding CloseCommand}" />
+
+                    <!-- 首次进全屏的一次性提示：工具条会自动隐藏，鼠标移到顶部再唤出 -->
+                    <Border x:Name="FullScreenHint"
+                            Visibility="Collapsed"
+                            Margin="8,0,2,0"
+                            Padding="8,3"
+                            VerticalAlignment="Center"
+                            Background="{DynamicResource Brand.Default}"
+                            CornerRadius="5">
+                        <TextBlock Text="工具条会自动隐藏 · 鼠标移到屏幕顶部再唤出"
+                                   FontSize="11"
+                                   Foreground="White"
+                                   VerticalAlignment="Center" />
+                    </Border>
                 </StackPanel>
             </Border>
         </Popup>
