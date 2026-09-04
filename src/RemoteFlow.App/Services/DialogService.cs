@@ -93,6 +93,17 @@ public sealed class DialogService(
         return dialog.ShowDialog(Owner) == true ? dialog.FileName : null;
     }
 
+    public string? PickFolder(string title)
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = title,
+            Multiselect = false
+        };
+
+        return dialog.ShowDialog(Owner) == true ? dialog.FolderName : null;
+    }
+
     /// <summary>
     /// 在 UI 线程执行并返回结果。
     /// 已在 UI 线程时直接执行，避免为一次弹窗多绕一圈调度。

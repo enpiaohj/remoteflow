@@ -40,6 +40,10 @@
     <sys:String x:Key="Icon.Clear">&#xE894;</sys:String>
     <sys:String x:Key="Icon.Reveal">&#xE7B3;</sys:String>
     <sys:String x:Key="Icon.Hide">&#xED1A;</sys:String>
+    <sys:String x:Key="Icon.Download">&#xE896;</sys:String>
+    <sys:String x:Key="Icon.Upload">&#xE898;</sys:String>
+    <sys:String x:Key="Icon.Database">&#xEE0F;</sys:String>
+    <sys:String x:Key="Icon.Lock">&#xE72E;</sys:String>
 
     <!-- 会话工具条 -->
     <sys:String x:Key="Icon.FullScreen">&#xE740;</sys:String>

@@ -204,6 +204,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<AppServices.ConnectionSearchService>();
         services.AddSingleton<AppServices.ImportExportService>();
         services.AddSingleton<AppServices.CredentialBackupService>();
+        services.AddSingleton<LocalBackupService>();
         services.AddSingleton<AppServices.SessionManager>();
 
         // ── 协议 Provider：新增协议只需在此追加一行 ───────────────
@@ -221,7 +222,6 @@ public partial class App : System.Windows.Application
         services.AddSingleton<HomePageViewModel>();
         services.AddSingleton<ConnectionsPageViewModel>();
         services.AddSingleton<CredentialsPageViewModel>();
-        services.AddSingleton<ImportExportPageViewModel>();
         services.AddSingleton<SettingsPageViewModel>();
         services.AddSingleton<MainViewModel>();
 

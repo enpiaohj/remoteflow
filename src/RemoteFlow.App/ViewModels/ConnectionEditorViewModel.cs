@@ -50,6 +50,9 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
             _profile.Ssh.KeepAliveSeconds = defaults.SshDefaultKeepAliveSeconds;
             _profile.Ssh.TerminalType = defaults.SshDefaultTerminalType;
             _profile.Ssh.Encoding = defaults.SshDefaultEncoding;
+            _profile.Vnc.ScaleMode = defaults.VncDefaultScaleMode;
+            _profile.Vnc.ViewOnly = defaults.VncDefaultViewOnly;
+            _profile.Vnc.SharedConnection = defaults.VncDefaultSharedConnection;
         }
 
         Title = _isNew ? "新建连接" : "编辑连接";

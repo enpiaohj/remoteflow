@@ -48,6 +48,9 @@ public interface IDialogService
 
     /// <summary>选择保存路径，取消返回 null。</summary>
     string? PickFileToSave(string title, string filter, string defaultFileName);
+
+    /// <summary>选择一个目录，取消返回 null。</summary>
+    string? PickFolder(string title);
 }
 
 /// <summary>

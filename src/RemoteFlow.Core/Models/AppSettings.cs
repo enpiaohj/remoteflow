@@ -49,6 +49,11 @@ public sealed class AppSettings
     public int SshDefaultKeepAliveSeconds { get; set; } = 30;
     public string SshDefaultTerminalType { get; set; } = "xterm-256color";
 
+    // ── VNC 默认值 ────────────────────────────────────────
+    public VncScaleMode VncDefaultScaleMode { get; set; } = VncScaleMode.FitToWindow;
+    public bool VncDefaultViewOnly { get; set; }
+    public bool VncDefaultSharedConnection { get; set; } = true;
+
     // ── 安全 ──────────────────────────────────────────────
     /// <summary>连接历史保留天数。0 表示不自动清理。</summary>
     public int HistoryRetentionDays { get; set; }

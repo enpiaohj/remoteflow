@@ -123,6 +123,21 @@ public sealed class EnumToBoolConverter : IValueConverter
     }
 }
 
+/// <summary>
+/// 枚举值与 <c>ConverterParameter</c> 相等时返回 Visible，否则 Collapsed。
+/// 用于按当前选中的标签页切换内容面板。
+/// </summary>
+public sealed class EnumToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is not null && parameter is not null && value.ToString() == parameter.ToString()
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>把枚举转换为中文显示名。</summary>
 public sealed class EnumDisplayNameConverter : IValueConverter
 {

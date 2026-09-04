@@ -47,9 +47,6 @@
         <DataTemplate DataType="{x:Type vm:CredentialsPageViewModel}">
             <pages:CredentialsPage />
         </DataTemplate>
-        <DataTemplate DataType="{x:Type vm:ImportExportPageViewModel}">
-            <pages:ImportExportPage />
-        </DataTemplate>
         <DataTemplate DataType="{x:Type vm:SettingsPageViewModel}">
             <pages:SettingsPage />
         </DataTemplate>
@@ -283,7 +280,7 @@
                     <ColumnDefinition x:Name="DetailColumn" Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- ── 左侧导航：只放 7 个一级入口 ───────────────── -->
+                <!-- ── 左侧导航：分「连接 / 管理」两组，设置固定在底部 ── -->
                 <Grid Grid.Column="0"
                       Background="{DynamicResource Bg.Sidebar}"
                       Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
@@ -292,62 +289,72 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <StackPanel Grid.Row="0" Margin="0,8,0,0">
-                        <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
-                                     IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Home, Mode=TwoWay}"
-                                     Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Home}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.Home}" Style="{StaticResource IconText}" Width="20" />
-                                <TextBlock Text="首页" Margin="12,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </RadioButton>
+                    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="0,16,0,8">
+                            <TextBlock Text="连接" Style="{StaticResource Nav.SectionHeader}" />
 
-                        <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
-                                     IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Connections, Mode=TwoWay}"
-                                     Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Connections}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.Connections}" Style="{StaticResource IconText}" Width="20" />
-                                <TextBlock Text="我的连接" Margin="12,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </RadioButton>
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Home, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Home}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Home}" Style="{StaticResource IconText}" Width="20" />
+                                    <TextBlock Text="首页" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
 
-                        <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
-                                     IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Favorites, Mode=TwoWay}"
-                                     Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Favorites}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.Favorite}" Style="{StaticResource IconText}" Width="20" />
-                                <TextBlock Text="收藏" Margin="12,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </RadioButton>
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Connections, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Connections}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Connections}" Style="{StaticResource IconText}" Width="20" />
+                                    <TextBlock Text="我的连接" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
 
-                        <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
-                                     IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Recent, Mode=TwoWay}"
-                                     Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Recent}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.Recent}" Style="{StaticResource IconText}" Width="20" />
-                                <TextBlock Text="最近连接" Margin="12,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </RadioButton>
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Favorites, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Favorites}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Favorite}" Style="{StaticResource IconText}" Width="20" />
+                                    <TextBlock Text="收藏" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
 
-                        <Border Style="{StaticResource Surface.Divider}" Margin="18,10" />
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Recent, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Recent}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Recent}" Style="{StaticResource IconText}" Width="20" />
+                                    <TextBlock Text="最近连接" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
 
-                        <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
-                                     IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Credentials, Mode=TwoWay}"
-                                     Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Credentials}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.Credential}" Style="{StaticResource IconText}" Width="20" />
-                                <TextBlock Text="凭据" Margin="12,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </RadioButton>
+                            <Border Style="{StaticResource Surface.Divider}" Margin="18,12" />
 
-                        <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
-                                     IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=ImportExport, Mode=TwoWay}"
-                                     Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.ImportExport}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.ImportExport}" Style="{StaticResource IconText}" Width="20" />
-                                <TextBlock Text="导入 / 导出" Margin="12,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </RadioButton>
+                            <TextBlock Text="管理" Style="{StaticResource Nav.SectionHeader}" />
+
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Credentials, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Credentials}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Credential}" Style="{StaticResource IconText}" Width="20" />
+                                    <TextBlock Text="凭据" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- 底部：会话状态一行 + 设置入口 -->
+                    <StackPanel Grid.Row="1" Margin="0,4,0,10">
+                        <StackPanel Orientation="Horizontal" Margin="21,0,12,10">
+                            <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                     Fill="{Binding SessionStatusBrushKey, Converter={StaticResource KeyToBrush}}" />
+                            <TextBlock Text="{Binding SessionStatusText}"
+                                       Style="{StaticResource Text.Caption}"
+                                       Margin="8,0,0,0" />
+                        </StackPanel>
+
+                        <Border Style="{StaticResource Surface.Divider}" Margin="12,0,12,6" />
 
                         <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
                                      IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Settings, Mode=TwoWay}"
@@ -358,29 +365,6 @@
                             </StackPanel>
                         </RadioButton>
                     </StackPanel>
-
-                    <!-- 会话状态 -->
-                    <Border Grid.Row="1" Margin="12,8,12,12" Padding="12,10"
-                            Background="{DynamicResource Bg.Layer}"
-                            CornerRadius="{StaticResource Radius.Medium}">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" VerticalAlignment="Center">
-                                <Ellipse.Style>
-                                    <Style TargetType="Ellipse">
-                                        <Setter Property="Fill" Value="{DynamicResource Status.Idle}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Tabs.Count}" Value="1">
-                                                <Setter Property="Fill" Value="{DynamicResource Status.Idle}" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Ellipse.Style>
-                            </Ellipse>
-                            <TextBlock Text="{Binding SessionStatusText}"
-                                       Style="{StaticResource Text.Caption}"
-                                       Margin="8,0,0,0" />
-                        </StackPanel>
-                    </Border>
                 </Grid>
 
                 <!-- ── 中央工作区 ────────────────────────────────── -->

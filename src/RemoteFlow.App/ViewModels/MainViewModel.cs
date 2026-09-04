@@ -17,7 +17,6 @@ public enum NavigationPage
     Favorites,
     Recent,
     Credentials,
-    ImportExport,
     Settings
 }
 
@@ -33,7 +32,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly SessionManager _sessions;
     private readonly CredentialsPageViewModel _credentialsPage;
-    private readonly ImportExportPageViewModel _importExportPage;
     private readonly SettingsPageViewModel _settingsPage;
     private readonly IDialogService _dialogs;
     private readonly ILogger<MainViewModel> _logger;
@@ -43,7 +41,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         HomePageViewModel homePage,
         ConnectionsPageViewModel connectionsPage,
         CredentialsPageViewModel credentialsPage,
-        ImportExportPageViewModel importExportPage,
         SettingsPageViewModel settingsPage,
         IDialogService dialogs,
         AppSettings settings,
@@ -53,7 +50,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         HomePage = homePage;
         ConnectionsPage = connectionsPage;
         _credentialsPage = credentialsPage;
-        _importExportPage = importExportPage;
         _settingsPage = settingsPage;
         _dialogs = dialogs;
         _logger = logger;
@@ -68,7 +64,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _sessions.SessionCreated += OnSessionCreated;
         _sessions.SessionClosed += OnSessionClosed;
 
-        _importExportPage.DataImported += async (_, _) => await ReloadCurrentPageAsync();
+        // 设置页的「数据与备份」改动了本地数据时刷新当前页。
+        _settingsPage.DataChanged += async (_, _) => await ReloadCurrentPageAsync();
 
         NavigateTo(NavigationPage.Home);
     }
@@ -124,6 +121,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public string SessionStatusText => _sessions.ActiveSessionCount == 0
         ? "无活动会话"
         : $"已连接 {_sessions.ActiveSessionCount} 个会话";
+
+    /// <summary>会话状态圆点的语义色键：有活动会话时用成功绿，否则用中性灰。</summary>
+    public string SessionStatusBrushKey => _sessions.ActiveSessionCount == 0
+        ? "Status.Idle"
+        : "Status.Success";
 
     partial void OnGlobalSearchTextChanged(string value)
     {
@@ -191,11 +193,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             case NavigationPage.Credentials:
                 WorkspaceTab.Page = _credentialsPage;
                 WorkspaceTab.Title = "凭据";
-                break;
-
-            case NavigationPage.ImportExport:
-                WorkspaceTab.Page = _importExportPage;
-                WorkspaceTab.Title = "导入 / 导出";
                 break;
 
             case NavigationPage.Settings:
@@ -287,6 +284,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         SelectedTab = tab;
 
         OnPropertyChanged(nameof(SessionStatusText));
+        OnPropertyChanged(nameof(SessionStatusBrushKey));
     }
 
     private void OnSessionActionRequested(object? sender, SessionAction action)
@@ -331,6 +329,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         OnPropertyChanged(nameof(SessionStatusText));
+        OnPropertyChanged(nameof(SessionStatusBrushKey));
     }
 
     private async Task CloseSessionAsync(Guid sessionId) => await _sessions.CloseSessionAsync(sessionId);
