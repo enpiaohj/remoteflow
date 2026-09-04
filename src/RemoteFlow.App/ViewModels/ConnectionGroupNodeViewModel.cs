@@ -27,7 +27,11 @@ public sealed partial class ConnectionGroupNodeViewModel : ObservableObject
 
     /// <summary>该分组（含所有子孙分组）的连接总数，显示在分组标题右侧。</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEmptyGroup))]
     private int _totalCount;
+
+    /// <summary>整个子树一条连接都没有——展开时显示「暂无连接」提示。</summary>
+    public bool IsEmptyGroup => TotalCount == 0;
 
     [ObservableProperty]
     private bool _isExpanded = true;

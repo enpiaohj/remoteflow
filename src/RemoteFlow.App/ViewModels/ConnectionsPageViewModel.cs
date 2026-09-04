@@ -208,10 +208,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     [ObservableProperty]
     private ConnectionFilter _filter = ConnectionFilter.All;
 
-    /// <summary>是否按分组折叠显示。</summary>
-    [ObservableProperty]
-    private bool _groupByFolder = true;
-
     /// <summary>「我的连接」页内的名称 / IP / 标签筛选（独立于顶部全局搜索）。</summary>
     [ObservableProperty]
     private string _pageFilterText = string.Empty;
@@ -283,7 +279,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         ApplyFilter();
     }
 
-    partial void OnGroupByFolderChanged(bool value) => ApplyGrouping();
 
     // ── 数据加载 ──────────────────────────────────────────────────
 

@@ -478,7 +478,7 @@
                             <MultiDataTrigger>
                                 <MultiDataTrigger.Conditions>
                                     <Condition Binding="{Binding IsGroupedView}" Value="True" />
-                                    <Condition Binding="{Binding IsEmpty}" Value="False" />
+                                    <Condition Binding="{Binding IsGroupedEmpty}" Value="False" />
                                 </MultiDataTrigger.Conditions>
                                 <Setter Property="Visibility" Value="Visible" />
                             </MultiDataTrigger>
@@ -487,7 +487,26 @@
                 </ListBox.Style>
                 <ListBox.Resources>
                     <DataTemplate DataType="{x:Type vm:ConnectionGroupNodeViewModel}">
-                        <ContentControl ContentTemplate="{StaticResource GroupHeaderTemplate}" Content="{Binding}" />
+                        <StackPanel>
+                            <ContentControl ContentTemplate="{StaticResource GroupHeaderTemplate}" Content="{Binding}" />
+                            <TextBlock Text="暂无连接　·　右键分组或点「+ 新建」添加"
+                                       Margin="44,0,0,8">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding IsExpanded}" Value="True" />
+                                                    <Condition Binding="{Binding IsEmptyGroup}" Value="True" />
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </MultiDataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
                     </DataTemplate>
                     <DataTemplate DataType="{x:Type vm:ConnectionItemViewModel}">
                         <ContentControl ContentTemplate="{StaticResource ConnRowTemplate}" Content="{Binding}" Margin="20,0,0,0" />
@@ -495,9 +514,25 @@
                 </ListBox.Resources>
             </ListBox>
 
-            <!-- ── 空状态 ────────────────────────────────────── -->
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="380"
-                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
+            <!-- ── 空状态：收藏 / 最近连接为空，或「我的连接」一个分组都没有 ── -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="380">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding IsGroupedView}" Value="False" />
+                                    <Condition Binding="{Binding IsEmpty}" Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Visible" />
+                            </MultiDataTrigger>
+                            <DataTrigger Binding="{Binding IsGroupedEmpty}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
                 <Border Width="56" Height="56" CornerRadius="16" Background="{DynamicResource Bg.Subtle}" HorizontalAlignment="Center">
                     <TextBlock Text="{StaticResource Icon.Connections}" FontFamily="{StaticResource IconFont}" FontSize="24"
                                Foreground="{DynamicResource Text.Tertiary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
