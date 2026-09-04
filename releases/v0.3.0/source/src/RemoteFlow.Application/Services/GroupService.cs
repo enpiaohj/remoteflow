@@ -1,0 +1,257 @@
+using RemoteFlow.Core.Abstractions;
+using RemoteFlow.Core.Models;
+
+namespace RemoteFlow.Application.Services;
+
+/// <summary>分组树的一个节点。子节点已按 <see cref="ConnectionGroup.SortOrder"/> 排好序。</summary>
+public sealed class GroupTreeNode
+{
+    public required ConnectionGroup Group { get; init; }
+    public List<GroupTreeNode> Children { get; } = [];
+}
+
+/// <summary>
+/// 分组应用服务。分组是「用户自己的连接组织目录」——
+/// 创建 / 重命名 / 删除 / 移动 / 取树，以及第一次启动时的默认分组种子。
+/// <para>
+/// 唯一的系统分组是「未分组」（<see cref="ConnectionGroup.UngroupedId"/>）：不可删除、
+/// 不可重命名、不可移动；新连接未指定分组、或删除普通分组时组内连接都归入这里。
+/// </para>
+/// </summary>
+public sealed class GroupService(IGroupRepository groups, IConnectionRepository connections)
+{
+    /// <summary>首次启动时自动创建的默认用户分组名。</summary>
+    public const string DefaultGroupName = "我的设备";
+
+    public Task<IReadOnlyList<ConnectionGroup>> GetAllAsync(CancellationToken ct = default)
+        => groups.GetAllAsync(ct);
+
+    /// <summary>取分组树（不含「未分组」——它由 UI 按需单独呈现）。</summary>
+    public async Task<IReadOnlyList<GroupTreeNode>> GetTreeAsync(CancellationToken ct = default)
+    {
+        var all = await groups.GetAllAsync(ct);
+        return BuildTree(all.Where(g => !g.IsSystem));
+    }
+
+    /// <summary>从扁平列表构建树，按 SortOrder 再按名称排序。</summary>
+    public static IReadOnlyList<GroupTreeNode> BuildTree(IEnumerable<ConnectionGroup> groups)
+    {
+        var nodes = groups.ToDictionary(g => g.Id, g => new GroupTreeNode { Group = g });
+        var roots = new List<GroupTreeNode>();
+
+        foreach (var node in nodes.Values)
+        {
+            if (node.Group.ParentId is { } parentId && nodes.TryGetValue(parentId, out var parent))
+            {
+                parent.Children.Add(node);
+            }
+            else
+            {
+                roots.Add(node);
+            }
+        }
+
+        Sort(roots);
+        return roots;
+    }
+
+    private static void Sort(List<GroupTreeNode> level)
+    {
+        level.Sort((a, b) => a.Group.SortOrder != b.Group.SortOrder
+            ? a.Group.SortOrder.CompareTo(b.Group.SortOrder)
+            : string.Compare(a.Group.Name, b.Group.Name, StringComparison.CurrentCultureIgnoreCase));
+
+        foreach (var node in level)
+        {
+            Sort(node.Children);
+        }
+    }
+
+    /// <summary>
+    /// 保证「未分组」存在，并在库中没有任何用户分组时创建默认分组「我的设备」。
+    /// 返回默认落脚分组的 Id——新建连接对话框用它作为「分组」的默认值。
+    /// </summary>
+    public async Task<Guid> EnsureSeedAsync(CancellationToken ct = default)
+    {
+        var all = await groups.GetAllAsync(ct);
+
+        if (all.All(g => g.Id != ConnectionGroup.UngroupedId))
+        {
+            await groups.AddAsync(new ConnectionGroup
+            {
+                Id = ConnectionGroup.UngroupedId,
+                Name = "未分组",
+                SortOrder = int.MaxValue,
+                IsSystem = true
+            }, ct);
+        }
+
+        var userGroups = all.Where(g => !g.IsSystem).ToList();
+        if (userGroups.Count > 0)
+        {
+            // 既有库（可能已有 Windows / Linux 等普通分组）——不再造「我的设备」。
+            return userGroups.OrderBy(g => g.SortOrder).First().Id;
+        }
+
+        var defaultGroup = new ConnectionGroup { Name = DefaultGroupName, SortOrder = 0 };
+        await groups.AddAsync(defaultGroup, ct);
+        return defaultGroup.Id;
+    }
+
+    public async Task<ConnectionGroup> CreateAsync(string name, Guid? parentId, CancellationToken ct = default)
+    {
+        var trimmed = (name ?? string.Empty).Trim();
+        if (trimmed.Length == 0)
+        {
+            throw new ArgumentException("分组名称不能为空。", nameof(name));
+        }
+
+        var all = await groups.GetAllAsync(ct);
+
+        if (parentId is { } pid && all.All(g => g.Id != pid))
+        {
+            throw new InvalidOperationException("上级分组不存在。");
+        }
+
+        if (HasSiblingNamed(all, parentId, trimmed, excludeId: null))
+        {
+            throw new InvalidOperationException($"同一层级下已存在分组「{trimmed}」。");
+        }
+
+        var nextOrder = all.Where(g => g.ParentId == parentId && !g.IsSystem)
+            .Select(g => g.SortOrder)
+            .DefaultIfEmpty(-1)
+            .Max() + 1;
+
+        var group = new ConnectionGroup { Name = trimmed, ParentId = parentId, SortOrder = nextOrder };
+        await groups.AddAsync(group, ct);
+        return group;
+    }
+
+    public async Task RenameAsync(Guid id, string newName, CancellationToken ct = default)
+    {
+        var trimmed = (newName ?? string.Empty).Trim();
+        if (trimmed.Length == 0)
+        {
+            throw new ArgumentException("分组名称不能为空。", nameof(newName));
+        }
+
+        var all = await groups.GetAllAsync(ct);
+        var group = all.FirstOrDefault(g => g.Id == id)
+            ?? throw new InvalidOperationException("分组不存在。");
+
+        if (group.IsSystem)
+        {
+            throw new InvalidOperationException("系统分组不能重命名。");
+        }
+
+        if (HasSiblingNamed(all, group.ParentId, trimmed, excludeId: id))
+        {
+            throw new InvalidOperationException($"同一层级下已存在分组「{trimmed}」。");
+        }
+
+        group.Name = trimmed;
+        await groups.UpdateAsync(group, ct);
+    }
+
+    /// <summary>删除分组：组内连接 → 未分组，子分组 → 被删除分组的父级（§16）。</summary>
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var all = await groups.GetAllAsync(ct);
+        var group = all.FirstOrDefault(g => g.Id == id)
+            ?? throw new InvalidOperationException("分组不存在。");
+
+        if (group.IsSystem)
+        {
+            throw new InvalidOperationException("系统分组不能删除。");
+        }
+
+        // 「未分组」以 group_id = null 表示；传 null 让仓储把组内连接置空。
+        await groups.DeleteAsync(id, moveConnectionsTo: null, ct);
+    }
+
+    /// <summary>把分组移动到新的父级（null = 根级）。</summary>
+    public async Task MoveAsync(Guid id, Guid? newParentId, CancellationToken ct = default)
+    {
+        if (id == newParentId)
+        {
+            throw new InvalidOperationException("不能把分组移动到自身。");
+        }
+
+        var all = await groups.GetAllAsync(ct);
+        var group = all.FirstOrDefault(g => g.Id == id)
+            ?? throw new InvalidOperationException("分组不存在。");
+
+        if (group.IsSystem)
+        {
+            throw new InvalidOperationException("系统分组不能移动。");
+        }
+
+        if (newParentId is { } target)
+        {
+            if (all.All(g => g.Id != target))
+            {
+                throw new InvalidOperationException("目标分组不存在。");
+            }
+
+            if (IsDescendant(all, ancestorId: id, candidateId: target))
+            {
+                throw new InvalidOperationException("不能把分组移动到它自己的子分组下。");
+            }
+        }
+
+        if (HasSiblingNamed(all, newParentId, group.Name, excludeId: id))
+        {
+            throw new InvalidOperationException($"目标层级下已存在分组「{group.Name}」。");
+        }
+
+        group.ParentId = newParentId;
+        await groups.UpdateAsync(group, ct);
+    }
+
+    /// <summary>把连接移动到指定分组（null / 未分组 都归入「未分组」）。</summary>
+    public async Task MoveConnectionAsync(Guid connectionId, Guid? groupId, CancellationToken ct = default)
+    {
+        var profile = await connections.GetByIdAsync(connectionId, ct)
+            ?? throw new InvalidOperationException("连接不存在。");
+
+        profile.GroupId = groupId == ConnectionGroup.UngroupedId ? null : groupId;
+        profile.UpdatedAt = DateTimeOffset.Now;
+        await connections.UpdateAsync(profile, ct);
+    }
+
+    /// <summary>更新同级排序值（拖拽排序落库）。</summary>
+    public async Task SetSortOrderAsync(Guid id, int sortOrder, CancellationToken ct = default)
+    {
+        var all = await groups.GetAllAsync(ct);
+        var group = all.FirstOrDefault(g => g.Id == id);
+        if (group is null || group.IsSystem)
+        {
+            return;
+        }
+
+        group.SortOrder = sortOrder;
+        await groups.UpdateAsync(group, ct);
+    }
+
+    private static bool HasSiblingNamed(IEnumerable<ConnectionGroup> all, Guid? parentId, string name, Guid? excludeId)
+        => all.Any(g => g.ParentId == parentId
+            && g.Id != excludeId
+            && !g.IsSystem
+            && string.Equals(g.Name, name, StringComparison.CurrentCultureIgnoreCase));
+
+    private static bool IsDescendant(IReadOnlyList<ConnectionGroup> all, Guid ancestorId, Guid candidateId)
+    {
+        var current = all.FirstOrDefault(g => g.Id == candidateId);
+        var guard = 0;
+        while (current is not null && guard++ < 64)
+        {
+            if (current.ParentId == ancestorId)
+            {
+                return true;
+            }
+            current = current.ParentId is { } pid ? all.FirstOrDefault(g => g.Id == pid) : null;
+        }
+        return false;
+    }
+}

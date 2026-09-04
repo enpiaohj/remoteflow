@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RemoteFlow.Core —— 领域模型与抽象接口层。
+    保持平台无关（net10.0），不引用 WPF / WinForms / Windows 专属 API，
+    以便后续抽取跨平台客户端时可直接复用。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RemoteFlow.Core</RootNamespace>
+  </PropertyGroup>
+
+</Project>
