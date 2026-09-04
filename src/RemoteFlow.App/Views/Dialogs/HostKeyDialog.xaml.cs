@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using RemoteFlow.Core.Sessions;
 
 namespace RemoteFlow.App.Views.Dialogs;
@@ -15,9 +16,21 @@ namespace RemoteFlow.App.Views.Dialogs;
 ///   因此默认焦点落在「取消连接」，且信任按钮使用警示色，杜绝顺手回车放行。</item>
 /// </list>
 /// </para>
+/// <para>
+/// <b>真实 Bug（2026-09-05 用户反馈）：</b>这个对话框是在握手中止后异步弹出的，
+/// 弹出时机紧跟在「终端刚就绪、用户习惯性按一下回车看看有没有反应」之类的操作后面。
+/// 之前 RejectButton 同时挂了 <c>IsCancel</c> 和 <c>IsDefault</c>，任何还残留在
+/// 消息队列里的回车/Esc 一送到这个新窗口就会立刻触发「取消连接」，表现成「弹窗一闪就消失」，
+/// 且几乎每次都能复现（终端就绪后按键是很常见的操作）。修复：去掉 IsDefault（只保留
+/// IsCancel，即显式按 Esc 仍可取消），并在窗口刚加载的一小段宽限期内整体禁用两个按钮，
+/// 这样无论是残留的键盘事件还是意外点击，只要落在这段时间内都不会误触发任何一侧。
+/// </para>
 /// </summary>
 public partial class HostKeyDialog : Window
 {
+    /// <summary>刚打开后的宽限期：这段时间内两个按钮都不响应，吸收残留的键盘/鼠标事件。</summary>
+    private static readonly TimeSpan InputGracePeriod = TimeSpan.FromMilliseconds(400);
+
     private HostKeyDialog()
     {
         InitializeComponent();
@@ -29,6 +42,35 @@ public partial class HostKeyDialog : Window
                 DragMove();
             }
         };
+
+        Loaded += OnLoadedArmButtonsAfterGracePeriod;
+    }
+
+    /// <summary>
+    /// 宽限期结束后需要落焦点在「取消连接」上（高风险场景）——不能在按钮还被
+    /// 禁用时调用 <c>Focus()</c>（WPF 不允许禁用控件获得键盘焦点，会被静默忽略），
+    /// 所以焦点也要跟着挪到宽限期结束之后一起设置。
+    /// </summary>
+    private bool _focusRejectAfterGracePeriod;
+
+    private void OnLoadedArmButtonsAfterGracePeriod(object sender, RoutedEventArgs e)
+    {
+        AcceptButton.IsEnabled = false;
+        RejectButton.IsEnabled = false;
+
+        var timer = new DispatcherTimer(DispatcherPriority.Input) { Interval = InputGracePeriod };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            AcceptButton.IsEnabled = true;
+            RejectButton.IsEnabled = true;
+
+            if (_focusRejectAfterGracePeriod)
+            {
+                RejectButton.Focus();
+            }
+        };
+        timer.Start();
     }
 
     /// <summary>显示确认对话框，返回用户是否接受该主机密钥。</summary>
@@ -61,10 +103,10 @@ public partial class HostKeyDialog : Window
             dialog.AdviceText.Text =
                 "在通过其他可信渠道（如带外登录服务器执行 ssh-keygen -lf）核实新指纹之前，请不要继续连接。";
 
-            // 高风险场景：信任按钮改用警示色，默认动作是取消。
+            // 高风险场景：信任按钮改用警示色，宽限期结束后焦点落在「取消连接」。
             dialog.AcceptButton.Style = (Style)System.Windows.Application.Current.FindResource("Button.Danger");
             dialog.AcceptButton.Content = "仍然信任";
-            dialog.Loaded += (_, _) => dialog.RejectButton.Focus();
+            dialog._focusRejectAfterGracePeriod = true;
         }
         else
         {
