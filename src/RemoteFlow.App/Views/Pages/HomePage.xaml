@@ -74,11 +74,11 @@
                             <ColumnDefinition Width="28" />
                         </Grid.ColumnDefinitions>
 
-                        <Grid Grid.Column="0" Width="44" Height="44" VerticalAlignment="Top">
-                            <Border CornerRadius="11"
+                        <Grid Grid.Column="0" Width="38" Height="38" VerticalAlignment="Top">
+                            <Border CornerRadius="10"
                                     Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
                                     Opacity="0.16" />
-                            <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="20"
+                            <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="17"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                         </Grid>
@@ -128,10 +128,10 @@
                     <ColumnDefinition Width="26" />
                 </Grid.ColumnDefinitions>
 
-                <Grid Grid.Column="0" Width="34" Height="34" VerticalAlignment="Center">
-                    <Border CornerRadius="9"
+                <Grid Grid.Column="0" Width="32" Height="32" VerticalAlignment="Center">
+                    <Border CornerRadius="8"
                             Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.16" />
-                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                    <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="14"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                 </Grid>
@@ -172,9 +172,9 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <Grid Grid.Column="0" Width="34" Height="34" VerticalAlignment="Center">
-                    <Border CornerRadius="9" Background="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
-                    <TextBlock Text="{Binding ResultIcon}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                <Grid Grid.Column="0" Width="32" Height="32" VerticalAlignment="Center">
+                    <Border CornerRadius="8" Background="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
+                    <TextBlock Text="{Binding ResultIcon}" FontFamily="{StaticResource IconFont}" FontSize="14"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                Foreground="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" />
                 </Grid>
