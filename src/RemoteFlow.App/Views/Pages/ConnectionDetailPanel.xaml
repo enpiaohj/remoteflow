@@ -60,14 +60,14 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Width="32" Height="32" CornerRadius="7"
+                    <Border Grid.Column="0" Width="38" Height="38" CornerRadius="9"
                             Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
                             Opacity="0.16" />
                     <TextBlock Grid.Column="0"
                                Text="{Binding ProtocolIcon}"
                                FontFamily="{StaticResource IconFont}"
-                               FontSize="15"
-                               Width="32"
+                               FontSize="18"
+                               Width="38"
                                TextAlignment="Center"
                                VerticalAlignment="Center"
                                Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />

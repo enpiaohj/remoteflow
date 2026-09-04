@@ -90,8 +90,9 @@
     </UserControl.Resources>
 
     <!-- 内容封顶、居中：窗口放大时不被无限拉伸，字段与控件间距保持概念图比例。
-         「数据与备份」是双列，用满 1360；其余单列表单收窄到 1000 / 860。 -->
-    <Grid Margin="24,20,24,0" MaxWidth="1360">
+         概念图中卡片铺满内容区（标题靠左、控件靠右），封顶取一个较宽的值，
+         让最大化后设置区域仍随窗口拉宽，只是不至于宽到左右脱节。 -->
+    <Grid Margin="24,20,24,0" MaxWidth="1560">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -124,7 +125,7 @@
             <Grid>
 
                 <!-- ── 常规 ── -->
-                <StackPanel MaxWidth="1000"
+                <StackPanel
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=General}">
 
                     <!-- 外观与行为 -->
@@ -142,7 +143,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
-                                            MaxWidth="420" HorizontalAlignment="Left">
+                                            MaxWidth="560" HorizontalAlignment="Left">
                                     <TextBlock Text="主题" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="更改应用外观主题，当前主题将应用到所有页面。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
@@ -188,7 +189,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
-                                            MaxWidth="420" HorizontalAlignment="Left">
+                                            MaxWidth="560" HorizontalAlignment="Left">
                                     <TextBlock Text="开机时启动 RemoteFlow" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="登录 Windows 后自动运行。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
@@ -203,7 +204,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
-                                            MaxWidth="420" HorizontalAlignment="Left">
+                                            MaxWidth="560" HorizontalAlignment="Left">
                                     <TextBlock Text="关闭窗口时最小化到通知区域" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="关闭主窗口时，程序将最小化到系统托盘，方便快速访问。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
@@ -218,7 +219,7 @@
                                     <ColumnDefinition Width="220" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
-                                            MaxWidth="420" HorizontalAlignment="Left">
+                                            MaxWidth="560" HorizontalAlignment="Left">
                                     <TextBlock Text="默认进入页面" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="启动或新建连接后，默认打开的页面。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
@@ -240,7 +241,7 @@
                                     <ColumnDefinition Width="220" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
-                                            MaxWidth="420" HorizontalAlignment="Left">
+                                            MaxWidth="560" HorizontalAlignment="Left">
                                     <TextBlock Text="并发会话上限" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="达到上限后将拒绝新建会话，防止异常情况下重复创建连接。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
@@ -265,7 +266,7 @@
                                     <ColumnDefinition Width="220" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
-                                            MaxWidth="420" HorizontalAlignment="Left">
+                                            MaxWidth="560" HorizontalAlignment="Left">
                                     <TextBlock Text="界面语言" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="选择 RemoteFlow 的用户界面语言，重启后生效。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
@@ -301,7 +302,7 @@
                 </StackPanel>
 
                 <!-- ── RDP ── -->
-                <StackPanel MaxWidth="860"
+                <StackPanel MaxWidth="1120"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Rdp}">
                     <TextBlock Text="新建 RDP 连接时的默认值" Style="{StaticResource Text.BodySecondary}" Margin="0,0,0,12" />
                     <Border Style="{StaticResource Surface.Card}" Padding="20,16">
@@ -327,7 +328,7 @@
                 </StackPanel>
 
                 <!-- ── SSH ── -->
-                <StackPanel MaxWidth="860"
+                <StackPanel MaxWidth="1120"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Ssh}">
                     <Border Style="{StaticResource Surface.Card}" Padding="20,16">
                         <StackPanel>
@@ -365,7 +366,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="200" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" MaxWidth="420" HorizontalAlignment="Left">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" MaxWidth="560" HorizontalAlignment="Left">
                                     <TextBlock Text="KeepAlive 间隔（秒）" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="0 表示关闭。用于避免空闲会话被网络设备断开" Style="{StaticResource Text.Caption}"
                                                TextWrapping="Wrap" Margin="0,2,0,0" />
@@ -378,7 +379,7 @@
                 </StackPanel>
 
                 <!-- ── VNC ── -->
-                <StackPanel MaxWidth="860"
+                <StackPanel MaxWidth="1120"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Vnc}">
                     <TextBlock Text="新建 VNC 连接时的默认值" Style="{StaticResource Text.BodySecondary}" Margin="0,0,0,12" />
                     <Border Style="{StaticResource Surface.Card}" Padding="20,16">
@@ -406,7 +407,7 @@
                 </StackPanel>
 
                 <!-- ── 安全 ── -->
-                <StackPanel MaxWidth="860"
+                <StackPanel MaxWidth="1120"
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Security}">
                     <Border Style="{StaticResource Surface.Card}" Padding="20,16">
                         <StackPanel>
@@ -493,8 +494,8 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="9" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Download}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Download}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                    Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
@@ -515,8 +516,8 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="9" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Upload}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Upload}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                    Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
@@ -546,8 +547,8 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="9" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Download}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Download}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                    Foreground="{DynamicResource Status.Success}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
@@ -568,8 +569,8 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="9" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Upload}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Upload}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                    Foreground="{DynamicResource Status.Success}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
@@ -599,8 +600,8 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="9" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Folder}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Folder}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                    Foreground="{DynamicResource Text.Secondary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
@@ -622,8 +623,8 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="9" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.ImportExport}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.ImportExport}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                    Foreground="{DynamicResource Text.Secondary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
@@ -643,8 +644,8 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="9" Background="{DynamicResource Bg.Subtle}">
-                                    <TextBlock Text="{StaticResource Icon.Database}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                    <TextBlock Text="{StaticResource Icon.Database}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                Foreground="{DynamicResource Text.Secondary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
                                 <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
@@ -665,8 +666,8 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="9" Background="{DynamicResource Bg.Subtle}">
-                                    <TextBlock Text="{StaticResource Icon.Delete}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Bg.Subtle}">
+                                    <TextBlock Text="{StaticResource Icon.Delete}" FontFamily="{StaticResource IconFont}" FontSize="18"
                                                Foreground="{DynamicResource Status.Danger}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
                                 <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
