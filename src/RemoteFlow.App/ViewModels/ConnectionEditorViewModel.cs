@@ -206,6 +206,24 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
 
     [RelayCommand]
     private void ToggleAdvanced() => IsAdvancedExpanded = !IsAdvancedExpanded;
+
+    /// <summary>
+    /// 标签管理对话框关闭后调用，用最新的标签列表刷新 <see cref="AvailableTags"/>。
+    /// 已勾选的标签按 Id 保留选中状态；被删除的标签自然从列表消失（选中状态一并丢弃）。
+    /// </summary>
+    public void RefreshAvailableTags(IReadOnlyList<Tag> tags)
+    {
+        var selectedIds = AvailableTags.Where(t => t.IsSelected).Select(t => t.Id).ToHashSet();
+
+        AvailableTags.Clear();
+        foreach (var tag in tags)
+        {
+            AvailableTags.Add(new TagSelection(tag.Id, tag.Name, tag.Color)
+            {
+                IsSelected = selectedIds.Contains(tag.Id)
+            });
+        }
+    }
 }
 
 /// <summary>凭据下拉项。Id 为 null 表示「未指定」。</summary>

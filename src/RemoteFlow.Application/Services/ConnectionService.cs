@@ -78,6 +78,74 @@ public sealed class ConnectionService(
     public Task<int> CountConnectionsInGroupAsync(Guid groupId, CancellationToken ct = default)
         => connections.CountByGroupAsync(groupId, ct);
 
+    // ── 标签 CRUD ────────────────────────────────────────────────
+    // 标签模型本身早就支持任意名称/颜色，只是此前没有从 UI 接出创建/编辑入口，
+    // 用户看到的是「已有那几个标签、名称和颜色都是固定的」。这里补上服务层方法，
+    // 校验规则参照分组（GroupService）：名称去空白、不能为空、同名不允许重复。
+
+    public async Task<Tag> CreateTagAsync(string name, string color, string description, CancellationToken ct = default)
+    {
+        var trimmed = (name ?? string.Empty).Trim();
+        if (trimmed.Length == 0)
+        {
+            throw new ArgumentException("标签名称不能为空。", nameof(name));
+        }
+
+        var all = await tags.GetAllAsync(ct);
+        if (all.Any(t => string.Equals(t.Name, trimmed, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException($"已存在同名标签「{trimmed}」。");
+        }
+
+        var tag = new Tag
+        {
+            Name = trimmed,
+            Color = ValidateColor(color),
+            Description = (description ?? string.Empty).Trim(),
+        };
+
+        await tags.AddAsync(tag, ct);
+        return tag;
+    }
+
+    public async Task UpdateTagAsync(Guid id, string name, string color, string description, CancellationToken ct = default)
+    {
+        var trimmed = (name ?? string.Empty).Trim();
+        if (trimmed.Length == 0)
+        {
+            throw new ArgumentException("标签名称不能为空。", nameof(name));
+        }
+
+        var all = await tags.GetAllAsync(ct);
+        var tag = all.FirstOrDefault(t => t.Id == id)
+            ?? throw new InvalidOperationException("标签不存在。");
+
+        if (all.Any(t => t.Id != id && string.Equals(t.Name, trimmed, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException($"已存在同名标签「{trimmed}」。");
+        }
+
+        tag.Name = trimmed;
+        tag.Color = ValidateColor(color);
+        tag.Description = (description ?? string.Empty).Trim();
+        await tags.UpdateAsync(tag, ct);
+    }
+
+    /// <summary>删除标签：连接上的引用由外键 CASCADE 一并清理，连接本身不受影响。</summary>
+    public Task DeleteTagAsync(Guid id, CancellationToken ct = default)
+        => tags.DeleteAsync(id, ct);
+
+    private static string ValidateColor(string color)
+    {
+        var trimmed = (color ?? string.Empty).Trim();
+        if (!System.Text.RegularExpressions.Regex.IsMatch(trimmed, "^#[0-9A-Fa-f]{6}$"))
+        {
+            throw new ArgumentException("标签颜色必须是 #RRGGBB 格式。", nameof(color));
+        }
+
+        return trimmed;
+    }
+
     private static void Validate(ConnectionProfile profile)
     {
         if (string.IsNullOrWhiteSpace(profile.Name))

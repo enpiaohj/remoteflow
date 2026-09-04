@@ -194,47 +194,65 @@
                                       DisplayMemberPath="Name" />
                         </Grid>
 
-                        <Grid Style="{StaticResource FormRow}"
-                              Visibility="{Binding AvailableTags.Count, Converter={StaticResource CountToVisibility}}">
+                        <!-- 标签行始终显示（哪怕一个标签都还没有）——否则用户永远找不到
+                             新建标签的入口。右键任意标签芯片可编辑 / 删除；末尾的
+                             「+ 管理标签」始终存在，点开完整的标签管理对话框。 -->
+                        <Grid Style="{StaticResource FormRow}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="76" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="标签" Style="{StaticResource Text.FieldLabel}" VerticalAlignment="Top" Margin="0,6,12,0" />
-                            <ItemsControl Grid.Column="1" ItemsSource="{Binding AvailableTags}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type vm:TagSelection}">
-                                        <ToggleButton IsChecked="{Binding IsSelected}"
-                                                      Margin="0,0,6,6" Cursor="Hand">
-                                            <ToggleButton.Template>
-                                                <ControlTemplate TargetType="ToggleButton">
-                                                    <Border x:Name="Root" CornerRadius="4" Padding="9,4"
-                                                            Background="{DynamicResource Bg.Subtle}"
-                                                            BorderBrush="{DynamicResource Stroke.Default}"
-                                                            BorderThickness="1">
-                                                        <TextBlock x:Name="Label" Text="{Binding Name}" FontSize="12"
-                                                                   Foreground="{DynamicResource Text.Secondary}" />
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsChecked" Value="True">
-                                                            <Setter TargetName="Root" Property="Background"
-                                                                    Value="{Binding Color, Converter={StaticResource ColorToBrush}}" />
-                                                            <Setter TargetName="Root" Property="BorderBrush"
-                                                                    Value="{Binding Color, Converter={StaticResource ColorToBrush}}" />
-                                                            <Setter TargetName="Label" Property="Foreground" Value="White" />
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </ToggleButton.Template>
-                                        </ToggleButton>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <WrapPanel Grid.Column="1">
+                                <ItemsControl ItemsSource="{Binding AvailableTags}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:TagSelection}">
+                                            <ToggleButton IsChecked="{Binding IsSelected}"
+                                                          Margin="0,0,6,6" Cursor="Hand">
+                                                <ToggleButton.Template>
+                                                    <ControlTemplate TargetType="ToggleButton">
+                                                        <Border x:Name="Root" CornerRadius="4" Padding="9,4"
+                                                                Background="{DynamicResource Bg.Subtle}"
+                                                                BorderBrush="{DynamicResource Stroke.Default}"
+                                                                BorderThickness="1">
+                                                            <TextBlock x:Name="Label" Text="{Binding Name}" FontSize="12"
+                                                                       Foreground="{DynamicResource Text.Secondary}" />
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsChecked" Value="True">
+                                                                <Setter TargetName="Root" Property="Background"
+                                                                        Value="{Binding Color, Converter={StaticResource ColorToBrush}}" />
+                                                                <Setter TargetName="Root" Property="BorderBrush"
+                                                                        Value="{Binding Color, Converter={StaticResource ColorToBrush}}" />
+                                                                <Setter TargetName="Label" Property="Foreground" Value="White" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </ToggleButton.Template>
+                                            </ToggleButton>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <Button Content="+ 管理标签" Margin="0,0,6,6" Cursor="Hand"
+                                        Click="OnManageTagsClick">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border CornerRadius="4" Padding="9,4"
+                                                    BorderBrush="{DynamicResource Stroke.Default}"
+                                                    BorderThickness="1" Background="Transparent">
+                                                <TextBlock Text="{TemplateBinding Content}" FontSize="12"
+                                                           Foreground="{DynamicResource Text.Tertiary}" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </WrapPanel>
                         </Grid>
 
                         <Grid Style="{StaticResource FormRow}">

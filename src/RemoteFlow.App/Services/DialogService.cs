@@ -46,7 +46,7 @@ public sealed class DialogService(
         return await InvokeOnUiAsync<ConnectionEditorResult?>(() =>
         {
             var viewModel = new ConnectionEditorViewModel(existing, credentialList, groups, tags, settings, defaultGroupId);
-            var dialog = new ConnectionEditorDialog(viewModel) { Owner = Owner };
+            var dialog = new ConnectionEditorDialog(viewModel, ManageTagsAsync) { Owner = Owner };
 
             return dialog.ShowDialog() == true && dialog.Result is { } profile
                 ? new ConnectionEditorResult(profile, dialog.ConnectImmediately)
@@ -70,6 +70,26 @@ public sealed class DialogService(
 
     public Task<string?> EditGroupNameAsync(GroupNamePrompt prompt)
         => InvokeOnUiAsync(() => GroupNameDialog.Prompt(Owner, prompt));
+
+    public Task<TagEditorResult?> EditTagAsync(TagEditorPrompt prompt)
+        => InvokeOnUiAsync(() => TagEditorDialog.Prompt(Owner, prompt));
+
+    public async Task<IReadOnlyList<Tag>> ManageTagsAsync()
+    {
+        var initialTags = await connections.GetTagsAsync();
+        var viewModel = new TagManagerViewModel(connections, this, initialTags);
+
+        await InvokeOnUiAsync(() =>
+        {
+            var dialog = new TagManagerDialog(viewModel) { Owner = Owner };
+            dialog.ShowDialog();
+            return true;
+        });
+
+        // 对话框内部每次增删改都已经落库，这里重新拉一遍作为唯一真相返回给调用方，
+        // 不直接复用 viewModel.Tags——避免把展示层模型泄漏到调用方。
+        return await connections.GetTagsAsync();
+    }
 
     public Task<string?> PromptPasswordAsync(string title, string message, bool confirm)
         => InvokeOnUiAsync(() => PasswordPromptDialog.Prompt(Owner, title, message, confirm));

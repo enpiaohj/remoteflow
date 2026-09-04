@@ -11,12 +11,19 @@ namespace RemoteFlow.App.Views.Dialogs;
 public partial class ConnectionEditorDialog : Window
 {
     private readonly ConnectionEditorViewModel _viewModel;
+    private readonly Func<Task<IReadOnlyList<Tag>>> _manageTags;
 
-    public ConnectionEditorDialog(ConnectionEditorViewModel viewModel)
+    /// <param name="manageTags">
+    /// 弹出标签管理对话框、返回最新标签列表——由 <c>DialogService</c> 注入，
+    /// 这样 <see cref="ConnectionEditorViewModel"/> 本身不需要持有任何服务引用，
+    /// 保持它一贯的「纯数据」构造方式（数据由 DialogService 预先取好传入）。
+    /// </param>
+    public ConnectionEditorDialog(ConnectionEditorViewModel viewModel, Func<Task<IReadOnlyList<Tag>>> manageTags)
     {
         InitializeComponent();
 
         _viewModel = viewModel;
+        _manageTags = manageTags;
         DataContext = viewModel;
 
         // 无系统标题栏，允许拖拽标题区移动窗口。
@@ -63,5 +70,11 @@ public partial class ConnectionEditorDialog : Window
     {
         DialogResult = false;
         Close();
+    }
+
+    private async void OnManageTagsClick(object sender, RoutedEventArgs e)
+    {
+        var latestTags = await _manageTags();
+        _viewModel.RefreshAvailableTags(latestTags);
     }
 }

@@ -37,6 +37,15 @@ public interface IDialogService
     /// </summary>
     Task<string?> EditGroupNameAsync(GroupNamePrompt prompt);
 
+    /// <summary>新建 / 编辑单个标签（名称 / 颜色 / 描述）的小对话框。返回 null 表示取消。</summary>
+    Task<TagEditorResult?> EditTagAsync(TagEditorPrompt prompt);
+
+    /// <summary>
+    /// 标签管理：列表形式新建 / 编辑 / 删除标签。对话框关闭后返回数据库里最新的标签列表，
+    /// 供调用方刷新自己持有的标签选择状态。
+    /// </summary>
+    Task<IReadOnlyList<Tag>> ManageTagsAsync();
+
     /// <summary>
     /// SSH 主机密钥确认。首次连接询问是否信任；指纹变化时必须以强警告呈现。
     /// </summary>
@@ -68,6 +77,17 @@ public sealed record ConnectionEditorResult(ConnectionProfile Profile, bool Conn
 /// <param name="InitialName">重命名时的原名；新建时为空。</param>
 /// <param name="ParentName">上级分组名，用于副标题提示；根级时为 null。</param>
 public sealed record GroupNamePrompt(string Title, string InitialName = "", string? ParentName = null);
+
+/// <summary>标签编辑对话框的上下文。</summary>
+/// <param name="Title">对话框标题，如「新建标签」/「编辑标签」。</param>
+/// <param name="InitialName">编辑时的原名称；新建时为空。</param>
+/// <param name="InitialColor">初始颜色（#RRGGBB）；新建时给一个默认色。</param>
+/// <param name="InitialDescription">初始描述；新建时为空。</param>
+public sealed record TagEditorPrompt(
+    string Title, string InitialName = "", string InitialColor = "#0F6CBD", string InitialDescription = "");
+
+/// <summary>标签编辑结果，均已 Trim。</summary>
+public sealed record TagEditorResult(string Name, string Color, string Description);
 
 /// <summary>
 /// 凭据编辑结果。
