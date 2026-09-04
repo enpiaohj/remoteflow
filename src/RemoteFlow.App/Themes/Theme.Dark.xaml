@@ -15,8 +15,8 @@
     <SolidColorBrush x:Key="Bg.Subtle" Color="#23272F" />
     <SolidColorBrush x:Key="Bg.Hover" Color="#2A2F38" />
     <SolidColorBrush x:Key="Bg.Pressed" Color="#333944" />
-    <SolidColorBrush x:Key="Bg.Selected" Color="#1B2C50" />
-    <SolidColorBrush x:Key="Bg.SelectedHover" Color="#243863" />
+    <SolidColorBrush x:Key="Bg.Selected" Color="#232A46" />
+    <SolidColorBrush x:Key="Bg.SelectedHover" Color="#2E3758" />
     <SolidColorBrush x:Key="Bg.Session" Color="#0E1013" />
 
     <SolidColorBrush x:Key="Text.Primary" Color="#F2F4F8" />
@@ -28,25 +28,26 @@
     <SolidColorBrush x:Key="Stroke.Subtle" Color="#282D36" />
     <SolidColorBrush x:Key="Stroke.Default" Color="#333944" />
     <SolidColorBrush x:Key="Stroke.Strong" Color="#4A5261" />
-    <SolidColorBrush x:Key="Stroke.Focus" Color="#5B8DEF" />
+    <SolidColorBrush x:Key="Stroke.Focus" Color="#8098F5" />
 
-    <Color x:Key="Brand.Color">#5B8DEF</Color>
-    <SolidColorBrush x:Key="Brand.Default" Color="#5B8DEF" />
-    <SolidColorBrush x:Key="Brand.Hover" Color="#7BA4F3" />
-    <SolidColorBrush x:Key="Brand.Pressed" Color="#4477DB" />
-    <SolidColorBrush x:Key="Brand.Subtle" Color="#1B2C50" />
+    <Color x:Key="Brand.Color">#8098F5</Color>
+    <SolidColorBrush x:Key="Brand.Default" Color="#8098F5" />
+    <SolidColorBrush x:Key="Brand.Hover" Color="#9AACF7" />
+    <SolidColorBrush x:Key="Brand.Pressed" Color="#6A83E8" />
+    <SolidColorBrush x:Key="Brand.Subtle" Color="#232A46" />
 
     <SolidColorBrush x:Key="Status.Success" Color="#3FBF7F" />
     <SolidColorBrush x:Key="Status.Warning" Color="#E0A030" />
     <SolidColorBrush x:Key="Status.Danger" Color="#F2726A" />
     <SolidColorBrush x:Key="Status.DangerHover" Color="#F58F88" />
-    <SolidColorBrush x:Key="Status.Info" Color="#5B8DEF" />
+    <SolidColorBrush x:Key="Status.Info" Color="#8098F5" />
     <SolidColorBrush x:Key="Status.Idle" Color="#78818F" />
 
-    <SolidColorBrush x:Key="Protocol.Rdp" Color="#5B8DEF" />
+    <SolidColorBrush x:Key="Protocol.Rdp" Color="#8098F5" />
     <SolidColorBrush x:Key="Protocol.Ssh" Color="#35BE8C" />
     <SolidColorBrush x:Key="Protocol.Vnc" Color="#A98BEA" />
 
+    <Color x:Key="Shadow.Cast">#000000</Color>
     <SolidColorBrush x:Key="Shadow.Color" Color="#40000000" />
 
 </ResourceDictionary>

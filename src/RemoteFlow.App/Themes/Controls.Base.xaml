@@ -563,12 +563,22 @@
 
     <!-- ── 卡片 / 分隔 ────────────────────────────────────────── -->
 
+    <!-- 卡片：白纸 + 细描边 + 一层很淡的投影。投影让卡片真正「浮」在机身之上，
+         是廉价感与成熟感之间最直接的一档差别。
+         注意：Surface.Card 只用在页面内容与会话中断提示卡上，不包裹 RDP ActiveX 宿主，
+         因此这里用 Effect 不影响 airspace。 -->
     <Style x:Key="Surface.Card" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Bg.Layer}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Stroke.Subtle}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="{StaticResource Radius.Large}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="{DynamicResource Shadow.Cast}"
+                                  BlurRadius="20" ShadowDepth="3" Direction="270" Opacity="0.10" />
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style x:Key="Surface.Divider" TargetType="Border">
