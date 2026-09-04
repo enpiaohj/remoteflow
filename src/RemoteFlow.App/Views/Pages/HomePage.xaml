@@ -145,13 +145,17 @@
                     <ColumnDefinition Width="26" />
                 </Grid.ColumnDefinitions>
 
-                <!-- A+ 方案：密集行不再有色块容器，裸字形 + 旁边的低饱和度徽章
-                     共同传达身份，颜色只是扫视辅助 -->
-                <TextBlock Grid.Column="0" Style="{StaticResource Icon.ProtocolGlyph}"
-                           Text="{Binding ProtocolIcon}"
-                           Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                <!-- 图标块显示协议（与收藏 / 连接列表同一套语言） -->
+                <Grid Grid.Column="0" VerticalAlignment="Center">
+                    <Border Style="{StaticResource IconTile.Background}"
+                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                            Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                    <TextBlock Style="{StaticResource IconTile.Glyph}"
+                               Text="{Binding ProtocolIcon}"
+                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                </Grid>
 
-                <StackPanel Grid.Column="1" Margin="6,0,0,0" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding HostDisplay}" Style="{StaticResource Text.Caption}"
                                FontFamily="{StaticResource MonoFont}" Margin="0,1,0,0" />
@@ -187,10 +191,13 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- A+ 方案：裸字形显示协议，不再有色块容器；
+                <!-- 图标块显示协议（与收藏 / 连接列表同一套语言）；
                      只有失败或取消才在右下角打一个状态点，成功是常态不必强调。 -->
-                <Grid Grid.Column="0" Width="28" Height="28" VerticalAlignment="Center">
-                    <TextBlock Style="{StaticResource Icon.ProtocolGlyph}" Width="28"
+                <Grid Grid.Column="0" VerticalAlignment="Center">
+                    <Border Style="{StaticResource IconTile.Background}"
+                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                            Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                    <TextBlock Style="{StaticResource IconTile.Glyph}"
                                Text="{Binding ProtocolIcon}"
                                Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                     <Border Width="13" Height="13" CornerRadius="7"
@@ -204,7 +211,7 @@
                     </Border>
                 </Grid>
 
-                <StackPanel Grid.Column="1" Margin="6,0,0,0" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding ActivityText}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding HostProtocolLine}" Style="{StaticResource Text.Caption}" Margin="0,1,0,0" />
                 </StackPanel>

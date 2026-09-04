@@ -92,11 +92,16 @@
                 </Button>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <!-- RemoteFlow A+：密集列表用无容器协议 Glyph，不再套彩色背景块 -->
-                    <TextBlock Style="{StaticResource Icon.ProtocolGlyph}"
-                               Text="{Binding ProtocolIcon}"
-                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
-                    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" Margin="6,0,8,0"
+                    <!-- 图标系统标准尺寸（44），与首页收藏 / 最近活动行同一套规格 -->
+                    <Grid>
+                        <Border Style="{StaticResource IconTile.Background}"
+                                Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                        <TextBlock Style="{StaticResource IconTile.Glyph}"
+                                   Text="{Binding ProtocolIcon}"
+                                   Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    </Grid>
+                    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" Margin="14,0,8,0"
                                MaxWidth="360" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 

@@ -74,24 +74,6 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
-    <!-- 「RemoteFlow A+」方案：密集连接列表（我的连接 / 收藏 / 最近连接 /
-         凭据 / 详情面板）不再用 IconTile.Background 那样的色块容器——协议
-         色块在长列表里连续出现会显得吵。这里图标是**裸字形**，直接落在行
-         背景上，靠字形本身的颜色做「快速扫视」辅助；真正可靠的身份标识
-         是旁边保留的低饱和度 RDP/SSH/VNC 文字徽章，颜色从来不是唯一识别
-         手段。首页「最近连接」大卡片是唯一仍保留极淡色块背景的例外
-         （见 IconTile.Background 用法），因为那里是稀疏的强调入口，不是
-         密集列表。
-         Width 固定为 IconTile.Size，保证跟有容器场景对齐同一条列基线，
-         图标本身居中显示在这个隐形槽位里，不撑满它。 -->
-    <Style x:Key="Icon.ProtocolGlyph" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
-        <Setter Property="FontSize" Value="21" />
-        <Setter Property="Width" Value="28" />
-        <Setter Property="TextAlignment" Value="Center" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-    </Style>
-
     <!-- ── 排版 ───────────────────────────────────────────────── -->
 
     <Style x:Key="Text.PageTitle" TargetType="TextBlock">
