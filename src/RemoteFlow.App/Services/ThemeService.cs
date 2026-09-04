@@ -70,24 +70,59 @@ public sealed class ThemeService
 
     /// <summary>
     /// 开始监听系统主题变化。仅在用户选择「跟随系统」时才实际重新应用。
+    /// <para>
+    /// Windows 切换浅色 / 深色时，<see cref="SystemEvents.UserPreferenceChanged"/> 的
+    /// <c>Category</c> 在不同版本上并不一致（General / VisualStyle / Color 都出现过），
+    /// 所以这几类都要响应；<see cref="Apply"/> 自身带幂等判断，多触发几次无副作用。
+    /// </para>
     /// </summary>
     public void StartListeningToSystemTheme()
     {
         SystemEvents.UserPreferenceChanged += (_, e) =>
         {
-            if (e.Category != UserPreferenceCategory.General || _current != AppTheme.System)
+            if (_current != AppTheme.System)
+            {
+                return;
+            }
+
+            if (e.Category is not (UserPreferenceCategory.General
+                or UserPreferenceCategory.VisualStyle
+                or UserPreferenceCategory.Color))
             {
                 return;
             }
 
             // 系统主题变化通知来自非 UI 线程，切回 UI 线程再操作资源字典。
-            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => Apply(AppTheme.System));
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(ReapplySystemTheme);
         };
+
+        // 应用重新获得焦点时补一次同步，兜住系统事件在后台期间丢失的情况。
+        if (System.Windows.Application.Current is { } app)
+        {
+            app.Activated += (_, _) => ReapplySystemTheme();
+        }
+    }
+
+    /// <summary>
+    /// 主窗口重新获得焦点时补一次同步：极少数情况下系统在应用最小化 / 后台期间
+    /// 切换了主题，而对应的系统事件没有送达。开销只是一次注册表读取。
+    /// </summary>
+    public void ReapplySystemTheme()
+    {
+        if (_current == AppTheme.System)
+        {
+            Apply(AppTheme.System);
+        }
     }
 
     /// <summary>
     /// 读取系统的「应用模式」设置。
-    /// 注册表值 AppsUseLightTheme：1 = 浅色，0 = 深色。读取失败时按浅色处理。
+    /// <para>
+    /// 注册表 <c>HKCU\...\Themes\Personalize\AppsUseLightTheme</c>：1 = 浅色，0 = 深色。
+    /// 该值可能以 <c>Int32</c> 或 <c>Int64</c> 返回（不同 Windows 版本 / 写入方式），
+    /// 都要能识别；键缺失时退回系统级 <c>SystemUsesLightTheme</c>；
+    /// 全部无法判定时按<b>浅色</b>处理（宁可跟错也不要突然全黑）。
+    /// </para>
     /// </summary>
     private static bool IsSystemUsingDarkTheme()
     {
@@ -96,11 +131,37 @@ public sealed class ThemeService
             using var key = Registry.CurrentUser.OpenSubKey(
                 @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
 
-            return key?.GetValue("AppsUseLightTheme") is int value && value == 0;
+            if (key is null)
+            {
+                return false;
+            }
+
+            if (TryReadFlag(key, "AppsUseLightTheme", out var appsUseLight))
+            {
+                return appsUseLight == 0;
+            }
+
+            if (TryReadFlag(key, "SystemUsesLightTheme", out var systemUsesLight))
+            {
+                return systemUsesLight == 0;
+            }
+
+            return false;
         }
         catch
         {
             return false;
         }
+    }
+
+    private static bool TryReadFlag(RegistryKey key, string name, out long value)
+    {
+        value = key.GetValue(name) switch
+        {
+            int i => i,
+            long l => l,
+            _ => -1
+        };
+        return value >= 0;
     }
 }

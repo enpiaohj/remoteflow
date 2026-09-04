@@ -37,7 +37,7 @@
 
         <!-- 最近连接：大号快捷卡片 -->
         <DataTemplate x:Key="RecentCard" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Grid Width="330" Margin="0,0,14,14">
+            <Grid Margin="0,0,14,0">
                 <Button Cursor="Hand" HorizontalContentAlignment="Stretch"
                         Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                         CommandParameter="{Binding}">
@@ -225,8 +225,9 @@
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <!-- 内容封顶 1440、居中：放大窗口时卡片不会被拉成空荡长条 -->
-        <Grid Margin="24,22,24,24" MaxWidth="1520">
+        <!-- 内容随窗口拉宽：最近连接卡片 3 等分铺满，收藏 / 活动两列各占一半。
+             1760 封顶只是防止在超宽屏上行内文字离得太散。 -->
+        <Grid Margin="24,22,24,24" MaxWidth="1760">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -266,10 +267,12 @@
                     <Button Content="查看全部" Style="{StaticResource Home.LinkButton}"
                             HorizontalAlignment="Right" Command="{Binding ViewAllRecentCommand}" />
                 </Grid>
-                <ItemsControl ItemsSource="{Binding RecentItems}" ItemTemplate="{StaticResource RecentCard}">
+                <!-- 负右边距抵消最后一张卡片的 gutter，使卡片右缘与下方两列对齐 -->
+                <ItemsControl ItemsSource="{Binding RecentItems}" ItemTemplate="{StaticResource RecentCard}"
+                              Margin="0,0,-14,0">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <WrapPanel />
+                            <UniformGrid Rows="1" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>
