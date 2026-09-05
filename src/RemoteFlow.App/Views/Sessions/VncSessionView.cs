@@ -173,8 +173,25 @@ public sealed class VncSessionView : ContentControl, IDisposable
         _image.PreviewKeyUp += OnPreviewKeyUp;
         _image.TextInput += OnTextInput;
 
-        _image.MouseDown += (_, _) => _image.Focus();
+        // 点击画面时把键盘焦点切到画面本身，保证后续按键能送到远端。
+        // 具名 handler：Dispose 时才能退订，匿名 lambda 无法解挂会在视图释放后仍持有 _image 引用。
+        _image.MouseDown += OnImageMouseDownFocus;
     }
+
+    /// <summary>退订全部输入事件。与 <see cref="HookInput"/> 一一对应，幂等可重复调用。</summary>
+    private void UnhookInput()
+    {
+        _image.MouseMove -= OnMouseMove;
+        _image.MouseDown -= OnMouseDown;
+        _image.MouseDown -= OnImageMouseDownFocus;
+        _image.MouseUp -= OnMouseUp;
+        _image.MouseWheel -= OnMouseWheel;
+        _image.PreviewKeyDown -= OnPreviewKeyDown;
+        _image.PreviewKeyUp -= OnPreviewKeyUp;
+        _image.TextInput -= OnTextInput;
+    }
+
+    private void OnImageMouseDownFocus(object? sender, MouseButtonEventArgs e) => _image.Focus();
 
     /// <summary>
     /// 把控件坐标换算为远端桌面像素坐标。
@@ -360,6 +377,9 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         _disposed = true;
 
+        // 先退订输入事件：视图释放后 _image 不再被输入事件链持有，鼠标/键盘回调不会发给已关闭会话。
+        UnhookInput();
+
         if (_renderingHooked)
         {
             CompositionTarget.Rendering -= OnRendering;
@@ -372,6 +392,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
         _session.RenderTarget.FramebufferSizeChanged -= OnFramebufferSizeChanged;
         _viewModel.ActionRequested -= OnActionRequested;
 
+        // 断开 WriteableBitmap 引用：即使控件仍在可视树中也不再取帧。
         _image.Source = null;
         _bitmap = null;
     }

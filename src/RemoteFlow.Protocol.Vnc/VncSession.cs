@@ -35,6 +35,15 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
 
     private volatile bool _disposed;
 
+    /// <summary>
+    /// 会话级取消源：关闭（Disconnect / Dispose / 远端关闭释放）时取消，
+    /// 使在途 <see cref="ConnectAsync"/> 能立刻中断握手 / 建流，而不是干等协议库超时。
+    /// </summary>
+    private readonly CancellationTokenSource _lifecycleCts = new();
+
+    /// <summary>会话已进入收尾（Disconnect / Dispose / 远端关闭释放）。置位后不再允许新连接 / 回填复活。</summary>
+    private volatile bool _closing;
+
     public VncSession(SessionRequest request, ILoggerFactory loggerFactory)
     {
         _request = request;
@@ -67,7 +76,12 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        if (State is ConnectionState.Connecting or ConnectionState.Connected)
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(VncSession));
+        }
+
+        if (_closing || State is ConnectionState.Connecting or ConnectionState.Connected)
         {
             return;
         }
@@ -101,7 +115,30 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
                 MaxReconnectAttempts = 0
             };
 
-            _connection = await client.ConnectAsync(parameters, cancellationToken);
+            // 会话级取消：调用方 token 与会话关闭流程（Disconnect / Dispose / 远端关）任一取消，
+            // 都会打断本次连接。连接中关闭会话因此能立刻中断，而不是干等库自身超时。
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _lifecycleCts.Token);
+
+            var connection = await client.ConnectAsync(parameters, linkedCts.Token);
+
+            // 连接在关闭 / 释放流程启动后才返回：禁止把迟到连接回填给已释放 / 已 closing 的会话，
+            // 否则会让已 Disconnected / 已释放的会话复活。这里立即释放迟到连接。
+            if (_disposed || _closing)
+            {
+                try
+                {
+                    connection.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "VNC 会话 {SessionId} 释放迟到连接时出现异常", SessionId);
+                }
+
+                return;
+            }
+
+            _connection = connection;
             _connection.PropertyChanged += OnConnectionPropertyChanged;
 
             SetState(ConnectionState.Connected);
@@ -113,10 +150,22 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
         }
         catch (OperationCanceledException)
         {
+            // 取消若来自关闭流程（Disconnect / Dispose / 远端关），会话已在收尾，不再标 Failed。
+            if (_disposed || _closing)
+            {
+                return;
+            }
+
             Fail(ConnectionErrorCode.Cancelled, null);
         }
         catch (Exception ex)
         {
+            // 关闭流程已在收尾时，交由 Disconnect / Dispose 统一收敛，不把已断开的会话标成 Failed。
+            if (_disposed || _closing)
+            {
+                return;
+            }
+
             Fail(MapError(ex), ex);
         }
         finally
@@ -128,20 +177,12 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
 
     public async Task DisconnectAsync()
     {
-        var connection = _connection;
-        if (connection is not null)
-        {
-            connection.PropertyChanged -= OnConnectionPropertyChanged;
+        // 先标记收尾并取消会话级 CTS：在途 ConnectAsync 会立刻中断，而不是继续握手 / 建流。
+        _closing = true;
+        CancelLifecycle();
 
-            try
-            {
-                await connection.CloseAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "VNC 会话 {SessionId} 关闭连接时出现异常", SessionId);
-            }
-        }
+        // 幂等空安全：连接已 null / 已在释放中时 ReleaseConnectionAsync 直接返回。
+        await ReleaseConnectionAsync();
 
         if (State is not (ConnectionState.Failed or ConnectionState.Disconnected))
         {
@@ -158,16 +199,105 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
 
         _disposed = true;
 
+        // 先走同一套幂等断开：标记收尾 → 取消会话 CTS → 释放连接 → 置 Disconnected。
         await DisconnectAsync();
-
-        _connection?.Dispose();
-        _connection = null;
 
         RenderTarget.Dispose();
 
         _credential?.Dispose();
         _credential = null;
         _password = null;
+
+        try
+        {
+            _lifecycleCts.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+            // CTS 已释放属预期，忽略。
+        }
+    }
+
+    // ── 生命周期 helpers ──────────────────────────────────────────
+
+    /// <summary>取消会话级 CTS。幂等；CTS 已被释放时静默忽略。</summary>
+    private void CancelLifecycle()
+    {
+        try
+        {
+            _lifecycleCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // CTS 已释放属预期，忽略。
+        }
+    }
+
+    /// <summary>
+    /// 幂等释放当前连接：摘除字段引用 → 退订状态事件 → 优雅关闭（已 Closed 则跳过）→ Dispose。
+    /// 连接已 null 时直接返回。Disconnect / Dispose / 远端关闭多路收敛共用此方法。
+    /// </summary>
+    private async Task ReleaseConnectionAsync()
+    {
+        var connection = _connection;
+        if (connection is null)
+        {
+            return;
+        }
+
+        // 先摘除字段并退订：并发再次进入时读到 null，不会再对同一连接重复关闭 / 重复释放。
+        _connection = null;
+        connection.PropertyChanged -= OnConnectionPropertyChanged;
+
+        await CloseAndDisposeConnectionAsync(connection);
+    }
+
+    /// <summary>
+    /// 库状态已终（Closed / Interrupted / ReconnectFailed）时立即释放连接，不再残留到关 Tab。
+    /// <para>
+    /// 由库的 PropertyChanged 回调触发。库在关闭 / 重连收尾路径持有内部信号量，若在本回调里
+    /// 同步调用 CloseAsync / Dispose 会与库自身收尾互相等待（自锁 / 死锁）；因此这里只同步摘除
+    /// 引用并退订，把真正的 Close / Dispose 放到后台异步执行。
+    /// </para>
+    /// </summary>
+    private void ReleaseConnectionOnRemoteClose(RfbConnection connection)
+    {
+        if (ReferenceEquals(_connection, connection))
+        {
+            _connection = null;
+        }
+
+        connection.PropertyChanged -= OnConnectionPropertyChanged;
+
+        // 库可能在持有内部信号量的线程上触发本回调（例如重连放弃路径在持锁时置 Closed），
+        // 若在这里同步执行 Close/Dispose 会与库自身收尾互相等待（自锁）。放到线程池异步执行。
+        _ = Task.Run(() => CloseAndDisposeConnectionAsync(connection));
+    }
+
+    /// <summary>关闭并释放单个连接。任何异常只记录，不向调用方传播（供后台 fire-and-forget 调用）。</summary>
+    private async Task CloseAndDisposeConnectionAsync(RfbConnection connection)
+    {
+        try
+        {
+            // 已 Closed 的连接无需再走 CloseAsync（会重复收尾）；直接 Dispose 即可。
+            if (connection.ConnectionState != VncConnectionState.Closed)
+            {
+                await connection.CloseAsync().ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "VNC 会话 {SessionId} 关闭连接时出现异常", SessionId);
+        }
+
+        try
+        {
+            connection.Dispose();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "VNC 会话 {SessionId} 释放连接时出现异常", SessionId);
+        }
     }
 
     // ── 输入转发 ──────────────────────────────────────────────────
@@ -276,28 +406,39 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
 
     private void OnConnectionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(RfbConnection.ConnectionState) || _connection is null)
+        if (e.PropertyName != nameof(RfbConnection.ConnectionState))
         {
             return;
         }
 
-        switch (_connection.ConnectionState)
+        var connection = _connection;
+        if (connection is null)
+        {
+            return;
+        }
+
+        // 会话已释放 / 已不在连接态（已断开、失败或正在收尾）时，库后续状态漂移不再处理：
+        // 状态推进与释放统一由 Disconnect / Dispose 收敛，避免把已结束的会话再标记成断开 / 失败。
+        if (_disposed || State != ConnectionState.Connected)
+        {
+            return;
+        }
+
+        switch (connection.ConnectionState)
         {
             case VncConnectionState.Closed:
-                if (State == ConnectionState.Connected)
-                {
-                    _logger.LogInformation("VNC 会话 {SessionId} 已被远端关闭", SessionId);
-                    SetState(ConnectionState.Disconnected);
-                }
+                _logger.LogInformation("VNC 会话 {SessionId} 已被远端关闭", SessionId);
+                _closing = true;
+                SetState(ConnectionState.Disconnected);
+                ReleaseConnectionOnRemoteClose(connection);
                 break;
 
             case VncConnectionState.Interrupted:
             case VncConnectionState.ReconnectFailed:
-                if (State == ConnectionState.Connected)
-                {
-                    ErrorMessage = ConnectionException.Describe(ConnectionErrorCode.RemoteClosed);
-                    Fail(ConnectionErrorCode.RemoteClosed, _connection.InterruptionCause);
-                }
+                ErrorMessage = ConnectionException.Describe(ConnectionErrorCode.RemoteClosed);
+                _closing = true;
+                Fail(ConnectionErrorCode.RemoteClosed, connection.InterruptionCause);
+                ReleaseConnectionOnRemoteClose(connection);
                 break;
         }
     }
