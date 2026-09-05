@@ -161,16 +161,16 @@
                 </Grid>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <!-- 图标系统标准尺寸（44），与首页收藏 / 最近活动行同一套规格 -->
-                    <Grid>
-                        <Border Style="{StaticResource IconTile.Background}"
-                                Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
-                                Opacity="{StaticResource IconTile.ColorBgOpacity}" />
-                        <TextBlock Style="{StaticResource IconTile.Glyph}"
-                                   Text="{Binding ProtocolIcon}"
-                                   Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
-                    </Grid>
-                    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" Margin="14,0,8,0"
+                    <!-- A+：高密度列表只留裸协议 Glyph，不带淡色方块底；
+                         首页 RecentCard 等大卡片继续用带背景的 IconTile -->
+                    <TextBlock Text="{Binding ProtocolIcon}"
+                               FontFamily="{StaticResource IconFont}"
+                               FontSize="18"
+                               Width="32"
+                               TextAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" Margin="10,0,8,0"
                                MaxWidth="360" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
@@ -614,7 +614,7 @@
                       Click="OnSelectAllHeaderClick"
                       Visibility="{Binding IsMultiSelect, Converter={StaticResource BoolToVisibility}}" />
 
-            <TextBlock Grid.Column="1" Text="名称" Style="{StaticResource Text.Label}" Margin="42,0,0,0" />
+            <TextBlock Grid.Column="1" Text="名称" Style="{StaticResource Text.Label}" Margin="44,0,0,0" />
             <TextBlock Grid.Column="2" Text="IP / 主机" Style="{StaticResource Text.Label}" Margin="16,0,0,0" />
             <TextBlock Grid.Column="3" Text="协议" Style="{StaticResource Text.Label}" Margin="16,0,0,0" />
             <TextBlock Grid.Column="4" Text="标签" Style="{StaticResource Text.Label}" Margin="16,0,0,0" />
