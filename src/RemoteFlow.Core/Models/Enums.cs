@@ -32,8 +32,13 @@ public enum CredentialType
 }
 
 /// <summary>
-/// 会话连接状态。状态机顺序：Idle → Connecting → Connected → Disconnecting → Disconnected。
-/// 任意阶段失败进入 Failed。
+/// 会话连接状态。
+/// <para>
+/// 正常推进：Idle → Connecting → Connected（连接成功后自动重连期间进入 Reconnecting）
+/// → Disconnecting → Disconnected → Closed（终态）。任意连接阶段失败进入 Failed，
+/// 失败后经统一关闭模板收敛到 Disconnected / Closed。
+/// </para>
+/// <para>会话为单次使用：已 Disconnected / Closed 后不允许再回到 Connected（重连 = 建新会话）。</para>
 /// </summary>
 public enum ConnectionState
 {
@@ -42,7 +47,13 @@ public enum ConnectionState
     Connected = 2,
     Disconnecting = 3,
     Disconnected = 4,
-    Failed = 5
+    Failed = 5,
+
+    /// <summary>自动重连中（如 RDP 库断线重连）。可回到 Connected，也可被用户中断进入关闭流程。</summary>
+    Reconnecting = 6,
+
+    /// <summary>会话已终结（终态，不再变化）。供 SessionManager 从活动集合移除后标记，UI 据此删除 Tab。</summary>
+    Closed = 7
 }
 
 /// <summary>连接历史的最终结果。</summary>
