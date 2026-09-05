@@ -176,6 +176,12 @@
                                Foreground="{DynamicResource Text.Primary}"
                                VerticalAlignment="Center"
                                Margin="10,0,0,0" />
+                    <TextBlock Text="{Binding AppVersion}"
+                               Style="{StaticResource Text.Caption}"
+                               Foreground="{DynamicResource Text.Tertiary}"
+                               VerticalAlignment="Center"
+                               Margin="8,0,0,0"
+                               ToolTip="点侧栏「帮助与关于」查看更多" />
                 </StackPanel>
 
                 <!-- 全局搜索：标题栏两个高频动作之一 -->
@@ -604,10 +610,8 @@
                         <TextBlock Text="{Binding SessionStatusText}" Style="{StaticResource Text.Caption}" Margin="8,0,0,0" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding AppVersion}" Style="{StaticResource Text.Caption}"
-                                   ToolTip="点侧栏「帮助与关于」查看更多" />
                         <TextBlock Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}" FontSize="11"
-                                   Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                                   Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
                         <TextBlock Text="本地优先 · 凭据由 Windows DPAPI 保护"
                                    Style="{StaticResource Text.Caption}" Margin="7,0,0,0" />
                     </StackPanel>
