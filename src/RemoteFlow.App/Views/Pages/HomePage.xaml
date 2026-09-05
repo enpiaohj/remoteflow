@@ -138,6 +138,12 @@
         <!-- 收藏 / 最近活动 卡片里的一行 -->
         <DataTemplate x:Key="FavoriteRow" DataType="{x:Type vm:ConnectionItemViewModel}">
             <Grid Height="60">
+                <Grid.InputBindings>
+                    <!-- 收藏行双击 = 连接（与「我的连接」列表同一约定），单击不连以免误触 -->
+                    <MouseBinding MouseAction="LeftDoubleClick"
+                                  Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  CommandParameter="{Binding}" />
+                </Grid.InputBindings>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
