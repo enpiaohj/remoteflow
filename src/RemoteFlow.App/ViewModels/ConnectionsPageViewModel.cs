@@ -312,6 +312,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// <summary>请求打开一个连接（双击 / Enter / 右键连接）。由 MainViewModel 统一开会话。</summary>
     public event EventHandler<ConnectionProfile>? OpenConnectionRequested;
 
+    /// <summary>请求主窗口切换一级页面（详情「查看全部历史」等）。</summary>
+    public event EventHandler<NavigationPage>? NavigationRequested;
+
     [ObservableProperty]
     private ConnectionItemViewModel? _selectedItem;
 
@@ -879,6 +882,10 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         OpenConnectionRequested?.Invoke(this, item.Profile);
         return Task.CompletedTask;
     }
+
+    /// <summary>详情「查看全部历史」：跳到「最近连接」活动页。复用既有页面，不新增导航入口。</summary>
+    [RelayCommand]
+    private void ViewAllHistory() => NavigationRequested?.Invoke(this, NavigationPage.Recent);
 
     [RelayCommand]
     private async Task CreateAsync()
