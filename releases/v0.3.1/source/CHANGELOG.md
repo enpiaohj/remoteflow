@@ -7,15 +7,6 @@
 
 ---
 
-## [0.3.1] — 2026-09-05
-
-### 修复
-- SSH 主机密钥信任弹窗仍会被残留鼠标输入瞬间关闭——无边框窗口的拖动处理器
-  未被输入宽限期覆盖，现已一并纳入，并为 `DragMove()` 增加防御性异常处理。
-  已实机验证。
-
-详见 [`releases/v0.3.1/CHANGELOG.md`](releases/v0.3.1/CHANGELOG.md)。
-
 ## [0.1.1] — 2026-09-04
 
 ### 修复
@@ -57,6 +48,5 @@
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
-[0.3.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.3.1
 [0.1.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.1.1
 [0.1.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.1.0
