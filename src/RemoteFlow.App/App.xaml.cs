@@ -330,10 +330,15 @@ public partial class App : System.Windows.Application
 
         // 托盘图标让「关闭即最小化」有一个明确的退出入口。
         _tray = new TrayService(window, Services.GetRequiredService<AppServices.SessionManager>());
+        _tray.SessionActivateRequested += OnTraySessionActivateRequested;
         _tray.Initialize();
 
         window.Show();
     }
+
+    /// <summary>托盘右键菜单点选某个已连接会话：让主窗口选中对应会话 Tab。</summary>
+    private void OnTraySessionActivateRequested(object? sender, Guid sessionId)
+        => Services.GetRequiredService<MainViewModel>().ActivateSession(sessionId);
 
     protected override void OnExit(ExitEventArgs e)
     {

@@ -433,6 +433,35 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// 从托盘等外部入口激活指定会话：若其 Tab 存在则选中它，并退出全屏让常规窗口可见。
+    /// 可能在非 UI 线程触发（托盘事件线程不定），统一切回 UI 线程处理。
+    /// </summary>
+    public void ActivateSession(Guid sessionId)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(() => ActivateSession(sessionId));
+            return;
+        }
+
+        var tab = Tabs.OfType<SessionTabViewModel>().FirstOrDefault(t => t.Session.SessionId == sessionId);
+        if (tab is null)
+        {
+            return;
+        }
+
+        // 托盘点选会话意味着用户要回到常规窗口上下文；全屏下无标题栏 / 导航，
+        // 先退出全屏再切 Tab，让切换过程与 Tab 条可见。
+        if (IsSessionFullScreen)
+        {
+            IsSessionFullScreen = false;
+        }
+
+        SelectedTab = tab;
+    }
+
     private async Task ReconnectAsync(ConnectionProfile profile)
     {
         try
