@@ -73,23 +73,55 @@
                     <ColumnDefinition Width="44" />
                 </Grid.ColumnDefinitions>
 
-                <Button Grid.Column="0" Width="28" Height="28" FontSize="14"
-                        ToolTip="收藏 / 取消收藏"
-                        Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
-                        CommandParameter="{Binding}">
-                    <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource Button.Icon}">
-                            <Setter Property="Content" Value="{StaticResource Icon.Favorite}" />
-                            <Setter Property="Foreground" Value="{DynamicResource Text.Tertiary}" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsFavorite}" Value="True">
-                                    <Setter Property="Content" Value="{StaticResource Icon.FavoriteFilled}" />
-                                    <Setter Property="Foreground" Value="#F2C037" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                <!-- 首列：普通模式=收藏星标；多选模式=勾选框，两者互斥交替 -->
+                <Grid Grid.Column="0" VerticalAlignment="Center">
+                    <Grid Width="36" HorizontalAlignment="Left">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.IsMultiSelect, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <Button Width="28" Height="28" FontSize="14"
+                                ToolTip="收藏 / 取消收藏"
+                                Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                CommandParameter="{Binding}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource Button.Icon}">
+                                    <Setter Property="Content" Value="{StaticResource Icon.Favorite}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource Text.Tertiary}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                            <Setter Property="Content" Value="{StaticResource Icon.FavoriteFilled}" />
+                                            <Setter Property="Foreground" Value="#F2C037" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+
+                    <CheckBox Width="30" Height="30" HorizontalAlignment="Left" Margin="3,0,0,0"
+                              VerticalAlignment="Center"
+                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                              Click="OnRowCheckBoxClick"
+                              Tag="{Binding}">
+                        <CheckBox.Style>
+                            <Style TargetType="CheckBox">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.IsMultiSelect, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </CheckBox.Style>
+                    </CheckBox>
+                </Grid>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- 图标系统标准尺寸（44），与首页收藏 / 最近活动行同一套规格 -->

@@ -42,6 +42,12 @@ public partial class ConnectionsPage : UserControl
         await viewModel.ConnectAsync(selected);
     }
 
+    /// <summary>
+    /// 多选模式下行勾选框点击。IsChecked 已 TwoWay 绑定行 VM；
+    /// 此处理器仅用于吞掉点击，避免冒泡成 ListBox 的行选中/详情展示。
+    /// </summary>
+    private void OnRowCheckBoxClick(object sender, RoutedEventArgs e) => e.Handled = true;
+
     /// <summary>「更多」按钮点击时弹出所在行的右键菜单。</summary>
     private void OnMoreClick(object sender, RoutedEventArgs e)
     {
