@@ -58,18 +58,35 @@
         </Style>
 
         <!-- 连接行的右键 / 「更多」菜单。ContextMenu 不在主可视树内，
-             菜单项动作统一用 Click 在代码后置分发（ResolveItem 从 DataContext 取行 VM）。 -->
-        <ContextMenu x:Key="ConnectionRowMenu" x:Shared="False">
-            <MenuItem Header="连接" InputGestureText="Enter" Click="OnConnectMenuClick" />
-            <MenuItem Header="编辑" Click="OnEditMenuClick" />
-            <MenuItem Header="复制" Click="OnDuplicateMenuClick" />
+             菜单项动作统一用 Click 在代码后置分发（ResolveItem 从 DataContext 取行 VM）。
+             菜单按视图裁剪：复制连接 / 移动到分组 / 删除仅「我的连接」（Filter=All）；
+             「在「我的连接」中定位」仅在收藏 / 最近连接快捷视图出现；连接 / 编辑 / 测试连接 / 收藏各视图都有。
+             裁剪在 OnRowContextMenuOpened 统一应用（菜单 Tag 定位）。 -->
+        <ContextMenu x:Key="ConnectionRowMenu" x:Shared="False" Opened="OnRowContextMenuOpened">
+            <MenuItem Tag="connect" Header="连接" InputGestureText="Enter" Click="OnConnectMenuClick" />
+            <MenuItem Tag="edit" Header="编辑" Click="OnEditMenuClick" />
+            <MenuItem Tag="duplicate" Header="复制连接" Click="OnDuplicateMenuClick" />
+            <MenuItem Tag="test" Header="测试连接" Click="OnTestMenuClick" />
             <Separator />
-            <MenuItem Header="移动到分组" />
-            <MenuItem Header="收藏" IsCheckable="True"
+            <MenuItem Tag="move" Header="移动到分组" />
+            <!-- 收藏 / 取消收藏：Header 随行当前收藏状态切换 -->
+            <MenuItem Tag="favorite" IsCheckable="True"
                       IsChecked="{Binding IsFavorite, Mode=OneWay}"
-                      Click="OnToggleFavoriteMenuClick" />
+                      Click="OnToggleFavoriteMenuClick">
+                <MenuItem.Style>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Header" Value="收藏" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                <Setter Property="Header" Value="取消收藏" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </MenuItem.Style>
+            </MenuItem>
             <Separator />
-            <MenuItem Header="删除" Click="OnDeleteMenuClick" />
+            <MenuItem Tag="locate" Header="在「我的连接」中定位" Click="OnLocateMenuClick" />
+            <MenuItem Tag="delete" Header="删除" Click="OnDeleteMenuClick" />
         </ContextMenu>
 
         <Style x:Key="ConnectionRow" TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">

@@ -35,14 +35,15 @@
             </Style.Triggers>
         </Style>
 
-        <!-- 首页「最近连接 / 收藏」行的右键菜单。动作与「我的连接」一致，
+        <!-- 首页「最近连接 / 收藏」行的右键菜单：快速访问，只保留
+             连接 / 编辑 / 测试连接 / 收藏|取消收藏 / 在「我的连接」中定位。
              统一经 HomePage.ConnectionActionRequested 桥接到既有命令，不在首页复制实现。
              x:Shared=False 使每行实例化独立菜单；DataContext 在菜单打开时取自所在行。
              Opened 时把该行设为选中，让菜单动作的作用对象在视觉上明确。 -->
         <ContextMenu x:Key="HomeRowMenu" x:Shared="False" Opened="OnHomeRowMenuOpened">
             <MenuItem Tag="connect" Header="连接" Click="OnRowActionClick" />
             <MenuItem Tag="edit" Header="编辑" Click="OnRowActionClick" />
-            <MenuItem Tag="duplicate" Header="复制" Click="OnRowActionClick" />
+            <MenuItem Tag="test" Header="测试连接" Click="OnRowActionClick" />
             <Separator />
             <!-- 收藏 / 取消收藏：Header 随行当前收藏状态切换 -->
             <MenuItem Tag="favorite" Click="OnRowActionClick">
@@ -58,8 +59,7 @@
                 </MenuItem.Style>
             </MenuItem>
             <Separator />
-            <MenuItem Tag="manage" Header="在「我的连接」中管理" Click="OnRowActionClick" />
-            <MenuItem Tag="delete" Header="删除" Click="OnRowActionClick" />
+            <MenuItem Tag="manage" Header="在「我的连接」中定位" Click="OnRowActionClick" />
         </ContextMenu>
 
         <!-- 最近连接：大号快捷卡片。是首页最突出的快捷入口，给足高度和图标尺寸 -->

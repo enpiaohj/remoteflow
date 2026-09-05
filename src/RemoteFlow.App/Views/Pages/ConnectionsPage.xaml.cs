@@ -131,6 +131,46 @@ public partial class ConnectionsPage : UserControl
         }
     }
 
+    /// <summary>菜单打开（右击 / 「⋯」都触发）时按当前视图裁剪菜单项。</summary>
+    private void OnRowContextMenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is ContextMenu menu)
+        {
+            ApplyConnectionRowMenuGuards(menu);
+        }
+    }
+
+    /// <summary>
+    /// 按所在页面的 Filter 裁剪连接行菜单：
+    /// <list type="bullet">
+    /// <item>「我的连接」（Filter=All，含分组树）→ 完整管理项：复制连接 / 移动到分组 / 删除可见；「在「我的连接」中定位」隐藏。</item>
+    /// <item>收藏 / 最近连接（Filter≠All）→ 快速访问：只留 连接 / 编辑 / 测试连接 / 收藏；显示「在「我的连接」中定位」。</item>
+    /// </list>
+    /// </summary>
+    private void ApplyConnectionRowMenuGuards(ContextMenu menu)
+    {
+        if (ViewModel is not { } vm)
+        {
+            return;
+        }
+
+        var isAll = vm.Filter == ConnectionFilter.All;
+        foreach (var item in menu.Items.OfType<MenuItem>())
+        {
+            switch (item.Tag as string)
+            {
+                case "duplicate":
+                case "move":
+                case "delete":
+                    item.Visibility = isAll ? Visibility.Visible : Visibility.Collapsed;
+                    break;
+                case "locate":
+                    item.Visibility = isAll ? Visibility.Collapsed : Visibility.Visible;
+                    break;
+            }
+        }
+    }
+
     private void PopulateMoveToGroup(ContextMenu menu, ConnectionItemViewModel? connection)
     {
         _menuConnection = connection;
@@ -203,6 +243,23 @@ public partial class ConnectionsPage : UserControl
         if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
         {
             await viewModel.ToggleFavoriteCommand.ExecuteAsync(item);
+        }
+    }
+
+    private async void OnTestMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
+        {
+            await viewModel.TestConnectionCommand.ExecuteAsync(item);
+        }
+    }
+
+    /// <summary>「在「我的连接」中定位」：切到全部视图并让该连接可见、选中。</summary>
+    private void OnLocateMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
+        {
+            viewModel.SelectById(item.Id);
         }
     }
 

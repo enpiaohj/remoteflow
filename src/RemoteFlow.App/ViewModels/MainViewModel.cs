@@ -83,7 +83,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         HomePage.OpenConnectionRequested += async (_, profile) => await OpenSessionAsync(profile);
         ConnectionsPage.OpenConnectionRequested += async (_, profile) => await OpenSessionAsync(profile);
 
-        // 首页行右键动作（编辑 / 复制 / 收藏 / 删除 / 管理）桥接到「我的连接」既有命令。
+        // 首页行右键动作（连接 / 编辑 / 测试连接 / 收藏 / 定位）桥接到「我的连接」既有命令。
         HomePage.ConnectionActionRequested += async (_, args) => await HandleHomeConnectionActionAsync(args);
 
         NavigateTo(settings.DefaultLandingPage switch
@@ -319,7 +319,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// 首页「最近连接 / 收藏」行右键动作的统一分发：桥接到「我的连接」既有命令，
-    /// 不在首页复制编辑 / 删除 / 收藏等实现。
+    /// 不在首页复制编辑 / 删除 / 收藏等实现。首页为快速访问，不含复制 / 删除。
     /// </summary>
     private async Task HandleHomeConnectionActionAsync(HomeConnectionActionEventArgs args)
     {
@@ -349,23 +349,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     await ConnectionsPage.EditCommand.ExecuteAsync(item);
                     break;
 
-                case HomeRowActions.Duplicate:
-                    await ConnectionsPage.DuplicateCommand.ExecuteAsync(item);
+                case HomeRowActions.Test:
+                    await ConnectionsPage.TestConnectionCommand.ExecuteAsync(item);
                     break;
 
                 case HomeRowActions.Favorite:
                     await ConnectionsPage.ToggleFavoriteCommand.ExecuteAsync(item);
                     break;
 
-                case HomeRowActions.Delete:
-                    await ConnectionsPage.DeleteCommand.ExecuteAsync(item);
-                    break;
-
                 default:
                     return;
             }
 
-            // 编辑 / 复制 / 收藏 / 删除都会改变首页列表（名称 / 收藏状态 / 是否仍存在），回到首页前刷新。
+            // 编辑 / 收藏等会改变首页列表（名称 / 收藏状态），回到首页前刷新。
             if (CurrentPage == NavigationPage.Home)
             {
                 await HomePage.LoadAsync();

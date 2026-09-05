@@ -37,7 +37,7 @@ public sealed partial class HomePageViewModel(
     public event EventHandler<ConnectionProfile>? OpenConnectionRequested;
 
     /// <summary>
-    /// 首页「最近连接 / 收藏」行右键动作（编辑 / 复制 / 收藏 / 删除 / 在「我的连接」中管理）。
+    /// 首页「最近连接 / 收藏」行右键动作（连接 / 编辑 / 测试连接 / 收藏 / 在「我的连接」中定位）。
     /// 真正的执行桥接到「我的连接」既有命令，避免在首页复制实现。
     /// </summary>
     public event EventHandler<HomeConnectionActionEventArgs>? ConnectionActionRequested;
@@ -362,10 +362,9 @@ public static class HomeRowActions
 {
     public const string Connect = "connect";
     public const string Edit = "edit";
-    public const string Duplicate = "duplicate";
+    public const string Test = "test";
     public const string Favorite = "favorite";
     public const string Manage = "manage";
-    public const string Delete = "delete";
 }
 
 /// <summary>首页「最近连接 / 收藏」行右键动作的参数：目标连接与动作名。</summary>

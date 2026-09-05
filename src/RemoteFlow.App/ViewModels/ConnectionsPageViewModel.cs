@@ -978,9 +978,69 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             return;
         }
 
-        var copy = await _connections.DuplicateAsync(item.Id);
+        // 复制 = 深拷贝配置（Clone 已深拷贝 Rdp/Ssh/Vnc 选项与 TagIds）、
+        // 生成不冲突名称「原名称 (N)」后落库，并立即对副本打开编辑对话框。
+        var copy = item.Profile.Clone(await NextDuplicateNameAsync(item.Name));
+        await _connections.CreateAsync(copy);
         await LoadAsync();
-        SelectedItem = Items.FirstOrDefault(i => i.Id == copy.Id);
+
+        var copyItem = Items.FirstOrDefault(i => i.Id == copy.Id);
+        SelectedItem = copyItem;
+        if (copyItem is not null)
+        {
+            await EditAsync(copyItem);
+        }
+    }
+
+    /// <summary>为副本生成不冲突名称：<c>原名称 (2)</c>、<c>原名称 (3)</c>…，跳过库里已存在的同名。</summary>
+    private async Task<string> NextDuplicateNameAsync(string sourceName)
+    {
+        var existing = await _connections.GetAllAsync();
+        var taken = existing.Select(p => p.Name).ToHashSet(StringComparer.CurrentCultureIgnoreCase);
+
+        for (var i = 2; ; i++)
+        {
+            var candidate = $"{sourceName} ({i})";
+            if (!taken.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
+    /// <summary>TCP 连通性测试：对目标 host:port 发起带约 3 秒超时的连接尝试，不做协议握手。
+    /// 成功 / 失败分别提示，不打开会话。</summary>
+    [RelayCommand]
+    private async Task TestConnectionAsync(ConnectionItemViewModel? item)
+    {
+        item ??= SelectedItem;
+        if (item is null)
+        {
+            return;
+        }
+
+        var profile = item.Profile;
+        var endpoint = $"{profile.Host}:{profile.Port}";
+
+        try
+        {
+            using var client = new System.Net.Sockets.TcpClient();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            await client.ConnectAsync(profile.Host, profile.Port, timeout.Token);
+            await _dialogs.ShowMessageAsync("连接测试成功", $"已能访问 {endpoint}。", DialogKind.Success);
+        }
+        catch (OperationCanceledException)
+        {
+            await _dialogs.ShowMessageAsync("连接测试失败", $"连接 {endpoint} 超时（3 秒）。", DialogKind.Error);
+        }
+        catch (System.Net.Sockets.SocketException ex)
+        {
+            await _dialogs.ShowMessageAsync("连接测试失败", $"无法连接 {endpoint}：{ex.Message}", DialogKind.Error);
+        }
+        catch (Exception ex)
+        {
+            await _dialogs.ShowMessageAsync("连接测试失败", $"无法连接 {endpoint}：{ex.Message}", DialogKind.Error);
+        }
     }
 
     [RelayCommand]
