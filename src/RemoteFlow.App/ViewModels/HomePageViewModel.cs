@@ -36,6 +36,12 @@ public sealed partial class HomePageViewModel(
     /// <summary>请求打开一个连接（首页卡片 / 收藏行双击等）。由 MainViewModel 统一开会话。</summary>
     public event EventHandler<ConnectionProfile>? OpenConnectionRequested;
 
+    /// <summary>
+    /// 首页「最近连接 / 收藏」行右键动作（编辑 / 复制 / 收藏 / 删除 / 在「我的连接」中管理）。
+    /// 真正的执行桥接到「我的连接」既有命令，避免在首页复制实现。
+    /// </summary>
+    public event EventHandler<HomeConnectionActionEventArgs>? ConnectionActionRequested;
+
     public ObservableCollection<ConnectionItemViewModel> RecentItems { get; } = [];
 
     public ObservableCollection<ConnectionItemViewModel> FavoriteItems { get; } = [];
@@ -245,6 +251,20 @@ public sealed partial class HomePageViewModel(
             favorite.IsSelected = ReferenceEquals(favorite, item);
         }
     }
+
+    /// <summary>
+    /// 行右键动作的统一入口（由视图 code-behind 调用）。事件从本类内部触发，
+    /// MainViewModel 订阅后桥接到「我的连接」既有命令。
+    /// </summary>
+    public void RequestConnectionAction(ConnectionItemViewModel? item, string action)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        ConnectionActionRequested?.Invoke(this, new HomeConnectionActionEventArgs(item, action));
+    }
 }
 
 /// <summary>连接历史行。只展示主机、协议、时间与标准化结果，不含任何凭据信息。</summary>
@@ -318,3 +338,17 @@ public sealed class HistoryItemViewModel(ConnectionHistoryEntry entry)
     /// <summary>失败 / 取消才需要在图标块上打状态点，成功是常态不必强调。</summary>
     public bool ShowResultBadge => entry.Result != ConnectionResult.Success;
 }
+
+/// <summary>首页行右键动作取值。<see cref="HomePageViewModel.ConnectionActionRequested"/> 分发的动作名。</summary>
+public static class HomeRowActions
+{
+    public const string Connect = "connect";
+    public const string Edit = "edit";
+    public const string Duplicate = "duplicate";
+    public const string Favorite = "favorite";
+    public const string Manage = "manage";
+    public const string Delete = "delete";
+}
+
+/// <summary>首页「最近连接 / 收藏」行右键动作的参数：目标连接与动作名。</summary>
+public sealed record HomeConnectionActionEventArgs(ConnectionItemViewModel Item, string Action);

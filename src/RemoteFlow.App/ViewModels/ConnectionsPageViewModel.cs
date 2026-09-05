@@ -1458,4 +1458,67 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             await _dialogs.ShowMessageAsync("无法移动连接", ex.Message, DialogKind.Warning);
         }
     }
+
+    /// <summary>
+    /// 按 Id 选中某个连接，并确保它在当前列表里可见。首页右键「在「我的连接」中管理」
+    /// 跳转后调用：切到「全部」视图、清掉会隐藏该行的搜索 / 页内筛选，展开所在分组。
+    /// 找不到目标时安全保持现状。
+    /// </summary>
+    public void SelectById(Guid id)
+    {
+        // 回到全部视图，并清掉可能把目标行滤掉的搜索与筛选词。
+        if (Filter != ConnectionFilter.All)
+        {
+            Filter = ConnectionFilter.All;
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchText))
+        {
+            SearchText = string.Empty;
+        }
+
+        if (!string.IsNullOrWhiteSpace(PageFilterText))
+        {
+            PageFilterText = string.Empty;
+        }
+
+        if (ProtocolFilter != ProtocolFilterOption.All)
+        {
+            ProtocolFilter = ProtocolFilterOption.All;
+        }
+
+        var target = _allItems.FirstOrDefault(i => i.Id == id);
+        if (target is null)
+        {
+            return;
+        }
+
+        // 分组视图下目标可能位于折叠分组：展开祖先链，让该行进入 GroupedRows 可见并可选中。
+        if (IsGroupedView)
+        {
+            foreach (var root in GroupNodes)
+            {
+                if (ExpandToConnection(root, id))
+                {
+                    break;
+                }
+            }
+        }
+
+        SelectedItem = target;
+    }
+
+    /// <summary>目标连接位于该节点子树时展开节点（含祖先链），返回是否命中。</summary>
+    private static bool ExpandToConnection(ConnectionGroupNodeViewModel node, Guid targetId)
+    {
+        var found = node.Connections.Any(c => c.Id == targetId)
+            || node.ChildGroups.Any(child => ExpandToConnection(child, targetId));
+
+        if (found && !node.IsExpanded)
+        {
+            node.IsExpanded = true; // 触发 WireExpandPersistence → FlattenGroupRows + 持久化折叠状态
+        }
+
+        return found;
+    }
 }

@@ -35,9 +35,36 @@
             </Style.Triggers>
         </Style>
 
+        <!-- 首页「最近连接 / 收藏」行的右键菜单。动作与「我的连接」一致，
+             统一经 HomePage.ConnectionActionRequested 桥接到既有命令，不在首页复制实现。
+             x:Shared=False 使每行实例化独立菜单；DataContext 在菜单打开时取自所在行。 -->
+        <ContextMenu x:Key="HomeRowMenu" x:Shared="False">
+            <MenuItem Tag="connect" Header="连接" Click="OnRowActionClick" />
+            <MenuItem Tag="edit" Header="编辑" Click="OnRowActionClick" />
+            <MenuItem Tag="duplicate" Header="复制" Click="OnRowActionClick" />
+            <Separator />
+            <!-- 收藏 / 取消收藏：Header 随行当前收藏状态切换 -->
+            <MenuItem Tag="favorite" Click="OnRowActionClick">
+                <MenuItem.Style>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Header" Value="收藏" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                <Setter Property="Header" Value="取消收藏" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </MenuItem.Style>
+            </MenuItem>
+            <Separator />
+            <MenuItem Tag="manage" Header="在「我的连接」中管理" Click="OnRowActionClick" />
+            <MenuItem Tag="delete" Header="删除" Click="OnRowActionClick" />
+        </ContextMenu>
+
         <!-- 最近连接：大号快捷卡片。是首页最突出的快捷入口，给足高度和图标尺寸 -->
         <DataTemplate x:Key="RecentCard" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Grid Margin="0,0,14,0" MinHeight="122">
+            <Grid Margin="0,0,14,0" MinHeight="122"
+                  ContextMenu="{StaticResource HomeRowMenu}">
                 <Button Cursor="Hand" HorizontalContentAlignment="Stretch"
                         Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                         CommandParameter="{Binding}">
@@ -123,15 +150,8 @@
                         Width="26" Height="26" FontSize="12"
                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,12,12,0"
                         Content="{StaticResource Icon.More}"
-                        Click="OnItemMenuClick" Tag="{Binding}">
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="连接" Click="OnItemConnectClick" />
-                            <Separator />
-                            <MenuItem Header="在「我的连接」中管理" Click="OnItemManageClick" />
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                </Button>
+                        Click="OnItemMenuClick" Tag="{Binding}"
+                        ContextMenu="{StaticResource HomeRowMenu}" />
             </Grid>
         </DataTemplate>
 
@@ -139,7 +159,8 @@
         <DataTemplate x:Key="FavoriteRow" DataType="{x:Type vm:ConnectionItemViewModel}">
             <!-- 手势与「我的连接」列表一致：单击选中（高亮），双击发起连接。
                  悬停有底色、整行手型指针，避免“看着像行却没反馈”。 -->
-            <Grid Height="60" Cursor="Hand" MouseLeftButtonDown="OnFavoriteRowMouseDown">
+            <Grid Height="60" Cursor="Hand" MouseLeftButtonDown="OnFavoriteRowMouseDown"
+                  ContextMenu="{StaticResource HomeRowMenu}">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Background" Value="Transparent" />
@@ -186,15 +207,8 @@
                 <Button Grid.Column="3" Style="{StaticResource Button.Icon}"
                         Width="24" Height="24" FontSize="11" VerticalAlignment="Center"
                         Content="{StaticResource Icon.More}"
-                        Click="OnItemMenuClick" Tag="{Binding}">
-                    <Button.ContextMenu>
-                        <ContextMenu>
-                            <MenuItem Header="连接" Click="OnItemConnectClick" />
-                            <Separator />
-                            <MenuItem Header="在「我的连接」中管理" Click="OnItemManageClick" />
-                        </ContextMenu>
-                    </Button.ContextMenu>
-                </Button>
+                        Click="OnItemMenuClick" Tag="{Binding}"
+                        ContextMenu="{StaticResource HomeRowMenu}" />
             </Grid>
         </DataTemplate>
 

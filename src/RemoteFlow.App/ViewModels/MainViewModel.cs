@@ -83,6 +83,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         HomePage.OpenConnectionRequested += async (_, profile) => await OpenSessionAsync(profile);
         ConnectionsPage.OpenConnectionRequested += async (_, profile) => await OpenSessionAsync(profile);
 
+        // 首页行右键动作（编辑 / 复制 / 收藏 / 删除 / 管理）桥接到「我的连接」既有命令。
+        HomePage.ConnectionActionRequested += async (_, args) => await HandleHomeConnectionActionAsync(args);
+
         NavigateTo(settings.DefaultLandingPage switch
         {
             LandingPage.Connections => NavigationPage.Connections,
@@ -217,6 +220,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void NavigateTo(NavigationPage page)
     {
+        ShowWorkspacePage(page);
+        _ = ReloadCurrentPageAsync();
+    }
+
+    /// <summary>
+    /// 切换工作区页面（设置工作区内容、标题并选中工作区 Tab），但不触发数据加载。
+    /// <see cref="NavigateTo"/> 的同步部分：需要「先切页、await 加载完再继续」的调用方
+    /// 先调它，再自行 <see cref="ReloadCurrentPageAsync"/>，避免与内部的 fire-and-forget 重载并发。
+    /// </summary>
+    private void ShowWorkspacePage(NavigationPage page)
+    {
         CurrentPage = page;
 
         // 收藏与最近本质上是「我的连接」的两个筛选视图，
@@ -258,7 +272,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         SelectedTab = WorkspaceTab;
-        _ = ReloadCurrentPageAsync();
     }
 
     /// <summary>首次显示与切换页面时加载对应数据。</summary>
@@ -301,6 +314,69 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private Task RetryPageLoadAsync() => ReloadCurrentPageAsync();
+
+    // ── 首页行右键动作 ─────────────────────────────────────────────
+
+    /// <summary>
+    /// 首页「最近连接 / 收藏」行右键动作的统一分发：桥接到「我的连接」既有命令，
+    /// 不在首页复制编辑 / 删除 / 收藏等实现。
+    /// </summary>
+    private async Task HandleHomeConnectionActionAsync(HomeConnectionActionEventArgs args)
+    {
+        var item = args.Item;
+        if (item is null)
+        {
+            return;
+        }
+
+        try
+        {
+            switch (args.Action)
+            {
+                case HomeRowActions.Connect:
+                    await OpenSessionAsync(item.Profile);
+                    return;
+
+                case HomeRowActions.Manage:
+                    // 跳到「我的连接」全部视图并让该连接可见、选中。
+                    GlobalSearchText = string.Empty;
+                    ShowWorkspacePage(NavigationPage.Connections);
+                    await ReloadCurrentPageAsync();
+                    ConnectionsPage.SelectById(item.Id);
+                    return;
+
+                case HomeRowActions.Edit:
+                    await ConnectionsPage.EditCommand.ExecuteAsync(item);
+                    break;
+
+                case HomeRowActions.Duplicate:
+                    await ConnectionsPage.DuplicateCommand.ExecuteAsync(item);
+                    break;
+
+                case HomeRowActions.Favorite:
+                    await ConnectionsPage.ToggleFavoriteCommand.ExecuteAsync(item);
+                    break;
+
+                case HomeRowActions.Delete:
+                    await ConnectionsPage.DeleteCommand.ExecuteAsync(item);
+                    break;
+
+                default:
+                    return;
+            }
+
+            // 编辑 / 复制 / 收藏 / 删除都会改变首页列表（名称 / 收藏状态 / 是否仍存在），回到首页前刷新。
+            if (CurrentPage == NavigationPage.Home)
+            {
+                await HomePage.LoadAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "处理首页行右键动作失败：{Action}", args.Action);
+            await _dialogs.ShowMessageAsync("操作失败", "执行该操作时出错，详情请查看日志。", DialogKind.Error);
+        }
+    }
 
     // ── 顶部动作 ──────────────────────────────────────────────────
 

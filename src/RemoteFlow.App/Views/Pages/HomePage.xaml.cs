@@ -57,11 +57,16 @@ public partial class HomePage : UserControl
         }
     }
 
-    private void OnItemConnectClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// 最近连接 / 收藏行右键菜单的统一入口：把动作名（MenuItem.Tag）与所在行一起抛给
+    /// HomePageViewModel.ConnectionActionRequested，由 MainViewModel 桥接到「我的连接」既有命令。
+    /// </summary>
+    private void OnRowActionClick(object sender, RoutedEventArgs e)
     {
-        if (Resolve(sender) is { } item)
+        if (sender is MenuItem { Tag: string action } menu
+            && menu.DataContext is ConnectionItemViewModel item)
         {
-            ViewModel?.ConnectCommand.Execute(item);
+            ViewModel?.RequestConnectionAction(item, action);
         }
     }
 
@@ -87,11 +92,4 @@ public partial class HomePage : UserControl
             ViewModel?.SelectFavorite(item);
         }
     }
-
-    private void OnItemManageClick(object sender, RoutedEventArgs e)
-        => ViewModel?.ViewAllFavoritesCommand.Execute(null);
-
-    /// <summary>菜单项的 DataContext 就是所在行 / 卡片的 VM。</summary>
-    private static ConnectionItemViewModel? Resolve(object sender)
-        => (sender as MenuItem)?.DataContext as ConnectionItemViewModel;
 }
