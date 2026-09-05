@@ -72,10 +72,15 @@ public sealed class InteractiveSshHostKeyPolicy(
                 context.Host, context.Port);
         }
 
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var accepted = await dialogs.ConfirmHostKeyAsync(context);
+        stopwatch.Stop();
 
+        // 耗时是关键诊断信号：明显短于宽限期（400ms）就返回，通常意味着弹窗是被残留输入
+        // 误关的，不是用户真的看清楚做了选择——而不是把这类情况和真实拒绝混为一谈。
         logger.LogInformation(
-            "SSH Host Key 确认框返回 {Host}:{Port} Accepted={Accepted}", context.Host, context.Port, accepted);
+            "SSH Host Key 确认框返回 {Host}:{Port} Accepted={Accepted} 耗时={ElapsedMs}ms",
+            context.Host, context.Port, accepted, stopwatch.ElapsedMilliseconds);
 
         if (!accepted)
         {
