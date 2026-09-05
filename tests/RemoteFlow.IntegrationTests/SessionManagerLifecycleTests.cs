@@ -152,6 +152,154 @@ public sealed class SessionManagerLifecycleTests : IDisposable
         await Task.Yield();
     }
 
+    // ── StateSync A：快照查询 + 聚合事件 ─────────────────────────
+
+    [Fact]
+    public async Task 快照查询_创建连接后派生已连_关闭后回落Idle()
+    {
+        var profile = NewProfile("快照派生");
+        var profileId = profile.Id;
+
+        var session = await _manager.CreateSessionAsync(profile);
+        Assert.True(_manager.HasActiveSession(profileId));
+        Assert.False(_manager.HasConnectedSession(profileId));
+        Assert.Equal(ConnectionState.Idle, _manager.GetSessionState(profileId));
+
+        await session.ConnectAsync();
+        Assert.True(_manager.HasActiveSession(profileId));
+        Assert.True(_manager.HasConnectedSession(profileId));
+        Assert.Equal(ConnectionState.Connected, _manager.GetSessionState(profileId));
+
+        await _manager.CloseSessionAsync(session.SessionId);
+        Assert.False(_manager.HasActiveSession(profileId));
+        Assert.False(_manager.HasConnectedSession(profileId));
+        Assert.Equal(ConnectionState.Idle, _manager.GetSessionState(profileId));
+    }
+
+    [Fact]
+    public async Task SessionsChanged_创建与关闭均触发_关闭后反映移除()
+    {
+        var sessionsChanged = 0;
+        var createdChanged = 0;
+        var closedChanged = 0;
+        _manager.SessionsChanged += (_, _) =>
+        {
+            sessionsChanged++;
+            if (_manager.ActiveSessionCount > 0)
+            {
+                createdChanged++;
+            }
+            else
+            {
+                closedChanged++;
+            }
+        };
+
+        var session = await _manager.CreateSessionAsync(NewProfile("聚合通知")); // 创建后 1 次
+        await session.ConnectAsync(); // Connecting + Connected 各 1 次
+
+        // 关闭完成后必须已收到一次「集合已空」的通知（会话已移除后再广播）。
+        await _manager.CloseSessionAsync(session.SessionId);
+
+        Assert.Equal(0, _manager.ActiveSessionCount);
+        Assert.True(sessionsChanged >= 4, $"预期至少 4 次，实际 {sessionsChanged}");
+        Assert.True(createdChanged >= 3, $"预期创建/状态跳变期至少 3 次，实际 {createdChanged}");
+        Assert.True(closedChanged >= 1, $"预期关闭后至少 1 次反映移除的通知，实际 {closedChanged}");
+    }
+
+    [Fact]
+    public async Task SessionStateChanged_连接过程状态跳变经聚合转发()
+    {
+        var newStates = new List<ConnectionState>();
+        SessionStateChangedEventArgs? connected = null;
+        _manager.SessionStateChanged += (_, e) =>
+        {
+            newStates.Add(e.NewState);
+            if (e.NewState == ConnectionState.Connected)
+            {
+                connected = e;
+            }
+        };
+
+        var session = await _manager.CreateSessionAsync(NewProfile("聚合跳变"));
+        await session.ConnectAsync();
+
+        Assert.Contains(ConnectionState.Connecting, newStates);
+        Assert.NotNull(connected);
+        Assert.Equal(ConnectionState.Connecting, connected.OldState);
+        Assert.Equal(ConnectionState.Connected, connected.NewState);
+        Assert.Equal(ConnectionErrorCode.None, connected.ErrorCode);
+    }
+
+    [Fact]
+    public async Task 失败_关闭后不残留活动会话()
+    {
+        _provider.SessionFactory = static p => new FakeSession(p) { FailOnConnect = true };
+
+        var profile = NewProfile("失败不残留");
+        var profileId = profile.Id;
+        ConnectionState? failedStateSeen = null;
+        _manager.SessionStateChanged += (_, e) =>
+        {
+            if (e.NewState == ConnectionState.Failed)
+            {
+                failedStateSeen = e.NewState;
+            }
+        };
+
+        var session = await _manager.CreateSessionAsync(profile);
+        await session.ConnectAsync();
+
+        Assert.Equal(ConnectionState.Failed, session.State);
+        Assert.True(_manager.HasActiveSession(profileId));
+        Assert.False(_manager.HasConnectedSession(profileId));
+        Assert.Equal(ConnectionState.Failed, _manager.GetSessionState(profileId));
+        Assert.Equal(ConnectionState.Failed, failedStateSeen);
+
+        await _manager.CloseSessionAsync(session.SessionId);
+
+        Assert.False(_manager.HasActiveSession(profileId));
+        Assert.False(_manager.HasConnectedSession(profileId));
+        Assert.Equal(ConnectionState.Idle, _manager.GetSessionState(profileId));
+    }
+
+    [Fact]
+    public async Task 快速开关循环_无旧状态残留()
+    {
+        _manager.MaxConcurrentSessions = 40;
+        const int rounds = 8;
+        var removalsNotified = 0;
+        _manager.SessionsChanged += (_, _) =>
+        {
+            if (_manager.ActiveSessionCount == 0)
+            {
+                removalsNotified++;
+            }
+        };
+
+        for (var i = 0; i < rounds; i++)
+        {
+            var profile = NewProfile($"快速开关{i}");
+            var profileId = profile.Id;
+
+            var session = await _manager.CreateSessionAsync(profile);
+            Assert.True(_manager.HasActiveSession(profileId));
+
+            await session.ConnectAsync();
+            Assert.True(_manager.HasConnectedSession(profileId));
+            Assert.Equal(ConnectionState.Connected, _manager.GetSessionState(profileId));
+
+            await _manager.CloseSessionAsync(session.SessionId);
+            Assert.False(_manager.HasActiveSession(profileId));
+            Assert.False(_manager.HasConnectedSession(profileId));
+            Assert.Equal(ConnectionState.Idle, _manager.GetSessionState(profileId));
+        }
+
+        Assert.Equal(0, _manager.ActiveSessionCount);
+        Assert.Empty(_manager.ActiveSessions);
+        Assert.True(removalsNotified >= rounds, $"每轮移除都应通知一次，实际 {removalsNotified}");
+    }
+
     private static ConnectionProfile NewProfile(string name) => new()
     {
         Name = name,

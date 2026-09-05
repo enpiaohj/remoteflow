@@ -67,11 +67,73 @@ public sealed class SessionManager : IAsyncDisposable
     /// <summary>当前全部活动会话。</summary>
     public IReadOnlyList<IRemoteSession> ActiveSessions => _sessions.Values.Select(e => e.Session).ToList();
 
+    /// <summary>指定 Profile 是否存在于活动集合（含 Connecting / Connected / Failed 尚未移除）。纯内存派生。</summary>
+    public bool HasActiveSession(Guid connectionProfileId)
+        => _sessions.Values.Any(e => e.Session.Profile.Id == connectionProfileId);
+
+    /// <summary>指定 Profile 是否存在 <see cref="ConnectionState.Connected"/> 的会话。纯内存派生。</summary>
+    public bool HasConnectedSession(Guid connectionProfileId)
+        => _sessions.Values.Any(e => e.Session.State == ConnectionState.Connected
+                                     && e.Session.Profile.Id == connectionProfileId);
+
+    /// <summary>
+    /// 取指定 Profile 的“最佳”会话状态。优先级：Connected &gt; (Connecting | Reconnecting)
+    /// &gt; Failed &gt; 其它（Idle / Disconnecting / Disconnected）；无会话返回 <see cref="ConnectionState.Idle"/>。
+    /// 同一 Profile 存在多个活动会话时返回其中状态优先级最高的那个状态。
+    /// </summary>
+    public ConnectionState GetSessionState(Guid connectionProfileId)
+    {
+        var best = ConnectionState.Idle;
+        var bestRank = -1;
+        foreach (var session in _sessions.Values.Select(e => e.Session))
+        {
+            if (session.Profile.Id != connectionProfileId)
+            {
+                continue;
+            }
+
+            var rank = RankForBestState(session.State);
+            if (rank > bestRank)
+            {
+                bestRank = rank;
+                best = session.State;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>状态聚合排序：值越大代表对用户越“关键 / 越接近已连接”。</summary>
+    private static int RankForBestState(ConnectionState state) => state switch
+    {
+        ConnectionState.Connected => 4,
+        ConnectionState.Connecting or ConnectionState.Reconnecting => 3,
+        ConnectionState.Failed => 2,
+        // Idle / Disconnecting / Disconnected（Closed 为终态，正常不会存在于活动集合）。
+        _ => 1,
+    };
+
     /// <summary>会话被创建时触发，供 UI 新建 Tab。</summary>
     public event EventHandler<IRemoteSession>? SessionCreated;
 
     /// <summary>会话被关闭时触发，供 UI 移除 Tab。</summary>
     public event EventHandler<Guid>? SessionClosed;
+
+    /// <summary>
+    /// 会话集合变化后触发（会话创建 / 任意状态跳变 / 会话移除）。无负载：
+    /// 消费者订阅后自行调用 <see cref="HasActiveSession"/> /
+    /// <see cref="HasConnectedSession"/> / <see cref="GetSessionState"/> 等快照查询重算 UI。
+    /// 事件可在任意线程触发（状态来自协议后台线程），消费者需自行 marshal 到 UI 线程。
+    /// </summary>
+    public event EventHandler? SessionsChanged;
+
+    /// <summary>
+    /// 每条会话状态跳变经聚合后转发，携带旧 / 新状态与错误码 / 错误说明。
+    /// 会话创建 / 移除本身不触发本事件（分别由 <see cref="SessionCreated"/> /
+    /// <see cref="SessionClosed"/> 与 <see cref="SessionsChanged"/> 覆盖）。
+    /// 事件可在任意线程触发，消费者需自行 marshal 到 UI 线程。
+    /// </summary>
+    public event EventHandler<SessionStateChangedEventArgs>? SessionStateChanged;
 
     /// <summary>查询指定协议的 Provider 是否可用。</summary>
     public bool IsProtocolAvailable(ProtocolType protocol, out string? reason)
@@ -148,6 +210,7 @@ public sealed class SessionManager : IAsyncDisposable
             session.SessionId, profile.Name, profile.Protocol, profile.Host, profile.Port);
 
         SessionCreated?.Invoke(this, session);
+        RaiseSessionsChanged();
         return session;
     }
 
@@ -201,6 +264,7 @@ public sealed class SessionManager : IAsyncDisposable
         }
 
         _logger.LogInformation("已关闭会话 {SessionId}", sessionId);
+        RaiseSessionsChanged();
         SessionClosed?.Invoke(this, sessionId);
     }
 
@@ -295,6 +359,10 @@ public sealed class SessionManager : IAsyncDisposable
             return;
         }
 
+        // 先做无负载的聚合转发（同步，保证状态跳变立即被 UI 观察到），再异步补历史。
+        RaiseSessionStateChanged(e);
+        RaiseSessionsChanged();
+
         // 事件可能来自协议库的后台线程，历史写入放到线程池执行，避免阻塞协议回调。
         _ = Task.Run(async () =>
         {
@@ -309,6 +377,12 @@ public sealed class SessionManager : IAsyncDisposable
             }
         });
     }
+
+    /// <summary>触发 <see cref="SessionsChanged"/>（会话集合变化后广播一次，覆盖 UI 重算）。</summary>
+    private void RaiseSessionsChanged() => SessionsChanged?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>转发一条聚合的会话状态跳变（<see cref="SessionStateChanged"/>）。</summary>
+    private void RaiseSessionStateChanged(SessionStateChangedEventArgs args) => SessionStateChanged?.Invoke(this, args);
 
     private async Task HandleStateChangeAsync(SessionEntry entry, IRemoteSession session, SessionStateChangedEventArgs e)
     {
