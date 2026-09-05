@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using RemoteFlow.App.Services;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Abstractions;
@@ -17,13 +18,44 @@ namespace RemoteFlow.App.ViewModels;
 /// 不做资产统计看板或复杂图表（产品设计文档 §7.6）。
 /// </para>
 /// </summary>
-public sealed partial class HomePageViewModel(
-    ConnectionService connections,
-    IHistoryRepository history,
-    SessionManager sessions,
-    AppSettings settings,
-    JsonSettingsStore settingsStore) : ObservableObject
+public sealed partial class HomePageViewModel : ObservableObject
 {
+    private readonly ConnectionService _connections;
+    private readonly IHistoryRepository _history;
+    private readonly SessionManager _sessions;
+    private readonly AppSettings _settings;
+    private readonly JsonSettingsStore _settingsStore;
+    private readonly ILogger<HomePageViewModel> _logger;
+
+    /// <summary>会话状态去抖全量刷新的版本号：每次收到 <see cref="SessionManager.SessionsChanged"/> 自增，
+    /// 延迟结束比对版本，期间再有新事件则放弃本次刷新，保证最终以最后一次状态为准。</summary>
+    private int _reloadVersion;
+
+    /// <summary>状态跳变后全量刷新的去抖窗口：合并连接中的连续跳变，避免连打 LoadAsync。</summary>
+    private static readonly TimeSpan ReloadDebounce = TimeSpan.FromMilliseconds(150);
+
+    public HomePageViewModel(
+        ConnectionService connections,
+        IHistoryRepository history,
+        SessionManager sessions,
+        AppSettings settings,
+        JsonSettingsStore settingsStore,
+        ILogger<HomePageViewModel> logger)
+    {
+        _connections = connections;
+        _history = history;
+        _sessions = sessions;
+        _settings = settings;
+        _settingsStore = settingsStore;
+        _logger = logger;
+
+        // 首页是 App 单例、常驻整个生命周期：构造时订阅一次聚合的「会话集合变化」，
+        // 停留在首页时任一状态跳变（连接成功点亮 / 关闭熄灭 / 最近排序 / 最近活动）都能实时刷新，
+        // 不再依赖切页重新 LoadAsync。事件可能在任意线程触发，OnSessionsChanged 内 marshal 回 UI。
+        // 单例常驻、App 退出由容器整体释放，不提供 Dispose 退订——与 ConnectionsPageViewModel 等其它单例 VM 一致。
+        _sessions.SessionsChanged += OnSessionsChanged;
+    }
+
     /// <summary>收藏 / 最近活动分区最多展示的条目数，超出的到对应页面查看全部。</summary>
     private const int SectionLimit = 7;
 
@@ -52,7 +84,7 @@ public sealed partial class HomePageViewModel(
     private int _totalConnections;
 
     /// <summary>当前已连接会话数（仅统计 Connected）。顶部统计行使用。</summary>
-    public int ConnectedSessions => sessions.ConnectedSessionCount;
+    public int ConnectedSessions => _sessions.ConnectedSessionCount;
 
     [ObservableProperty]
     private string _greeting = string.Empty;
@@ -72,7 +104,7 @@ public sealed partial class HomePageViewModel(
     public bool HasClockLine => !string.IsNullOrEmpty(ClockLine);
 
     /// <summary>用户是否开启「显示时间」。供视图决定是否启动秒级刷新。</summary>
-    public bool ShowHomeTimeEnabled => settings.ShowHomeTime;
+    public bool ShowHomeTimeEnabled => _settings.ShowHomeTime;
 
     /// <summary>底部安全提示横幅是否可见（用户可关闭，选择记入设置）。</summary>
     [ObservableProperty]
@@ -98,14 +130,14 @@ public sealed partial class HomePageViewModel(
 
         RefreshHeader();
 
-        var profiles = await connections.GetAllAsync(ct);
-        var groups = (await connections.GetGroupsAsync(ct)).ToDictionary(g => g.Id, g => g.Name);
+        var profiles = await _connections.GetAllAsync(ct);
+        var groups = (await _connections.GetGroupsAsync(ct)).ToDictionary(g => g.Id, g => g.Name);
 
         TotalConnections = profiles.Count;
-        ShowSecurityTip = !settings.HomeSecurityTipDismissed && profiles.Count > 0;
+        ShowSecurityTip = !_settings.HomeSecurityTipDismissed && profiles.Count > 0;
 
         // 卡片高亮只认“真正已连接”的会话：正在连接 / 失败不点亮“已连接”标签。
-        var connectedProfileIds = sessions.ActiveSessions
+        var connectedProfileIds = _sessions.ActiveSessions
             .Where(s => s.State == ConnectionState.Connected)
             .Select(s => s.Profile.Id)
             .ToHashSet();
@@ -131,7 +163,7 @@ public sealed partial class HomePageViewModel(
         }
 
         RecentHistory.Clear();
-        foreach (var entry in await history.GetRecentAsync(SectionLimit, ct))
+        foreach (var entry in await _history.GetRecentAsync(SectionLimit, ct))
         {
             RecentHistory.Add(new HistoryItemViewModel(entry));
         }
@@ -146,6 +178,86 @@ public sealed partial class HomePageViewModel(
         OnPropertyChanged(nameof(ConnectedSessions));
     }
 
+    // ── 实时状态同步：订阅 SessionManager.SessionsChanged ─────────
+
+    /// <summary>
+    /// 会话集合快照变化（创建 / 任意状态跳变 / 移除）后实时刷新首页统计与卡片。
+    /// <see cref="SessionManager.SessionsChanged"/> 可能在任意线程触发（状态来自协议后台线程），
+    /// 因此先 marshal 回 UI 线程（沿用 MainViewModel 的 CheckAccess/BeginInvoke 模式）。
+    /// </summary>
+    private void OnSessionsChanged(object? sender, EventArgs e)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(() => OnSessionsChanged(sender, e));
+            return;
+        }
+
+        // 1) 立即：统计行「M 个会话已连接」与已展示卡片的「已连接」点即时刷新，不等去抖。
+        OnPropertyChanged(nameof(ConnectedSessions));
+        RefreshCardActiveStates();
+
+        // 2) 去抖全量：停留首页时任一跳变都可能改变最近排序 / LastConnectedDisplay / 最近活动，
+        //    静置约 150ms 后再 LoadAsync 重建集合；期间再次收到事件则重置计时，避免连打。
+        ScheduleDebouncedReload();
+    }
+
+    /// <summary>
+    /// 遍历最近 / 收藏行，按 SessionManager 实时快照点亮 / 熄灭「已连接」，
+    /// 让 Connecting→Connected 即时点亮、关闭后即时熄灭。仅在 UI 线程调用（改写行的 ObservableProperty）。
+    /// 行不在当前两列表（如连接的 Profile 尚未进入最近 / 收藏）时由去抖的 LoadAsync 重建列表补齐。
+    /// </summary>
+    private void RefreshCardActiveStates()
+    {
+        foreach (var item in RecentItems)
+        {
+            var connected = _sessions.HasConnectedSession(item.Id);
+            if (item.HasActiveSession != connected)
+            {
+                item.HasActiveSession = connected;
+            }
+        }
+
+        foreach (var item in FavoriteItems)
+        {
+            var connected = _sessions.HasConnectedSession(item.Id);
+            if (item.HasActiveSession != connected)
+            {
+                item.HasActiveSession = connected;
+            }
+        }
+    }
+
+    /// <summary>发起一次去抖全量刷新。必须在 UI 线程调用。</summary>
+    private void ScheduleDebouncedReload()
+    {
+        var version = ++_reloadVersion;
+        _ = DebouncedReloadAsync(version);
+    }
+
+    /// <summary>去抖窗口结束后全量刷新一次；窗口内又有新事件（版本号变了）则本次作废。</summary>
+    private async Task DebouncedReloadAsync(int version)
+    {
+        try
+        {
+            await Task.Delay(ReloadDebounce);
+
+            if (version != _reloadVersion)
+            {
+                return; // 去抖窗口内又收到新事件：本次已过期，由最新一次负责刷新。
+            }
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            // 全量刷新失败不应影响已即时更新的统计与卡片；记录日志而非静默吞掉。
+            // 首页没有统一的页面错误横幅，导航返回时 ReloadCurrentPageAsync 会再兜底刷新。
+            _logger.LogWarning(ex, "首页会话变化去抖全量刷新失败");
+        }
+    }
+
     /// <summary>
     /// 合成首页标题日期行与可选的时钟行。日期恒在行首，其余段（星期 / 周数 / 时间）
     /// 依 <see cref="HomeTimeOrder"/> 决定的槽位顺序拼接，且各段只在对应开关开启时插入；
@@ -155,37 +267,37 @@ public sealed partial class HomePageViewModel(
     {
         var now = DateTimeOffset.Now;
         var date = DateTimeDisplay.Date(now);
-        var clock = settings.ShowHomeTime ? DateTimeDisplay.Clock(now, settings.ShowHomeSeconds) : null;
+        var clock = _settings.ShowHomeTime ? DateTimeDisplay.Clock(now, _settings.ShowHomeSeconds) : null;
 
         var parts = new List<string> { date };
         string? clockLine = null;
 
-        switch (settings.ShowHomeTimeOrder)
+        switch (_settings.ShowHomeTimeOrder)
         {
             case HomeTimeOrder.SeparateLine:
                 // 日期 · 星期 · 周数，时间单独一行。
-                if (settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
-                if (settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
+                if (_settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
+                if (_settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
                 clockLine = clock;
                 break;
 
             case HomeTimeOrder.DateTimeWeekdayWeek:
                 // 日期 · 时间 · 星期 · 周数。
                 if (clock is not null) parts.Add(clock);
-                if (settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
-                if (settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
+                if (_settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
+                if (_settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
                 break;
 
             case HomeTimeOrder.DateWeekdayTimeWeek:
                 // 日期 · 星期 · 时间 · 周数。
-                if (settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
+                if (_settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
                 if (clock is not null) parts.Add(clock);
-                if (settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
+                if (_settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
                 break;
 
             default: // DateWeekdayWeekTime —— 日期 · 星期 · 周数 · 时间
-                if (settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
-                if (settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
+                if (_settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
+                if (_settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
                 if (clock is not null) parts.Add(clock);
                 break;
         }
@@ -214,10 +326,10 @@ public sealed partial class HomePageViewModel(
     private async Task DismissSecurityTipAsync()
     {
         ShowSecurityTip = false;
-        settings.HomeSecurityTipDismissed = true;
+        _settings.HomeSecurityTipDismissed = true;
         try
         {
-            await settingsStore.SaveAsync(settings);
+            await _settingsStore.SaveAsync(_settings);
         }
         catch
         {
