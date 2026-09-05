@@ -59,7 +59,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     private readonly ConnectionService _connections;
     private readonly GroupService _groupService;
     private readonly ConnectionSearchService _search;
-    private readonly SessionManager _sessions;
     private readonly IHistoryRepository _history;
     private readonly IDialogService _dialogs;
     private readonly AppSettings _settings;
@@ -84,7 +83,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         ConnectionService connections,
         GroupService groupService,
         ConnectionSearchService search,
-        SessionManager sessions,
         IHistoryRepository history,
         IDialogService dialogs,
         AppSettings settings,
@@ -94,7 +92,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         _connections = connections;
         _groupService = groupService;
         _search = search;
-        _sessions = sessions;
         _history = history;
         _dialogs = dialogs;
         _settings = settings;
@@ -197,6 +194,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     /// <summary>带分组的视图。分组折叠是连接列表的默认组织方式。</summary>
     public ICollectionView ItemsView { get; }
+
+    /// <summary>请求打开一个连接（双击 / Enter / 右键连接）。由 MainViewModel 统一开会话。</summary>
+    public event EventHandler<ConnectionProfile>? OpenConnectionRequested;
 
     [ObservableProperty]
     private ConnectionItemViewModel? _selectedItem;
@@ -686,34 +686,19 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     // ── 命令 ──────────────────────────────────────────────────────
 
-    /// <summary>发起连接。这是列表页最高频的操作，由双击或 Enter 触发。</summary>
+    /// <summary>发起连接。这是列表页最高频的操作，由双击或 Enter 触发。
+    /// 真正的开会话由 MainViewModel 的统一漏斗处理（去重 / 聚焦 / 失败提示）。</summary>
     [RelayCommand]
-    public async Task ConnectAsync(ConnectionItemViewModel? item)
+    public Task ConnectAsync(ConnectionItemViewModel? item)
     {
         item ??= SelectedItem;
         if (item is null)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        try
-        {
-            // 只创建会话；实际连接由会话视图在控件就绪后发起。
-            await _sessions.CreateSessionAsync(item.Profile);
-        }
-        catch (ConnectionException ex)
-        {
-            await _dialogs.ShowMessageAsync("无法建立连接", ex.Message, DialogKind.Error);
-        }
-        catch (InvalidOperationException ex)
-        {
-            await _dialogs.ShowMessageAsync("无法建立连接", ex.Message, DialogKind.Warning);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "创建会话失败：{ConnectionName}", item.Name);
-            await _dialogs.ShowMessageAsync("无法建立连接", "创建会话时发生未知错误，详情请查看日志。", DialogKind.Error);
-        }
+        OpenConnectionRequested?.Invoke(this, item.Profile);
+        return Task.CompletedTask;
     }
 
     [RelayCommand]
