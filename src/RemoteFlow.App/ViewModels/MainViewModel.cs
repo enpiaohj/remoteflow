@@ -132,7 +132,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public bool IsConnectionListPage =>
         CurrentPage is NavigationPage.Connections or NavigationPage.Favorites or NavigationPage.Recent;
 
-    partial void OnCurrentPageChanged(NavigationPage value) => OnPropertyChanged(nameof(IsConnectionListPage));
+    partial void OnCurrentPageChanged(NavigationPage value)
+    {
+        OnPropertyChanged(nameof(IsConnectionListPage));
+
+        // 多选是临时上下文：一旦离开连接页（导航常经 RadioButton 的 TwoWay 提前改
+        // CurrentPage，不能只依赖 NavigateTo 里的判断），立即退出并清空选择。
+        if (ConnectionsPage.IsMultiSelect)
+        {
+            ConnectionsPage.ExitMultiSelectCommand.Execute(null);
+        }
+    }
 
     /// <summary>状态栏文案。</summary>
     public string SessionStatusText => _sessions.ActiveSessionCount == 0
@@ -191,12 +201,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void NavigateTo(NavigationPage page)
     {
-        // 多选是临时上下文：离开连接页（或切到另一个连接子视图）即退出并清空。
-        if (page != CurrentPage && IsConnectionListPage)
-        {
-            ConnectionsPage.ExitMultiSelectCommand.Execute(null);
-        }
-
         CurrentPage = page;
 
         // 收藏与最近本质上是「我的连接」的两个筛选视图，
