@@ -17,6 +17,8 @@
     <SolidColorBrush x:Key="Bg.Pressed" Color="#333944" />
     <SolidColorBrush x:Key="Bg.Selected" Color="#232A46" />
     <SolidColorBrush x:Key="Bg.SelectedHover" Color="#2E3758" />
+    <SolidColorBrush x:Key="Bg.RowSelected" Color="#202942" />
+    <SolidColorBrush x:Key="Bg.RowSelectedHover" Color="#293350" />
     <SolidColorBrush x:Key="Bg.Session" Color="#0E1013" />
 
     <SolidColorBrush x:Key="Text.Primary" Color="#F2F4F8" />

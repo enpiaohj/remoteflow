@@ -30,6 +30,8 @@
     <SolidColorBrush x:Key="Bg.Pressed" Color="#DFDFDF" />
     <SolidColorBrush x:Key="Bg.Selected" Color="#E7EDFB" />
     <SolidColorBrush x:Key="Bg.SelectedHover" Color="#DAE3F8" />
+    <SolidColorBrush x:Key="Bg.RowSelected" Color="#F1F5FE" />
+    <SolidColorBrush x:Key="Bg.RowSelectedHover" Color="#E4EDFC" />
     <SolidColorBrush x:Key="Bg.Session" Color="#12131A" />
 
     <!-- 文字层级：3 级灰度 + 反色，贴近 Windows 系统灰阶，不刻意染色相 -->

@@ -282,7 +282,7 @@
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Selected}" />
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.RowSelected}" />
                             <Setter TargetName="Accent" Property="Opacity" Value="1" />
                         </Trigger>
                         <MultiTrigger>
@@ -290,7 +290,7 @@
                                 <Condition Property="IsSelected" Value="True" />
                                 <Condition Property="IsMouseOver" Value="True" />
                             </MultiTrigger.Conditions>
-                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.SelectedHover}" />
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.RowSelectedHover}" />
                         </MultiTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
