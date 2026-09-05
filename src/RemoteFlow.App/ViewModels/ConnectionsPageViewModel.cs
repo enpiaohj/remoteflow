@@ -194,7 +194,18 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         try
         {
             var entries = await _history.GetByConnectionAsync(item.Id, 50);
-            _selectedHistoryCount = await _history.CountByConnectionAsync(item.Id);
+            if (!ReferenceEquals(SelectedItem, item))
+            {
+                return; // 选中已切走：丢弃本次迟到结果，避免详情历史与当前选中错行
+            }
+
+            var count = await _history.CountByConnectionAsync(item.Id);
+            if (!ReferenceEquals(SelectedItem, item))
+            {
+                return;
+            }
+
+            _selectedHistoryCount = count;
             _selectedLastDuration = entries.FirstOrDefault()?.Duration;
 
             foreach (var entry in entries)
