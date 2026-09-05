@@ -37,27 +37,17 @@
 
         <!-- 首页「最近连接 / 收藏」行的右键菜单：快速访问，只保留
              连接 / 编辑 / 测试连接 / 收藏|取消收藏 / 在「我的连接」中定位。
+             分组布局：主操作组=连接 / 编辑；第二组=测试连接与收藏切换；末组=定位。
              统一经 HomePage.ConnectionActionRequested 桥接到既有命令，不在首页复制实现。
              x:Shared=False 使每行实例化独立菜单；DataContext 在菜单打开时取自所在行。
-             Opened 时把该行设为选中，让菜单动作的作用对象在视觉上明确。 -->
+             Opened 时把该行设为选中，并依行 IsFavorite 写入收藏项 Header。 -->
         <ContextMenu x:Key="HomeRowMenu" x:Shared="False" Opened="OnHomeRowMenuOpened">
             <MenuItem Tag="connect" Header="连接" Click="OnRowActionClick" />
             <MenuItem Tag="edit" Header="编辑" Click="OnRowActionClick" />
-            <MenuItem Tag="test" Header="测试连接" Click="OnRowActionClick" />
             <Separator />
-            <!-- 收藏 / 取消收藏：Header 随行当前收藏状态切换 -->
-            <MenuItem Tag="favorite" Click="OnRowActionClick">
-                <MenuItem.Style>
-                    <Style TargetType="MenuItem">
-                        <Setter Property="Header" Value="收藏" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsFavorite}" Value="True">
-                                <Setter Property="Header" Value="取消收藏" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </MenuItem.Style>
-            </MenuItem>
+            <MenuItem Tag="test" Header="测试连接" Click="OnRowActionClick" />
+            <!-- 收藏 / 取消收藏：Header 随行当前收藏状态切换，打开时由 OnHomeRowMenuOpened 写入 -->
+            <MenuItem Tag="favorite" Header="收藏" Click="OnRowActionClick" />
             <Separator />
             <MenuItem Tag="manage" Header="在「我的连接」中定位" Click="OnRowActionClick" />
         </ContextMenu>

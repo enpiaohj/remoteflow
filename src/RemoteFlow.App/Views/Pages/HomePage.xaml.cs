@@ -71,6 +71,13 @@ public partial class HomePage : UserControl
 
         var item = menu.DataContext as ConnectionItemViewModel
             ?? (menu.PlacementTarget as FrameworkElement)?.DataContext as ConnectionItemViewModel;
+
+        // 收藏项 Header 随行当前收藏状态切换：已收藏→取消收藏，未收藏→收藏。
+        if (menu.Items.OfType<MenuItem>().FirstOrDefault(m => (m.Tag as string) == HomeRowActions.Favorite) is { } favorite)
+        {
+            favorite.Header = item?.IsFavorite == true ? "取消收藏" : "收藏";
+        }
+
         ViewModel?.SelectInContext(item);
     }
 

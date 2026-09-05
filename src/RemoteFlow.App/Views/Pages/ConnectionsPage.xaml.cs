@@ -146,6 +146,7 @@ public partial class ConnectionsPage : UserControl
     /// <item>「我的连接」（Filter=All，含分组树）→ 完整管理项：复制连接 / 移动到分组 / 删除可见；「在「我的连接」中定位」隐藏。</item>
     /// <item>收藏 / 最近连接（Filter≠All）→ 快速访问：只留 连接 / 编辑 / 测试连接 / 收藏；显示「在「我的连接」中定位」。</item>
     /// </list>
+    /// 同时把收藏项 Header 按视图与行状态写成 收藏 / 取消收藏；裁剪后顺手隐藏空分隔组。
     /// </summary>
     private void ApplyConnectionRowMenuGuards(ContextMenu menu)
     {
@@ -155,6 +156,9 @@ public partial class ConnectionsPage : UserControl
         }
 
         var isAll = vm.Filter == ConnectionFilter.All;
+        var row = menu.DataContext as ConnectionItemViewModel
+            ?? (menu.PlacementTarget as FrameworkElement)?.DataContext as ConnectionItemViewModel;
+
         foreach (var item in menu.Items.OfType<MenuItem>())
         {
             switch (item.Tag as string)
@@ -167,6 +171,56 @@ public partial class ConnectionsPage : UserControl
                 case "locate":
                     item.Visibility = isAll ? Visibility.Collapsed : Visibility.Visible;
                     break;
+                case "favorite":
+                    // 收藏页（Filter=Favorites）展示的都是收藏，恒「取消收藏」；其它页按行当前状态。
+                    item.Header = vm.Filter == ConnectionFilter.Favorites || row?.IsFavorite == true
+                        ? "取消收藏"
+                        : "收藏";
+                    break;
+            }
+        }
+
+        NormalizeSeparators(menu);
+    }
+
+    /// <summary>
+    /// 隐藏某菜单项后，它夹住的分隔线可能变成空组（悬空 / 相邻 Separator）。
+    /// 规则：Separator 只在两侧都还有可见菜单项时保留，其余折叠，保证视觉不出现空分组。
+    /// </summary>
+    private static void NormalizeSeparators(ContextMenu menu)
+    {
+        var items = menu.Items.Cast<object>().ToList();
+        var n = items.Count;
+
+        var hasBefore = false;
+        var visibleBefore = new bool[n];
+        for (var i = 0; i < n; i++)
+        {
+            visibleBefore[i] = hasBefore;
+            if (items[i] is MenuItem { Visibility: Visibility.Visible })
+            {
+                hasBefore = true;
+            }
+        }
+
+        var hasAfter = false;
+        var visibleAfter = new bool[n];
+        for (var i = n - 1; i >= 0; i--)
+        {
+            visibleAfter[i] = hasAfter;
+            if (items[i] is MenuItem { Visibility: Visibility.Visible })
+            {
+                hasAfter = true;
+            }
+        }
+
+        for (var i = 0; i < n; i++)
+        {
+            if (items[i] is Separator sep)
+            {
+                sep.Visibility = visibleBefore[i] && visibleAfter[i]
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             }
         }
     }
