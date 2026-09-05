@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using RemoteFlow.App.ViewModels;
 
 namespace RemoteFlow.App.Views.Pages;
@@ -30,6 +31,29 @@ public partial class HomePage : UserControl
         if (Resolve(sender) is { } item)
         {
             ViewModel?.ConnectCommand.Execute(item);
+        }
+    }
+
+    /// <summary>收藏行：单击选中（高亮），双击发起连接。单击不连以免误触。</summary>
+    private void OnFavoriteRowMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left)
+        {
+            return;
+        }
+
+        if ((sender as FrameworkElement)?.DataContext is not ConnectionItemViewModel item)
+        {
+            return;
+        }
+
+        if (e.ClickCount >= 2)
+        {
+            ViewModel?.ConnectCommand.Execute(item);
+        }
+        else
+        {
+            ViewModel?.SelectFavorite(item);
         }
     }
 

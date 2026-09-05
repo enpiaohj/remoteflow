@@ -137,13 +137,22 @@
 
         <!-- 收藏 / 最近活动 卡片里的一行 -->
         <DataTemplate x:Key="FavoriteRow" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Grid Height="60">
-                <Grid.InputBindings>
-                    <!-- 收藏行双击 = 连接（与「我的连接」列表同一约定），单击不连以免误触 -->
-                    <MouseBinding MouseAction="LeftDoubleClick"
-                                  Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                  CommandParameter="{Binding}" />
-                </Grid.InputBindings>
+            <!-- 手势与「我的连接」列表一致：单击选中（高亮），双击发起连接。
+                 悬停有底色、整行手型指针，避免“看着像行却没反馈”。 -->
+            <Grid Height="60" Cursor="Hand" MouseLeftButtonDown="OnFavoriteRowMouseDown">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Background" Value="Transparent" />
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource Bg.Hover}" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource Bg.Selected}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />

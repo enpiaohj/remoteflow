@@ -161,6 +161,15 @@ public sealed partial class HomePageViewModel(
         // 真正的开会话由 MainViewModel 的统一漏斗处理（去重 / 聚焦 / 失败提示）。
         OpenConnectionRequested?.Invoke(this, item.Profile);
     }
+
+    /// <summary>单选收藏行（单击选中并高亮），再双击才连接。</summary>
+    public void SelectFavorite(ConnectionItemViewModel? item)
+    {
+        foreach (var favorite in FavoriteItems)
+        {
+            favorite.IsSelected = ReferenceEquals(favorite, item);
+        }
+    }
 }
 
 /// <summary>连接历史行。只展示主机、协议、时间与标准化结果，不含任何凭据信息。</summary>
