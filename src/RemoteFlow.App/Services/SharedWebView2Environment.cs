@@ -64,8 +64,6 @@ public sealed class SharedWebView2Environment
                     $"不能用 {userDataFolder} 再次获取。");
             }
 
-            _acquireCount++;
-
             if (_environmentTask is null)
             {
                 Directory.CreateDirectory(userDataFolder);
@@ -75,6 +73,9 @@ public sealed class SharedWebView2Environment
                     userDataFolder: userDataFolder);
             }
 
+            // 只有真正注册/复用了共享 task 的获取才计入引用计数：
+            // 若 Directory.CreateDirectory / CreateAsync 同步抛错，异常会在计数前离开 lock，不会留下无人归还的计数。
+            _acquireCount++;
             task = _environmentTask;
         }
 
