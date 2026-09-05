@@ -44,6 +44,12 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
     /// <summary>会话已进入收尾（Disconnect / Dispose / 远端关闭释放）。置位后不再允许新连接 / 回填复活。</summary>
     private volatile bool _closing;
 
+    /// <summary>
+    /// 连接释放认领位。同一连接的多路释放（远端关闭回调 vs UI Disconnect/Dispose）并发时，
+    /// 只让第一个认领成功的调用者真正执行 Close/Dispose（Interlocked.Exchange 0→1）。
+    /// </summary>
+    private int _releaseClaimed;
+
     public VncSession(SessionRequest request, ILoggerFactory loggerFactory)
     {
         _request = request;
@@ -126,20 +132,35 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
             // 否则会让已 Disconnected / 已释放的会话复活。这里立即释放迟到连接。
             if (_disposed || _closing)
             {
-                try
+                DisposeLateConnection(connection);
+                return;
+            }
+
+            // 原子认领连接槽位（检查 + 赋值一体）：仅当槽位仍为空（无既有连接）才写入。
+            // CompareExchange 返回原值：返回非 null 说明槽位已被并发路径占用 / 释放流程接管，
+            // 放弃这条迟到连接，绝不覆盖既有连接。
+            if (Interlocked.CompareExchange(ref _connection, connection, null) is not null)
+            {
+                DisposeLateConnection(connection);
+                return;
+            }
+
+            connection.PropertyChanged += OnConnectionPropertyChanged;
+
+            // 认领成功后再次确认：关闭流程若恰在「检查 + 认领」之间启动，撤销写入并释放。
+            // 若释放已被并发 Disconnect/Dispose 认领，槽位中的连接由认领者负责释放，这里不再重复释放。
+            if (_disposed || _closing)
+            {
+                connection.PropertyChanged -= OnConnectionPropertyChanged;
+
+                if (TryClaimRelease())
                 {
-                    connection.Dispose();
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "VNC 会话 {SessionId} 释放迟到连接时出现异常", SessionId);
+                    Interlocked.Exchange(ref _connection, null);
+                    await CloseAndDisposeConnectionAsync(connection);
                 }
 
                 return;
             }
-
-            _connection = connection;
-            _connection.PropertyChanged += OnConnectionPropertyChanged;
 
             SetState(ConnectionState.Connected);
 
@@ -234,19 +255,29 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
     }
 
     /// <summary>
-    /// 幂等释放当前连接：摘除字段引用 → 退订状态事件 → 优雅关闭（已 Closed 则跳过）→ Dispose。
-    /// 连接已 null 时直接返回。Disconnect / Dispose / 远端关闭多路收敛共用此方法。
+    /// 幂等释放当前连接：认领释放 → 原子摘除槽位 → 退订状态事件 → 优雅关闭（已 Closed 则跳过）→ Dispose。
+    /// 连接已 null 时直接返回。Disconnect / Dispose / 远端关闭多路收敛共用此方法，同一连接只释放一次。
     /// </summary>
     private async Task ReleaseConnectionAsync()
     {
-        var connection = _connection;
+        // 槽位空（无连接，或连接在途尚未写入）时无需释放；此时由迟到的 ConnectAsync 自行释放。
+        if (_connection is null)
+        {
+            return;
+        }
+
+        // 认领释放：远端关闭回调与 UI Disconnect/Dispose 并发时，只让第一个成功者执行真正的收尾。
+        if (!TryClaimRelease())
+        {
+            return;
+        }
+
+        var connection = Interlocked.Exchange(ref _connection, null);
         if (connection is null)
         {
             return;
         }
 
-        // 先摘除字段并退订：并发再次进入时读到 null，不会再对同一连接重复关闭 / 重复释放。
-        _connection = null;
         connection.PropertyChanged -= OnConnectionPropertyChanged;
 
         await CloseAndDisposeConnectionAsync(connection);
@@ -262,9 +293,16 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
     /// </summary>
     private void ReleaseConnectionOnRemoteClose(RfbConnection connection)
     {
-        if (ReferenceEquals(_connection, connection))
+        // 与 UI Disconnect/Dispose 并发：只让一路真正释放同一连接。
+        if (!TryClaimRelease())
         {
-            _connection = null;
+            return;
+        }
+
+        // 原子摘除：仅当槽位仍指向本连接才清空，避免误清并发写入的新连接。
+        if (!ReferenceEquals(Interlocked.CompareExchange(ref _connection, null, connection), connection))
+        {
+            return;
         }
 
         connection.PropertyChanged -= OnConnectionPropertyChanged;
@@ -272,6 +310,22 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
         // 库可能在持有内部信号量的线程上触发本回调（例如重连放弃路径在持锁时置 Closed），
         // 若在这里同步执行 Close/Dispose 会与库自身收尾互相等待（自锁）。放到线程池异步执行。
         _ = Task.Run(() => CloseAndDisposeConnectionAsync(connection));
+    }
+
+    /// <summary>认领「连接释放」。0→1 成功返回 true 的调用者负责真正释放；其余并发释放路径直接返回。</summary>
+    private bool TryClaimRelease() => Interlocked.Exchange(ref _releaseClaimed, 1) == 0;
+
+    /// <summary>释放一条从未进入会话槽位（迟到 / 未认领）的连接。同步幂等，异常只记录。</summary>
+    private void DisposeLateConnection(RfbConnection connection)
+    {
+        try
+        {
+            connection.Dispose();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "VNC 会话 {SessionId} 释放迟到连接时出现异常", SessionId);
+        }
     }
 
     /// <summary>关闭并释放单个连接。任何异常只记录，不向调用方传播（供后台 fire-and-forget 调用）。</summary>
