@@ -230,9 +230,10 @@ public sealed class SessionManager : IAsyncDisposable
 
         var session = entry.Session;
 
-        // 关闭期间不再观察该会话的状态变化：Disconnecting/Disconnected 的历史补写统一由下方
-        // CompleteHistoryAsync 收口，避免与 OnSessionStateChanged 的后台写入竞争或重复补写。
-        session.StateChanged -= OnSessionStateChanged;
+        // 关闭期间保持对该会话状态变化的观察：Disconnecting/Disconnected 等跳变仍会经
+        // OnSessionStateChanged 广播（让 UI 的计数与「已连接」在会话移除前即回落）；
+        // 但 Closing 会话的历史补写被跳过，统一由下方 CompleteHistoryAsync 原子单写，
+        // 避免与状态事件的后台补写竞争或重复写。
 
         var timeout = CloseTimeout;
         var sw = Stopwatch.StartNew();
@@ -364,7 +365,7 @@ public sealed class SessionManager : IAsyncDisposable
             return;
         }
 
-        // 先做无负载的聚合转发（同步，保证状态跳变立即被 UI 观察到），再异步补历史。
+        // 先做无负载的聚合转发（同步，保证状态跳变立即被 UI 观察到）。
         RaiseSessionStateChanged(new SessionStateChangedAggregatedEventArgs(
             session.SessionId,
             session.Profile.Id,
@@ -373,6 +374,13 @@ public sealed class SessionManager : IAsyncDisposable
             e.ErrorCode,
             e.ErrorMessage));
         RaiseSessionsChanged();
+
+        // 关闭编排期（Closing）：状态跳变仍广播（Disconnecting 即让 UI 回落），但历史补写
+        // 由关闭路径 CompleteHistoryAsync 原子单写，这里跳过，避免与关闭路径竞争或重复写。
+        if (entry.Closing)
+        {
+            return;
+        }
 
         // 事件可能来自协议库的后台线程，历史写入放到线程池执行，避免阻塞协议回调。
         _ = Task.Run(async () =>
@@ -514,12 +522,26 @@ public sealed class SessionManager : IAsyncDisposable
 
         private int _historyCompletionClaimed;
         private int _closeClaimed;
+        private volatile bool _closing;
 
         /// <summary>原子认领一次「结束历史补写」；并发/重复补写只会有一个调用者成功。</summary>
         public bool TryCompleteHistory() => Interlocked.Exchange(ref _historyCompletionClaimed, 1) == 0;
 
-        /// <summary>原子认领一次关闭流程；同一条目并发 / 重复关闭只会有一个调用者成功。</summary>
-        public bool TryClaimClose() => Interlocked.Exchange(ref _closeClaimed, 1) == 0;
+        /// <summary>该会话是否已进入关闭编排期（<see cref="TryClaimClose"/> 成功后即置位）。
+        /// 关闭期状态跳变仍会广播，但历史补写统一由关闭路径收口，<see cref="SessionManager"/> 将跳过。</summary>
+        public bool Closing => _closing;
+
+        /// <summary>原子认领一次关闭流程；同一条目并发 / 重复关闭只会有一个调用者成功，成功时置 <see cref="Closing"/>。</summary>
+        public bool TryClaimClose()
+        {
+            if (Interlocked.Exchange(ref _closeClaimed, 1) != 0)
+            {
+                return false;
+            }
+
+            _closing = true;
+            return true;
+        }
     }
 }
 

@@ -331,21 +331,85 @@ public sealed class SessionManagerLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task SessionStateChanged_创建与未连接关闭不触发_关闭期不转发收尾跳变()
+    public async Task 关闭期仍广播回落_历史单写_会话不残留()
+    {
+        var profile = NewProfile("关闭广播回落");
+        var profileId = profile.Id;
+
+        var observedStates = new List<ConnectionState>();
+        var snapshots = new List<(int Active, bool Connected)>();
+        _manager.SessionStateChanged += (_, e) => observedStates.Add(e.NewState);
+        _manager.SessionsChanged += (_, _) => snapshots.Add((_manager.ActiveSessionCount, _manager.HasConnectedSession(profileId)));
+
+        var session = await _manager.CreateSessionAsync(profile);
+        Assert.Empty(observedStates); // 创建不触发聚合状态事件
+
+        await session.ConnectAsync();
+        Assert.Equal(1, _manager.ConnectedSessionCount);
+        Assert.True(_manager.HasConnectedSession(profileId));
+        Assert.Contains(ConnectionState.Connecting, observedStates);
+        Assert.Contains(ConnectionState.Connected, observedStates);
+
+        observedStates.Clear();
+        snapshots.Clear();
+
+        var history = new SqliteHistoryRepository(_database);
+        await _manager.CloseSessionAsync(session.SessionId);
+
+        // 关闭期 Disconnecting / Disconnected 仍经聚合广播（不再是“退订不转发”）。
+        Assert.Contains(ConnectionState.Disconnecting, observedStates);
+        Assert.Contains(ConnectionState.Disconnected, observedStates);
+
+        // 关闭发起（Disconnecting，会话尚未移除）时“已连接”即回落：存在 (活动≥1, 未连接) 的快照。
+        Assert.Contains(snapshots, s => s.Active >= 1 && !s.Connected);
+
+        // 会话不残留：移除后无活动 / 未连接。
+        Assert.Equal(0, _manager.ActiveSessionCount);
+        Assert.False(_manager.HasActiveSession(profileId));
+        Assert.False(_manager.HasConnectedSession(profileId));
+        Assert.Equal(0, _manager.ConnectedSessionCount);
+
+        // 历史不被双写：连接→关闭只产生 1 条历史（关闭期 Disconnecting/Disconnected 不补插新行）。
+        var rows = await WaitForHistoryCountAsync(history, profileId, expected: 1);
+        Assert.Equal(1, rows);
+    }
+
+    [Fact]
+    public async Task SessionStateChanged_创建与连接触发_未连接即关也广播收尾但不补历史()
     {
         var stateChanged = 0;
         _manager.SessionStateChanged += (_, _) => stateChanged++;
 
-        var profile = NewProfile("负向转发");
+        var profile = NewProfile("未连接即关");
         var session = await _manager.CreateSessionAsync(profile);
         Assert.Equal(0, stateChanged); // 创建不触发聚合状态事件
 
-        await session.ConnectAsync();
-        Assert.True(stateChanged >= 2, $"连接过程应转发 Connecting/Connected，实际 {stateChanged}");
-
-        stateChanged = 0;
+        // 未连接直接关闭：收尾（Disconnecting/Disconnected）仍会广播。
         await _manager.CloseSessionAsync(session.SessionId);
-        Assert.Equal(0, stateChanged); // 关闭退订后 Disconnecting/Disconnected/Closed 不再转发
+        Assert.True(stateChanged >= 2, $"关闭收尾应广播 Disconnecting/Disconnected，实际 {stateChanged}");
+
+        Assert.Equal(0, _manager.ActiveSessionCount);
+        Assert.False(_manager.HasActiveSession(profile.Id));
+        Assert.Null(_manager.GetSessionState(profile.Id));
+    }
+
+    private static async Task<int> WaitForHistoryCountAsync(
+        SqliteHistoryRepository history, Guid connectionId, int expected)
+    {
+        // 连接态的历史行由 OnSessionStateChanged 的后台 Task 异步写入，轮询等待稳定后再断言。
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            var count = await history.CountByConnectionAsync(connectionId);
+            if (count >= expected)
+            {
+                return count;
+            }
+
+            await Task.Delay(20);
+        }
+
+        return await history.CountByConnectionAsync(connectionId);
     }
 
     [Fact]
