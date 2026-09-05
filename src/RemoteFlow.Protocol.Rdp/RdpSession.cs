@@ -64,6 +64,17 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
 
     public event EventHandler<SessionStateChangedEventArgs>? StateChanged;
 
+    /// <summary>是否已进入关闭 / 收尾流程。RDP 的收尾（取消 + 退订 + 断开 + 释放控件）集中在
+    /// <see cref="DisposeAsync"/>，故以释放位（_disposed）近似表示。</summary>
+    public bool IsClosing => _disposed;
+
+    /// <summary>
+    /// 收尾：将会话置 <see cref="ConnectionState.Closed"/>（终态，幂等）。
+    /// <para>SessionManager 在 teardown + 释放（_disposed 已置位）之后调用；
+    /// 不能因已释放而提前返回，Closed 仍需广播，供 UI 移除 Tab / 历史收口。</para>
+    /// </summary>
+    public void MarkClosed() => SetState(ConnectionState.Closed);
+
     /// <summary>
     /// 供 UI 放入 <c>WindowsFormsHost</c> 的宿主控件。
     /// 必须先加入可视树，<see cref="ConnectAsync"/> 才能成功。
@@ -155,7 +166,8 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
 
         SafeDisconnect();
 
-        if (State is not (ConnectionState.Failed or ConnectionState.Disconnected))
+        // Closed 为终态：若已被 MarkClosed 置 Closed，后续迟到的断开收尾不得回退到 Disconnected。
+        if (State is not (ConnectionState.Failed or ConnectionState.Disconnected or ConnectionState.Closed))
         {
             SetState(ConnectionState.Disconnected);
         }

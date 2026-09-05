@@ -174,7 +174,10 @@ public sealed class SessionManager : IAsyncDisposable
         try
         {
             // 结束历史只补写一次；此前若已因 Failed/Disconnected 补写则去重跳过。
-            await CompleteHistoryAsync(entry, ConnectionResult.Success, ConnectionErrorCode.None);
+            // 结果按会话终态判定：最终停在 Failed（错误码 Cancelled → Cancelled，其余 → Failed）记失败，
+            // 避免「取消 / 失败被记成成功」；正常关闭（teardown 后 Disconnected）记 Success。
+            var (result, errorCode) = ResolveTerminalOutcome(session);
+            await CompleteHistoryAsync(entry, result, errorCode);
         }
         catch (Exception ex)
         {
@@ -333,7 +336,35 @@ public sealed class SessionManager : IAsyncDisposable
         }
     }
 
-    private async Task StartHistoryAsync(SessionEntry entry, IRemoteSession session)
+    /// <summary>
+    /// 依据会话的终态（最后一次观察到的状态）决定关闭路径补写历史的结项结果。
+    /// <para>关闭编排会先把会话 teardown 到 Disconnected（若此前不是 Failed），因此这里读取
+    /// <see cref="IRemoteSession.State"/>：最终停在 Failed 则按 <see cref="IRemoteSession.ErrorCode"/>
+    /// 记 Failed / Cancelled；其余（正常断开 / 从未连接成功）一律记 Success。</para>
+    /// </summary>
+    private static (ConnectionResult Result, ConnectionErrorCode ErrorCode) ResolveTerminalOutcome(IRemoteSession session)
+    {
+        if (session.State == ConnectionState.Failed)
+        {
+            var code = session.ErrorCode;
+            return (code == ConnectionErrorCode.Cancelled ? ConnectionResult.Cancelled : ConnectionResult.Failed, code);
+        }
+
+        return (ConnectionResult.Success, ConnectionErrorCode.None);
+    }
+
+    /// <summary>
+    /// 开始一条历史记录并回填 HistoryId。返回回填任务并登记到条目上：
+    /// 供 <see cref="CompleteHistoryAsync"/> 在 HistoryId 尚未就绪时 await，避免竞态产生悬空行。
+    /// </summary>
+    private Task StartHistoryAsync(SessionEntry entry, IRemoteSession session)
+    {
+        var startTask = DoStartHistoryAsync(entry, session);
+        entry.HistoryStartTask = startTask;
+        return startTask;
+    }
+
+    private async Task DoStartHistoryAsync(SessionEntry entry, IRemoteSession session)
     {
         var historyEntry = new ConnectionHistoryEntry
         {
@@ -352,6 +383,25 @@ public sealed class SessionManager : IAsyncDisposable
 
     private async Task CompleteHistoryAsync(SessionEntry entry, ConnectionResult result, ConnectionErrorCode errorCode)
     {
+        // 开始回填（HistoryId）与结束补写是两条独立异步任务，可能交错：Connecting 的
+        // StartHistoryAsync 尚未完成（AddAsync + 回填 Id）时，Failed / Disconnected / 关闭路径的
+        // Complete 就已到达。若此时因 HistoryId 为空直接返回，会留下只有 StartedAt、没有 EndedAt
+        // 的悬空历史行。同一会话的状态事件按序入队（ThreadPool 全局队列 FIFO），Connecting 处理器
+        // 会在任何后续 Complete 前先把 HistoryStartTask 登记上，因此这里 await 它即可等到 HistoryId
+        // 就绪。开始记录只会注册一次；await 已完成的任务立即返回。开始失败（AddAsync 抛）时行未写入，
+        // 无需补写，悬空行不会产生。
+        if (entry.HistoryId is null && entry.HistoryStartTask is { } startTask)
+        {
+            try
+            {
+                await startTask;
+            }
+            catch
+            {
+                return;
+            }
+        }
+
         // 每个会话只补写一次结束记录；用原子认领保证「失败后关闭 Tab」在 close 路径与后台补写并发下也只写一次。
         if (entry.HistoryId is not { } historyId || !entry.TryCompleteHistory())
         {
@@ -370,6 +420,9 @@ public sealed class SessionManager : IAsyncDisposable
 
         /// <summary>对应的历史记录 Id。会话进入 Connecting 后才产生。</summary>
         public Guid? HistoryId { get; set; }
+
+        /// <summary>开始历史回填任务（AddAsync + HistoryId 赋值）。Complete 发现 HistoryId 为空时 await 它，消除悬空 StartedAt 行。</summary>
+        public Task? HistoryStartTask { get; set; }
 
         private int _historyCompletionClaimed;
         private int _closeClaimed;

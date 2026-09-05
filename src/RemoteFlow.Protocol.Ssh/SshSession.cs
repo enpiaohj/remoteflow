@@ -72,6 +72,16 @@ public sealed class SshSession : IRemoteSession
 
     public event EventHandler<SessionStateChangedEventArgs>? StateChanged;
 
+    /// <summary>是否已进入关闭 / 收尾流程（Disconnect / Dispose / 远端 EOF 后为 true）。</summary>
+    public bool IsClosing => _closing;
+
+    /// <summary>
+    /// 收尾：将会话置 <see cref="ConnectionState.Closed"/>（终态，幂等）。
+    /// <para>SessionManager 在 teardown + 释放（_disposed 已置位）之后调用；
+    /// 不能因已释放而提前返回，Closed 仍需广播，供 UI 移除 Tab / 历史收口。</para>
+    /// </summary>
+    public void MarkClosed() => SetState(ConnectionState.Closed);
+
     /// <summary>收到远端数据。参数为原始字节，交由终端渲染层解码。</summary>
     public event EventHandler<byte[]>? DataReceived;
 
@@ -267,7 +277,8 @@ public sealed class SshSession : IRemoteSession
 
         await CleanupAsync();
 
-        if (State is not (ConnectionState.Failed or ConnectionState.Disconnected))
+        // Closed 为终态：若已被 MarkClosed 置 Closed，后续迟到的断开收尾不得回退到 Disconnected。
+        if (State is not (ConnectionState.Failed or ConnectionState.Disconnected or ConnectionState.Closed))
         {
             SetState(ConnectionState.Disconnected);
         }
