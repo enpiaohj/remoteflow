@@ -38,6 +38,12 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
 
         session.StateChanged += OnSessionStateChanged;
         UpdateStateDisplay(session.State, session.ErrorCode, session.ErrorMessage);
+
+        // VNC 会话打开时按该连接记住的档位初始化（RDP 不读此项）。
+        if (Protocol == ProtocolType.Vnc)
+        {
+            VncScale = Session.Profile.Vnc.ScaleMode;
+        }
     }
 
     public IRemoteSession Session { get; }
@@ -83,6 +89,18 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     [ObservableProperty]
     private bool _scaleToFit = true;
 
+    /// <summary>VNC 缩放模式（VNC 专用三态；RDP 仍用 ScaleToFit bool）。</summary>
+    [ObservableProperty]
+    private VncScaleMode _vncScale = VncScaleMode.FitToWindow;
+
+    /// <summary>VNC 缩放按钮 ToolTip，随档位变化。</summary>
+    public string VncScalingLabel => VncScale switch
+    {
+        VncScaleMode.Fill => "拉伸铺满",
+        VncScaleMode.Original => "1:1 原始",
+        _ => "等比适应"
+    };
+
     /// <summary>请求宿主视图执行某个操作（全屏、发送 Ctrl+Alt+Del 等）。</summary>
     public event EventHandler<SessionAction>? ActionRequested;
 
@@ -102,6 +120,20 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     private void ToggleScaling()
     {
         ScaleToFit = !ScaleToFit;
+        ActionRequested?.Invoke(this, SessionAction.ToggleScaling);
+    }
+
+    /// <summary>VNC 缩放三档循环：等比适应 → 拉伸铺满 → 1:1 → 等比适应。</summary>
+    [RelayCommand]
+    private void CycleVncScaling()
+    {
+        VncScale = VncScale switch
+        {
+            VncScaleMode.FitToWindow => VncScaleMode.Fill,
+            VncScaleMode.Fill => VncScaleMode.Original,
+            _ => VncScaleMode.FitToWindow
+        };
+        OnPropertyChanged(nameof(VncScalingLabel));
         ActionRequested?.Invoke(this, SessionAction.ToggleScaling);
     }
 

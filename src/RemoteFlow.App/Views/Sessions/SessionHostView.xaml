@@ -90,8 +90,8 @@
                     <StackPanel x:Name="VncToolsDock" Orientation="Horizontal" Visibility="Collapsed">
                         <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
                                 Content="{StaticResource Icon.Scale}"
-                                ToolTip="适应窗口 / 1:1"
-                                Command="{Binding ToggleScalingCommand}" />
+                                ToolTip="{Binding VncScalingLabel}"
+                                Command="{Binding CycleVncScalingCommand}" />
                     </StackPanel>
 
                     <Border Width="1" Height="16" Margin="6,0"
@@ -315,8 +315,8 @@
                     <StackPanel x:Name="VncToolsPill" Orientation="Horizontal" Visibility="Collapsed">
                         <Button Style="{StaticResource Session.BarButton}"
                                 Content="{StaticResource Icon.Scale}"
-                                ToolTip="适应窗口 / 1:1"
-                                Command="{Binding ToggleScalingCommand}" />
+                                ToolTip="{Binding VncScalingLabel}"
+                                Command="{Binding CycleVncScalingCommand}" />
                     </StackPanel>
 
                     <Border Width="1" Height="16" Margin="4,0"

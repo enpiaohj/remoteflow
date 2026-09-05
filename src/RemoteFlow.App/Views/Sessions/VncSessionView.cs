@@ -83,6 +83,9 @@ public sealed class VncSessionView : ContentControl, IDisposable
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
 
+        // 按连接记住的档位初始化画面缩放（构造后 VM 已从 Profile 恢复 VncScale）。
+        ApplyScaleMode();
+
         HookInput();
     }
 
@@ -314,6 +317,29 @@ public sealed class VncSessionView : ContentControl, IDisposable
         e.Handled = true;
     }
 
+    /// <summary>按当前 VNC 缩放档位设置画面拉伸与滚动条。</summary>
+    private void ApplyScaleMode()
+    {
+        switch (_viewModel.VncScale)
+        {
+            case VncScaleMode.Fill:
+                _image.Stretch = Stretch.Fill;
+                _scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                break;
+            case VncScaleMode.Original:
+                _image.Stretch = Stretch.None;
+                _scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
+                _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+                break;
+            default: // FitToWindow
+                _image.Stretch = Stretch.Uniform;
+                _scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                break;
+        }
+    }
+
     private void OnActionRequested(object? sender, SessionAction action)
     {
         if (action != SessionAction.ToggleScaling)
@@ -321,21 +347,8 @@ public sealed class VncSessionView : ContentControl, IDisposable
             return;
         }
 
-        // 适应窗口用 Uniform 缩放、关闭滚动条；1:1 用原始像素、按需滚动。
-        if (_viewModel.ScaleToFit)
-        {
-            _image.Stretch = Stretch.Uniform;
-            _scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
-            _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
-        }
-        else
-        {
-            _image.Stretch = Stretch.None;
-            _scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
-            _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-        }
-
-        _session.Profile.Vnc.ScaleMode = _viewModel.ScaleToFit ? VncScaleMode.FitToWindow : VncScaleMode.Original;
+        ApplyScaleMode();
+        _session.Profile.Vnc.ScaleMode = _viewModel.VncScale;
     }
 
     public void Dispose()

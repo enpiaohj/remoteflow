@@ -119,7 +119,10 @@ public enum VncScaleMode
     FitToWindow = 0,
 
     /// <summary>1:1 原始像素显示。</summary>
-    Original = 1
+    Original = 1,
+
+    /// <summary>拉伸填满窗口：等比不保留，横纵都拉满（比例不同会变形）。</summary>
+    Fill = 2
 }
 
 /// <summary>
