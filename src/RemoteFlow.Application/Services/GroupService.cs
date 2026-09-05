@@ -84,19 +84,20 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
                 Id = ConnectionGroup.UngroupedId,
                 Name = "未分组",
                 SortOrder = int.MaxValue,
-                IsSystem = true,
-                IsProtected = true
+                // 系统组保护由 GroupService 按 IsSystem 强制，不需要也不能依赖本列。
+                IsSystem = true
             }, ct);
         }
 
-        var existingDefault = (await groups.GetAllAsync(ct))
-            .FirstOrDefault(g => !g.IsSystem && g.IsDefault);
+        // 之后的判断都基于同一份快照：上面的 Add 只影响系统「未分组」，
+        // 不会改变「非系统组」集合，故无需再查库。
+        var existingDefault = all.FirstOrDefault(g => !g.IsSystem && g.IsDefault);
         if (existingDefault is not null)
         {
             return existingDefault.Id;
         }
 
-        var userGroups = (await groups.GetAllAsync(ct)).Where(g => !g.IsSystem).ToList();
+        var userGroups = all.Where(g => !g.IsSystem).ToList();
         if (userGroups.Count > 0)
         {
             // 存量回填：有普通分组但都未标记默认 → 把旧行为默认（sort_order,name 最前）标记为默认+保护。
@@ -318,8 +319,9 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
     /// <summary>开 / 关当前默认分组的保护。无默认组时无操作。</summary>
     public async Task SetDefaultProtectionAsync(bool isProtected, CancellationToken ct = default)
     {
+        // GetDefaultGroupAsync 已过滤系统组，无需再判 IsSystem。
         var currentDefault = await GetDefaultGroupAsync(ct);
-        if (currentDefault is null || currentDefault.IsSystem)
+        if (currentDefault is null)
         {
             return;
         }

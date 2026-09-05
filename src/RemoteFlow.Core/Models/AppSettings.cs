@@ -70,6 +70,10 @@ public sealed class AppSettings
     /// </summary>
     public List<string> CollapsedGroupIds { get; set; } = [];
 
+    /// <summary>是否已完成默认分组种子（首启）。用于区分「真·首次安装」与「用户已删光分组」，
+    /// 避免删光后每次启动又自动复活默认组。</summary>
+    public bool DefaultGroupSeedDone { get; set; }
+
     // ── RDP 默认值 ────────────────────────────────────────
     public RdpDisplayMode RdpDefaultDisplayMode { get; set; } = RdpDisplayMode.FitToWindow;
     public bool RdpDefaultRedirectClipboard { get; set; } = true;

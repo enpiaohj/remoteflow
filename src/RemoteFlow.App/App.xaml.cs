@@ -218,6 +218,7 @@ public partial class App : System.Windows.Application
 
         // ── UI 服务 ───────────────────────────────────────────────
         services.AddSingleton<ThemeService>();
+        services.AddSingleton<DefaultGroupResolver>();
         services.AddSingleton<IDialogService, DialogService>();
         services.AddSingleton<ISshHostKeyPolicy, InteractiveSshHostKeyPolicy>();
         services.AddSingleton<ISessionViewFactory, SessionViewFactory>();
@@ -256,7 +257,9 @@ public partial class App : System.Windows.Application
     /// </summary>
     private async Task SeedDefaultsIfEmptyAsync()
     {
-        await Services.GetRequiredService<AppServices.GroupService>().EnsureSeedAsync();
+        // 首启种子经 DefaultGroupResolver：由它决定 createIfEmpty（真·首启 true，
+        // 之后 false），并在首启成功后落 DefaultGroupSeedDone 标记，避免删光分组后每次启动又复活。
+        await Services.GetRequiredService<DefaultGroupResolver>().ResolveDefaultAsync();
 
         var tags = Services.GetRequiredService<ITagRepository>();
         if ((await tags.GetAllAsync()).Count == 0)

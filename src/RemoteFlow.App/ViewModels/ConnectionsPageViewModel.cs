@@ -58,6 +58,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 {
     private readonly ConnectionService _connections;
     private readonly GroupService _groupService;
+    private readonly DefaultGroupResolver _defaultGroupResolver;
     private readonly ConnectionSearchService _search;
     private readonly IHistoryRepository _history;
     private readonly IDialogService _dialogs;
@@ -96,6 +97,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     public ConnectionsPageViewModel(
         ConnectionService connections,
         GroupService groupService,
+        DefaultGroupResolver defaultGroup,
         ConnectionSearchService search,
         IHistoryRepository history,
         IDialogService dialogs,
@@ -106,6 +108,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     {
         _connections = connections;
         _groupService = groupService;
+        _defaultGroupResolver = defaultGroup;
         _search = search;
         _history = history;
         _dialogs = dialogs;
@@ -437,7 +440,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         IsLoading = true;
         try
         {
-            DefaultGroupId = await _groupService.EnsureSeedAsync(ct);
+            DefaultGroupId = await _defaultGroupResolver.ResolveDefaultAsync(ct);
 
             var profiles = await _connections.GetAllAsync(ct);
             var groups = await _connections.GetGroupsAsync(ct);

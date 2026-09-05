@@ -15,7 +15,7 @@ namespace RemoteFlow.App.Services;
 /// </summary>
 public sealed class DialogService(
     ConnectionService connections,
-    GroupService groupService,
+    DefaultGroupResolver defaultGroup,
     ICredentialRepository credentials,
     AppSettings settings) : IDialogService
 {
@@ -40,8 +40,8 @@ public sealed class DialogService(
         var credentialList = await credentials.GetAllAsync();
         var groups = await connections.GetGroupsAsync();
         var tags = await connections.GetTagsAsync();
-        // 新建连接默认落在「我的设备」（或既有库里的第一个用户分组）。
-        var defaultGroupId = existing is null ? await groupService.EnsureSeedAsync() : (Guid?)null;
+        // 新建连接默认落在「我的设备」（或既有库里的第一个用户分组）；由 resolver 决定首启/回落。
+        var defaultGroupId = existing is null ? await defaultGroup.ResolveDefaultAsync() : (Guid?)null;
 
         return await InvokeOnUiAsync<ConnectionEditorResult?>(() =>
         {

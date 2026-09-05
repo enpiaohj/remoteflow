@@ -11,7 +11,7 @@ namespace RemoteFlow.IntegrationTests;
 public sealed class ConnectionSelectionViewModelTests
 {
     private static ConnectionsPageViewModel CreateVm()
-        => new(null!, null!, null!, null!, null!, null!, null!, null!, null!);
+        => new(null!, null!, null!, null!, null!, null!, null!, null!, null!, null!);
 
     private static ConnectionItemViewModel Item(string name)
         => new(new ConnectionProfile { Name = name, Protocol = ProtocolType.Ssh });
