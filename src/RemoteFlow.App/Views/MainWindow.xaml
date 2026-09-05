@@ -573,13 +573,15 @@
                         <Style TargetType="Border">
                             <Setter Property="Visibility" Value="Collapsed" />
                             <Style.Triggers>
-                                <!-- 详情面板只在连接列表页出现：窗口够宽、未全屏、且当前不是会话 Tab -->
+                                <!-- 详情面板只在连接列表页出现：窗口够宽、未全屏、非会话 Tab、
+                                     且未处于多选模式（多选时隐藏详情，让列表占满 Workspace） -->
                                 <MultiDataTrigger>
                                     <MultiDataTrigger.Conditions>
                                         <Condition Binding="{Binding IsDetailPanelVisible}" Value="True" />
                                         <Condition Binding="{Binding IsSessionFullScreen}" Value="False" />
                                         <Condition Binding="{Binding IsSessionSelected}" Value="False" />
                                         <Condition Binding="{Binding IsConnectionListPage}" Value="True" />
+                                        <Condition Binding="{Binding ConnectionsPage.IsMultiSelect}" Value="False" />
                                     </MultiDataTrigger.Conditions>
                                     <Setter Property="Visibility" Value="Visible" />
                                 </MultiDataTrigger>

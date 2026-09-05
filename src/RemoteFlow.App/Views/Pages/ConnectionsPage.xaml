@@ -24,19 +24,20 @@
              否则应用到 ToggleButton 上会抛 “TargetType does not match” 运行时异常崩溃。 -->
         <Style x:Key="MultiSelectToggle" TargetType="ToggleButton">
             <Setter Property="Height" Value="32" />
-            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Padding" Value="10,0" />
             <Setter Property="Margin" Value="0,0,8,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-            <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+            <Setter Property="FontSize" Value="12" />
+            <!-- 低强调的“幽灵”按钮：无边框盒、次级文字；让「+ 新建连接」保持唯一 Primary。 -->
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
                         <Border x:Name="Chrome"
-                                Background="{DynamicResource Bg.Layer}"
-                                BorderBrush="{DynamicResource Stroke.Default}"
-                                BorderThickness="1"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="0"
                                 CornerRadius="{StaticResource Radius.Medium}"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -44,10 +45,10 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Bg.Selected}" />
-                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
                                 <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
