@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Shell;
 using RemoteFlow.App.Services;
 using RemoteFlow.App.ViewModels;
 using RemoteFlow.Core.Models;
@@ -61,6 +62,10 @@ public partial class MainWindow : Window
         {
             _hwnd = new WindowInteropHelper(this).Handle;
             InstallKeyboardHook();
+
+            // 首次显示前把窗口收进所在显示器工作区：默认 1560×940 在小分辨率屏上
+            // 会超出可视区、标题栏被顶出屏幕，导致既无法拖动也无法点窗口按钮。
+            FitInitialWindow();
         };
     }
 
@@ -271,6 +276,103 @@ public partial class MainWindow : Window
         Close();
     }
 
+    // ── 窗口尺寸自适应（小分辨率 / 显示器切换）──────────────────
+
+    /// <summary>当前窗口所在显示器的工作区，换算为设备无关单位。句柄未就绪返回 null。</summary>
+    private Rect? GetMonitorWorkAreaDiu()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        var screen = System.Windows.Forms.Screen.FromHandle(handle).WorkingArea;
+        var toDiu = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice
+                    ?? Matrix.Identity;
+        var topLeft = toDiu.Transform(new Point(screen.Left, screen.Top));
+        var size = toDiu.Transform(new Vector(screen.Width, screen.Height));
+        return new Rect(topLeft.X, topLeft.Y, size.X, size.Y);
+    }
+
+    /// <summary>
+    /// 首次显示前把尺寸收敛到显示器工作区、位置居中：
+    /// 默认 1560×940 在比它小的屏上会让标题栏（拖动区 + 窗口按钮）跑到屏幕外，
+    /// 表现为「完全无法操作」。可用区小于最小尺寸时放低下限，保证能缩进来。
+    /// </summary>
+    private void FitInitialWindow()
+    {
+        if (WindowState != WindowState.Normal || _preFullScreen is not null)
+        {
+            return;
+        }
+
+        if (GetMonitorWorkAreaDiu() is not { } area)
+        {
+            return;
+        }
+
+        MinWidth = Math.Min(MinWidth, Math.Floor(area.Width));
+        MinHeight = Math.Min(MinHeight, Math.Floor(area.Height));
+
+        Width = Math.Clamp(Width, MinWidth, area.Width);
+        Height = Math.Clamp(Height, MinHeight, area.Height);
+
+        Left = area.Left + (area.Width - Width) / 2;
+        Top = area.Top + (area.Height - Height) / 2;
+    }
+
+    /// <summary>
+    /// 回到普通态（还原 / 从最小化回来）时，确保窗口仍在显示器工作区内且标题栏可达。
+    /// 覆盖「曾在更小屏上最大化、再还原」与「拖动到更小显示器」两类越界。
+    /// </summary>
+    private void KeepWindowOnScreen()
+    {
+        if (WindowState != WindowState.Normal || _preFullScreen is not null)
+        {
+            return;
+        }
+
+        if (GetMonitorWorkAreaDiu() is not { } area)
+        {
+            return;
+        }
+
+        var minW = Math.Min(MinWidth, area.Width);
+        var minH = Math.Min(MinHeight, area.Height);
+        var w = Math.Clamp(Width, minW, area.Width);
+        var h = Math.Clamp(Height, minH, area.Height);
+        var left = Math.Clamp(Left, area.Left, Math.Max(area.Left, area.Right - w));
+        var top = Math.Clamp(Top, area.Top, Math.Max(area.Top, area.Bottom - h));
+
+        var changed = Math.Abs(Width - w) > 0.5 || Math.Abs(Height - h) > 0.5
+                      || Math.Abs(Left - left) > 0.5 || Math.Abs(Top - top) > 0.5;
+        if (!changed)
+        {
+            return;
+        }
+
+        Width = w;
+        Height = h;
+        Left = left;
+        Top = top;
+    }
+
+    /// <summary>标题栏右键弹出系统菜单（移动 / 还原 / 大小 / 最小化 / 最大化 / 关闭）。</summary>
+    private void OnTitleBarSystemMenu(object sender, MouseButtonEventArgs e)
+    {
+        if (_preFullScreen is not null)
+        {
+            return; // 会话全屏（无边框）不需要系统菜单。
+        }
+
+        if (e.ButtonState == MouseButtonState.Released)
+        {
+            var point = PointToScreen(e.GetPosition(this));
+            SystemCommands.ShowSystemMenu(this, point);
+        }
+    }
+
     // ── 标题栏按钮 ────────────────────────────────────────────────
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
@@ -289,6 +391,13 @@ public partial class MainWindow : Window
         MaximizeButton.ToolTip = WindowState == WindowState.Maximized ? "向下还原" : "最大化";
 
         UpdateRootPadding();
+
+        // 还原（退出最大化 / 最小化后回来）时把窗口收进所在显示器工作区，
+        // 避免标题栏被顶出屏幕导致无法操作。
+        if (WindowState == WindowState.Normal)
+        {
+            KeepWindowOnScreen();
+        }
     }
 
     // ── 响应式布局 ────────────────────────────────────────────────

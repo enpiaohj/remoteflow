@@ -150,7 +150,8 @@
 
             <!-- ══ 标题栏 ══════════════════════════════════════════ -->
             <Grid Grid.Row="0" Background="{DynamicResource Bg.Base}"
-                  Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
+                  Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}"
+                  MouseRightButtonUp="OnTitleBarSystemMenu">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
