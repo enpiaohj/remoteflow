@@ -34,6 +34,19 @@ public enum AppTimeFormat
     Hour12 = 1
 }
 
+/// <summary>首页时间相对日期段的显示顺序。</summary>
+public enum HomeTimeOrder
+{
+    /// <summary>时间拼在日期段之后（如「2026年9月5日 · 14:05」）。</summary>
+    Trailing = 0,
+
+    /// <summary>时间拼在日期段之前（如「14:05 · 2026年9月5日」）。</summary>
+    Leading = 1,
+
+    /// <summary>时间在日期行下方另起一行显示时钟。</summary>
+    SeparateLine = 2
+}
+
 /// <summary>
 /// 应用级设置。持久化为独立 JSON 文件，写入采用原子替换，避免异常退出导致配置损坏。
 /// </summary>
@@ -54,6 +67,15 @@ public sealed class AppSettings
     public AppTimeFormat TimeFormat { get; set; } = AppTimeFormat.Hour24;
     public bool ShowWeekday { get; set; } = true;
     public bool ShowHomeWeekNumber { get; set; } = true;
+
+    /// <summary>首页日期行是否显示当前时间。</summary>
+    public bool ShowHomeTime { get; set; }
+
+    /// <summary>首页时间是否显示秒（需 ShowHomeTime）。</summary>
+    public bool ShowHomeSeconds { get; set; }
+
+    /// <summary>首页时间相对日期段的显示顺序。</summary>
+    public HomeTimeOrder ShowHomeTimeOrder { get; set; } = HomeTimeOrder.Trailing;
 
     /// <summary>是否已展示过「全屏工具条自动隐藏」的首次提示。</summary>
     public bool SessionFullScreenHintShown { get; set; }

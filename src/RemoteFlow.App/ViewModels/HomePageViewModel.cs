@@ -45,18 +45,25 @@ public sealed partial class HomePageViewModel(
     [ObservableProperty]
     private int _totalConnections;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasActiveSessions))]
-    private int _activeSessions;
-
-    public bool HasActiveSessions => ActiveSessions > 0;
+    /// <summary>当前已连接会话数（仅统计 Connected）。顶部统计行使用。</summary>
+    public int ConnectedSessions => sessions.ConnectedSessionCount;
 
     [ObservableProperty]
     private string _greeting = string.Empty;
 
-    /// <summary>首页日期行：如「2026年9月5日 · 周六 · 第36周」。</summary>
+    /// <summary>首页标题日期行：如「2026年9月5日 · 周六 · 第36周」；开启首页时间后依序附时间或保持纯日期。</summary>
     [ObservableProperty]
     private string _dateLine = string.Empty;
+
+    /// <summary>首页时钟行（仅「显示顺序 = 单独一行」时显示），例：<c>14:05:09</c>。</summary>
+    [ObservableProperty]
+    private string _clockLine = string.Empty;
+
+    /// <summary>时钟行是否可见：单独一行时非空。</summary>
+    public bool HasClockLine => !string.IsNullOrEmpty(ClockLine);
+
+    /// <summary>用户是否开启「显示时间」。供视图决定是否启动秒级刷新。</summary>
+    public bool ShowHomeTimeEnabled => settings.ShowHomeTime;
 
     /// <summary>底部安全提示横幅是否可见（用户可关闭，选择记入设置）。</summary>
     [ObservableProperty]
@@ -80,16 +87,19 @@ public sealed partial class HomePageViewModel(
             _ => "夜深了"
         };
 
-        DateLine = RemoteFlow.App.Services.DateTimeDisplay.FullDateHeader(DateTimeOffset.Now);
+        RefreshHeader();
 
         var profiles = await connections.GetAllAsync(ct);
         var groups = (await connections.GetGroupsAsync(ct)).ToDictionary(g => g.Id, g => g.Name);
 
         TotalConnections = profiles.Count;
-        ActiveSessions = sessions.ActiveSessionCount;
         ShowSecurityTip = !settings.HomeSecurityTipDismissed && profiles.Count > 0;
 
-        var activeProfileIds = sessions.ActiveSessions.Select(s => s.Profile.Id).ToHashSet();
+        // 卡片高亮只认“真正已连接”的会话：正在连接 / 失败不点亮“已连接”标签。
+        var connectedProfileIds = sessions.ActiveSessions
+            .Where(s => s.State == ConnectionState.Connected)
+            .Select(s => s.Profile.Id)
+            .ToHashSet();
 
         RecentItems.Clear();
         foreach (var profile in profiles
@@ -98,7 +108,7 @@ public sealed partial class HomePageViewModel(
                      .Take(RecentCardLimit))
         {
             var item = BuildItem(profile, groups);
-            item.HasActiveSession = activeProfileIds.Contains(profile.Id);
+            item.HasActiveSession = connectedProfileIds.Contains(profile.Id);
             RecentItems.Add(item);
         }
 
@@ -121,7 +131,53 @@ public sealed partial class HomePageViewModel(
         OnPropertyChanged(nameof(HasFavorites));
         OnPropertyChanged(nameof(HasActivity));
         OnPropertyChanged(nameof(IsFirstRun));
+
+        // 返回首页时重算统计行：卡片绿点读会话实时状态，这里显式通知计数刷新，
+        // 避免「统计行 0 已连接」与「卡片仍点绿」两者矛盾。
+        OnPropertyChanged(nameof(ConnectedSessions));
     }
+
+    /// <summary>
+    /// 合成首页标题日期行与可选的时钟行。开启「显示时间」时按用户选择的顺序把时钟
+    /// 拼到日期段之后 / 之前，或作为单独一行（<see cref="ClockLine"/>）。
+    /// </summary>
+    private void RefreshHeader()
+    {
+        var now = DateTimeOffset.Now;
+
+        // 日期·星期·周数核心段由统一格式化器产出，避免与它重复拼装（设置与 DateTimeDisplay 同源）。
+        var core = DateTimeDisplay.FullDateHeader(now);
+
+        if (!settings.ShowHomeTime)
+        {
+            DateLine = core;
+            ClockLine = "";
+            OnPropertyChanged(nameof(HasClockLine));
+            return;
+        }
+
+        var clock = DateTimeDisplay.Clock(now, settings.ShowHomeSeconds);
+        switch (settings.ShowHomeTimeOrder)
+        {
+            case HomeTimeOrder.Leading:
+                DateLine = $"{clock} · {core}";
+                ClockLine = "";
+                break;
+            case HomeTimeOrder.SeparateLine:
+                DateLine = core;
+                ClockLine = clock;
+                break;
+            default: // Trailing
+                DateLine = $"{core} · {clock}";
+                ClockLine = "";
+                break;
+        }
+
+        OnPropertyChanged(nameof(HasClockLine));
+    }
+
+    /// <summary>供首页视图的秒级定时器调用，刷新日期行与时钟行。</summary>
+    public void RefreshClock() => RefreshHeader();
 
     [RelayCommand]
     private void ViewAllRecent() => NavigationRequested?.Invoke(this, NavigationPage.Recent);

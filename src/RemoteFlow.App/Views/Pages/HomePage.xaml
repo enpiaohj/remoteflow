@@ -108,7 +108,7 @@
                                 <Ellipse Width="7" Height="7" VerticalAlignment="Center" Margin="10,0,0,0"
                                          Fill="{DynamicResource Status.Success}"
                                          Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}" />
-                                <TextBlock Text="进行中" Style="{StaticResource Text.Caption}" FontWeight="SemiBold"
+                                <TextBlock Text="已连接" Style="{StaticResource Text.Caption}" FontWeight="SemiBold"
                                            Foreground="{DynamicResource Status.Success}" Margin="6,0,0,0" VerticalAlignment="Center"
                                            Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}" />
                                 <TextBlock Text="{Binding LastConnectedDisplay}" Style="{StaticResource Text.Caption}" Margin="10,0,0,0"
@@ -249,18 +249,23 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-            <!-- 问候语 + 统一日期 + 常显统计行（N 个连接 · M 个会话进行中） -->
+            <!-- 问候语 + 统一日期 + 常显统计行（N 个连接 · M 个会话已连接） -->
             <StackPanel Grid.Row="0" Margin="0,0,0,18">
                 <TextBlock Style="{StaticResource Text.PageTitle}" Text="{Binding Greeting, Mode=OneWay}" />
                 <TextBlock Text="{Binding DateLine, Mode=OneWay}" Style="{StaticResource Text.PageSubtitle}"
                            Foreground="{DynamicResource Text.Tertiary}" Margin="0,3,0,0" />
+                <TextBlock Text="{Binding ClockLine, Mode=OneWay}" Style="{StaticResource Text.PageSubtitle}"
+                           FontFamily="{StaticResource MonoFont}"
+                           Foreground="{DynamicResource Text.Secondary}"
+                           Margin="0,2,0,0"
+                           Visibility="{Binding HasClockLine, Converter={StaticResource BoolToVisibility}}" />
                 <TextBlock Style="{StaticResource Text.PageSubtitle}" Margin="0,7,0,0">
                     <Run Text="{Binding TotalConnections, Mode=OneWay}" FontWeight="SemiBold"
                          Foreground="{DynamicResource Text.Secondary}" />
                     <Run Text=" 个连接 · " Foreground="{DynamicResource Text.Tertiary}" />
-                    <Run Text="{Binding ActiveSessions, Mode=OneWay}" FontWeight="SemiBold"
+                    <Run Text="{Binding ConnectedSessions, Mode=OneWay}" FontWeight="SemiBold"
                          Foreground="{DynamicResource Text.Secondary}" />
-                    <Run Text=" 个会话进行中" Foreground="{DynamicResource Text.Tertiary}" />
+                    <Run Text=" 个会话已连接" Foreground="{DynamicResource Text.Tertiary}" />
                 </TextBlock>
             </StackPanel>
 

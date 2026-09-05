@@ -61,6 +61,9 @@ public sealed class SessionManager : IAsyncDisposable
     /// <summary>当前活动会话数量。</summary>
     public int ActiveSessionCount => _sessions.Count;
 
+    /// <summary>当前已连接会话数量（仅统计 State == Connected 的会话，不含正在连接 / 失败 / 已关闭）。</summary>
+    public int ConnectedSessionCount => _sessions.Values.Count(e => e.Session.State == ConnectionState.Connected);
+
     /// <summary>当前全部活动会话。</summary>
     public IReadOnlyList<IRemoteSession> ActiveSessions => _sessions.Values.Select(e => e.Session).ToList();
 

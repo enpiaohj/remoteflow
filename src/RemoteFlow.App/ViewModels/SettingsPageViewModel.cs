@@ -40,6 +40,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     public sealed record TimeFormatOption(AppTimeFormat Value, string Label);
 
+    public sealed record HomeTimeOrderOption(HomeTimeOrder Value, string Label);
+
     private const string StartupRegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string StartupValueName = "RemoteFlow";
 
@@ -171,6 +173,13 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         new(AppTimeFormat.Hour12, "12 小时"),
     ];
 
+    public IReadOnlyList<HomeTimeOrderOption> HomeTimeOrderOptions { get; } =
+    [
+        new(HomeTimeOrder.Trailing, "时间在后"),
+        new(HomeTimeOrder.Leading, "时间在前"),
+        new(HomeTimeOrder.SeparateLine, "单独一行"),
+    ];
+
     [ObservableProperty]
     private DateFormatOption _selectedDateFormat = null!;
 
@@ -182,6 +191,21 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _showHomeWeekNumber = true;
+
+    [ObservableProperty]
+    private bool _showHomeTime;
+
+    [ObservableProperty]
+    private bool _showHomeSeconds;
+
+    [ObservableProperty]
+    private HomeTimeOrderOption _selectedHomeTimeOrder = null!;
+
+    /// <summary>「显示秒」开关是否可操作：需先开启「显示时间」。</summary>
+    public bool ShowSecondsEnabled => ShowHomeTime;
+
+    /// <summary>「显示顺序」选择是否可操作：需先开启「显示时间」。</summary>
+    public bool ShowOrderEnabled => ShowHomeTime;
 
     // ── RDP ───────────────────────────────────────────────────────
 
@@ -267,6 +291,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         SelectedTimeFormat = TimeFormatOptions.First(o => o.Value == _settings.TimeFormat);
         ShowWeekday = _settings.ShowWeekday;
         ShowHomeWeekNumber = _settings.ShowHomeWeekNumber;
+        ShowHomeTime = _settings.ShowHomeTime;
+        ShowHomeSeconds = _settings.ShowHomeSeconds;
+        SelectedHomeTimeOrder = HomeTimeOrderOptions.First(o => o.Value == _settings.ShowHomeTimeOrder);
 
         RdpFitToWindow = _settings.RdpDefaultDisplayMode == RdpDisplayMode.FitToWindow;
         RdpRedirectClipboard = _settings.RdpDefaultRedirectClipboard;
@@ -363,6 +390,18 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     partial void OnShowWeekdayChanged(bool value) => ApplyDateTimeSettings();
     partial void OnShowHomeWeekNumberChanged(bool value) => ApplyDateTimeSettings();
 
+    partial void OnShowHomeTimeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowSecondsEnabled));
+        OnPropertyChanged(nameof(ShowOrderEnabled));
+        if (!value) ShowHomeSeconds = false; // 时间关掉时秒一并关闭
+        ApplyDateTimeSettings();
+    }
+
+    partial void OnShowHomeSecondsChanged(bool value) => ApplyDateTimeSettings();
+
+    partial void OnSelectedHomeTimeOrderChanged(HomeTimeOrderOption value) => ApplyDateTimeSettings();
+
     private void ApplyDateTimeSettings(AppDateFormat dateFormat)
     {
         _settings.DateFormat = dateFormat;
@@ -379,6 +418,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     {
         _settings.ShowWeekday = ShowWeekday;
         _settings.ShowHomeWeekNumber = ShowHomeWeekNumber;
+        _settings.ShowHomeTime = ShowHomeTime;
+        _settings.ShowHomeSeconds = ShowHomeSeconds;
+        _settings.ShowHomeTimeOrder = SelectedHomeTimeOrder?.Value ?? HomeTimeOrder.Trailing;
         DateTimeDisplay.Configure(_settings);
         Save();
     }
