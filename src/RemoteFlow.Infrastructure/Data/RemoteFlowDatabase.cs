@@ -17,7 +17,7 @@ namespace RemoteFlow.Infrastructure.Data;
 public sealed class RemoteFlowDatabase
 {
     /// <summary>当前 Schema 版本。新增迁移时递增，并在 <see cref="Migrations"/> 中追加脚本。</summary>
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     private readonly string _connectionString;
     private readonly ILogger<RemoteFlowDatabase> _logger;
@@ -301,6 +301,13 @@ public sealed class RemoteFlowDatabase
 
         INSERT OR IGNORE INTO connection_groups (id, name, parent_id, sort_order, icon, is_system)
         VALUES ('00000000-0000-0000-0000-0000000000ff', '未分组', NULL, 2147483647, '', 1);
+        """,
+
+        // v3：默认分组与保护标记。语义约束（默认组至多一个、系统组保护）由服务层执行，
+        // 迁移只加列；存量数据默认都不是默认组、不受保护。
+        [3] = """
+        ALTER TABLE connection_groups ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE connection_groups ADD COLUMN is_protected INTEGER NOT NULL DEFAULT 0;
         """
     };
 }

@@ -12,7 +12,7 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
         await using var connection = database.OpenConnection();
         await using var command = connection.CreateCommand();
         command.CommandText =
-            "SELECT id, name, parent_id, sort_order, icon, is_system FROM connection_groups ORDER BY sort_order, name COLLATE NOCASE;";
+            "SELECT id, name, parent_id, sort_order, icon, is_system, is_default, is_protected FROM connection_groups ORDER BY sort_order, name COLLATE NOCASE;";
 
         var groups = new List<ConnectionGroup>();
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -25,7 +25,9 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
                 ParentId = reader.IsDBNull(2) ? null : Guid.Parse(reader.GetString(2)),
                 SortOrder = reader.GetInt32(3),
                 Icon = reader.GetString(4),
-                IsSystem = reader.GetInt32(5) != 0
+                IsSystem = reader.GetInt32(5) != 0,
+                IsDefault = reader.GetBoolean(reader.GetOrdinal("is_default")),
+                IsProtected = reader.GetBoolean(reader.GetOrdinal("is_protected"))
             });
         }
         return groups;
@@ -36,8 +38,8 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
         await using var connection = database.OpenConnection();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            INSERT INTO connection_groups (id, name, parent_id, sort_order, icon, is_system)
-            VALUES ($id, $name, $parentId, $sortOrder, $icon, $isSystem);
+            INSERT INTO connection_groups (id, name, parent_id, sort_order, icon, is_system, is_default, is_protected)
+            VALUES ($id, $name, $parentId, $sortOrder, $icon, $isSystem, $isDefault, $isProtected);
             """;
         Bind(command, group);
         await command.ExecuteNonQueryAsync(ct);
@@ -49,7 +51,8 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
         await using var command = connection.CreateCommand();
         command.CommandText = """
             UPDATE connection_groups
-            SET name = $name, parent_id = $parentId, sort_order = $sortOrder, icon = $icon, is_system = $isSystem
+            SET name = $name, parent_id = $parentId, sort_order = $sortOrder, icon = $icon,
+                is_system = $isSystem, is_default = $isDefault, is_protected = $isProtected
             WHERE id = $id;
             """;
         Bind(command, group);
@@ -119,6 +122,8 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
         command.Parameters.AddWithValue("$sortOrder", group.SortOrder);
         command.Parameters.AddWithValue("$icon", group.Icon);
         command.Parameters.AddWithValue("$isSystem", group.IsSystem ? 1 : 0);
+        command.Parameters.AddWithValue("$isDefault", group.IsDefault ? 1 : 0);
+        command.Parameters.AddWithValue("$isProtected", group.IsProtected ? 1 : 0);
     }
 }
 

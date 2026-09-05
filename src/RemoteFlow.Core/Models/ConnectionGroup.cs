@@ -30,6 +30,12 @@ public sealed class ConnectionGroup
     /// 必须显式区分，不允许只按名称字符串判断。
     /// </summary>
     public bool IsSystem { get; set; }
+
+    /// <summary>是否默认新建连接分组。仅用户分组可为默认；至多一个，0 个 = 回落未分组。</summary>
+    public bool IsDefault { get; set; }
+
+    /// <summary>是否受保护 / 锁定（仅默认组有意义）。系统组保护由 GroupService 强制，不依赖本列。</summary>
+    public bool IsProtected { get; set; }
 }
 
 /// <summary>

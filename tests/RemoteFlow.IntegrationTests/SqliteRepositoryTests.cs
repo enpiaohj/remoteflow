@@ -280,4 +280,32 @@ public sealed class SqliteRepositoryTests : IDisposable
         // 列表接口只回最近 3 条，用于证明两者不同源。
         Assert.Equal(3, (await repo.GetByConnectionAsync(connectionId, 3)).Count);
     }
+
+    [Fact]
+    public async Task 分组表含默认与保护两列()
+    {
+        using var connection = _database.OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA table_info(connection_groups);";
+        var columns = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            columns.Add(reader.GetString(1));
+        }
+        Assert.Contains("is_default", columns);
+        Assert.Contains("is_protected", columns);
+    }
+
+    [Fact]
+    public async Task 分组默认与保护字段往返一致()
+    {
+        var repo = new SqliteGroupRepository(_database);
+        var group = new ConnectionGroup { Name = "默认组", IsDefault = true, IsProtected = true };
+        await repo.AddAsync(group);
+
+        var loaded = (await repo.GetAllAsync()).Single(g => g.Id == group.Id);
+        Assert.True(loaded.IsDefault);
+        Assert.True(loaded.IsProtected);
+    }
 }
