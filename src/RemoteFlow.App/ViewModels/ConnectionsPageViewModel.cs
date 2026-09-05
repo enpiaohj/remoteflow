@@ -1531,9 +1531,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 按 Id 选中某个连接，并确保它在当前列表里可见。首页右键「在「我的连接」中管理」
-    /// 跳转后调用：切到「全部」视图、清掉会隐藏该行的搜索 / 页内筛选，展开所在分组。
-    /// 找不到目标时安全保持现状。
+    /// 按 Id 选中某个连接，并确保它在当前列表里可见。首页 / 收藏 / 最近连接右键
+    /// 「在「我的连接」中定位」跳转后调用：切到「全部」视图、清掉会隐藏该行的
+    /// 搜索 / 页内筛选，展开所在分组。找不到目标时安全保持现状。
     /// </summary>
     public void SelectById(Guid id)
     {
