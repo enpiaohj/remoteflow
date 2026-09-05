@@ -37,7 +37,7 @@
 
         <!-- 最近连接：大号快捷卡片。是首页最突出的快捷入口，给足高度和图标尺寸 -->
         <DataTemplate x:Key="RecentCard" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Grid Margin="0,0,14,0" MinHeight="132">
+            <Grid Margin="0,0,14,0" MinHeight="122">
                 <Button Cursor="Hand" HorizontalContentAlignment="Stretch"
                         Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                         CommandParameter="{Binding}">
@@ -55,7 +55,7 @@
                                     <Border Width="3" HorizontalAlignment="Left" Margin="0,18"
                                             Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
                                             CornerRadius="0,2,2,0" />
-                                    <ContentPresenter Margin="22,22,18,20" />
+                                    <ContentPresenter Margin="20,18,16,16" />
                                 </Grid>
                             </Border>
                             <ControlTemplate.Triggers>
@@ -95,9 +95,9 @@
                             <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontWeight="SemiBold" FontSize="15"
                                        TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" />
                             <TextBlock Text="{Binding HostDisplay}" Style="{StaticResource Text.Caption}"
-                                       FontFamily="{StaticResource MonoFont}" Margin="0,5,0,0" HorizontalAlignment="Left" />
+                                       FontFamily="{StaticResource MonoFont}" Margin="0,4,0,0" HorizontalAlignment="Left" />
                             <!-- 协议徽章紧跟主机，和图标 / 名称贴在一起 -->
-                            <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
+                            <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
                                 <Grid>
                                     <Border CornerRadius="5"
                                             Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
@@ -249,25 +249,19 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-            <!-- 问候语 + 概览。会话数为 0 时不喧宾夺主（走三级灰），
-                 有活动会话时整段染成品牌色并加一个状态点。 -->
-            <StackPanel Grid.Row="0" Margin="0,0,0,26">
+            <!-- 问候语 + 统一日期 + 常显统计行（N 个连接 · M 个会话进行中） -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,18">
                 <TextBlock Style="{StaticResource Text.PageTitle}" Text="{Binding Greeting, Mode=OneWay}" />
                 <TextBlock Text="{Binding DateLine, Mode=OneWay}" Style="{StaticResource Text.PageSubtitle}"
-                           Foreground="{DynamicResource Text.Tertiary}" Margin="0,4,0,0" />
-                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                    <TextBlock Style="{StaticResource Text.PageSubtitle}">
-                        <Run Text="共 " /><Run Text="{Binding TotalConnections, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource Text.Secondary}" /><Run Text=" 个连接" />
-                    </TextBlock>
-                    <StackPanel Orientation="Horizontal" Margin="12,0,0,0"
-                                Visibility="{Binding HasActiveSessions, Converter={StaticResource BoolToVisibility}}">
-                        <Ellipse Width="6" Height="6" VerticalAlignment="Center" Fill="{DynamicResource Status.Success}" />
-                        <TextBlock Margin="7,0,0,0" FontSize="{StaticResource FontSize.Body}"
-                                   Foreground="{DynamicResource Status.Success}">
-                            <Run Text="{Binding ActiveSessions, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" 个会话进行中" />
-                        </TextBlock>
-                    </StackPanel>
-                </StackPanel>
+                           Foreground="{DynamicResource Text.Tertiary}" Margin="0,3,0,0" />
+                <TextBlock Style="{StaticResource Text.PageSubtitle}" Margin="0,7,0,0">
+                    <Run Text="{Binding TotalConnections, Mode=OneWay}" FontWeight="SemiBold"
+                         Foreground="{DynamicResource Text.Secondary}" />
+                    <Run Text=" 个连接 · " Foreground="{DynamicResource Text.Tertiary}" />
+                    <Run Text="{Binding ActiveSessions, Mode=OneWay}" FontWeight="SemiBold"
+                         Foreground="{DynamicResource Text.Secondary}" />
+                    <Run Text=" 个会话进行中" Foreground="{DynamicResource Text.Tertiary}" />
+                </TextBlock>
             </StackPanel>
 
             <!-- 首次使用引导 -->
