@@ -21,6 +21,9 @@ public enum CredentialTypeFilter
 /// <summary>筛选下拉的一项。</summary>
 public sealed record CredentialTypeOption(CredentialTypeFilter Value, string Label);
 
+/// <summary>批量“更改类型”菜单的一项（目标凭据类型）。</summary>
+public sealed record CredentialTypeTargetOption(CredentialType Value, string Label);
+
 /// <summary>
 /// 「凭据」页面。只管理凭据元数据与安全存储，不承担主机列表管理。
 /// <para>
@@ -56,6 +59,9 @@ public sealed partial class CredentialsPageViewModel(
     public bool HasSelection => SelectedCredentials.Count > 0;
 
     public string SelectionSummary => $"已选择 {SelectedCredentials.Count} 项";
+
+    /// <summary>批量「更改类型」当前合法的目标（混合选择只给对全部合法项）。</summary>
+    public IReadOnlyList<CredentialTypeTargetOption> ChangeTypeOptions { get; private set; } = [];
 
     /// <summary>全部类型下拉项。</summary>
     public IReadOnlyList<CredentialTypeOption> TypeOptions { get; } =
@@ -314,7 +320,108 @@ public sealed partial class CredentialsPageViewModel(
     {
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(SelectionSummary));
+
+        RecomputeChangeTypeOptions();
     }
+
+    /// <summary>按当前勾选推算合法的「更改类型」目标：
+    /// SSH 私钥（KeyReference）与口令型结构不同，一律不允许批量转换。</summary>
+    private void RecomputeChangeTypeOptions()
+    {
+        var selected = SelectedCredentials.ToList();
+        if (selected.Count == 0 || selected.Any(i => i.Credential.Type == CredentialType.SshPrivateKey))
+        {
+            ChangeTypeOptions = [];
+        }
+        else
+        {
+            var current = selected.Select(i => i.Credential.Type).ToHashSet();
+            var options = PasswordTargetTypes
+                .Where(t => !(current.Count == 1 && current.Contains(t)))
+                .Select(t => new CredentialTypeTargetOption(t, TypeLabel(t)))
+                .ToList();
+            ChangeTypeOptions = options;
+        }
+
+        OnPropertyChanged(nameof(ChangeTypeOptions));
+    }
+
+    /// <summary>口令型（可互转）目标类型；SSH 私钥为独立 Secret 结构，不在此列。</summary>
+    private static readonly CredentialType[] PasswordTargetTypes =
+    [
+        CredentialType.WindowsDomain,
+        CredentialType.LocalPassword,
+        CredentialType.SshPassword,
+        CredentialType.VncPassword,
+    ];
+
+    private static string TypeLabel(CredentialType type) => type switch
+    {
+        CredentialType.WindowsDomain => "Windows 域账号",
+        CredentialType.LocalPassword => "本地账号",
+        CredentialType.SshPassword => "SSH 口令",
+        CredentialType.SshPrivateKey => "SSH 私钥",
+        _ => "VNC 口令"
+    };
+
+    /// <summary>批量更改所选凭据类型（仅口令型互转）。不触碰 Secret 内容。</summary>
+    public async Task ChangeTypeSelectedAsync(CredentialType target)
+    {
+        var selected = SelectedCredentials.ToList();
+        if (selected.Count == 0)
+        {
+            return;
+        }
+
+        // 校验引用兼容性：改类型不能破坏仍在引用它的连接。
+        var selectedIds = selected.Select(i => i.Id).ToHashSet();
+        var profiles = await connections.GetAllAsync();
+        var incompatible = profiles
+            .Where(p => p.CredentialId is { } cid && selectedIds.Contains(cid))
+            .Where(p => !TypeAllowedForProtocol(target, p.Protocol))
+            .ToList();
+
+        if (incompatible.Count > 0)
+        {
+            await dialogs.ShowMessageAsync(
+                "无法更改类型",
+                $"有 {incompatible.Count} 个连接引用到所选凭据，但目标类型「{TypeLabel(target)}」与这些连接的协议不兼容" +
+                "（如 SSH 连接不能使用 Windows 域账号）。请先处理这些引用，未做任何更改。",
+                DialogKind.Warning);
+            return;
+        }
+
+        var names = string.Join("、", selected.Select(i => i.Name));
+        var confirmed = await dialogs.ConfirmAsync(
+            "更改凭据类型",
+            $"把所选 {selected.Count} 个凭据的类型统一改为「{TypeLabel(target)}」？\n\n{names}\n\n" +
+            "只修改类型与元数据，不触碰已保存的密码 / 私钥内容。",
+            "更改",
+            isDanger: false);
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        foreach (var item in selected)
+        {
+            item.Credential.Type = target;
+            await credentials.UpdateAsync(item.Credential, null, null);
+        }
+
+        await LoadAsync();
+        ExitMultiSelect();
+    }
+
+    /// <summary>目标类型对该协议是否允许（决定引用是否兼容）。</summary>
+    private static bool TypeAllowedForProtocol(CredentialType type, ProtocolType protocol)
+        => protocol switch
+        {
+            ProtocolType.Rdp => type is CredentialType.WindowsDomain or CredentialType.LocalPassword,
+            ProtocolType.Ssh => type is CredentialType.SshPassword or CredentialType.SshPrivateKey,
+            _ => type == CredentialType.VncPassword
+        };
 
     [RelayCommand]
     private async Task RefreshAsync() => await LoadAsync();

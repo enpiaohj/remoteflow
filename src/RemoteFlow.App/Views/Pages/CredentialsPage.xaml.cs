@@ -32,6 +32,40 @@ public partial class CredentialsPage : UserControl
         e.Handled = true;
     }
 
+    /// <summary>批量「更改类型」：按当前合法目标弹出菜单（含 SSH 私钥时无可选项）。</summary>
+    private async void OnChangeTypeClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || ViewModel is not { } vm)
+        {
+            return;
+        }
+
+        var menu = new ContextMenu();
+        if (vm.ChangeTypeOptions.Count == 0)
+        {
+            menu.Items.Add(new MenuItem
+            {
+                Header = "所选包含 SSH 私钥，无法批量更改类型",
+                IsEnabled = false
+            });
+        }
+        else
+        {
+            foreach (var option in vm.ChangeTypeOptions)
+            {
+                var target = option.Value;
+                var item = new MenuItem { Header = option.Label };
+                item.Click += async (_, _) => await vm.ChangeTypeSelectedAsync(target);
+                menu.Items.Add(item);
+            }
+        }
+
+        button.ContextMenu = menu;
+        menu.PlacementTarget = button;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
     /// <summary>多选模式下行单击切换勾选；点勾选框本身不重复处理。</summary>
     private void OnListMouseDown(object sender, MouseButtonEventArgs e)
     {
