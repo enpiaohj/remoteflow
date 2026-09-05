@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
@@ -31,8 +33,14 @@ public sealed class SessionManager : IAsyncDisposable
 
     private readonly ConcurrentDictionary<Guid, SessionEntry> _sessions = new();
 
+    /// <summary>单个会话关闭流程（断开 + 释放）的总时限。超时不抛、只告警并 best-effort 强制收尾。</summary>
+    private static readonly TimeSpan DefaultCloseTimeout = TimeSpan.FromSeconds(5);
+
     /// <summary>并发会话上限。达到上限后拒绝创建新会话，由 UI 给出明确提示。</summary>
     public int MaxConcurrentSessions { get; set; } = 20;
+
+    /// <summary>单会话关闭总时限（spec §4 约 5s）。测试可调小以便回归。</summary>
+    public TimeSpan CloseTimeout { get; set; } = DefaultCloseTimeout;
 
     public SessionManager(
         IEnumerable<IConnectionProvider> providers,
@@ -143,36 +151,124 @@ public sealed class SessionManager : IAsyncDisposable
     /// <summary>关闭并释放指定会话。可重复调用。</summary>
     public async Task CloseSessionAsync(Guid sessionId)
     {
-        if (!_sessions.TryRemove(sessionId, out var entry))
+        // 幂等守卫：条目不存在，或已有一条关闭流程在途（并发 / 重复调用）→ 直接返回。
+        if (!_sessions.TryGetValue(sessionId, out var entry) || !entry.TryClaimClose())
         {
             return;
         }
 
-        entry.Session.StateChanged -= OnSessionStateChanged;
+        var session = entry.Session;
+
+        // 关闭期间不再观察该会话的状态变化：Disconnecting/Disconnected 的历史补写统一由下方
+        // CompleteHistoryAsync 收口，避免与 OnSessionStateChanged 的后台写入竞争或重复补写。
+        session.StateChanged -= OnSessionStateChanged;
+
+        var timeout = CloseTimeout;
+        var sw = Stopwatch.StartNew();
+
+        // 统一关闭模板（spec §4）：先断开（Disconnecting→Cancel→teardown→Disconnected），
+        // 再释放会话自有资源（协议句柄 / CTS / Tracker）；两阶段共享同一总时限。
+        await DisconnectSessionAsync(session, sessionId, timeout, sw);
+        await DisposeSessionAsync(session, sessionId, timeout, sw);
 
         try
         {
-            await entry.Session.DisconnectAsync();
+            // 结束历史只补写一次；此前若已因 Failed/Disconnected 补写则去重跳过。
+            await CompleteHistoryAsync(entry, ConnectionResult.Success, ConnectionErrorCode.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "补写会话 {SessionId} 结束历史失败", sessionId);
+        }
+
+        // 先移出活动集合，再置 Closed，并保证 SessionClosed 在 MarkClosed 之后触发。
+        _sessions.TryRemove(sessionId, out _);
+
+        try
+        {
+            session.MarkClosed();
+        }
+        catch (Exception ex)
+        {
+            // MarkClosed 默认空实现 / 终态幂等，正常不会抛；这里兜底防止阻断 SessionClosed。
+            _logger.LogWarning(ex, "将会话 {SessionId} 标记 Closed 失败", sessionId);
+        }
+
+        _logger.LogInformation("已关闭会话 {SessionId}", sessionId);
+        SessionClosed?.Invoke(this, sessionId);
+    }
+
+    /// <summary>有界等待：返回 <see langword="true"/> 表示 <paramref name="task"/> 在时限内完成。</summary>
+    private static async Task<bool> WaitBoundedAsync(Task task, TimeSpan timeout)
+    {
+        var winner = await Task.WhenAny(task, Task.Delay(timeout)).ConfigureAwait(false);
+        return ReferenceEquals(winner, task);
+    }
+
+    private static TimeSpan RemainingTimeout(TimeSpan total, Stopwatch sw)
+    {
+        var remaining = total - sw.Elapsed;
+        return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
+    }
+
+    private async Task DisconnectSessionAsync(IRemoteSession session, Guid sessionId, TimeSpan totalTimeout, Stopwatch sw)
+    {
+        Task disconnect;
+        try
+        {
+            disconnect = session.DisconnectAsync();
+        }
+        catch (Exception ex)
+        {
+            // 同步启动即失败（非 async 实现的同步抛异常）也按可继续强制释放处理。
+            _logger.LogWarning(ex, "启动断开会话 {SessionId} 失败，继续释放资源。", sessionId);
+            return;
+        }
+
+        try
+        {
+            if (!await WaitBoundedAsync(disconnect, RemainingTimeout(totalTimeout, sw)).ConfigureAwait(false))
+            {
+                _logger.LogWarning("关闭会话 {SessionId}：断开超过时限未完成，转为 best-effort 强制释放。", sessionId);
+                return;
+            }
+
+            await disconnect.ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             // 断开阶段的异常不应阻止资源释放，记录后继续。
-            _logger.LogWarning(ex, "关闭会话 {SessionId} 时断开连接失败", sessionId);
+            _logger.LogWarning(ex, "断开会话 {SessionId} 失败，继续释放资源。", sessionId);
+        }
+    }
+
+    private async Task DisposeSessionAsync(IRemoteSession session, Guid sessionId, TimeSpan totalTimeout, Stopwatch sw)
+    {
+        Task dispose;
+        try
+        {
+            dispose = session.DisposeAsync().AsTask();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "启动释放会话 {SessionId} 失败。", sessionId);
+            return;
         }
 
         try
         {
-            await entry.Session.DisposeAsync();
+            if (!await WaitBoundedAsync(dispose, RemainingTimeout(totalTimeout, sw)).ConfigureAwait(false))
+            {
+                _logger.LogWarning("关闭会话 {SessionId}：释放超过时限未完成，放弃等待（best-effort）。", sessionId);
+                return;
+            }
+
+            await dispose.ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "释放会话 {SessionId} 资源时失败", sessionId);
+            _logger.LogWarning(ex, "释放会话 {SessionId} 资源时失败。", sessionId);
         }
-
-        await CompleteHistoryAsync(entry, ConnectionResult.Success, ConnectionErrorCode.None);
-
-        _logger.LogInformation("已关闭会话 {SessionId}", sessionId);
-        SessionClosed?.Invoke(this, sessionId);
     }
 
     /// <summary>关闭全部会话。应用退出时调用，确保协议资源被完整释放。</summary>
@@ -278,5 +374,10 @@ public sealed class SessionManager : IAsyncDisposable
 
         /// <summary>结束记录是否已补写，防止重复写入。</summary>
         public bool HistoryCompleted { get; set; }
+
+        private int _closeClaimed;
+
+        /// <summary>原子认领一次关闭流程；同一条目并发 / 重复关闭只会有一个调用者成功。</summary>
+        public bool TryClaimClose() => Interlocked.Exchange(ref _closeClaimed, 1) == 0;
     }
 }
