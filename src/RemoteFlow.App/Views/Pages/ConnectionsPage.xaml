@@ -20,6 +20,42 @@
         <conv:IsGroupNodeConverter x:Key="IsGroupNode" />
         <conv:DepthToMarginConverter x:Key="DepthToMargin" />
 
+        <!-- 顶部「多选」Toggle 的样式。注意不能用 Button.* 系列（TargetType=Button），
+             否则应用到 ToggleButton 上会抛 “TargetType does not match” 运行时异常崩溃。 -->
+        <Style x:Key="MultiSelectToggle" TargetType="ToggleButton">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Chrome"
+                                Background="{DynamicResource Bg.Layer}"
+                                BorderBrush="{DynamicResource Stroke.Default}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource Radius.Medium}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Brand.Default}" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
+                                <Setter Property="Foreground" Value="White" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- 连接行的右键 / 「更多」菜单。ContextMenu 不在主可视树内，
              菜单项动作统一用 Click 在代码后置分发（ResolveItem 从 DataContext 取行 VM）。 -->
         <ContextMenu x:Key="ConnectionRowMenu" x:Shared="False">
@@ -370,9 +406,7 @@
             </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <ToggleButton Style="{StaticResource Button.Secondary}"
-                              MinHeight="32" Padding="12,0" Margin="0,0,8,0"
-                              VerticalAlignment="Center"
+                <ToggleButton Style="{StaticResource MultiSelectToggle}"
                               IsChecked="{Binding IsMultiSelect}"
                               ToolTip="多选：对多台设备批量连接 / 收藏 / 分组 / 标签 / 删除">
                     <StackPanel Orientation="Horizontal">
