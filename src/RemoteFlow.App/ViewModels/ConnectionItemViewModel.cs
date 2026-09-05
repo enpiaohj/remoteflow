@@ -69,9 +69,22 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
     [ObservableProperty]
     private bool _isFavorite = profile.Favorite;
 
-    /// <summary>该连接当前是否有进行中的会话。首页最近连接卡片据此高亮。</summary>
+    /// <summary>
+    /// 该连接是否存在任意活动会话（含 Connecting / Failed 尚未移除）。
+    /// 用于右键「连接 / 切换到会话 / 断开连接」的动作区分——只要有会话在跑，
+    /// 首操作就应是聚焦既有会话而非新建。由页面 VM 按 SessionManager 快照统一写入。
+    /// </summary>
     [ObservableProperty]
     private bool _hasActiveSession;
+
+    /// <summary>
+    /// 该连接是否存在「真正已连接」（State == Connected）的会话。
+    /// 与 <see cref="HasActiveSession"/>（任意活动）语义区分：列表「最近连接」列
+    /// 的绿色“已连接”点只认本属性。由页面 VM 在会话集合变化时按
+    /// SessionManager.HasConnectedSession 统一写入，不落库。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isConnected;
 
     /// <summary>多选模式下是否被勾选。</summary>
     [ObservableProperty]

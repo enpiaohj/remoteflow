@@ -338,6 +338,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     await OpenSessionAsync(item.Profile);
                     return;
 
+                case HomeRowActions.Disconnect:
+                    // 断开该 Profile 的全部活动会话；行状态熄灭由 SessionsChanged 驱动，无需在此刷新首页。
+                    await ConnectionsPage.DisconnectItemCommand.ExecuteAsync(item);
+                    return;
+
                 case HomeRowActions.Manage:
                     // 跳到「我的连接」全部视图并让该连接可见、选中。
                     GlobalSearchText = string.Empty;

@@ -260,19 +260,40 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     public string SelectedCreatedAtText => SelectedItem?.CreatedAtDisplay ?? "—";
 
     /// <summary>聚合 <see cref="SessionManager.SessionsChanged"/>：会话创建 / 任意状态跳变 / 移除后
-    /// 重算右侧详情状态。事件可在任意线程触发，由 <see cref="RefreshSelectedDetail"/> marshal 回 UI。</summary>
-    private void OnSessionsChanged(object? sender, EventArgs e) => RefreshSelectedDetail();
+    /// 重算右侧详情状态并刷新连接行的实时已连接状态。事件可在任意线程触发，
+    /// 由 <see cref="RefreshSessionDependentState"/> marshal 回 UI。</summary>
+    private void OnSessionsChanged(object? sender, EventArgs e) => RefreshSessionDependentState();
 
-    private void RefreshSelectedDetail()
+    private void RefreshSessionDependentState()
     {
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
         if (dispatcher is not null && !dispatcher.CheckAccess())
         {
-            dispatcher.BeginInvoke(RefreshSelectedDetail);
+            dispatcher.BeginInvoke(RefreshSessionDependentState);
             return;
         }
 
+        RefreshItemsRealtimeState();
         RaiseSelectedDetail();
+    }
+
+    /// <summary>
+    /// 把全量连接行的实时状态对齐到 SessionManager 快照：<see cref="ConnectionItemViewModel.IsConnected"/>
+    /// 只认“真正已连接”，<see cref="ConnectionItemViewModel.HasActiveSession"/> 表示任意活动（含 Connecting/Failed）。
+    /// 我的连接 / 收藏 / 最近连接三视图与分组树共用同一批 <see cref="_allItems"/>，改一处即全同步；不落库。
+    /// </summary>
+    private void RefreshItemsRealtimeState()
+    {
+        if (_sessions is null)
+        {
+            return;
+        }
+
+        foreach (var item in _allItems)
+        {
+            item.IsConnected = _sessions.HasConnectedSession(item.Id);
+            item.HasActiveSession = _sessions.HasActiveSession(item.Id);
+        }
     }
 
     private void RaiseSelectedDetail()
@@ -521,6 +542,10 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
         item.Tags = chips.Take(MaxVisibleTags).ToList();
         item.OverflowTagCount = Math.Max(0, chips.Count - MaxVisibleTags);
+
+        // 行级实时状态：以 SessionManager 为唯一事实来源（可能为 null 以支持单元测试）。
+        item.IsConnected = _sessions?.HasConnectedSession(profile.Id) ?? false;
+        item.HasActiveSession = _sessions?.HasActiveSession(profile.Id) ?? false;
 
         return item;
     }
@@ -893,6 +918,28 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
         OpenConnectionRequested?.Invoke(this, item.Profile);
         return Task.CompletedTask;
+    }
+
+    /// <summary>右键「断开连接」：关闭该连接 Profile 的全部活动会话（含连接中 / 失败尚未移除的）。
+    /// 会话逐个移除后自然经 <see cref="SessionManager.SessionsChanged"/> 驱动行状态与详情熄灭。</summary>
+    [RelayCommand]
+    private async Task DisconnectItemAsync(ConnectionItemViewModel? item)
+    {
+        item ??= SelectedItem;
+        if (item is null || _sessions is null)
+        {
+            return;
+        }
+
+        var sessionIds = _sessions.ActiveSessions
+            .Where(s => s.Profile.Id == item.Id)
+            .Select(s => s.SessionId)
+            .ToList();
+
+        foreach (var sessionId in sessionIds)
+        {
+            await _sessions.CloseSessionAsync(sessionId);
+        }
     }
 
     /// <summary>详情「查看全部历史」：放开时间范围后跳到「最近连接」活动页，

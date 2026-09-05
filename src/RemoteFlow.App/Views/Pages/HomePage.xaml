@@ -36,13 +36,15 @@
         </Style>
 
         <!-- 首页「最近连接 / 收藏」行的右键菜单：快速访问，只保留
-             连接 / 编辑 / 测试连接 / 收藏|取消收藏 / 管理连接。
-             分组布局：主操作组=连接 / 编辑；第二组=测试连接与收藏切换；末组=定位。
+             连接(无活动)/切换到会话+断开连接(有活动) / 编辑 / 测试连接 / 收藏|取消收藏 / 管理连接。
+             分组布局：主操作组=connect + disconnect + 编辑；第二组=测试连接与收藏切换；末组=定位。
              统一经 HomePage.ConnectionActionRequested 桥接到既有命令，不在首页复制实现。
              x:Shared=False 使每行实例化独立菜单；DataContext 在菜单打开时取自所在行。
-             Opened 时把该行设为选中，并依行 IsFavorite 写入收藏项 Header。 -->
+             Opened 时把该行设为选中，依行 IsFavorite 写入收藏项 Header，
+             并按行会话状态把 connect 改名 / 显隐 disconnect（与「我的连接」行菜单同一约定）。 -->
         <ContextMenu x:Key="HomeRowMenu" x:Shared="False" Opened="OnHomeRowMenuOpened">
             <MenuItem Tag="connect" Header="连接" Click="OnRowActionClick" />
+            <MenuItem Tag="disconnect" Header="断开连接" Click="OnRowActionClick" />
             <MenuItem Tag="edit" Header="编辑" Click="OnRowActionClick" />
             <Separator />
             <MenuItem Tag="test" Header="测试连接" Click="OnRowActionClick" />
@@ -77,7 +79,8 @@
                                 </Grid>
                             </Border>
                             <ControlTemplate.Triggers>
-                                <DataTrigger Binding="{Binding HasActiveSession}" Value="True">
+                                <!-- 高亮 / 绿点只认“真正已连接”；HasActiveSession（任意活动）只用于行右键区分动作 -->
+                                <DataTrigger Binding="{Binding IsConnected}" Value="True">
                                     <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
                                     <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Selected}" />
                                 </DataTrigger>
@@ -130,13 +133,13 @@
                                 </Grid>
                                 <Ellipse Width="7" Height="7" VerticalAlignment="Center" Margin="10,0,0,0"
                                          Fill="{DynamicResource Status.Success}"
-                                         Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}" />
+                                         Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}" />
                                 <TextBlock Text="已连接" Style="{StaticResource Text.Caption}" FontWeight="SemiBold"
                                            Foreground="{DynamicResource Status.Success}" Margin="6,0,0,0" VerticalAlignment="Center"
-                                           Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}" />
+                                           Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}" />
                                 <TextBlock Text="{Binding LastConnectedDisplay}" Style="{StaticResource Text.Caption}" Margin="10,0,0,0"
                                            VerticalAlignment="Center"
-                                           Visibility="{Binding HasActiveSession, Converter={StaticResource InverseBoolToVisibility}}" />
+                                           Visibility="{Binding IsConnected, Converter={StaticResource InverseBoolToVisibility}}" />
                             </StackPanel>
                         </StackPanel>
                     </Grid>

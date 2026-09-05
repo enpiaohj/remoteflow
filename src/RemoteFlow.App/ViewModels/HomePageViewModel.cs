@@ -69,7 +69,7 @@ public sealed partial class HomePageViewModel : ObservableObject
     public event EventHandler<ConnectionProfile>? OpenConnectionRequested;
 
     /// <summary>
-    /// 首页「最近连接 / 收藏」行右键动作（连接 / 编辑 / 测试连接 / 收藏 / 管理连接）。
+    /// 首页「最近连接 / 收藏」行右键动作（连接 / 切换到会话 / 断开连接 / 编辑 / 测试连接 / 收藏 / 管理连接）。
     /// 真正的执行桥接到「我的连接」既有命令，避免在首页复制实现。
     /// </summary>
     public event EventHandler<HomeConnectionActionEventArgs>? ConnectionActionRequested;
@@ -136,7 +136,8 @@ public sealed partial class HomePageViewModel : ObservableObject
         TotalConnections = profiles.Count;
         ShowSecurityTip = !_settings.HomeSecurityTipDismissed && profiles.Count > 0;
 
-        // 卡片高亮只认“真正已连接”的会话：正在连接 / 失败不点亮“已连接”标签。
+        // 卡片高亮只认“真正已连接”的会话（IsConnected）：正在连接 / 失败不点亮“已连接”标签。
+        // HasActiveSession（任意活动）单独维护，供行右键区分「连接 / 切换到会话 / 断开连接」。
         var connectedProfileIds = _sessions.ActiveSessions
             .Where(s => s.State == ConnectionState.Connected)
             .Select(s => s.Profile.Id)
@@ -149,7 +150,8 @@ public sealed partial class HomePageViewModel : ObservableObject
                      .Take(RecentCardLimit))
         {
             var item = BuildItem(profile, groups);
-            item.HasActiveSession = connectedProfileIds.Contains(profile.Id);
+            item.HasActiveSession = _sessions.HasActiveSession(profile.Id);
+            item.IsConnected = connectedProfileIds.Contains(profile.Id);
             RecentItems.Add(item);
         }
 
@@ -159,7 +161,10 @@ public sealed partial class HomePageViewModel : ObservableObject
                      .OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)
                      .Take(SectionLimit))
         {
-            FavoriteItems.Add(BuildItem(profile, groups));
+            var item = BuildItem(profile, groups);
+            item.HasActiveSession = _sessions.HasActiveSession(profile.Id);
+            item.IsConnected = connectedProfileIds.Contains(profile.Id);
+            FavoriteItems.Add(item);
         }
 
         RecentHistory.Clear();
@@ -204,7 +209,9 @@ public sealed partial class HomePageViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 遍历最近 / 收藏行，按 SessionManager 实时快照点亮 / 熄灭「已连接」，
+    /// 遍历最近 / 收藏行，按 SessionManager 实时快照点亮 / 熄灭「已连接」并刷新“任意活动”标记：
+    /// <see cref="ConnectionItemViewModel.IsConnected"/> 走 HasConnectedSession（真正已连，点亮绿点），
+    /// <see cref="ConnectionItemViewModel.HasActiveSession"/> 走 HasActiveSession（任意活动，供右键区分）。
     /// 让 Connecting→Connected 即时点亮、关闭后即时熄灭。仅在 UI 线程调用（改写行的 ObservableProperty）。
     /// 行不在当前两列表（如连接的 Profile 尚未进入最近 / 收藏）时由去抖的 LoadAsync 重建列表补齐。
     /// </summary>
@@ -212,20 +219,14 @@ public sealed partial class HomePageViewModel : ObservableObject
     {
         foreach (var item in RecentItems)
         {
-            var connected = _sessions.HasConnectedSession(item.Id);
-            if (item.HasActiveSession != connected)
-            {
-                item.HasActiveSession = connected;
-            }
+            item.IsConnected = _sessions.HasConnectedSession(item.Id);
+            item.HasActiveSession = _sessions.HasActiveSession(item.Id);
         }
 
         foreach (var item in FavoriteItems)
         {
-            var connected = _sessions.HasConnectedSession(item.Id);
-            if (item.HasActiveSession != connected)
-            {
-                item.HasActiveSession = connected;
-            }
+            item.IsConnected = _sessions.HasConnectedSession(item.Id);
+            item.HasActiveSession = _sessions.HasActiveSession(item.Id);
         }
     }
 
@@ -473,6 +474,7 @@ public sealed class HistoryItemViewModel(ConnectionHistoryEntry entry)
 public static class HomeRowActions
 {
     public const string Connect = "connect";
+    public const string Disconnect = "disconnect";
     public const string Edit = "edit";
     public const string Test = "test";
     public const string Favorite = "favorite";

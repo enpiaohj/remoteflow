@@ -146,7 +146,8 @@ public partial class ConnectionsPage : UserControl
     /// <item>「我的连接」（Filter=All，含分组树）→ 完整管理项：复制连接 / 移动到分组 / 删除可见；「管理连接」隐藏。</item>
     /// <item>收藏 / 最近连接（Filter≠All）→ 快速访问：只留 连接 / 编辑 / 测试连接 / 收藏；显示「管理连接」。</item>
     /// </list>
-    /// 同时把收藏项 Header 按视图与行状态写成 收藏 / 取消收藏；裁剪后顺手隐藏空分隔组。
+    /// 同时把收藏项 Header 按视图与行状态写成 收藏 / 取消收藏；把主操作 connect 项按行会话状态
+    /// 写成 连接 / 切换到会话，并同步显隐 disconnect 项；裁剪后顺手隐藏空分隔组。
     /// </summary>
     private void ApplyConnectionRowMenuGuards(ContextMenu menu)
     {
@@ -163,6 +164,15 @@ public partial class ConnectionsPage : UserControl
         {
             switch (item.Tag as string)
             {
+                case "connect":
+                    // 主操作按行会话状态改名：任意活动（连接中 / 已连 / 失败未清）→ 切换到会话（聚焦既有）；
+                    // 无活动 → 连接（走统一漏斗新建 / 聚焦）。
+                    item.Header = row?.HasActiveSession == true ? "切换到会话" : "连接";
+                    break;
+                case "disconnect":
+                    // 断开连接只在存在活动会话时可用（关闭该 Profile 全部活动会话）。
+                    item.Visibility = row?.HasActiveSession == true ? Visibility.Visible : Visibility.Collapsed;
+                    break;
                 case "duplicate":
                 case "move":
                 case "delete":
@@ -265,6 +275,15 @@ public partial class ConnectionsPage : UserControl
         if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
         {
             await viewModel.ConnectAsync(item);
+        }
+    }
+
+    /// <summary>「断开连接」：关闭该连接的全部活动会话（含连接中 / 失败未清）。</summary>
+    private async void OnDisconnectMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
+        {
+            await viewModel.DisconnectItemCommand.ExecuteAsync(item);
         }
     }
 

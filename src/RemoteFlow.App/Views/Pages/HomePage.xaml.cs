@@ -72,6 +72,18 @@ public partial class HomePage : UserControl
         var item = menu.DataContext as ConnectionItemViewModel
             ?? (menu.PlacementTarget as FrameworkElement)?.DataContext as ConnectionItemViewModel;
 
+        // 主操作按行会话状态区分：任意活动（连接中 / 已连 / 失败未清）→ 切换到会话 + 断开连接；
+        // 无活动 → 连接。与「我的连接」行菜单同一套约定。
+        if (menu.Items.OfType<MenuItem>().FirstOrDefault(m => (m.Tag as string) == HomeRowActions.Connect) is { } connect)
+        {
+            connect.Header = item?.HasActiveSession == true ? "切换到会话" : "连接";
+        }
+
+        if (menu.Items.OfType<MenuItem>().FirstOrDefault(m => (m.Tag as string) == HomeRowActions.Disconnect) is { } disconnect)
+        {
+            disconnect.Visibility = item?.HasActiveSession == true ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         // 收藏项 Header 随行当前收藏状态切换：已收藏→取消收藏，未收藏→收藏。
         if (menu.Items.OfType<MenuItem>().FirstOrDefault(m => (m.Tag as string) == HomeRowActions.Favorite) is { } favorite)
         {

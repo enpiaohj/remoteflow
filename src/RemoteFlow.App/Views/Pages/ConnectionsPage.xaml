@@ -59,13 +59,18 @@
 
         <!-- 连接行的右键 / 「更多」菜单。ContextMenu 不在主可视树内，
              菜单项动作统一用 Click 在代码后置分发（ResolveItem 从 DataContext 取行 VM）。
-             分组布局：主操作组=连接 / 编辑；第二组=测试连接与收藏切换（我的连接里夹着复制连接）；
+             分组布局：主操作组=连接(无活动)/切换到会话+断开连接(有活动) + 编辑；
+             第二组=测试连接与收藏切换（我的连接里夹着复制连接）；
              第三组按视图裁切——「我的连接」（Filter=All）放 移动到分组 / 删除，
              收藏 / 最近连接快捷视图放「管理连接」。
-             收藏项 Header 在 OnRowContextMenuOpened 按视图与行状态设为 收藏 / 取消收藏；
+             connect / disconnect 项 Header 与显隐在 OnRowContextMenuOpened 按行会话状态守卫；
+             收藏项 Header 按视图与行状态设为 收藏 / 取消收藏；
              被隐藏项夹出的空分隔组由 NormalizeSeparators 一并隐藏（菜单 Tag 定位）。 -->
         <ContextMenu x:Key="ConnectionRowMenu" x:Shared="False" Opened="OnRowContextMenuOpened">
+            <!-- 主操作组首项按行会话状态在守卫里改名：无活动=「连接」；有活动=「切换到会话」；
+                 同时按状态显隐第二项「断开连接」（连接行与首页快捷菜单同一套约定）。 -->
             <MenuItem Tag="connect" Header="连接" InputGestureText="Enter" Click="OnConnectMenuClick" />
+            <MenuItem Tag="disconnect" Header="断开连接" Click="OnDisconnectMenuClick" />
             <MenuItem Tag="edit" Header="编辑" Click="OnEditMenuClick" />
             <Separator />
             <MenuItem Tag="duplicate" Header="复制连接" Click="OnDuplicateMenuClick" />
@@ -221,7 +226,19 @@
                                Visibility="{Binding OverflowTagCount, Converter={StaticResource CountToVisibility}}" />
                 </StackPanel>
 
-                <TextBlock Grid.Column="6" Text="{Binding LastConnectedDisplay}" Style="{StaticResource Text.Caption}" />
+                <!-- 「最近连接」列：真正已连接时显示绿点 +「已连接」，否则回退显示最近连接时间。
+                     我的连接 / 收藏 / 最近连接三视图共用同一 ConnRowTemplate，行级实时状态全同步。 -->
+                <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal"
+                                Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}">
+                        <Ellipse Width="6" Height="6" VerticalAlignment="Center"
+                                 Fill="{DynamicResource Status.Success}" />
+                        <TextBlock Text="已连接" Style="{StaticResource Text.Caption}" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Status.Success}" Margin="6,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding LastConnectedDisplay}" Style="{StaticResource Text.Caption}"
+                               Visibility="{Binding IsConnected, Converter={StaticResource InverseBoolToVisibility}}" />
+                </StackPanel>
 
                 <Button Grid.Column="7" Style="{StaticResource Button.Icon}" Width="30" Height="30"
                         Content="{StaticResource Icon.More}" ToolTip="更多操作" Click="OnMoreClick" />
