@@ -370,6 +370,18 @@
             </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <ToggleButton Style="{StaticResource Button.Secondary}"
+                              MinHeight="32" Padding="12,0" Margin="0,0,8,0"
+                              VerticalAlignment="Center"
+                              IsChecked="{Binding IsMultiSelect}"
+                              ToolTip="多选：对多台设备批量连接 / 收藏 / 分组 / 标签 / 删除">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{StaticResource Icon.Accept}" FontFamily="{StaticResource IconFont}"
+                                   FontSize="11" VerticalAlignment="Center" />
+                        <TextBlock Text="多选" Margin="6,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </ToggleButton>
+
                 <Button Style="{StaticResource Button.Icon}"
                         Content="{StaticResource Icon.Refresh}"
                         ToolTip="刷新"
@@ -435,13 +447,50 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
+
+                <!-- ── 批量动作条（多选模式浮现）────────────────────── -->
+                <Grid Grid.Row="0" Height="40" Margin="4,0,4,8"
+                      Visibility="{Binding IsMultiSelect, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Text="{Binding SelectionSummary}" />
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                Content="全选" FontSize="12" Command="{Binding SelectAllVisibleCommand}" />
+                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                Margin="6,0,0,0" Content="清除" FontSize="12" Command="{Binding ClearSelectionCommand}" />
+                        <Button Style="{StaticResource Button.Primary}" MinHeight="28" Padding="12,0"
+                                Margin="10,0,0,0" Content="连接" FontSize="12" Command="{Binding ConnectSelectedCommand}" />
+                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                Margin="6,0,0,0" Content="收藏切换" FontSize="12"
+                                Command="{Binding ToggleFavoriteSelectedCommand}" />
+                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                Margin="6,0,0,0" Content="移到分组" FontSize="12"
+                                Click="OnBatchMoveClick" Tag="move" />
+                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                Margin="6,0,0,0" Content="标签" FontSize="12"
+                                Click="OnBatchTagClick" Tag="tag" />
+                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                Margin="6,0,0,0" Content="删除" FontSize="12" Foreground="{DynamicResource Status.Danger}"
+                                Command="{Binding DeleteSelectedCommand}" />
+                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                Margin="10,0,0,0" Content="完成" FontSize="12" Command="{Binding ExitMultiSelectCommand}" />
+                    </StackPanel>
+                </Grid>
 
                 <!-- ── 列头 ──────────────────────────────────────────── -->
                 <!-- 列头只在扁平视图（收藏 / 最近连接）出现。
                      分组视图是一棵带缩进的树，再压一行表头既对不齐也没必要。 -->
-                <Grid Grid.Row="0" Height="30" Margin="4,0,4,0">
+                <Grid Grid.Row="1" Height="30" Margin="4,0,4,0">
             <Grid.Style>
                 <Style TargetType="Grid">
                     <Setter Property="Visibility" Value="Collapsed" />
@@ -475,7 +524,7 @@
             <TextBlock Grid.Column="6" Text="最近连接" Style="{StaticResource Text.Label}" />
         </Grid>
 
-                <Border Grid.Row="1" VerticalAlignment="Bottom" Margin="4,0">
+                <Border Grid.Row="2" VerticalAlignment="Bottom" Margin="4,0">
                     <Border.Style>
                         <Style TargetType="Border" BasedOn="{StaticResource Surface.Divider}">
                             <Setter Property="Visibility" Value="Collapsed" />
@@ -493,7 +542,7 @@
                 </Border>
 
                 <!-- ── 连接列表 ──────────────────────────────────────── -->
-                <Grid Grid.Row="2">
+                <Grid Grid.Row="3">
 
             <!-- 收藏 / 最近连接：扁平列表（最近连接按日期桶分组）-->
             <ListBox x:Name="ConnectionList"
