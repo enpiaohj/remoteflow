@@ -253,6 +253,24 @@ public sealed partial class HomePageViewModel(
     }
 
     /// <summary>
+    /// 行右键菜单打开前把目标行设为选中（「最近连接 / 收藏」两列表内互斥），
+    /// 让菜单动作的作用对象在视觉上明确。同一 profile 可能分别出现在两列表，
+    /// 各自列表内选中即可；目标行不在某列表时该列表全部取消选中。
+    /// </summary>
+    public void SelectInContext(ConnectionItemViewModel? item)
+    {
+        foreach (var recent in RecentItems)
+        {
+            recent.IsSelected = ReferenceEquals(recent, item);
+        }
+
+        foreach (var favorite in FavoriteItems)
+        {
+            favorite.IsSelected = ReferenceEquals(favorite, item);
+        }
+    }
+
+    /// <summary>
     /// 行右键动作的统一入口（由视图 code-behind 调用）。事件从本类内部触发，
     /// MainViewModel 订阅后桥接到「我的连接」既有命令。
     /// </summary>

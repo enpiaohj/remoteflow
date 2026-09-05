@@ -470,8 +470,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
                 $"{date} · {clock} · {weekday} · {week}"),
             new(HomeTimeOrder.DateWeekdayTimeWeek, "日期 · 星期 · 时间 · 周数",
                 $"{date} · {weekday} · {clock} · {week}"),
-            new(HomeTimeOrder.SeparateLine, "日期 · 星期 · 周数（时间单独一行）",
-                $"{date} · {weekday} · {week}\n{clock}")
+            // 「时间单独一行」的下拉样例也保持单行：日期行示意后加括号说明，时间不真正换行。
+            new(HomeTimeOrder.SeparateLine, "日期 · 星期 · 周数（时间另起一行）",
+                $"{date} · {weekday} · {week}（时间另起一行）")
         };
 
         _refreshingOrderOptions = true;

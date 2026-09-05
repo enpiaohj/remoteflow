@@ -37,8 +37,9 @@
 
         <!-- 首页「最近连接 / 收藏」行的右键菜单。动作与「我的连接」一致，
              统一经 HomePage.ConnectionActionRequested 桥接到既有命令，不在首页复制实现。
-             x:Shared=False 使每行实例化独立菜单；DataContext 在菜单打开时取自所在行。 -->
-        <ContextMenu x:Key="HomeRowMenu" x:Shared="False">
+             x:Shared=False 使每行实例化独立菜单；DataContext 在菜单打开时取自所在行。
+             Opened 时把该行设为选中，让菜单动作的作用对象在视觉上明确。 -->
+        <ContextMenu x:Key="HomeRowMenu" x:Shared="False" Opened="OnHomeRowMenuOpened">
             <MenuItem Tag="connect" Header="连接" Click="OnRowActionClick" />
             <MenuItem Tag="edit" Header="编辑" Click="OnRowActionClick" />
             <MenuItem Tag="duplicate" Header="复制" Click="OnRowActionClick" />
@@ -97,6 +98,11 @@
                                 <Trigger Property="IsPressed" Value="True">
                                     <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Pressed}" />
                                 </Trigger>
+                                <!-- 右键菜单打开时行进入选中态：品牌色描边 + 浅蓝底，轻量表达目标行。 -->
+                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.RowSelected}" />
+                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
+                                </DataTrigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>
                     </Button.Template>

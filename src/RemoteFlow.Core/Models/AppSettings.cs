@@ -72,10 +72,10 @@ public sealed class AppSettings
     public bool ShowHomeWeekNumber { get; set; } = true;
 
     /// <summary>首页日期行是否显示当前时间。</summary>
-    public bool ShowHomeTime { get; set; }
+    public bool ShowHomeTime { get; set; } = true;
 
     /// <summary>首页时间是否显示秒（需 ShowHomeTime）。</summary>
-    public bool ShowHomeSeconds { get; set; }
+    public bool ShowHomeSeconds { get; set; } = true;
 
     /// <summary>首页标题行的整行排列方式。</summary>
     public HomeTimeOrder ShowHomeTimeOrder { get; set; } = HomeTimeOrder.DateWeekdayWeekTime;

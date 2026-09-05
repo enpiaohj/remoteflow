@@ -58,6 +58,23 @@ public partial class HomePage : UserControl
     }
 
     /// <summary>
+    /// 行右键菜单打开时把所在行设为选中（「最近连接 / 收藏」两列表内互斥），
+    /// 让菜单动作的作用对象在视觉上明确。行模板内 ContextMenu 的 DataContext
+    /// 即该行 VM；「⋯」按钮路径再退化到 PlacementTarget 兜底。
+    /// </summary>
+    private void OnHomeRowMenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu menu)
+        {
+            return;
+        }
+
+        var item = menu.DataContext as ConnectionItemViewModel
+            ?? (menu.PlacementTarget as FrameworkElement)?.DataContext as ConnectionItemViewModel;
+        ViewModel?.SelectInContext(item);
+    }
+
+    /// <summary>
     /// 最近连接 / 收藏行右键菜单的统一入口：把动作名（MenuItem.Tag）与所在行一起抛给
     /// HomePageViewModel.ConnectionActionRequested，由 MainViewModel 桥接到「我的连接」既有命令。
     /// </summary>
