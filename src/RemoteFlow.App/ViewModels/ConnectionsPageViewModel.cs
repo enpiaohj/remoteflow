@@ -65,6 +65,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     private readonly JsonSettingsStore _settingsStore;
     private readonly ILogger<ConnectionsPageViewModel> _logger;
 
+    /// <summary>多选模式下被勾选的连接。批量动作的作用域。</summary>
+    public ObservableCollection<ConnectionItemViewModel> SelectedConnections { get; } = [];
+
     /// <summary>详情面板迷你图表展示的历史条数。</summary>
     private const int SparkCount = 10;
 
@@ -232,6 +235,30 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isLoading;
+
+    /// <summary>是否处于多选模式。</summary>
+    [ObservableProperty]
+    private bool _isMultiSelect;
+
+    public bool HasSelection => SelectedConnections.Count > 0;
+
+    /// <summary>批量条文案：「已选 N 项」。</summary>
+    public string SelectionSummary => $"已选 {SelectedConnections.Count} 项";
+
+    public bool IsAllSelected => SelectedConnections.Count > 0
+        && SelectedConnections.Count == Items.Count;
+
+    partial void OnIsMultiSelectChanged(bool value)
+    {
+        // 进入多选清空旧选择；退出多选同样清空。
+        foreach (var item in Items)
+        {
+            item.IsSelected = false;
+        }
+
+        SelectedConnections.Clear();
+        RefreshSelectionSummary();
+    }
 
     /// <summary>列表为空时显示的说明文字，区分「没有数据」与「没有匹配结果」。</summary>
     [ObservableProperty]
@@ -470,6 +497,19 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             : null;
 
         OnPropertyChanged(nameof(IsEmpty));
+
+        // 筛选变化后，被滤掉的已勾选项同步移出选择集合，避免批量作用到不可见项。
+        var visibleIds = Items.Select(i => i.Id).ToHashSet();
+        for (var i = SelectedConnections.Count - 1; i >= 0; i--)
+        {
+            if (!visibleIds.Contains(SelectedConnections[i].Id))
+            {
+                SelectedConnections[i].IsSelected = false;
+                SelectedConnections.RemoveAt(i);
+            }
+        }
+
+        RefreshSelectionSummary();
     }
 
     /// <summary>把最近连接时间归入「今天 / 昨天 / 更早」三个桶。</summary>
@@ -811,6 +851,201 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     [RelayCommand]
     private async Task RefreshAsync() => await LoadAsync();
+
+    // ── 多选模式与批量操作 ───────────────────────────────────────
+
+    [RelayCommand]
+    private void ExitMultiSelect() => IsMultiSelect = false;
+
+    /// <summary>勾选 / 取消勾选单台（多选模式下行单击或点 CheckBox）。</summary>
+    public void ToggleSelect(ConnectionItemViewModel? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        if (SelectedConnections.Contains(item))
+        {
+            SelectedConnections.Remove(item);
+            item.IsSelected = false;
+        }
+        else
+        {
+            SelectedConnections.Add(item);
+            item.IsSelected = true;
+        }
+
+        RefreshSelectionSummary();
+    }
+
+    /// <summary>勾选当前可见全部。</summary>
+    [RelayCommand]
+    private void SelectAllVisible()
+    {
+        foreach (var item in Items)
+        {
+            if (!SelectedConnections.Contains(item))
+            {
+                SelectedConnections.Add(item);
+                item.IsSelected = true;
+            }
+        }
+
+        RefreshSelectionSummary();
+    }
+
+    /// <summary>清除全部勾选。</summary>
+    [RelayCommand]
+    private void ClearSelection()
+    {
+        SelectedConnections.Clear();
+        foreach (var item in Items)
+        {
+            item.IsSelected = false;
+        }
+
+        RefreshSelectionSummary();
+    }
+
+    /// <summary>批量连接：逐个走统一漏斗；已开设备由漏斗自动聚焦，不重复建。</summary>
+    [RelayCommand]
+    private void ConnectSelected()
+    {
+        foreach (var item in SelectedConnections.ToList())
+        {
+            OpenConnectionRequested?.Invoke(this, item.Profile);
+        }
+    }
+
+    /// <summary>批量切换收藏：若存在未收藏项则全部收藏，否则全部取消收藏。</summary>
+    [RelayCommand]
+    private async Task ToggleFavoriteSelectedAsync()
+    {
+        var selected = SelectedConnections.ToList();
+        if (selected.Count == 0)
+        {
+            return;
+        }
+
+        var wantFavorite = selected.Any(i => !i.IsFavorite);
+        foreach (var item in selected)
+        {
+            item.IsFavorite = wantFavorite;
+            item.Profile.Favorite = wantFavorite;
+            await _connections.SetFavoriteAsync(item.Id, wantFavorite);
+        }
+
+        // 收藏视图下取消收藏应立即从可见列表消失。
+        if (Filter == ConnectionFilter.Favorites)
+        {
+            ApplyFilter();
+        }
+
+        RefreshSelectionSummary();
+    }
+
+    /// <summary>把所选连接移动到目标分组（菜单项统一入口）。</summary>
+    public async Task MoveSelectedToGroupAsync(Guid? targetGroupId)
+    {
+        var selected = SelectedConnections.ToList();
+        foreach (var item in selected)
+        {
+            try
+            {
+                await _groupService.MoveConnectionAsync(item.Id, targetGroupId);
+            }
+            catch (InvalidOperationException ex)
+            {
+                await _dialogs.ShowMessageAsync("无法移动连接", ex.Message, DialogKind.Warning);
+                return;
+            }
+        }
+
+        await LoadAsync();
+    }
+
+    /// <summary>批量加标签到所选（已存在则跳过）。</summary>
+    [RelayCommand]
+    private async Task AddTagToSelectedAsync(Tag? tag)
+    {
+        if (tag is null)
+        {
+            return;
+        }
+
+        foreach (var item in SelectedConnections.ToList())
+        {
+            if (!item.Profile.TagIds.Contains(tag.Id))
+            {
+                item.Profile.TagIds.Add(tag.Id);
+                await _connections.UpdateAsync(item.Profile);
+            }
+        }
+
+        await LoadAsync();
+    }
+
+    /// <summary>批量从所选移除标签。</summary>
+    [RelayCommand]
+    private async Task RemoveTagFromSelectedAsync(Tag? tag)
+    {
+        if (tag is null)
+        {
+            return;
+        }
+
+        foreach (var item in SelectedConnections.ToList())
+        {
+            if (item.Profile.TagIds.Remove(tag.Id))
+            {
+                await _connections.UpdateAsync(item.Profile);
+            }
+        }
+
+        await LoadAsync();
+    }
+
+    /// <summary>批量删除（强确认）。</summary>
+    [RelayCommand]
+    private async Task DeleteSelectedAsync()
+    {
+        var selected = SelectedConnections.ToList();
+        if (selected.Count == 0)
+        {
+            return;
+        }
+
+        var names = string.Join("、", selected.Select(i => i.Name));
+        var confirmed = await _dialogs.ConfirmAsync(
+            "删除连接",
+            $"确定要删除这 {selected.Count} 个连接吗？\n\n{names}\n\n该操作无法撤销。此操作不会删除它们引用的凭据。",
+            "删除",
+            isDanger: true);
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        foreach (var item in selected)
+        {
+            await _connections.DeleteAsync(item.Id);
+        }
+
+        await LoadAsync();
+    }
+
+    /// <summary>供批量「标签 ▾」菜单在打开时拉取全部标签。</summary>
+    public Task<IReadOnlyList<Tag>> GetTagsAsync()
+        => _connections.GetTagsAsync();
+
+    private void RefreshSelectionSummary()
+    {
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(SelectionSummary));
+        OnPropertyChanged(nameof(IsAllSelected));
+    }
 
     // ── 分组命令 ──────────────────────────────────────────────────
 
