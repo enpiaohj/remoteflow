@@ -883,9 +883,14 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         return Task.CompletedTask;
     }
 
-    /// <summary>详情「查看全部历史」：跳到「最近连接」活动页。复用既有页面，不新增导航入口。</summary>
+    /// <summary>详情「查看全部历史」：放开时间范围后跳到「最近连接」活动页，
+    /// 让当前连接保持选中并展示它的全部历史。复用既有页面，不新增导航入口。</summary>
     [RelayCommand]
-    private void ViewAllHistory() => NavigationRequested?.Invoke(this, NavigationPage.Recent);
+    private void ViewAllHistory()
+    {
+        RecentRange = RecentRange.All;
+        NavigationRequested?.Invoke(this, NavigationPage.Recent);
+    }
 
     [RelayCommand]
     private async Task CreateAsync()
