@@ -61,7 +61,7 @@
              菜单项动作统一用 Click 在代码后置分发（ResolveItem 从 DataContext 取行 VM）。
              分组布局：主操作组=连接 / 编辑；第二组=测试连接与收藏切换（我的连接里夹着复制连接）；
              第三组按视图裁切——「我的连接」（Filter=All）放 移动到分组 / 删除，
-             收藏 / 最近连接快捷视图放「在「我的连接」中定位」。
+             收藏 / 最近连接快捷视图放「管理连接」。
              收藏项 Header 在 OnRowContextMenuOpened 按视图与行状态设为 收藏 / 取消收藏；
              被隐藏项夹出的空分隔组由 NormalizeSeparators 一并隐藏（菜单 Tag 定位）。 -->
         <ContextMenu x:Key="ConnectionRowMenu" x:Shared="False" Opened="OnRowContextMenuOpened">
@@ -77,7 +77,7 @@
             <Separator />
             <MenuItem Tag="move" Header="移动到分组" />
             <MenuItem Tag="delete" Header="删除" Click="OnDeleteMenuClick" />
-            <MenuItem Tag="locate" Header="在「我的连接」中定位" Click="OnLocateMenuClick" />
+            <MenuItem Tag="locate" Header="管理连接" Click="OnLocateMenuClick" />
         </ContextMenu>
 
         <Style x:Key="ConnectionRow" TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">

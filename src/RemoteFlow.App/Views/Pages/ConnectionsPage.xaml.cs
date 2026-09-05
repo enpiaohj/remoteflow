@@ -143,8 +143,8 @@ public partial class ConnectionsPage : UserControl
     /// <summary>
     /// 按所在页面的 Filter 裁剪连接行菜单：
     /// <list type="bullet">
-    /// <item>「我的连接」（Filter=All，含分组树）→ 完整管理项：复制连接 / 移动到分组 / 删除可见；「在「我的连接」中定位」隐藏。</item>
-    /// <item>收藏 / 最近连接（Filter≠All）→ 快速访问：只留 连接 / 编辑 / 测试连接 / 收藏；显示「在「我的连接」中定位」。</item>
+    /// <item>「我的连接」（Filter=All，含分组树）→ 完整管理项：复制连接 / 移动到分组 / 删除可见；「管理连接」隐藏。</item>
+    /// <item>收藏 / 最近连接（Filter≠All）→ 快速访问：只留 连接 / 编辑 / 测试连接 / 收藏；显示「管理连接」。</item>
     /// </list>
     /// 同时把收藏项 Header 按视图与行状态写成 收藏 / 取消收藏；裁剪后顺手隐藏空分隔组。
     /// </summary>
@@ -308,7 +308,7 @@ public partial class ConnectionsPage : UserControl
         }
     }
 
-    /// <summary>「在「我的连接」中定位」：切到全部视图并让该连接可见、选中。</summary>
+    /// <summary>「管理连接」：切到全部视图并让该连接可见、选中。</summary>
     private void OnLocateMenuClick(object sender, RoutedEventArgs e)
     {
         if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)

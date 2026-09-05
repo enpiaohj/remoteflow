@@ -37,7 +37,7 @@ public sealed partial class HomePageViewModel(
     public event EventHandler<ConnectionProfile>? OpenConnectionRequested;
 
     /// <summary>
-    /// 首页「最近连接 / 收藏」行右键动作（连接 / 编辑 / 测试连接 / 收藏 / 在「我的连接」中定位）。
+    /// 首页「最近连接 / 收藏」行右键动作（连接 / 编辑 / 测试连接 / 收藏 / 管理连接）。
     /// 真正的执行桥接到「我的连接」既有命令，避免在首页复制实现。
     /// </summary>
     public event EventHandler<HomeConnectionActionEventArgs>? ConnectionActionRequested;
