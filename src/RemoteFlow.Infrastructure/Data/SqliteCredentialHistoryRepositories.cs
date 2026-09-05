@@ -139,6 +139,16 @@ public sealed class SqliteHistoryRepository(RemoteFlowDatabase database) : IHist
         return await ReadEntriesAsync(command, ct);
     }
 
+    public async Task<int> CountByConnectionAsync(Guid connectionId, CancellationToken ct = default)
+    {
+        await using var connection = database.OpenConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM connection_history WHERE connection_id = $cid;";
+        command.Parameters.AddWithValue("$cid", connectionId.ToString());
+        var result = await command.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
     private static async Task<IReadOnlyList<ConnectionHistoryEntry>> ReadEntriesAsync(SqliteCommand command, CancellationToken ct)
     {
         var entries = new List<ConnectionHistoryEntry>();

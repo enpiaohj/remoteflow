@@ -254,4 +254,30 @@ public sealed class SqliteRepositoryTests : IDisposable
         command.CommandText = "PRAGMA user_version;";
         Assert.Equal(RemoteFlowDatabase.CurrentSchemaVersion, Convert.ToInt32(command.ExecuteScalar()));
     }
+
+    [Fact]
+    public async Task 连接历史计数返回真实累计总数不受列表上限影响()
+    {
+        var repo = new SqliteHistoryRepository(_database);
+        var connectionId = Guid.NewGuid();
+
+        for (var i = 1; i <= 6; i++)
+        {
+            await repo.AddAsync(new ConnectionHistoryEntry
+            {
+                Id = Guid.NewGuid(),
+                ConnectionId = connectionId,
+                ConnectionName = "计数机",
+                Host = "10.0.0.1",
+                Protocol = ProtocolType.Ssh,
+                StartedAt = DateTimeOffset.Now.AddMinutes(-i),
+                Result = ConnectionResult.Success,
+                ErrorCode = ConnectionErrorCode.None
+            });
+        }
+
+        Assert.Equal(6, await repo.CountByConnectionAsync(connectionId));
+        // 列表接口只回最近 3 条，用于证明两者不同源。
+        Assert.Equal(3, (await repo.GetByConnectionAsync(connectionId, 3)).Count);
+    }
 }

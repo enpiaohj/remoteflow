@@ -177,7 +177,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         try
         {
             var entries = await _history.GetByConnectionAsync(item.Id, 50);
-            _selectedHistoryCount = entries.Count;
+            _selectedHistoryCount = await _history.CountByConnectionAsync(item.Id);
             _selectedLastDuration = entries.FirstOrDefault()?.Duration;
 
             foreach (var entry in entries)
