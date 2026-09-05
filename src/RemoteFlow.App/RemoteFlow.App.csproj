@@ -65,11 +65,22 @@
     <PackageReference Include="Serilog.Extensions.Logging" />
   </ItemGroup>
 
-  <!-- 终端前端资源（xterm.js）随应用发布，运行时不依赖网络 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="RemoteFlow.IntegrationTests" />
+  </ItemGroup>
+
+  <!--
+    终端前端资源（xterm.js）既保留在普通 publish 目录，又嵌入 RemoteFlow.exe。
+    嵌入副本由 TerminalAssetStore 在运行时释放到 %LOCALAPPDATA%，确保用户只下载
+    单个 exe 时 SSH 终端也能初始化；不能依赖 exe 旁边恰好存在 Assets/Terminal。
+  -->
   <ItemGroup>
     <Content Include="Assets\Terminal\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <EmbeddedResource Include="Assets\Terminal\**\*">
+      <LogicalName>RemoteFlow.App.Assets.Terminal.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

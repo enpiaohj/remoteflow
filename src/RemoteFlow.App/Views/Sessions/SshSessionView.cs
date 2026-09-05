@@ -129,7 +129,7 @@ public sealed class SshSessionView : ContentControl, IDisposable
         core.Settings.IsZoomControlEnabled = false;
         core.Settings.IsSwipeNavigationEnabled = false;
 
-        var assetFolder = Path.Combine(AppContext.BaseDirectory, "Assets", "Terminal");
+        var assetFolder = TerminalAssetStore.EnsureAvailable();
         core.SetVirtualHostNameToFolderMapping(
             VirtualHost, assetFolder, CoreWebView2HostResourceAccessKind.Allow);
 
