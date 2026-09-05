@@ -429,15 +429,9 @@ public partial class App : System.Windows.Application
 
             // 5) 干净退出标记：走到这里说明 OnExit 收尾（含上述兜底）已完成，翻成 cleanExit:true。
             //    若进程在本次运行中崩溃 / 被强杀，OnExit 不执行，启动时武装的 false 会保留 →
-            //    下次启动写 recovery 日志。尽力而为：异常只记录，不阻断 Logging / Mutex 收尾。
-            try
-            {
-                _sessionStateStore?.Save(cleanExit: true, timestamp: DateTimeOffset.Now);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "写入会话状态（干净退出标记）失败");
-            }
+            //    下次启动写 recovery 日志。Save 契约「尽力而为、永不抛出」，无需再包 try/catch；
+            //    即便写失败也只 LogWarning，不会阻断下方 Logging / Mutex 收尾。
+            _sessionStateStore?.Save(cleanExit: true, timestamp: DateTimeOffset.Now);
 
             // 6) 关闭 Serilog，刷新并释放日志（须在 Save 之后，Save 失败还能记日志）。
             LoggingSetup.Shutdown();

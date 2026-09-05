@@ -83,9 +83,11 @@ public sealed class SessionStateStore(string dataDirectory, ILogger<SessionState
                 File.Move(tempPath, _path);
             }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex)
         {
-            // 标记仅为诊断用途，失败不影响退出流程。
+            // 标记仅为诊断用途，本方法契约是「尽力而为、永不抛出」：
+            // 任何 IO / 权限 / 序列化等失败都只记录，不阻断启动（OnStartup 调用点
+            // 不设保护，若抛出会被误判为启动失败）与退出流程。
             logger?.LogWarning(ex, "写入会话状态失败（尽力而为）：{Path}", _path);
         }
     }
