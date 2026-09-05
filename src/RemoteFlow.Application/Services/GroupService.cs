@@ -68,10 +68,12 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
     }
 
     /// <summary>
-    /// 保证「未分组」存在，并在库中没有任何用户分组时创建默认分组「我的设备」。
-    /// 返回默认落脚分组的 Id——新建连接对话框用它作为「分组」的默认值。
+    /// 保证「未分组」存在，并返回默认新建连接分组（is_default=true 的用户组）。
+    /// <paramref name="createIfEmpty"/> 仅当库里一个普通分组都没有时才允许新建「我的设备」；
+    /// 由 App 层决定该值（首启 true，之后 false），避免“删光后每次启动又复活”。
+    /// 返回 null 表示无默认组（新连接回落未分组）。
     /// </summary>
-    public async Task<Guid> EnsureSeedAsync(CancellationToken ct = default)
+    public async Task<Guid?> EnsureSeedAsync(CancellationToken ct = default, bool createIfEmpty = true)
     {
         var all = await groups.GetAllAsync(ct);
 
@@ -82,18 +84,43 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
                 Id = ConnectionGroup.UngroupedId,
                 Name = "未分组",
                 SortOrder = int.MaxValue,
-                IsSystem = true
+                IsSystem = true,
+                IsProtected = true
             }, ct);
         }
 
-        var userGroups = all.Where(g => !g.IsSystem).ToList();
-        if (userGroups.Count > 0)
+        var existingDefault = (await groups.GetAllAsync(ct))
+            .FirstOrDefault(g => !g.IsSystem && g.IsDefault);
+        if (existingDefault is not null)
         {
-            // 既有库（可能已有 Windows / Linux 等普通分组）——不再造「我的设备」。
-            return userGroups.OrderBy(g => g.SortOrder).First().Id;
+            return existingDefault.Id;
         }
 
-        var defaultGroup = new ConnectionGroup { Name = DefaultGroupName, SortOrder = 0 };
+        var userGroups = (await groups.GetAllAsync(ct)).Where(g => !g.IsSystem).ToList();
+        if (userGroups.Count > 0)
+        {
+            // 存量回填：有普通分组但都未标记默认 → 把旧行为默认（sort_order,name 最前）标记为默认+保护。
+            var legacyDefault = userGroups
+                .OrderBy(g => g.SortOrder).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
+                .First();
+            legacyDefault.IsDefault = true;
+            legacyDefault.IsProtected = true;
+            await groups.UpdateAsync(legacyDefault, ct);
+            return legacyDefault.Id;
+        }
+
+        if (!createIfEmpty)
+        {
+            return null;
+        }
+
+        var defaultGroup = new ConnectionGroup
+        {
+            Name = DefaultGroupName,
+            SortOrder = 0,
+            IsDefault = true,
+            IsProtected = true
+        };
         await groups.AddAsync(defaultGroup, ct);
         return defaultGroup.Id;
     }
@@ -145,6 +172,11 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
             throw new InvalidOperationException("系统分组不能重命名。");
         }
 
+        if (group.IsProtected)
+        {
+            throw new InvalidOperationException("默认分组受保护，无法重命名。请先在「设置 → 常规 → 分组」关闭保护。");
+        }
+
         if (HasSiblingNamed(all, group.ParentId, trimmed, excludeId: id))
         {
             throw new InvalidOperationException($"同一层级下已存在分组「{trimmed}」。");
@@ -166,6 +198,11 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
             throw new InvalidOperationException("系统分组不能删除。");
         }
 
+        if (group.IsProtected)
+        {
+            throw new InvalidOperationException("默认分组受保护，无法删除。请先在「设置 → 常规 → 分组」关闭保护。");
+        }
+
         // 「未分组」以 group_id = null 表示；传 null 让仓储把组内连接置空。
         await groups.DeleteAsync(id, moveConnectionsTo: null, ct);
     }
@@ -185,6 +222,11 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
         if (group.IsSystem)
         {
             throw new InvalidOperationException("系统分组不能移动。");
+        }
+
+        if (group.IsProtected)
+        {
+            throw new InvalidOperationException("默认分组受保护，无法移动。请先在「设置 → 常规 → 分组」关闭保护。");
         }
 
         if (newParentId is { } target)
@@ -232,6 +274,58 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
 
         group.SortOrder = sortOrder;
         await groups.UpdateAsync(group, ct);
+    }
+
+    /// <summary>返回默认新建连接分组（is_default=true 的非系统组）；无则 null。</summary>
+    public async Task<ConnectionGroup?> GetDefaultGroupAsync(CancellationToken ct = default)
+    {
+        var all = await groups.GetAllAsync(ct);
+        return all.FirstOrDefault(g => !g.IsSystem && g.IsDefault);
+    }
+
+    /// <summary>
+    /// 把默认身份移给另一普通组。若当前存在受保护默认组则拒绝（防止借换默认绕过保护）；
+    /// 成功后旧默认组 is_default/is_protected 均清 0，目标组 is_default=true 且 is_protected=false。
+    /// </summary>
+    public async Task SetDefaultAsync(Guid groupId, CancellationToken ct = default)
+    {
+        var all = await groups.GetAllAsync(ct);
+        var target = all.FirstOrDefault(g => g.Id == groupId)
+            ?? throw new InvalidOperationException("分组不存在。");
+        if (target.IsSystem)
+        {
+            throw new InvalidOperationException("系统分组不能作为默认分组。");
+        }
+
+        var currentDefault = all.FirstOrDefault(g => !g.IsSystem && g.IsDefault);
+        if (currentDefault is { IsProtected: true })
+        {
+            throw new InvalidOperationException("当前默认分组受保护，请先在「设置 → 常规 → 分组」关闭保护后再更换默认分组。");
+        }
+
+        if (currentDefault is not null && currentDefault.Id != groupId)
+        {
+            currentDefault.IsDefault = false;
+            currentDefault.IsProtected = false;
+            await groups.UpdateAsync(currentDefault, ct);
+        }
+
+        target.IsDefault = true;
+        target.IsProtected = false;
+        await groups.UpdateAsync(target, ct);
+    }
+
+    /// <summary>开 / 关当前默认分组的保护。无默认组时无操作。</summary>
+    public async Task SetDefaultProtectionAsync(bool isProtected, CancellationToken ct = default)
+    {
+        var currentDefault = await GetDefaultGroupAsync(ct);
+        if (currentDefault is null || currentDefault.IsSystem)
+        {
+            return;
+        }
+
+        currentDefault.IsProtected = isProtected;
+        await groups.UpdateAsync(currentDefault, ct);
     }
 
     private static bool HasSiblingNamed(IEnumerable<ConnectionGroup> all, Guid? parentId, string name, Guid? excludeId)

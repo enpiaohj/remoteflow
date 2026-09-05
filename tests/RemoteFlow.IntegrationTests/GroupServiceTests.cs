@@ -64,11 +64,12 @@ public sealed class GroupServiceTests : IDisposable
     public async Task 首次种子在无用户分组时创建我的设备()
     {
         var defaultId = await _service.EnsureSeedAsync();
+        Assert.NotNull(defaultId);
 
         var all = await _groups.GetAllAsync();
         var mine = Assert.Single(all, g => !g.IsSystem);
         Assert.Equal(GroupService.DefaultGroupName, mine.Name);
-        Assert.Equal(mine.Id, defaultId);
+        Assert.Equal(mine.Id, defaultId!.Value);
     }
 
     [Fact]
@@ -193,5 +194,80 @@ public sealed class GroupServiceTests : IDisposable
 
         Assert.NotNull(await _connections.GetByIdAsync(connId));
         Assert.Null((await _connections.GetByIdAsync(connId))!.GroupId);
+    }
+
+    [Fact]
+    public async Task 首次种子创建默认组并带默认与保护()
+    {
+        var defaultId = await _service.EnsureSeedAsync(createIfEmpty: true);
+        Assert.NotNull(defaultId);
+        var def = (await _groups.GetAllAsync()).Single(g => !g.IsSystem);
+        Assert.True(def.IsDefault);
+        Assert.True(def.IsProtected);
+        Assert.Equal(def.Id, defaultId!.Value);
+    }
+
+    [Fact]
+    public async Task 种子标记已种时删光分组不再复活()
+    {
+        var first = await _service.EnsureSeedAsync(createIfEmpty: true);
+        Assert.NotNull(first);
+        await _service.SetDefaultProtectionAsync(false);
+        await _service.DeleteAsync(first!.Value);
+
+        var again = await _service.EnsureSeedAsync(createIfEmpty: false);
+        Assert.Null(again);
+        Assert.DoesNotContain(await _groups.GetAllAsync(), g => !g.IsSystem);
+    }
+
+    [Fact]
+    public async Task 已有普通分组且无默认时回填最前一个为默认并保护()
+    {
+        // CreateAsync 递增 sort_order：后建的排后面。OrderBy(sort_order) 先取先建的那个。
+        var first = await _service.CreateAsync("首个分组", null);
+        await _service.CreateAsync("第二个分组", null);
+
+        var defaultId = await _service.EnsureSeedAsync(createIfEmpty: false);
+        Assert.NotNull(defaultId);
+
+        var def = (await _groups.GetAllAsync()).Single(g => !g.IsSystem && g.IsDefault);
+        Assert.Equal(first.Id, def.Id);          // sort_order 最前 = 先建者
+        Assert.True(def.IsProtected);
+    }
+
+    [Fact]
+    public async Task 受保护默认组拒绝改名删移()
+    {
+        var defaultId = (await _service.EnsureSeedAsync())!.Value;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.RenameAsync(defaultId, "新名"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.DeleteAsync(defaultId));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.MoveAsync(defaultId, null));
+    }
+
+    [Fact]
+    public async Task 关保护后可改默认并删除()
+    {
+        var defaultId = (await _service.EnsureSeedAsync())!.Value;
+        await _service.SetDefaultProtectionAsync(false);
+
+        var other = (await _service.CreateAsync("服务器", null)).Id;
+        await _service.SetDefaultAsync(other);
+
+        var def = (await _groups.GetAllAsync()).Single(g => !g.IsSystem && g.IsDefault);
+        Assert.Equal(other, def.Id);
+        Assert.False(def.IsProtected);
+
+        await _service.DeleteAsync(other);
+        Assert.Null(await _service.GetDefaultGroupAsync());
+    }
+
+    [Fact]
+    public async Task 受保护默认组存在时SetDefault被拒绝()
+    {
+        var defaultId = (await _service.EnsureSeedAsync())!.Value;
+        var other = (await _service.CreateAsync("服务器", null)).Id;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.SetDefaultAsync(other));
+        var all = await _groups.GetAllAsync();
+        Assert.True(all.Single(g => g.Id == defaultId).IsDefault);
     }
 }
