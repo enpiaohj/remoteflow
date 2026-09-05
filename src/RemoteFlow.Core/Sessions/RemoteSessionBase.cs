@@ -67,7 +67,10 @@ public abstract class RemoteSessionBase : IRemoteSession
 
     public event EventHandler<SessionStateChangedEventArgs>? StateChanged;
 
-    /// <summary>是否已进入关闭流程（首次 DisconnectAsync / MarkClosed 后为 true）。</summary>
+    /// <summary>
+    /// 是否已进入关闭 / 收尾流程。首次 <see cref="DisconnectAsync"/> 或 <see cref="MarkClosed"/> 后为 true。
+    /// SessionManager 用它防止对同一会话重复发起关闭。
+    /// </summary>
     public bool IsClosing
     {
         get
@@ -139,10 +142,21 @@ public abstract class RemoteSessionBase : IRemoteSession
     }
 
     /// <summary>
-    /// 幂等收尾：置 <see cref="ConnectionState.Closed"/>（终态）。
-    /// 由 SessionManager 从活动集合移除后调用。非 Closed 状态下调用即进入终态，重复调用无副作用。
+    /// 幂等收尾：将会话置为 <see cref="ConnectionState.Closed"/>（终态）并标记关闭中。
+    /// <para>
+    /// 约定在会话已 teardown 到 <see cref="ConnectionState.Disconnected"/> 后由 SessionManager
+    /// 将其从活动集合移除时调用；非终态下调用即进入 Closed，重复调用无副作用。
+    /// </para>
     /// </summary>
-    public void MarkClosed() => SetState(ConnectionState.Closed);
+    public void MarkClosed()
+    {
+        lock (_gate)
+        {
+            _closing = true;
+        }
+
+        SetState(ConnectionState.Closed);
+    }
 
     /// <summary>
     /// 幂等释放：等价于「若未关闭则先执行关闭模板，再释放会话 CTS 与 Tracker 登记的全部资源」。
