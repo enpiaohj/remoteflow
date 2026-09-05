@@ -352,13 +352,12 @@ public sealed class SessionManager : IAsyncDisposable
 
     private async Task CompleteHistoryAsync(SessionEntry entry, ConnectionResult result, ConnectionErrorCode errorCode)
     {
-        // 每个会话只补写一次结束记录，避免「失败后关闭 Tab」被记成两条。
-        if (entry.HistoryId is not { } historyId || entry.HistoryCompleted)
+        // 每个会话只补写一次结束记录；用原子认领保证「失败后关闭 Tab」在 close 路径与后台补写并发下也只写一次。
+        if (entry.HistoryId is not { } historyId || !entry.TryCompleteHistory())
         {
             return;
         }
 
-        entry.HistoryCompleted = true;
         await _history.CompleteAsync(historyId, DateTimeOffset.Now, result, errorCode);
     }
 
@@ -372,10 +371,11 @@ public sealed class SessionManager : IAsyncDisposable
         /// <summary>对应的历史记录 Id。会话进入 Connecting 后才产生。</summary>
         public Guid? HistoryId { get; set; }
 
-        /// <summary>结束记录是否已补写，防止重复写入。</summary>
-        public bool HistoryCompleted { get; set; }
-
+        private int _historyCompletionClaimed;
         private int _closeClaimed;
+
+        /// <summary>原子认领一次「结束历史补写」；并发/重复补写只会有一个调用者成功。</summary>
+        public bool TryCompleteHistory() => Interlocked.Exchange(ref _historyCompletionClaimed, 1) == 0;
 
         /// <summary>原子认领一次关闭流程；同一条目并发 / 重复关闭只会有一个调用者成功。</summary>
         public bool TryClaimClose() => Interlocked.Exchange(ref _closeClaimed, 1) == 0;
