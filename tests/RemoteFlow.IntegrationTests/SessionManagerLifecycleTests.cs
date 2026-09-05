@@ -155,25 +155,64 @@ public sealed class SessionManagerLifecycleTests : IDisposable
     // ── StateSync A：快照查询 + 聚合事件 ─────────────────────────
 
     [Fact]
-    public async Task 快照查询_创建连接后派生已连_关闭后回落Idle()
+    public async Task 快照查询_创建连接后派生已连_关闭后回落null()
     {
         var profile = NewProfile("快照派生");
         var profileId = profile.Id;
 
+        // 无会话 → null（与“存在 Idle 会话”区分开）。
+        Assert.Null(_manager.GetSessionState(Guid.NewGuid()));
+
         var session = await _manager.CreateSessionAsync(profile);
         Assert.True(_manager.HasActiveSession(profileId));
         Assert.False(_manager.HasConnectedSession(profileId));
-        Assert.Equal(ConnectionState.Idle, _manager.GetSessionState(profileId));
+        // 已创建但未连接：存在 Idle 会话 → 返回 Idle（非 null）。
+        Assert.Equal(ConnectionState.Idle, Assert.IsType<ConnectionState>(_manager.GetSessionState(profileId)));
 
         await session.ConnectAsync();
         Assert.True(_manager.HasActiveSession(profileId));
         Assert.True(_manager.HasConnectedSession(profileId));
-        Assert.Equal(ConnectionState.Connected, _manager.GetSessionState(profileId));
+        Assert.Equal(ConnectionState.Connected, Assert.IsType<ConnectionState>(_manager.GetSessionState(profileId)));
 
         await _manager.CloseSessionAsync(session.SessionId);
         Assert.False(_manager.HasActiveSession(profileId));
         Assert.False(_manager.HasConnectedSession(profileId));
-        Assert.Equal(ConnectionState.Idle, _manager.GetSessionState(profileId));
+        Assert.Null(_manager.GetSessionState(profileId));
+    }
+
+    [Fact]
+    public async Task 同Profile两会话一已连一失败_GetSessionState取Connected()
+    {
+        var profile = NewProfile("多会话聚合");
+        var profileId = profile.Id;
+
+        var createCount = 0;
+        _provider.SessionFactory = p =>
+        {
+            createCount++;
+            return new FakeSession(p) { FailOnConnect = createCount == 2 };
+        };
+
+        var connectedSession = await _manager.CreateSessionAsync(profile);
+        var failedSession = await _manager.CreateSessionAsync(profile);
+        await connectedSession.ConnectAsync(); // Connected
+        await failedSession.ConnectAsync();     // Failed
+
+        Assert.Equal(2, _manager.ActiveSessionCount);
+        Assert.True(_manager.HasActiveSession(profileId));
+        Assert.True(_manager.HasConnectedSession(profileId));
+        // 一 Connected 一 Failed：聚合取优先级最高的 Connected。
+        Assert.Equal(ConnectionState.Connected, Assert.IsType<ConnectionState>(_manager.GetSessionState(profileId)));
+
+        await _manager.CloseSessionAsync(connectedSession.SessionId);
+        // 仅剩 Failed 会话时聚合回落为 Failed。
+        Assert.Equal(ConnectionState.Failed, Assert.IsType<ConnectionState>(_manager.GetSessionState(profileId)));
+
+        await _manager.CloseSessionAsync(failedSession.SessionId);
+        Assert.Equal(0, _manager.ActiveSessionCount);
+        Assert.False(_manager.HasActiveSession(profileId));
+        Assert.False(_manager.HasConnectedSession(profileId));
+        Assert.Null(_manager.GetSessionState(profileId));
     }
 
     [Fact]
@@ -211,7 +250,7 @@ public sealed class SessionManagerLifecycleTests : IDisposable
     public async Task SessionStateChanged_连接过程状态跳变经聚合转发()
     {
         var newStates = new List<ConnectionState>();
-        SessionStateChangedEventArgs? connected = null;
+        SessionStateChangedAggregatedEventArgs? connected = null;
         _manager.SessionStateChanged += (_, e) =>
         {
             newStates.Add(e.NewState);
@@ -221,14 +260,42 @@ public sealed class SessionManagerLifecycleTests : IDisposable
             }
         };
 
-        var session = await _manager.CreateSessionAsync(NewProfile("聚合跳变"));
+        var profile = NewProfile("聚合跳变");
+        var session = await _manager.CreateSessionAsync(profile);
         await session.ConnectAsync();
 
         Assert.Contains(ConnectionState.Connecting, newStates);
         Assert.NotNull(connected);
+        Assert.Equal(session.SessionId, connected.SessionId);
+        Assert.Equal(profile.Id, connected.ConnectionProfileId);
         Assert.Equal(ConnectionState.Connecting, connected.OldState);
         Assert.Equal(ConnectionState.Connected, connected.NewState);
         Assert.Equal(ConnectionErrorCode.None, connected.ErrorCode);
+    }
+
+    [Fact]
+    public async Task SessionStateChanged_聚合参数携带会话与Profile身份可区分()
+    {
+        var profileA = NewProfile("身份A");
+        var profileB = NewProfile("身份B");
+        var bySession = new Dictionary<Guid, SessionStateChangedAggregatedEventArgs>();
+
+        _manager.SessionStateChanged += (_, e) => bySession[e.SessionId] = e;
+
+        var sessionA = await _manager.CreateSessionAsync(profileA);
+        var sessionB = await _manager.CreateSessionAsync(profileB);
+        await sessionA.ConnectAsync();
+        await sessionB.ConnectAsync();
+
+        Assert.NotEqual(sessionA.SessionId, sessionB.SessionId);
+
+        Assert.True(bySession.TryGetValue(sessionA.SessionId, out var argsA), "应能按 SessionId 区分出 A 的跳变");
+        Assert.Equal(profileA.Id, argsA.ConnectionProfileId);
+        Assert.Equal(ConnectionState.Connected, argsA.NewState);
+
+        Assert.True(bySession.TryGetValue(sessionB.SessionId, out var argsB), "应能按 SessionId 区分出 B 的跳变");
+        Assert.Equal(profileB.Id, argsB.ConnectionProfileId);
+        Assert.Equal(ConnectionState.Connected, argsB.NewState);
     }
 
     [Fact]
@@ -253,14 +320,32 @@ public sealed class SessionManagerLifecycleTests : IDisposable
         Assert.Equal(ConnectionState.Failed, session.State);
         Assert.True(_manager.HasActiveSession(profileId));
         Assert.False(_manager.HasConnectedSession(profileId));
-        Assert.Equal(ConnectionState.Failed, _manager.GetSessionState(profileId));
+        Assert.Equal(ConnectionState.Failed, Assert.IsType<ConnectionState>(_manager.GetSessionState(profileId)));
         Assert.Equal(ConnectionState.Failed, failedStateSeen);
 
         await _manager.CloseSessionAsync(session.SessionId);
 
         Assert.False(_manager.HasActiveSession(profileId));
         Assert.False(_manager.HasConnectedSession(profileId));
-        Assert.Equal(ConnectionState.Idle, _manager.GetSessionState(profileId));
+        Assert.Null(_manager.GetSessionState(profileId));
+    }
+
+    [Fact]
+    public async Task SessionStateChanged_创建与未连接关闭不触发_关闭期不转发收尾跳变()
+    {
+        var stateChanged = 0;
+        _manager.SessionStateChanged += (_, _) => stateChanged++;
+
+        var profile = NewProfile("负向转发");
+        var session = await _manager.CreateSessionAsync(profile);
+        Assert.Equal(0, stateChanged); // 创建不触发聚合状态事件
+
+        await session.ConnectAsync();
+        Assert.True(stateChanged >= 2, $"连接过程应转发 Connecting/Connected，实际 {stateChanged}");
+
+        stateChanged = 0;
+        await _manager.CloseSessionAsync(session.SessionId);
+        Assert.Equal(0, stateChanged); // 关闭退订后 Disconnecting/Disconnected/Closed 不再转发
     }
 
     [Fact]
@@ -287,12 +372,12 @@ public sealed class SessionManagerLifecycleTests : IDisposable
 
             await session.ConnectAsync();
             Assert.True(_manager.HasConnectedSession(profileId));
-            Assert.Equal(ConnectionState.Connected, _manager.GetSessionState(profileId));
+            Assert.Equal(ConnectionState.Connected, Assert.IsType<ConnectionState>(_manager.GetSessionState(profileId)));
 
             await _manager.CloseSessionAsync(session.SessionId);
             Assert.False(_manager.HasActiveSession(profileId));
             Assert.False(_manager.HasConnectedSession(profileId));
-            Assert.Equal(ConnectionState.Idle, _manager.GetSessionState(profileId));
+            Assert.Null(_manager.GetSessionState(profileId));
         }
 
         Assert.Equal(0, _manager.ActiveSessionCount);

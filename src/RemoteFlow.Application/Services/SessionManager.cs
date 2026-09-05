@@ -78,12 +78,12 @@ public sealed class SessionManager : IAsyncDisposable
 
     /// <summary>
     /// 取指定 Profile 的“最佳”会话状态。优先级：Connected &gt; (Connecting | Reconnecting)
-    /// &gt; Failed &gt; 其它（Idle / Disconnecting / Disconnected）；无会话返回 <see cref="ConnectionState.Idle"/>。
-    /// 同一 Profile 存在多个活动会话时返回其中状态优先级最高的那个状态。
+    /// &gt; Failed &gt; 其它（Idle / Disconnecting / Disconnected）。无会话返回 <see langword="null"/>，
+    /// 以区分「无会话」与「存在 Idle 会话」。同一 Profile 存在多个活动会话时返回状态优先级最高的那个状态。
     /// </summary>
-    public ConnectionState GetSessionState(Guid connectionProfileId)
+    public ConnectionState? GetSessionState(Guid connectionProfileId)
     {
-        var best = ConnectionState.Idle;
+        ConnectionState? best = null;
         var bestRank = -1;
         foreach (var session in _sessions.Values.Select(e => e.Session))
         {
@@ -120,20 +120,25 @@ public sealed class SessionManager : IAsyncDisposable
     public event EventHandler<Guid>? SessionClosed;
 
     /// <summary>
-    /// 会话集合变化后触发（会话创建 / 任意状态跳变 / 会话移除）。无负载：
-    /// 消费者订阅后自行调用 <see cref="HasActiveSession"/> /
-    /// <see cref="HasConnectedSession"/> / <see cref="GetSessionState"/> 等快照查询重算 UI。
+    /// 会话集合快照失效 / 需重算的信号：会话创建、任意状态跳变、会话移除后都会触发
+    /// （会话成员增减与会话状态变化都可能引发）。无负载：消费者订阅后自行调用
+    /// <see cref="HasActiveSession"/> / <see cref="HasConnectedSession"/> /
+    /// <see cref="GetSessionState"/> 等快照查询重算 UI。
     /// 事件可在任意线程触发（状态来自协议后台线程），消费者需自行 marshal 到 UI 线程。
     /// </summary>
     public event EventHandler? SessionsChanged;
 
     /// <summary>
-    /// 每条会话状态跳变经聚合后转发，携带旧 / 新状态与错误码 / 错误说明。
+    /// 每条会话状态跳变经聚合后转发，携带会话身份与所属 Profile 身份
+    /// （<see cref="SessionStateChangedAggregatedEventArgs.SessionId"/> /
+    /// <see cref="SessionStateChangedAggregatedEventArgs.ConnectionProfileId"/> /
+    /// OldState / NewState / ErrorCode / ErrorMessage）。
     /// 会话创建 / 移除本身不触发本事件（分别由 <see cref="SessionCreated"/> /
-    /// <see cref="SessionClosed"/> 与 <see cref="SessionsChanged"/> 覆盖）。
+    /// <see cref="SessionClosed"/> 与 <see cref="SessionsChanged"/> 覆盖）；
+    /// 关闭流程期间已退订该会话 <see cref="IRemoteSession.StateChanged"/>，不再转发其收尾跳变。
     /// 事件可在任意线程触发，消费者需自行 marshal 到 UI 线程。
     /// </summary>
-    public event EventHandler<SessionStateChangedEventArgs>? SessionStateChanged;
+    public event EventHandler<SessionStateChangedAggregatedEventArgs>? SessionStateChanged;
 
     /// <summary>查询指定协议的 Provider 是否可用。</summary>
     public bool IsProtocolAvailable(ProtocolType protocol, out string? reason)
@@ -360,7 +365,13 @@ public sealed class SessionManager : IAsyncDisposable
         }
 
         // 先做无负载的聚合转发（同步，保证状态跳变立即被 UI 观察到），再异步补历史。
-        RaiseSessionStateChanged(e);
+        RaiseSessionStateChanged(new SessionStateChangedAggregatedEventArgs(
+            session.SessionId,
+            session.Profile.Id,
+            e.OldState,
+            e.NewState,
+            e.ErrorCode,
+            e.ErrorMessage));
         RaiseSessionsChanged();
 
         // 事件可能来自协议库的后台线程，历史写入放到线程池执行，避免阻塞协议回调。
@@ -382,7 +393,7 @@ public sealed class SessionManager : IAsyncDisposable
     private void RaiseSessionsChanged() => SessionsChanged?.Invoke(this, EventArgs.Empty);
 
     /// <summary>转发一条聚合的会话状态跳变（<see cref="SessionStateChanged"/>）。</summary>
-    private void RaiseSessionStateChanged(SessionStateChangedEventArgs args) => SessionStateChanged?.Invoke(this, args);
+    private void RaiseSessionStateChanged(SessionStateChangedAggregatedEventArgs args) => SessionStateChanged?.Invoke(this, args);
 
     private async Task HandleStateChangeAsync(SessionEntry entry, IRemoteSession session, SessionStateChangedEventArgs e)
     {
@@ -510,4 +521,43 @@ public sealed class SessionManager : IAsyncDisposable
         /// <summary>原子认领一次关闭流程；同一条目并发 / 重复关闭只会有一个调用者成功。</summary>
         public bool TryClaimClose() => Interlocked.Exchange(ref _closeClaimed, 1) == 0;
     }
+}
+
+/// <summary>
+/// <see cref="SessionManager.SessionStateChanged"/> 聚合事件参数（定义于 Application 层，
+/// 名称与 <c>RemoteFlow.Core.Sessions.SessionStateChangedEventArgs</c> 区分，避免命名空间混用歧义）。
+/// 携带会话身份（<see cref="SessionId"/>）与所属 Profile 身份（<see cref="ConnectionProfileId"/>），
+/// 便于 UI 精确定位到具体连接资产 / Tab。
+/// </summary>
+public sealed class SessionStateChangedAggregatedEventArgs : EventArgs
+{
+    public SessionStateChangedAggregatedEventArgs(
+        Guid sessionId,
+        Guid connectionProfileId,
+        ConnectionState oldState,
+        ConnectionState newState,
+        ConnectionErrorCode errorCode = ConnectionErrorCode.None,
+        string? errorMessage = null)
+    {
+        SessionId = sessionId;
+        ConnectionProfileId = connectionProfileId;
+        OldState = oldState;
+        NewState = newState;
+        ErrorCode = errorCode;
+        ErrorMessage = errorMessage;
+    }
+
+    /// <summary>发生状态跳变的会话 Id。</summary>
+    public Guid SessionId { get; }
+
+    /// <summary>该会话对应的连接配置（Profile）Id。</summary>
+    public Guid ConnectionProfileId { get; }
+
+    public ConnectionState OldState { get; }
+
+    public ConnectionState NewState { get; }
+
+    public ConnectionErrorCode ErrorCode { get; }
+
+    public string? ErrorMessage { get; }
 }
