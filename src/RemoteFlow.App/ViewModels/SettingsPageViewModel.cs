@@ -299,6 +299,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     private void ApplyDateTimeSettings()
     {
+        _settings.ShowWeekday = ShowWeekday;
+        _settings.ShowHomeWeekNumber = ShowHomeWeekNumber;
         DateTimeDisplay.Configure(_settings);
         Save();
     }
