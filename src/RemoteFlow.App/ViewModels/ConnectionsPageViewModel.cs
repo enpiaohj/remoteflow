@@ -242,8 +242,17 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     public bool HasSelection => SelectedConnections.Count > 0;
 
-    /// <summary>批量条文案：「已选 N 项」。</summary>
-    public string SelectionSummary => $"已选 {SelectedConnections.Count} 项";
+    /// <summary>批量条文案：「已选择 N 项」。</summary>
+    public string SelectionSummary => $"已选择 {SelectedConnections.Count} 项";
+
+    /// <summary>进入多选但还没勾选时，只显示提示条（不显示一排业务按钮）。</summary>
+    public bool IsSelectionHintVisible => IsMultiSelect && !HasSelection;
+
+    /// <summary>已勾选 ≥1 项时，才显示批量业务操作栏。</summary>
+    public bool IsBatchBarVisible => IsMultiSelect && HasSelection;
+
+    /// <summary>收藏动作的文案随选择变化：所选都已是收藏 → 显示「取消收藏」，否则「收藏」。</summary>
+    public string FavoriteActionText => SelectedConnections.Any(i => !i.IsFavorite) ? "收藏" : "取消收藏";
 
     public bool IsAllSelected => SelectedConnections.Count > 0
         && SelectedConnections.Count == Items.Count;
@@ -1044,6 +1053,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(SelectionSummary));
+        OnPropertyChanged(nameof(IsSelectionHintVisible));
+        OnPropertyChanged(nameof(IsBatchBarVisible));
+        OnPropertyChanged(nameof(FavoriteActionText));
         OnPropertyChanged(nameof(IsAllSelected));
     }
 

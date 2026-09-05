@@ -77,6 +77,12 @@ public partial class ConnectionsPage : UserControl
             return;
         }
 
+        // 多选态不做双击动作；第二击直接忽略，避免“选中又被取消”。
+        if (e.ClickCount > 1)
+        {
+            return;
+        }
+
         // 点 CheckBox 让 IsChecked 绑定自己翻转，避免这里再补一次成“取消”。
         if (FindAncestor<CheckBox>(source) is not null)
         {
@@ -90,11 +96,16 @@ public partial class ConnectionsPage : UserControl
         }
     }
 
-    /// <summary>
-    /// 多选模式下行勾选框点击。IsChecked 已 TwoWay 绑定行 VM；
-    /// 此处理器仅用于吞掉点击，避免冒泡成 ListBox 的行选中/详情展示。
-    /// </summary>
-    private void OnRowCheckBoxClick(object sender, RoutedEventArgs e) => e.Handled = true;
+    /// <summary>勾选框点击 = 切换该行选中（与点行同一入口，保证“已选”集合同步）。</summary>
+    private void OnRowCheckBoxClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is ConnectionItemViewModel item)
+        {
+            ViewModel?.ToggleSelect(item);
+        }
+
+        e.Handled = true;
+    }
 
     /// <summary>「更多」按钮点击时弹出所在行的右键菜单。</summary>
     private void OnMoreClick(object sender, RoutedEventArgs e)
@@ -232,50 +243,96 @@ public partial class ConnectionsPage : UserControl
             return;
         }
 
-        IReadOnlyList<Tag> tags;
-        try
-        {
-            tags = await vm.GetTagsAsync();
-        }
-        catch
-        {
-            tags = [];
-        }
-
+        var tags = await LoadTagsAsync(vm);
         var menu = new ContextMenu();
-
-        var add = new MenuItem { Header = "添加标签", IsEnabled = tags.Count > 0 };
-        foreach (var tag in tags)
-        {
-            var sub = new MenuItem
-            {
-                Header = tag.Name,
-                Command = vm.AddTagToSelectedCommand,
-                CommandParameter = tag
-            };
-            add.Items.Add(sub);
-        }
-        menu.Items.Add(add);
-
-        var remove = new MenuItem { Header = "移除标签", IsEnabled = tags.Count > 0 };
-        foreach (var tag in tags)
-        {
-            var sub = new MenuItem
-            {
-                Header = tag.Name,
-                Command = vm.RemoveTagFromSelectedCommand,
-                CommandParameter = tag
-            };
-            remove.Items.Add(sub);
-        }
-        menu.Items.Add(remove);
 
         if (tags.Count == 0)
         {
             menu.Items.Add(new MenuItem { Header = "还没有标签", IsEnabled = false });
         }
+        else
+        {
+            foreach (var tag in tags)
+            {
+                menu.Items.Add(new MenuItem
+                {
+                    Header = tag.Name,
+                    Command = vm.AddTagToSelectedCommand,
+                    CommandParameter = tag
+                });
+            }
+        }
 
         OpenBatchMenu(button, menu);
+    }
+
+    /// <summary>「更多 ▾」：低频但仍有用，避免与高频操作同排堆叠。</summary>
+    private async void OnBatchMoreClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || ViewModel is not { } vm)
+        {
+            return;
+        }
+
+        var menu = new ContextMenu();
+        menu.Items.Add(new MenuItem
+        {
+            Header = "连接所选项",
+            Command = vm.ConnectSelectedCommand
+        });
+
+        var tags = await LoadTagsAsync(vm);
+        if (tags.Count == 0)
+        {
+            menu.Items.Add(new MenuItem { Header = "移除标签…", IsEnabled = false });
+        }
+        else
+        {
+            var remove = new MenuItem { Header = "移除标签…" };
+            foreach (var tag in tags)
+            {
+                remove.Items.Add(new MenuItem
+                {
+                    Header = tag.Name,
+                    Command = vm.RemoveTagFromSelectedCommand,
+                    CommandParameter = tag
+                });
+            }
+
+            menu.Items.Add(remove);
+        }
+
+        OpenBatchMenu(button, menu);
+    }
+
+    /// <summary>列头 CheckBox：全选 / 取消全选当前可见项。</summary>
+    private void OnSelectAllHeaderClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } vm)
+        {
+            return;
+        }
+
+        if (vm.IsAllSelected)
+        {
+            vm.ClearSelectionCommand.Execute(null);
+        }
+        else
+        {
+            vm.SelectAllVisibleCommand.Execute(null);
+        }
+    }
+
+    private static async Task<IReadOnlyList<Tag>> LoadTagsAsync(ConnectionsPageViewModel vm)
+    {
+        try
+        {
+            return await vm.GetTagsAsync();
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     private static void OpenBatchMenu(Button button, ContextMenu menu)

@@ -46,9 +46,9 @@
                                 <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Bg.Hover}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Brand.Default}" />
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Bg.Selected}" />
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
-                                <Setter Property="Foreground" Value="White" />
+                                <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -143,7 +143,7 @@
 
                     <CheckBox Width="30" Height="30" HorizontalAlignment="Left" Margin="3,0,0,0"
                               VerticalAlignment="Center"
-                              IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                              IsChecked="{Binding IsSelected, Mode=OneWay}"
                               Click="OnRowCheckBoxClick"
                               Tag="{Binding}">
                         <CheckBox.Style>
@@ -485,40 +485,76 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- ── 批量动作条（多选模式浮现）────────────────────── -->
-                <Grid Grid.Row="0" Height="40" Margin="4,0,4,8"
+                <!-- ── 多选状态条：未勾选时只有提示；真正勾选后才出现业务操作 ── -->
+                <Grid Grid.Row="0" MinHeight="34" Margin="4,0,4,8"
                       Visibility="{Binding IsMultiSelect, Converter={StaticResource BoolToVisibility}}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
-                               VerticalAlignment="Center" Text="{Binding SelectionSummary}" />
+                    <!-- 已进入多选、未勾选任何项：轻提示 + 关闭 -->
+                    <Grid Visibility="{Binding IsSelectionHintVisible, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{StaticResource Text.BodySecondary}" FontSize="12"
+                                   VerticalAlignment="Center" Text="选择需要批量操作的连接" />
+                        <Button Grid.Column="1" Style="{StaticResource Button.Icon}" Width="26" Height="26"
+                                Content="{StaticResource Icon.Close}" ToolTip="退出多选"
+                                Command="{Binding ExitMultiSelectCommand}" />
+                    </Grid>
 
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
-                                Content="全选" FontSize="12" Command="{Binding SelectAllVisibleCommand}" />
-                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
-                                Margin="6,0,0,0" Content="清除" FontSize="12" Command="{Binding ClearSelectionCommand}" />
-                        <Button Style="{StaticResource Button.Primary}" MinHeight="28" Padding="12,0"
-                                Margin="10,0,0,0" Content="连接" FontSize="12" Command="{Binding ConnectSelectedCommand}" />
-                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
-                                Margin="6,0,0,0" Content="收藏切换" FontSize="12"
-                                Command="{Binding ToggleFavoriteSelectedCommand}" />
-                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
-                                Margin="6,0,0,0" Content="移到分组" FontSize="12"
-                                Click="OnBatchMoveClick" Tag="move" />
-                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
-                                Margin="6,0,0,0" Content="标签" FontSize="12"
-                                Click="OnBatchTagClick" Tag="tag" />
-                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
-                                Margin="6,0,0,0" Content="删除" FontSize="12" Foreground="{DynamicResource Status.Danger}"
-                                Command="{Binding DeleteSelectedCommand}" />
-                        <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
-                                Margin="10,0,0,0" Content="完成" FontSize="12" Command="{Binding ExitMultiSelectCommand}" />
-                    </StackPanel>
+                    <!-- 已勾选 ≥1 项：上下文批量操作栏 -->
+                    <Grid Visibility="{Binding IsBatchBarVisible, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" Text="{Binding SelectionSummary}" />
+                        <Button Grid.Column="1" Style="{StaticResource Button.Subtle}" MinHeight="24" Padding="6,0"
+                                Margin="10,0,0,0" Content="取消选择" FontSize="12" VerticalAlignment="Center"
+                                Command="{Binding ClearSelectionCommand}" />
+
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                    FontSize="12" Click="OnBatchMoveClick" Tag="move">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="移动到分组" VerticalAlignment="Center" />
+                                    <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
+                                               FontSize="9" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                    Margin="6,0,0,0" FontSize="12" Click="OnBatchTagClick" Tag="tag">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="添加标签" VerticalAlignment="Center" />
+                                    <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
+                                               FontSize="9" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                    Margin="6,0,0,0" FontSize="12"
+                                    Content="{Binding FavoriteActionText}"
+                                    Command="{Binding ToggleFavoriteSelectedCommand}" />
+                            <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                    Margin="6,0,0,0" FontSize="12" Click="OnBatchMoreClick" Tag="more">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="更多" VerticalAlignment="Center" />
+                                    <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
+                                               FontSize="9" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                    Margin="10,0,0,0" FontSize="12"
+                                    Content="删除" Foreground="{DynamicResource Status.Danger}"
+                                    Command="{Binding DeleteSelectedCommand}" />
+                        </StackPanel>
+                    </Grid>
                 </Grid>
 
                 <!-- ── 列头 ──────────────────────────────────────────── -->
@@ -550,6 +586,14 @@
                 <ColumnDefinition Width="Auto" MinWidth="90" SharedSizeGroup="ColRecent" />
                 <ColumnDefinition Width="44" />
             </Grid.ColumnDefinitions>
+
+            <!-- 全选（仅多选模式出现）：勾选 / 取消当前可见全部 -->
+            <CheckBox Grid.Column="0" Width="26" Height="26" Margin="5,0,0,0"
+                      VerticalAlignment="Center"
+                      IsChecked="{Binding IsAllSelected, Mode=OneWay}"
+                      ToolTip="全选当前列表"
+                      Click="OnSelectAllHeaderClick"
+                      Visibility="{Binding IsMultiSelect, Converter={StaticResource BoolToVisibility}}" />
 
             <TextBlock Grid.Column="1" Text="名称" Style="{StaticResource Text.Label}" Margin="42,0,0,0" />
             <TextBlock Grid.Column="2" Text="IP / 主机" Style="{StaticResource Text.Label}" Margin="16,0,0,0" />

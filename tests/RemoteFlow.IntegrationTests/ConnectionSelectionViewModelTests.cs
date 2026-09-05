@@ -29,7 +29,7 @@ public sealed class ConnectionSelectionViewModelTests
         Assert.True(a.IsSelected);
         Assert.True(vm.HasSelection);
         Assert.Single(vm.SelectedConnections);
-        Assert.Equal("已选 1 项", vm.SelectionSummary);
+        Assert.Equal("已选择 1 项", vm.SelectionSummary);
 
         vm.ToggleSelect(a);
         Assert.False(a.IsSelected);
@@ -70,6 +70,6 @@ public sealed class ConnectionSelectionViewModelTests
         Assert.False(a.IsSelected);
         Assert.False(vm.HasSelection);
         Assert.False(vm.IsAllSelected);
-        Assert.Equal("已选 0 项", vm.SelectionSummary);
+        Assert.Equal("已选择 0 项", vm.SelectionSummary);
     }
 }
