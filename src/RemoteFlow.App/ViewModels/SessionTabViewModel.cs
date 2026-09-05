@@ -168,7 +168,9 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
 
     private void UpdateStateDisplay(ConnectionState state, ConnectionErrorCode errorCode, string? errorMessage)
     {
-        IsConnecting = state == ConnectionState.Connecting;
+        // 自动重连（Reconnecting）与初次连接一样需要进度指示，因此并入 IsConnecting；
+        // 但不算已连接，也不进入断线状态层（由协议库自动恢复，无需手动「重新连接」按钮）。
+        IsConnecting = state is ConnectionState.Connecting or ConnectionState.Reconnecting;
         IsConnected = state == ConnectionState.Connected;
         IsInterrupted = state is ConnectionState.Failed or ConnectionState.Disconnected;
 
@@ -193,6 +195,15 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
                 InterruptionMessage = string.Empty;
                 break;
 
+            case ConnectionState.Reconnecting:
+                // 自动重连中：表现对齐 Connecting（IsConnecting/图标/Info 色），
+                // 不再让状态栏停留在「已连接」造成「已连却断」的观感矛盾。
+                StateText = "重新连接中…";
+                StateIcon = "\uE895";
+                StateBrushKey = "Status.Info";
+                InterruptionMessage = string.Empty;
+                break;
+
             case ConnectionState.Disconnecting:
                 StateText = "正在断开…";
                 StateIcon = "\uE895";
@@ -211,6 +222,13 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
                 StateIcon = "\uEA39";
                 StateBrushKey = "Status.Danger";
                 InterruptionMessage = errorMessage ?? ConnectionException.Describe(errorCode);
+                break;
+
+            case ConnectionState.Closed:
+                // 会话已终结（SessionManager 移除后 MarkClosed），Tab 即将被移除：短暂窗口内给出明确文案。
+                StateText = "已关闭";
+                StateIcon = "\uE7BA";
+                StateBrushKey = "Status.Idle";
                 break;
         }
     }

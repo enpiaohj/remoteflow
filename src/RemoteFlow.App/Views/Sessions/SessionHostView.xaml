@@ -128,9 +128,9 @@
                                Foreground="#9E9E9E"
                                HorizontalAlignment="Center"
                                Margin="0,8,0,0">
-                        <Run Text="正在连接" />
+                        <Run Text="{Binding StateText, Mode=OneWay}" />
+                        <Run Text="  " />
                         <Run Text="{Binding Profile.Host, Mode=OneWay}" />
-                        <Run Text="…" />
                     </TextBlock>
                     <ProgressBar IsIndeterminate="True"
                                  Width="180" Height="2"
