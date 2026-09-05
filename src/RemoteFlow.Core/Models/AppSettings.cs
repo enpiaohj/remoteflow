@@ -34,17 +34,20 @@ public enum AppTimeFormat
     Hour12 = 1
 }
 
-/// <summary>首页时间相对日期段的显示顺序。</summary>
+/// <summary>首页标题行的整行布局。日期恒在行首，其余段按枚举顺序拼接，各段依对应开关取舍。</summary>
 public enum HomeTimeOrder
 {
-    /// <summary>时间拼在日期段之后（如「2026年9月5日 · 14:05」）。</summary>
-    Trailing = 0,
+    /// <summary>日期 · 星期 · 周数 · 时间（时间附在行尾）。</summary>
+    DateWeekdayWeekTime = 0,
 
-    /// <summary>时间拼在日期段之前（如「14:05 · 2026年9月5日」）。</summary>
-    Leading = 1,
+    /// <summary>日期 · 时间 · 星期 · 周数（时间紧跟日期）。</summary>
+    DateTimeWeekdayWeek = 1,
 
-    /// <summary>时间在日期行下方另起一行显示时钟。</summary>
-    SeparateLine = 2
+    /// <summary>日期 · 星期 · 时间 · 周数（时间在星期后、周数前）。</summary>
+    DateWeekdayTimeWeek = 2,
+
+    /// <summary>日期 · 星期 · 周数，时间在下一行单独显示。</summary>
+    SeparateLine = 3
 }
 
 /// <summary>
@@ -74,8 +77,8 @@ public sealed class AppSettings
     /// <summary>首页时间是否显示秒（需 ShowHomeTime）。</summary>
     public bool ShowHomeSeconds { get; set; }
 
-    /// <summary>首页时间相对日期段的显示顺序。</summary>
-    public HomeTimeOrder ShowHomeTimeOrder { get; set; } = HomeTimeOrder.Trailing;
+    /// <summary>首页标题行的整行排列方式。</summary>
+    public HomeTimeOrder ShowHomeTimeOrder { get; set; } = HomeTimeOrder.DateWeekdayWeekTime;
 
     /// <summary>是否已展示过「全屏工具条自动隐藏」的首次提示。</summary>
     public bool SessionFullScreenHintShown { get; set; }

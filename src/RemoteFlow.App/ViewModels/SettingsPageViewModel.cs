@@ -40,7 +40,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     public sealed record TimeFormatOption(AppTimeFormat Value, string Label);
 
-    public sealed record HomeTimeOrderOption(HomeTimeOrder Value, string Label);
+    public sealed record HomeTimeOrderOption(HomeTimeOrder Value, string Name, string Sample);
 
     private const string StartupRegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string StartupValueName = "RemoteFlow";
@@ -63,6 +63,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     /// <summary>加载期间抑制自动保存，避免初始化赋值触发一连串写盘。</summary>
     private bool _isLoading = true;
+
+    /// <summary>重建「显示顺序」下拉样例时抑制选中项回调，避免回声递归。</summary>
+    private bool _refreshingOrderOptions;
 
     public SettingsPageViewModel(
         AppSettings settings,
@@ -173,12 +176,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         new(AppTimeFormat.Hour12, "12 小时"),
     ];
 
-    public IReadOnlyList<HomeTimeOrderOption> HomeTimeOrderOptions { get; } =
-    [
-        new(HomeTimeOrder.Trailing, "时间在后"),
-        new(HomeTimeOrder.Leading, "时间在前"),
-        new(HomeTimeOrder.SeparateLine, "单独一行"),
-    ];
+    /// <summary>「显示顺序」四种整行预设，每项携带真实格式化样例（由 <see cref="RefreshHomeOrderOptions"/> 重建）。</summary>
+    [ObservableProperty]
+    private IReadOnlyList<HomeTimeOrderOption> _homeTimeOrderOptions = [];
 
     [ObservableProperty]
     private DateFormatOption _selectedDateFormat = null!;
@@ -293,7 +293,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         ShowHomeWeekNumber = _settings.ShowHomeWeekNumber;
         ShowHomeTime = _settings.ShowHomeTime;
         ShowHomeSeconds = _settings.ShowHomeSeconds;
-        SelectedHomeTimeOrder = HomeTimeOrderOptions.First(o => o.Value == _settings.ShowHomeTimeOrder);
 
         RdpFitToWindow = _settings.RdpDefaultDisplayMode == RdpDisplayMode.FitToWindow;
         RdpRedirectClipboard = _settings.RdpDefaultRedirectClipboard;
@@ -310,6 +309,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         VncSharedConnection = _settings.VncDefaultSharedConnection;
 
         MaxConcurrentSessions = _settings.MaxConcurrentSessions;
+
+        RefreshHomeOrderOptions();
     }
 
     public async Task LoadHostKeysAsync(CancellationToken ct = default)
@@ -400,7 +401,15 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     partial void OnShowHomeSecondsChanged(bool value) => ApplyDateTimeSettings();
 
-    partial void OnSelectedHomeTimeOrderChanged(HomeTimeOrderOption value) => ApplyDateTimeSettings();
+    partial void OnSelectedHomeTimeOrderChanged(HomeTimeOrderOption value)
+    {
+        if (_isLoading || _refreshingOrderOptions)
+        {
+            return;
+        }
+
+        ApplyDateTimeSettings();
+    }
 
     private void ApplyDateTimeSettings(AppDateFormat dateFormat)
     {
@@ -420,9 +429,61 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         _settings.ShowHomeWeekNumber = ShowHomeWeekNumber;
         _settings.ShowHomeTime = ShowHomeTime;
         _settings.ShowHomeSeconds = ShowHomeSeconds;
-        _settings.ShowHomeTimeOrder = SelectedHomeTimeOrder?.Value ?? HomeTimeOrder.Trailing;
+        // LoadFromSettings 早期 SelectedHomeTimeOrder 尚未就绪时保留已读入的持久化值，
+        // 避免默认值回写把用户选好的「显示顺序」覆盖掉。
+        if (SelectedHomeTimeOrder is not null)
+        {
+            _settings.ShowHomeTimeOrder = SelectedHomeTimeOrder.Value;
+        }
+
         DateTimeDisplay.Configure(_settings);
         Save();
+
+        // 日期格式 / 12-24 小时 / 显示秒变化会反映进下拉样例文字。
+        RefreshHomeOrderOptions();
+        OnPropertyChanged(nameof(HomeTimeOrderOptions));
+    }
+
+    /// <summary>
+    /// 用当前日期时间与格式设置重建「显示顺序」下拉的四种整行预设。
+    /// 样例中星期 / 周数始终展示（仅示意排列），时间是否含秒跟随「显示秒」。
+    /// 日期格式、12/24 小时或「显示秒」改变后由 <see cref="ApplyDateTimeSettings"/> 自动调用刷新。
+    /// </summary>
+    public void RefreshHomeOrderOptions()
+    {
+        var now = DateTimeOffset.Now;
+        var sampleTime = new DateTimeOffset(
+            now.Year, now.Month, now.Day, now.Hour, now.Minute,
+            ShowHomeSeconds ? now.Second : 0, now.Offset);
+
+        var date = DateTimeDisplay.Date(sampleTime);
+        var weekday = DateTimeDisplay.Weekday(sampleTime);
+        var week = $"第{DateTimeDisplay.IsoWeek(sampleTime)}周";
+        var clock = DateTimeDisplay.Clock(sampleTime, ShowHomeSeconds);
+
+        var selected = SelectedHomeTimeOrder?.Value ?? _settings.ShowHomeTimeOrder;
+        var options = new List<HomeTimeOrderOption>
+        {
+            new(HomeTimeOrder.DateWeekdayWeekTime, "日期 · 星期 · 周数 · 时间",
+                $"{date} · {weekday} · {week} · {clock}"),
+            new(HomeTimeOrder.DateTimeWeekdayWeek, "日期 · 时间 · 星期 · 周数",
+                $"{date} · {clock} · {weekday} · {week}"),
+            new(HomeTimeOrder.DateWeekdayTimeWeek, "日期 · 星期 · 时间 · 周数",
+                $"{date} · {weekday} · {clock} · {week}"),
+            new(HomeTimeOrder.SeparateLine, "日期 · 星期 · 周数（时间单独一行）",
+                $"{date} · {weekday} · {week}\n{clock}")
+        };
+
+        _refreshingOrderOptions = true;
+        try
+        {
+            HomeTimeOrderOptions = options;
+            SelectedHomeTimeOrder = options.First(o => o.Value == selected);
+        }
+        finally
+        {
+            _refreshingOrderOptions = false;
+        }
     }
 
     partial void OnRdpFitToWindowChanged(bool value) => Save();

@@ -51,11 +51,14 @@ public sealed partial class HomePageViewModel(
     [ObservableProperty]
     private string _greeting = string.Empty;
 
-    /// <summary>首页标题日期行：如「2026年9月5日 · 周六 · 第36周」；开启首页时间后依序附时间或保持纯日期。</summary>
+    /// <summary>
+    /// 首页标题日期行：日期恒在行首，星期 / 周数 / 时间按「显示顺序」取舍拼接。
+    /// 例：<c>2026年9月6日 · 周日 · 第37周 · 14:05</c>；「时间单独一行」时此行不含时间。
+    /// </summary>
     [ObservableProperty]
     private string _dateLine = string.Empty;
 
-    /// <summary>首页时钟行（仅「显示顺序 = 单独一行」时显示），例：<c>14:05:09</c>。</summary>
+    /// <summary>首页时钟行（仅「显示顺序 = 单独一行」且开启时间时显示），例：<c>14:05:09</c>。</summary>
     [ObservableProperty]
     private string _clockLine = string.Empty;
 
@@ -138,41 +141,51 @@ public sealed partial class HomePageViewModel(
     }
 
     /// <summary>
-    /// 合成首页标题日期行与可选的时钟行。开启「显示时间」时按用户选择的顺序把时钟
-    /// 拼到日期段之后 / 之前，或作为单独一行（<see cref="ClockLine"/>）。
+    /// 合成首页标题日期行与可选的时钟行。日期恒在行首，其余段（星期 / 周数 / 时间）
+    /// 依 <see cref="HomeTimeOrder"/> 决定的槽位顺序拼接，且各段只在对应开关开启时插入；
+    /// 「时间单独一行」布局中星期 / 周数留在日期行，时间进入 <see cref="ClockLine"/>。
     /// </summary>
     private void RefreshHeader()
     {
         var now = DateTimeOffset.Now;
+        var date = DateTimeDisplay.Date(now);
+        var clock = settings.ShowHomeTime ? DateTimeDisplay.Clock(now, settings.ShowHomeSeconds) : null;
 
-        // 日期·星期·周数核心段由统一格式化器产出，避免与它重复拼装（设置与 DateTimeDisplay 同源）。
-        var core = DateTimeDisplay.FullDateHeader(now);
+        var parts = new List<string> { date };
+        string? clockLine = null;
 
-        if (!settings.ShowHomeTime)
-        {
-            DateLine = core;
-            ClockLine = "";
-            OnPropertyChanged(nameof(HasClockLine));
-            return;
-        }
-
-        var clock = DateTimeDisplay.Clock(now, settings.ShowHomeSeconds);
         switch (settings.ShowHomeTimeOrder)
         {
-            case HomeTimeOrder.Leading:
-                DateLine = $"{clock} · {core}";
-                ClockLine = "";
-                break;
             case HomeTimeOrder.SeparateLine:
-                DateLine = core;
-                ClockLine = clock;
+                // 日期 · 星期 · 周数，时间单独一行。
+                if (settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
+                if (settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
+                clockLine = clock;
                 break;
-            default: // Trailing
-                DateLine = $"{core} · {clock}";
-                ClockLine = "";
+
+            case HomeTimeOrder.DateTimeWeekdayWeek:
+                // 日期 · 时间 · 星期 · 周数。
+                if (clock is not null) parts.Add(clock);
+                if (settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
+                if (settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
+                break;
+
+            case HomeTimeOrder.DateWeekdayTimeWeek:
+                // 日期 · 星期 · 时间 · 周数。
+                if (settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
+                if (clock is not null) parts.Add(clock);
+                if (settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
+                break;
+
+            default: // DateWeekdayWeekTime —— 日期 · 星期 · 周数 · 时间
+                if (settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
+                if (settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
+                if (clock is not null) parts.Add(clock);
                 break;
         }
 
+        DateLine = string.Join(" · ", parts);
+        ClockLine = clockLine ?? "";
         OnPropertyChanged(nameof(HasClockLine));
     }
 

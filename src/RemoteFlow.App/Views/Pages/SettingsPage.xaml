@@ -261,19 +261,22 @@
                             <Grid Style="{StaticResource SettingRow}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="260" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
                                             MaxWidth="560" HorizontalAlignment="Left">
                                     <TextBlock Text="显示顺序" Style="{StaticResource Text.Body}" />
-                                    <TextBlock Text="时间放在日期前、后，或单独一行。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    <TextBlock Text="首页标题行整行排列方式；下拉项直接展示真实样例。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
                                 <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
                                           ItemsSource="{Binding HomeTimeOrderOptions}" SelectedItem="{Binding SelectedHomeTimeOrder}"
                                           IsEnabled="{Binding ShowOrderEnabled}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
-                                            <TextBlock Text="{Binding Label}" />
+                                            <StackPanel Margin="0,3">
+                                                <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource Text.Primary}" />
+                                                <TextBlock Text="{Binding Sample}" FontSize="11" Foreground="{DynamicResource Text.Tertiary}" Margin="0,2,0,0" />
+                                            </StackPanel>
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
