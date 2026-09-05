@@ -54,12 +54,12 @@ public sealed class TrayService(MainWindow window, SessionManager sessions) : ID
             return;
         }
 
-        var count = sessions.ActiveSessionCount;
+        var count = sessions.ConnectedSessionCount;
 
         // NotifyIcon.Text 有 63 字符上限，这里的文案远低于该限制。
         _notifyIcon.Text = count == 0
             ? "RemoteFlow"
-            : $"RemoteFlow — {count} 个会话进行中";
+            : $"RemoteFlow — {count} 个会话已连接";
     }
 
     private void RestoreWindow()

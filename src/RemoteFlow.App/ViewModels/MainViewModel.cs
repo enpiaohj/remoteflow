@@ -153,12 +153,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>状态栏文案。</summary>
-    public string SessionStatusText => _sessions.ActiveSessionCount == 0
+    public string SessionStatusText => _sessions.ConnectedSessionCount == 0
         ? "无活动会话"
-        : $"已连接 {_sessions.ActiveSessionCount} 个会话";
+        : $"已连接 {_sessions.ConnectedSessionCount} 个会话";
 
-    /// <summary>会话状态圆点的语义色键：有活动会话时用成功绿，否则用中性灰。</summary>
-    public string SessionStatusBrushKey => _sessions.ActiveSessionCount == 0
+    /// <summary>会话状态圆点的语义色键：有已连接会话时用成功绿，否则用中性灰。</summary>
+    public string SessionStatusBrushKey => _sessions.ConnectedSessionCount == 0
         ? "Status.Idle"
         : "Status.Success";
 

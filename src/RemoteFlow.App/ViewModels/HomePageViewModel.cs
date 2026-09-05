@@ -45,11 +45,8 @@ public sealed partial class HomePageViewModel(
     [ObservableProperty]
     private int _totalConnections;
 
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasActiveSessions))]
-    private int _activeSessions;
-
-    public bool HasActiveSessions => ActiveSessions > 0;
+    /// <summary>当前已连接会话数（仅统计 Connected）。顶部统计行使用。</summary>
+    public int ConnectedSessions => sessions.ConnectedSessionCount;
 
     [ObservableProperty]
     private string _greeting = string.Empty;
@@ -96,10 +93,13 @@ public sealed partial class HomePageViewModel(
         var groups = (await connections.GetGroupsAsync(ct)).ToDictionary(g => g.Id, g => g.Name);
 
         TotalConnections = profiles.Count;
-        ActiveSessions = sessions.ActiveSessionCount;
         ShowSecurityTip = !settings.HomeSecurityTipDismissed && profiles.Count > 0;
 
-        var activeProfileIds = sessions.ActiveSessions.Select(s => s.Profile.Id).ToHashSet();
+        // 卡片高亮只认“真正已连接”的会话：正在连接 / 失败不点亮“已连接”标签。
+        var connectedProfileIds = sessions.ActiveSessions
+            .Where(s => s.State == ConnectionState.Connected)
+            .Select(s => s.Profile.Id)
+            .ToHashSet();
 
         RecentItems.Clear();
         foreach (var profile in profiles
@@ -108,7 +108,7 @@ public sealed partial class HomePageViewModel(
                      .Take(RecentCardLimit))
         {
             var item = BuildItem(profile, groups);
-            item.HasActiveSession = activeProfileIds.Contains(profile.Id);
+            item.HasActiveSession = connectedProfileIds.Contains(profile.Id);
             RecentItems.Add(item);
         }
 
