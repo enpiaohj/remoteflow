@@ -59,6 +59,10 @@ public static class DateTimeDisplay
             S.TimeFormat == AppTimeFormat.Hour24 ? "HH:mm" : "h:mm tt",
             CultureInfo.InvariantCulture);
 
+    /// <summary>紧凑的“日期 时间”，用于迷你图悬停等短提示，跟随用户日期与 12/24 小时设置。</summary>
+    public static string Compact(DateTimeOffset value)
+        => $"{Date(value)} {Time(value)}";
+
     /// <summary>星期短名（周一～周日）。</summary>
     public static string Weekday(DateTimeOffset value)
         => WeekdayNames[(int)value.ToLocalTime().DayOfWeek];

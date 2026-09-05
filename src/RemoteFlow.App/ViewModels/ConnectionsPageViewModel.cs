@@ -199,7 +199,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                 SelectedItemSparkline.Add(new SparkBar(
                     Math.Max(0.12, ratio),
                     entry.Result == ConnectionResult.Success ? "Status.Success" : "Status.Danger",
-                    $"{entry.StartedAt:MM-dd HH:mm} · {(entry.Duration is { } d ? FormatDuration(d) : "未完成")}"));
+                    $"{DateTimeDisplay.Compact(entry.StartedAt)} · {(entry.Duration is { } d ? FormatDuration(d) : "未完成")}"));
             }
         }
         catch (Exception ex)
