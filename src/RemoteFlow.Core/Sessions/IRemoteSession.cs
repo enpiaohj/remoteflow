@@ -39,6 +39,20 @@ public interface IRemoteSession : IAsyncDisposable
     event EventHandler<SessionStateChangedEventArgs>? StateChanged;
 
     /// <summary>
+    /// 会话是否已进入关闭 / 收尾流程（SessionManager 防重复关闭）。
+    /// <para>默认返回 false：三个尚未迁移到 <c>RemoteSessionBase</c> 的协议 Session 走该默认实现；
+    /// 迁移到基类后由基类的状态守卫提供真实值。</para>
+    /// </summary>
+    bool IsClosing => false;
+
+    /// <summary>
+    /// 收尾：由 SessionManager 在从活动集合移除后调用，将会话置 <see cref="ConnectionState.Closed"/>（幂等）。
+    /// <para>默认空实现：三个尚未迁移到 <c>RemoteSessionBase</c> 的协议 Session 走该默认实现；
+    /// 迁移到基类后由基类覆盖为真实的终态收尾。</para>
+    /// </summary>
+    void MarkClosed() { }
+
+    /// <summary>
     /// 建立连接。整个过程必须可取消，且不得阻塞 UI 主线程。
     /// <para>一次 Connect 后可进入 Connected / Reconnecting / Failed / Disconnected；
     /// 不允许在已 Closed / Disposed 的会话上再次 Connect。</para>

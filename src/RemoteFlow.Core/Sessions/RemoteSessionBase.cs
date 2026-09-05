@@ -122,21 +122,21 @@ public abstract class RemoteSessionBase : IRemoteSession
 
         try
         {
-            _lifecycleCts.Cancel();
-        }
-        catch (ObjectDisposedException)
-        {
-            // CTS 已释放属预期，忽略。
-        }
+            try
+            {
+                _lifecycleCts.Cancel();
+            }
+            catch
+            {
+                // 取消回调若抛异常，Cancel() 会抛 AggregateException；不得让 teardown 被阻断。
+            }
 
-        try
-        {
             await PerformTeardownAsync().ConfigureAwait(false);
         }
         finally
         {
-            // 无论 teardown 是否成功都必须离开 Disconnecting 死态；若期间已被 MarkClosed 置为
-            // Closed，此处 SetState(Disconnected) 会被终态规则忽略，状态保持 Closed。
+            // 无论 Cancel / teardown 是否成功都必须离开 Disconnecting 死态；若期间已被
+            // MarkClosed 置为 Closed，此处 SetState(Disconnected) 会被终态规则忽略，状态保持 Closed。
             SetState(ConnectionState.Disconnected);
         }
     }

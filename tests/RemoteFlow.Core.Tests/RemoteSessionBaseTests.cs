@@ -39,6 +39,10 @@ public sealed class RemoteSessionBaseTests
         /// <summary>测试观察口：向状态机请求一次任意迁移（是否生效由状态机规则决定）。</summary>
         public void TrySet(ConnectionState state) => SetState(state);
 
+        /// <summary>在会话级取消令牌上注册一个会抛异常的取消回调，模拟 Cancel() 抛 AggregateException。</summary>
+        public void RegisterThrowingCancelCallback()
+            => LifecycleToken.Register(() => throw new InvalidOperationException("cancel callback boom"));
+
         protected override ValueTask PerformTeardownAsync() => ValueTask.CompletedTask;
     }
 
@@ -142,6 +146,19 @@ public sealed class RemoteSessionBaseTests
 
         await s.DisposeAsync();
         await s.DisposeAsync(); // 二次不抛
+
+        Assert.Equal(ConnectionState.Disconnected, s.State);
+    }
+
+    [Fact]
+    public async Task 状态_Cancel回调抛异常不阻断关闭模板()
+    {
+        var s = new ProbeSession();
+        s.GoConnected();
+        s.RegisterThrowingCancelCallback();
+
+        // Cancel() 会因取消回调抛异常而抛 AggregateException，但关闭模板必须吞掉并继续收尾。
+        await s.DisconnectAsync();
 
         Assert.Equal(ConnectionState.Disconnected, s.State);
     }
