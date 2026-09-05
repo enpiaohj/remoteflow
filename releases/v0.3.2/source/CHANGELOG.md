@@ -7,15 +7,6 @@
 
 ---
 
-## [0.3.2] — 2026-09-05
-
-### 修复
-- 单文件发布包缺失终端资源导致 SSH 无法连接——SSH 终端资源（xterm.js 前端）
-  现随 exe 内嵌并在运行时释放，不再依赖 exe 旁存在 `Assets/Terminal/`。
-  已实机验证。
-
-详见 [`releases/v0.3.2/CHANGELOG.md`](releases/v0.3.2/CHANGELOG.md)。
-
 ## [0.3.1] — 2026-09-05
 
 ### 修复
@@ -66,8 +57,6 @@
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
-[0.3.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.3.1
-[0.3.2]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.3.2
 [0.3.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.3.1
 [0.1.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.1.1
 [0.1.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.1.0
