@@ -30,11 +30,20 @@ public sealed class SshSession : IRemoteSession
     private CancellationTokenSource? _readLoopCts;
     private Task? _readLoopTask;
 
+    /// <summary>
+    /// 会话级取消源：Disconnect / Dispose / 远端关闭时取消，使在途的
+    /// <see cref="ConnectAsync"/> 能立刻中断握手/建流，而不是挂死等待 SSH.NET 自身超时。
+    /// </summary>
+    private readonly CancellationTokenSource _lifecycleCts = new();
+
     /// <summary>保护断开/释放路径，避免 UI 关闭 Tab 与远端断线同时触发导致重复释放。</summary>
     private readonly SemaphoreSlim _lifecycleMutex = new(1, 1);
 
     private ResolvedCredential? _credential;
     private volatile bool _disposed;
+
+    /// <summary>会话已进入收尾（Disconnect / Dispose / 远端 EOF）。置位后不再允许重新连接。</summary>
+    private volatile bool _closing;
 
     /// <summary>Host Key 校验失败的具体原因，用于在连接异常时给出准确错误码。</summary>
     private ConnectionErrorCode _hostKeyFailure = ConnectionErrorCode.None;
@@ -68,7 +77,12 @@ public sealed class SshSession : IRemoteSession
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
-        if (State is ConnectionState.Connecting or ConnectionState.Connected)
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(SshSession));
+        }
+
+        if (_closing || State is ConnectionState.Connecting or ConnectionState.Connected)
         {
             return;
         }
@@ -77,18 +91,31 @@ public sealed class SshSession : IRemoteSession
 
         try
         {
+            // 会话级取消：调用方 token 与关闭流程（Disconnect / Dispose / 远端关）共享同一来源。
+            // 连接中关闭会话会取消 _lifecycleCts，这里联动的 token 随即触发，
+            // 让握手/建流立刻中断，而不是干等底层库超时。
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _lifecycleCts.Token);
+            var connectCt = linkedCts.Token;
+
             // 最多两轮：首轮若因主机密钥未信任被我方中止握手，弹窗确认后再来一轮。
             for (var attempt = 0; attempt < 2; attempt++)
             {
                 try
                 {
-                    await ConnectOnceAsync(cancellationToken);
+                    await ConnectOnceAsync(connectCt);
                     return;
                 }
                 catch (OperationCanceledException)
                 {
                     await CleanupAsync();
-                    Fail(ConnectionErrorCode.Cancelled, null);
+
+                    // 取消也可能是关闭流程（Disconnect/Dispose/远端关）引发的：此时会话已在
+                    // 收尾，不再置 Failed，避免把「已断开/已释放」的会话又标记成失败。
+                    if (!_closing && !_disposed && State is not (ConnectionState.Disconnected or ConnectionState.Failed))
+                    {
+                        Fail(ConnectionErrorCode.Cancelled, null);
+                    }
                     return;
                 }
                 catch (Exception ex)
@@ -228,6 +255,10 @@ public sealed class SshSession : IRemoteSession
 
     public async Task DisconnectAsync()
     {
+        // 先标记收尾并取消会话级 CTS：在途 ConnectAsync 会立刻中断，而不是继续握手。
+        _closing = true;
+        CancelLifecycle();
+
         await CleanupAsync();
 
         if (State is not (ConnectionState.Failed or ConnectionState.Disconnected))
@@ -244,11 +275,22 @@ public sealed class SshSession : IRemoteSession
         }
 
         _disposed = true;
+        _closing = true;
+        CancelLifecycle();
         await CleanupAsync();
 
         // ConnectAsync 从未跑完（或根本没调用）时凭据还在，这里兜底释放。
         _credential?.Dispose();
         _credential = null;
+
+        try
+        {
+            _lifecycleCts.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+            // CTS 已释放属预期，忽略。
+        }
 
         _lifecycleMutex.Dispose();
     }
@@ -408,11 +450,16 @@ public sealed class SshSession : IRemoteSession
                 DataReceived?.Invoke(this, chunk);
             }
 
-            // 读到流末尾表示远端已关闭会话。
-            if (!ct.IsCancellationRequested && State == ConnectionState.Connected)
+            // 读到流末尾表示远端已关闭会话：置 Disconnected 后立即幂等清理 _client/_shell，
+            // 不再把底层连接残留到用户关 Tab。若关闭流程（Disconnect/Dispose）已在收尾，
+            // 则跳过，由该流程统一清理，避免双清理竞态。
+            if (!ct.IsCancellationRequested && !_closing && !_disposed && State == ConnectionState.Connected)
             {
                 _logger.LogInformation("SSH 会话 {SessionId} 被远端关闭", SessionId);
                 SetState(ConnectionState.Disconnected);
+
+                _closing = true;
+                await CleanupAsync(skipReadLoopWait: true);
             }
         }
         catch (OperationCanceledException)
@@ -432,9 +479,26 @@ public sealed class SshSession : IRemoteSession
 
     // ── 生命周期 ──────────────────────────────────────────────────
 
-    private async Task CleanupAsync()
+    /// <summary>
+    /// 幂等清理。多路并发进入（Disconnect / Dispose / 远端 EOF / Connect 失败）由
+    /// <see cref="_lifecycleMutex"/> 串行化，首轮已把字段清空，后续轮次是幂等 no-op；
+    /// DisposeAsync 之后再次进入也不会抛（互斥体已释放时静默返回）。
+    /// </summary>
+    /// <param name="skipReadLoopWait">
+    /// 由读取循环自身触发（远端 EOF）时置 true：此时读取循环即将结束，等待它自己没有意义。
+    /// </param>
+    private async Task CleanupAsync(bool skipReadLoopWait = false)
     {
-        await _lifecycleMutex.WaitAsync();
+        try
+        {
+            await _lifecycleMutex.WaitAsync();
+        }
+        catch (ObjectDisposedException)
+        {
+            // DisposeAsync 已释放互斥体：完整清理已由 DisposeAsync 完成，无需重复执行。
+            return;
+        }
+
         try
         {
             if (_readLoopCts is not null)
@@ -442,12 +506,17 @@ public sealed class SshSession : IRemoteSession
                 await _readLoopCts.CancelAsync();
             }
 
-            if (_readLoopTask is not null)
+            if (!skipReadLoopWait && _readLoopTask is not null)
             {
                 // 读取循环可能阻塞在网络读上，等待时给一个上限，避免关闭 Tab 卡住 UI。
-                await Task.WhenAny(_readLoopTask, Task.Delay(TimeSpan.FromSeconds(2)));
-                _readLoopTask = null;
+                var readLoop = _readLoopTask;
+                if (!ReferenceEquals(await Task.WhenAny(readLoop, Task.Delay(TimeSpan.FromSeconds(2))), readLoop))
+                {
+                    _logger.LogWarning("SSH 会话 {SessionId} 读取循环在清理时未及时退出，按超时继续释放", SessionId);
+                }
             }
+
+            _readLoopTask = null;
 
             _readLoopCts?.Dispose();
             _readLoopCts = null;
@@ -477,7 +546,27 @@ public sealed class SshSession : IRemoteSession
         }
         finally
         {
-            _lifecycleMutex.Release();
+            try
+            {
+                _lifecycleMutex.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // 互斥体在等待期间被 DisposeAsync 释放：清理结果与直接返回等价，忽略。
+            }
+        }
+    }
+
+    /// <summary>取消会话级 CTS。幂等；CTS 已被释放时静默忽略。</summary>
+    private void CancelLifecycle()
+    {
+        try
+        {
+            _lifecycleCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // CTS 已释放属预期，忽略。
         }
     }
 
