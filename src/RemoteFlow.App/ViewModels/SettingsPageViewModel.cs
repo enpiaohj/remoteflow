@@ -143,13 +143,17 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     /// <summary>开关是否可操作：存在默认用户组才可。</summary>
     public bool ProtectionSwitchEnabled => HasDefaultGroup;
 
-    /// <summary>分组卡片副文案（跟随状态）。</summary>
+    /// <summary>开关标题（对齐设计文档 §6：保护默认分组「{默认组名}」）。</summary>
+    public string DefaultGroupSwitchLabel =>
+        HasDefaultGroup ? $"保护默认分组「{DefaultGroupLabel}」" : "保护默认分组";
+
+    /// <summary>分组卡片副文案（跟随状态，不再重复组名）。</summary>
     public string DefaultGroupDescription =>
         !HasDefaultGroup
             ? "当前没有默认分组，新建连接默认进入「未分组」。"
             : (DefaultGroupProtected
-                ? $"「{DefaultGroupLabel}」已受保护：不可重命名 / 删除 / 移动层级，但仍可增删连接、建子分组。"
-                : $"「{DefaultGroupLabel}」未受保护：可重命名 / 删除 / 移动层级。");
+                ? "已受保护：不可重命名 / 删除 / 移动层级，但仍可增删连接、建子分组。"
+                : "未受保护：可重命名 / 删除 / 移动层级。");
 
     // ── 日期与时间 ────────────────────────────────────────────────
 
@@ -302,6 +306,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
             DefaultGroupProtected = def is { IsProtected: true };
             OnPropertyChanged(nameof(DefaultGroupDescription));
             OnPropertyChanged(nameof(ProtectionSwitchEnabled));
+            OnPropertyChanged(nameof(DefaultGroupSwitchLabel));
         }
         finally
         {
@@ -330,6 +335,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "切换默认分组保护失败");
+            StatusMessage = "切换默认分组保护失败，请查看日志。";
             await LoadGroupsAsync(); // 回滚到真实状态
         }
     }
