@@ -85,6 +85,23 @@
 
     <!-- ── 左侧导航项 ─────────────────────────────────────────── -->
 
+    <!-- 键盘 Focus 的统一外观：鼠标点击不显示任何 Focus 边框（WPF 默认只有键盘
+         输入才会走 FocusVisualStyle），只有 Tab 聚焦时出现轻量蓝色圆角环。 -->
+    <Style x:Key="Nav.FocusVisual">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Grid Margin="-3">
+                        <Rectangle RadiusX="6" RadiusY="6"
+                                   Stroke="{DynamicResource Stroke.Focus}"
+                                   StrokeThickness="1"
+                                   SnapsToDevicePixels="True" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- 导航分组标题：小字号、次级灰度、字距略放，用来把一级入口分块。 -->
     <Style x:Key="Nav.SectionHeader" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
@@ -116,6 +133,7 @@
         <Setter Property="Height" Value="40" />
         <Setter Property="Margin" Value="6,1" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource Nav.FocusVisual}" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="Template">
             <Setter.Value>
@@ -172,9 +190,6 @@
                             <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
                             <Setter Property="FontWeight" Value="SemiBold" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Focus}" />
-                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
@@ -194,6 +209,7 @@
         <Setter Property="Height" Value="40" />
         <Setter Property="Margin" Value="6,1" />
         <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{StaticResource Nav.FocusVisual}" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="Template">
             <Setter.Value>
@@ -228,10 +244,6 @@
                                     </Storyboard>
                                 </BeginStoryboard>
                             </Trigger.ExitActions>
-                        </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Focus}" />
-                            <Setter TargetName="Root" Property="BorderThickness" Value="1" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
