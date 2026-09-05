@@ -51,9 +51,10 @@ public sealed class TrayService(MainWindow window, SessionManager sessions) : ID
         // 比在 SessionCreated/Closed 时维护列表更能避免过期项。
         _menu.Opening += (_, _) => RebuildConnectedSessionSection();
 
-        // 会话数量变化时更新提示文字，让用户从托盘就能看到后台状态。
-        sessions.SessionCreated += (_, _) => UpdateTooltip();
-        sessions.SessionClosed += (_, _) => UpdateTooltip();
+        // 会话集合变化（创建 / 任意状态跳变 / 移除）都会改变“已连接 N 个会话”，
+        // 统一订阅聚合 SessionsChanged 一次刷新提示文字；事件可在协议后台线程触发，
+        // UpdateTooltip 内部 marshal 回 UI 线程再更新 NotifyIcon。
+        sessions.SessionsChanged += (_, _) => UpdateTooltip();
     }
 
     /// <summary>建立固定菜单骨架：打开项 / 分隔 / 会话区（动态）/ 分隔 / 退出。</summary>
@@ -79,6 +80,14 @@ public sealed class TrayService(MainWindow window, SessionManager sessions) : ID
     {
         if (_notifyIcon is null)
         {
+            return;
+        }
+
+        // SessionsChanged 可能来自协议后台线程，而 NotifyIcon 属 UI 线程（WPF 主 Dispatcher）资源，
+        // 非 UI 线程切回再更新，避免跨线程访问控件。
+        if (!window.Dispatcher.CheckAccess())
+        {
+            window.Dispatcher.BeginInvoke(UpdateTooltip);
             return;
         }
 

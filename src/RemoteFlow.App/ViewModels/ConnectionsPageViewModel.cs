@@ -124,11 +124,11 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         ItemsView = CollectionViewSource.GetDefaultView(Items);
         ApplyGrouping();
 
-        // 会话创建 / 关闭会改变选中连接的实时状态与“最近连接”，进入即刷新详情。
+        // 会话集合快照变化（创建 / 任意状态跳变 / 移除）会改变选中连接的实时状态与“最近连接”，
+        // 统一订阅聚合 SessionsChanged 一次刷新详情，不再逐会话订阅 StateChanged。
         if (_sessions is not null)
         {
-            _sessions.SessionCreated += OnSessionLifecycleChanged;
-            _sessions.SessionClosed += OnSessionLifecycleChanged;
+            _sessions.SessionsChanged += OnSessionsChanged;
         }
     }
 
@@ -248,8 +248,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     // ── 详情面板：连接状态与使用信息 ──────────────────────────────
 
-    private readonly Dictionary<Guid, EventHandler<SessionStateChangedEventArgs>> _sessionStateSubscriptions = new();
-
     private string _selectedStatusText = "未连接";
     private string _selectedStatusBrushKey = "Status.Idle";
 
@@ -261,8 +259,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     public string SelectedTotalConnectionsText => $"{_selectedHistoryCount} 次";
     public string SelectedCreatedAtText => SelectedItem?.CreatedAtDisplay ?? "—";
 
-    private void OnSessionLifecycleChanged(object? sender, IRemoteSession session) => RefreshSelectedDetail();
-    private void OnSessionLifecycleChanged(object? sender, Guid sessionId) => RefreshSelectedDetail();
+    /// <summary>聚合 <see cref="SessionManager.SessionsChanged"/>：会话创建 / 任意状态跳变 / 移除后
+    /// 重算右侧详情状态。事件可在任意线程触发，由 <see cref="RefreshSelectedDetail"/> marshal 回 UI。</summary>
+    private void OnSessionsChanged(object? sender, EventArgs e) => RefreshSelectedDetail();
 
     private void RefreshSelectedDetail()
     {
@@ -271,24 +270,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         {
             dispatcher.BeginInvoke(RefreshSelectedDetail);
             return;
-        }
-
-        // 跟随当前活跃会话（连接中→已连接→失败 / 关闭）的变化刷新状态。
-        IReadOnlyList<IRemoteSession> active = _sessions?.ActiveSessions ?? [];
-        var ids = active.Select(s => s.SessionId).ToHashSet();
-        foreach (var key in _sessionStateSubscriptions.Keys.Where(k => !ids.Contains(k)).ToList())
-        {
-            _sessionStateSubscriptions.Remove(key);
-        }
-
-        foreach (var session in active)
-        {
-            if (!_sessionStateSubscriptions.ContainsKey(session.SessionId))
-            {
-                var handler = new EventHandler<SessionStateChangedEventArgs>((_, _) => RefreshSelectedDetail());
-                session.StateChanged += handler;
-                _sessionStateSubscriptions[session.SessionId] = handler;
-            }
         }
 
         RaiseSelectedDetail();
