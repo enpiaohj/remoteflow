@@ -131,6 +131,10 @@ public sealed partial class HomePageViewModel(
         OnPropertyChanged(nameof(HasFavorites));
         OnPropertyChanged(nameof(HasActivity));
         OnPropertyChanged(nameof(IsFirstRun));
+
+        // 返回首页时重算统计行：卡片绿点读会话实时状态，这里显式通知计数刷新，
+        // 避免「统计行 0 已连接」与「卡片仍点绿」两者矛盾。
+        OnPropertyChanged(nameof(ConnectedSessions));
     }
 
     /// <summary>
@@ -140,18 +144,9 @@ public sealed partial class HomePageViewModel(
     private void RefreshHeader()
     {
         var now = DateTimeOffset.Now;
-        var parts = new List<string> { DateTimeDisplay.Date(now) };
-        if (settings.ShowWeekday)
-        {
-            parts.Add(DateTimeDisplay.Weekday(now));
-        }
 
-        if (settings.ShowHomeWeekNumber)
-        {
-            parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
-        }
-
-        var core = string.Join(" · ", parts);
+        // 日期·星期·周数核心段由统一格式化器产出，避免与它重复拼装（设置与 DateTimeDisplay 同源）。
+        var core = DateTimeDisplay.FullDateHeader(now);
 
         if (!settings.ShowHomeTime)
         {

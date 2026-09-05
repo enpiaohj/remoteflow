@@ -39,6 +39,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>正在创建会话的连接 Profile.Id。用于连点去重：会话 Tab 建出前，第二次请求不重复建。</summary>
     private readonly HashSet<Guid> _openingProfileIds = [];
 
+    /// <summary>每个活动会话一次的 StateChanged 订阅句柄，供 SessionClosed / Dispose 精确退订，避免事件泄漏。</summary>
+    private readonly Dictionary<Guid, EventHandler<SessionStateChangedEventArgs>> _sessionStateSubscriptions = [];
+
     public MainViewModel(
         SessionManager sessions,
         HomePageViewModel homePage,
@@ -337,6 +340,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Tabs.Add(tab);
         SelectedTab = tab;
 
+        // 订阅该会话的状态变化：Connecting→Connected / Failed 等跳变会改变“已连接 N 个会话”，
+        // 状态栏文案与圆点需要即时刷新（对齐 ConnectionsPageViewModel 的逐会话订阅模式）。
+        var stateHandler = new EventHandler<SessionStateChangedEventArgs>(OnSessionStateChanged);
+        session.StateChanged += stateHandler;
+        _sessionStateSubscriptions[session.SessionId] = stateHandler;
+
         // 会话 Tab 已建出，放开该 Profile 的占位；此刻再点可再次触发（走“聚焦既有”分支）。
         _openingProfileIds.Remove(session.Profile.Id);
 
@@ -369,6 +378,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         var wasSelected = ReferenceEquals(SelectedTab, tab);
 
+        // 退订本会话的状态订阅，避免已关闭会话继续向状态栏推送。
+        if (_sessionStateSubscriptions.Remove(sessionId, out var stateHandler))
+        {
+            tab.Session.StateChanged -= stateHandler;
+        }
+
         tab.ActionRequested -= OnSessionActionRequested;
         tab.Dispose();
         Tabs.Remove(tab);
@@ -383,6 +398,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (wasSelected)
         {
             SelectedTab = Tabs.OfType<SessionTabViewModel>().LastOrDefault() ?? (WorkspaceTabViewModel)WorkspaceTab;
+        }
+
+        OnPropertyChanged(nameof(SessionStatusText));
+        OnPropertyChanged(nameof(SessionStatusBrushKey));
+    }
+
+    /// <summary>某会话连接状态跳变（连接中→已连接 / 失败等）后，刷新状态栏“已连接 N 个会话”文案与圆点。</summary>
+    private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs e)
+        => RaiseSessionStatusChanged();
+
+    /// <summary>
+    /// 状态事件可能来自协议库的后台线程；切回 UI 线程再触发
+    /// <see cref="SessionStatusText"/> / <see cref="SessionStatusBrushKey"/> 的刷新。
+    /// </summary>
+    private void RaiseSessionStatusChanged()
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(RaiseSessionStatusChanged);
+            return;
         }
 
         OnPropertyChanged(nameof(SessionStatusText));
@@ -498,8 +534,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         foreach (var tab in Tabs.OfType<SessionTabViewModel>())
         {
+            if (_sessionStateSubscriptions.Remove(tab.Session.SessionId, out var stateHandler))
+            {
+                tab.Session.StateChanged -= stateHandler;
+            }
+
             tab.ActionRequested -= OnSessionActionRequested;
             tab.Dispose();
         }
+
+        _sessionStateSubscriptions.Clear();
     }
 }
