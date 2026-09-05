@@ -38,6 +38,12 @@ public partial class App : System.Windows.Application
     private TrayService? _tray;
 
     /// <summary>
+    /// 会话退出标记（session-state.json）。启动时读上次状态并武装 cleanExit:false，
+    /// OnExit 正常收尾后再写 cleanExit:true；进程崩溃 / 被杀时 OnExit 不执行，供下次启动识别异常退出。
+    /// </summary>
+    private SessionStateStore? _sessionStateStore;
+
+    /// <summary>
     /// 单实例互斥体。两个 RemoteFlow 实例同时打开同一份 SQLite 与保险库会互相争锁，
     /// 轻则启动报错，重则 WAL 状态错乱。这里保证同一用户会话只运行一个实例，
     /// 已在运行时把已有窗口带到前台。
@@ -78,6 +84,9 @@ public partial class App : System.Windows.Application
             _logger = _services.GetRequiredService<ILogger<App>>();
 
             _logger.LogInformation("RemoteFlow 启动，数据目录 {DataDirectory}", paths.DataDirectory);
+
+            // 崩溃恢复标记：读上次退出状态 → 若异常退出写 recovery 日志 → 武装本次 cleanExit:false。
+            InitializeSessionState(paths, loggerFactory);
 
             ApplyLanguage();
             InitializeDatabase();
@@ -335,17 +344,46 @@ public partial class App : System.Windows.Application
         window.Show();
     }
 
+    /// <summary>
+    /// 崩溃恢复标记初始化（启动时调用）。
+    /// <para>
+    /// 先读上次退出状态：若上次异常退出（cleanExit=false），写一条 recovery 日志；
+    /// 随后无条件把本次标记为「运行中未干净」（cleanExit:false）——若本次运行崩溃或被强杀，
+    /// OnExit 不会把标记翻成 true，下次启动即可据此识别。
+    /// 会话本就不跨重启持久化：这里只清标记 + 记录，不恢复任何会话；DB / TerminalAssets 的
+    /// 遗留临时数据继续走各自既有自愈路径。
+    /// </para>
+    /// </summary>
+    private void InitializeSessionState(AppPaths paths, ILoggerFactory loggerFactory)
+    {
+        _sessionStateStore = new SessionStateStore(
+            paths.DataDirectory,
+            loggerFactory.CreateLogger<SessionStateStore>());
+
+        var previous = _sessionStateStore.Load();
+        if (previous is { CleanExit: false })
+        {
+            // 本次不恢复任何会话（产品不跨重启持久化会话），仅标记 + recovery 日志。
+            _logger?.LogInformation(
+                "上次异常退出（标记于 {LastAt:o}），本次不恢复任何会话：不自动重连、不做跨重启恢复。",
+                previous.LastAt);
+        }
+
+        _sessionStateStore.Save(cleanExit: false, timestamp: DateTimeOffset.Now);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         // 进入退出流程后，界面异常处理不再尝试弹窗（此时资源系统已开始拆除）。
         _isShuttingDown = true;
 
+        // 退出顺序（spec §6.1）：Graceful Close All → 释放共享资源 → 容器兜底释放 →
+        // ClearAllPools → 写干净退出标记 → Logging Shutdown → Mutex 释放。全程异常安全（finally 兜底）。
         try
         {
-            // 退出前关闭全部会话，尽量让 RDP ActiveX 控件、SSH 连接、VNC 线程正常释放。
-            // 放到后台线程并设上限：极端情况下（例如 RDP 控件正卡在自身的模态证书
-            // 对话框上）Disconnect 会长时间占住 UI 线程，此时超时后交由进程退出兜底，
-            // 不让整个应用卡死在关闭流程里。
+            // 1) Graceful Close All：逐会话走统一关闭模板（各有界等待）。整体放到后台线程并设 5s 上限，
+            //    极端情况下（例如 RDP 控件正卡在自身的模态证书对话框上）Disconnect 会长时间占住 UI 线程，
+            //    此时超时后交由进程退出兜底（force 已由会话关闭模板内含），不让整个应用卡死在关闭流程里。
             var sessions = _services?.GetService<AppServices.SessionManager>();
             if (sessions is not null)
             {
@@ -356,11 +394,11 @@ public partial class App : System.Windows.Application
                 }
             }
 
+            // 2) 释放共享资源：托盘 → 主视图模型 → 共享 WebView2 环境。
+            //    WebView2：会话清理时各 SSH 终端视图已各自 Dispose 并 Release，
+            //    这里禁止后续获取并丢弃环境引用；浏览器进程由 WebView2 运行时自行退出，不按进程名强杀。
             _tray?.Dispose();
             _services?.GetService<MainViewModel>()?.Dispose();
-
-            // WebView2 共享环境收尾：会话清理时各 SSH 终端视图已各自 Dispose 并 Release，
-            // 这里禁止后续获取并丢弃环境引用；浏览器进程由 WebView2 运行时自行退出，不按进程名强杀。
             SharedWebView2Environment.Instance.Shutdown();
 
             _logger?.LogInformation("RemoteFlow 已退出");
@@ -371,8 +409,8 @@ public partial class App : System.Windows.Application
         }
         finally
         {
-            // SessionManager 只实现 IAsyncDisposable，容器同步 Dispose 会抛异常，
-            // 因此走异步释放路径；同样设上限，避免卡住的会话拖住退出。
+            // 3) 容器兜底释放：SessionManager 只实现 IAsyncDisposable，容器同步 Dispose 会抛异常，
+            //    因此走异步释放路径（二次 CloseAll，SessionManager 幂等）；同样设上限，避免卡住的会话拖住退出。
             try
             {
                 if (_services is not null)
@@ -385,12 +423,26 @@ public partial class App : System.Windows.Application
                 _logger?.LogError(ex, "释放服务容器时出现异常");
             }
 
-            // 关闭连接池里所有 SQLite 连接，触发 WAL 校验点，
-            // 让 -wal / -shm 文件不残留到下次启动（配合数据库层的启动重试）。
+            // 4) 关闭连接池里所有 SQLite 连接，触发 WAL 校验点，
+            //    让 -wal / -shm 文件不残留到下次启动（配合数据库层的启动重试）。
             Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 
+            // 5) 干净退出标记：走到这里说明 OnExit 收尾（含上述兜底）已完成，翻成 cleanExit:true。
+            //    若进程在本次运行中崩溃 / 被强杀，OnExit 不执行，启动时武装的 false 会保留 →
+            //    下次启动写 recovery 日志。尽力而为：异常只记录，不阻断 Logging / Mutex 收尾。
+            try
+            {
+                _sessionStateStore?.Save(cleanExit: true, timestamp: DateTimeOffset.Now);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "写入会话状态（干净退出标记）失败");
+            }
+
+            // 6) 关闭 Serilog，刷新并释放日志（须在 Save 之后，Save 失败还能记日志）。
             LoggingSetup.Shutdown();
 
+            // 7) 释放单实例互斥体。
             if (_ownsMutex)
             {
                 SingleInstanceMutex.ReleaseMutex();
