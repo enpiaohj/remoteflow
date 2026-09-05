@@ -36,6 +36,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly IDialogService _dialogs;
     private readonly ILogger<MainViewModel> _logger;
 
+    /// <summary>正在创建会话的连接 Profile.Id。用于连点去重：会话 Tab 建出前，第二次请求不重复建。</summary>
+    private readonly HashSet<Guid> _openingProfileIds = [];
+
     public MainViewModel(
         SessionManager sessions,
         HomePageViewModel homePage,
@@ -69,6 +72,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         // 首页的「查看全部」等入口请求跳转。
         HomePage.NavigationRequested += (_, page) => NavigateTo(page);
+
+        // 首页 / 连接页所有「点设备→开会话」都收敛到这里统一处理：去重、聚焦、失败提示。
+        HomePage.OpenConnectionRequested += async (_, profile) => await OpenSessionAsync(profile);
+        ConnectionsPage.OpenConnectionRequested += async (_, profile) => await OpenSessionAsync(profile);
 
         NavigateTo(settings.DefaultLandingPage switch
         {
@@ -300,6 +307,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Tabs.Add(tab);
         SelectedTab = tab;
 
+        // 会话 Tab 已建出，放开该 Profile 的占位；此刻再点可再次触发（走“聚焦既有”分支）。
+        _openingProfileIds.Remove(session.Profile.Id);
+
         OnPropertyChanged(nameof(SessionStatusText));
         OnPropertyChanged(nameof(SessionStatusBrushKey));
     }
@@ -350,6 +360,48 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     private async Task CloseSessionAsync(Guid sessionId) => await _sessions.CloseSessionAsync(sessionId);
+
+    /// <summary>
+    /// 统一「点设备→开会话」漏斗。同一 Profile 已有会话（连接中或已连）则聚焦其 Tab，
+    /// 不新建；正在创建中（连点）则忽略本次；否则创建新会话，由 SessionCreated 开新 Tab。
+    /// </summary>
+    public async Task OpenSessionAsync(ConnectionProfile profile)
+    {
+        var existing = Tabs.OfType<SessionTabViewModel>()
+            .FirstOrDefault(t => t.Session.Profile.Id == profile.Id);
+        if (existing is not null)
+        {
+            SelectedTab = existing;
+            return;
+        }
+
+        if (!_openingProfileIds.Add(profile.Id))
+        {
+            return; // 已有同设备的创建请求在跑，聚焦等它建完由 SessionCreated 切过去。
+        }
+
+        try
+        {
+            // 成功路径不在此移除占位：等 OnSessionCreated 建出 Tab 时移除，堵住连点竞态。
+            await _sessions.CreateSessionAsync(profile);
+        }
+        catch (ConnectionException ex)
+        {
+            _openingProfileIds.Remove(profile.Id);
+            await _dialogs.ShowMessageAsync("无法建立连接", ex.Message, DialogKind.Error);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _openingProfileIds.Remove(profile.Id);
+            await _dialogs.ShowMessageAsync("无法建立连接", ex.Message, DialogKind.Warning);
+        }
+        catch (Exception ex)
+        {
+            _openingProfileIds.Remove(profile.Id);
+            _logger.LogError(ex, "创建会话失败：{ConnectionName}", profile.Name);
+            await _dialogs.ShowMessageAsync("无法建立连接", "创建会话时发生未知错误，详情请查看日志。", DialogKind.Error);
+        }
+    }
 
     private async Task ReconnectAsync(ConnectionProfile profile)
     {
