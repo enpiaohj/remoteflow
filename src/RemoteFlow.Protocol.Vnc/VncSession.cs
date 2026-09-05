@@ -180,7 +180,10 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
             return;
         }
 
-        TryEnqueue(new PointerEventMessage(position, buttons));
+        var ok = TryEnqueue(new PointerEventMessage(position, buttons));
+        _logger.LogInformation(
+            "[VNC INPUT] PointerEvent mask=0x{mask:x2} pos={position} -> {result}",
+            (int)buttons, position, ok ? "SEND OK" : "SEND FAILED");
     }
 
     /// <summary>发送按键事件。</summary>
@@ -191,7 +194,10 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
             return;
         }
 
-        TryEnqueue(new KeyEventMessage(isDown, keySymbol));
+        var ok = TryEnqueue(new KeyEventMessage(isDown, keySymbol));
+        _logger.LogInformation(
+            "[VNC INPUT] Key{action} keysym={keySymbol} -> {result}",
+            isDown ? "Down" : "Up", keySymbol, ok ? "SEND OK" : "SEND FAILED");
     }
 
     /// <summary>发送一次完整的按键（按下并抬起），用于文本输入。</summary>
@@ -201,23 +207,31 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
         SendKeyEvent(keySymbol, isDown: false);
     }
 
-    private void TryEnqueue<TMessage>(TMessage message)
-        where TMessage : class, MarcusW.VncClient.Protocol.MessageTypes.IOutgoingMessage<MarcusW.VncClient.Protocol.MessageTypes.IOutgoingMessageType>
+    /// <summary>
+    /// 把输入消息入队。泛型携带<b>具体</b>的消息类型描述符（TMessageType），
+    /// 而不是收窄成基接口——否则库会按“任意首个”类型描述符序列化实际消息，
+    /// 发送循环抛 ArgumentException 直接死亡，远端收不到任何输入。
+    /// </summary>
+    private bool TryEnqueue<TMessageType>(
+        MarcusW.VncClient.Protocol.MessageTypes.IOutgoingMessage<TMessageType> message)
+        where TMessageType : class, MarcusW.VncClient.Protocol.MessageTypes.IOutgoingMessageType
     {
         var connection = _connection;
         if (connection is null || State != ConnectionState.Connected)
         {
-            return;
+            return false;
         }
 
         try
         {
             connection.EnqueueMessage(message);
+            return true;
         }
         catch (Exception ex)
         {
-            // 输入发送失败通常意味着连接已断，交由状态变化事件统一处理。
-            _logger.LogDebug(ex, "VNC 会话 {SessionId} 发送输入失败", SessionId);
+            // 队列已中止或连接正在关闭时发送会失败，交由状态变化事件统一处理。
+            _logger.LogWarning(ex, "VNC 会话 {SessionId} 发送输入失败（发送队列可能已中止）", SessionId);
+            return false;
         }
     }
 

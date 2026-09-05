@@ -34,7 +34,7 @@ public sealed class SessionViewFactory(
         SshSession ssh => new SshSessionView(
             ssh, tab, settings, theme, loggerFactory.CreateLogger<SshSessionView>()),
 
-        VncSession vnc => new VncSessionView(vnc, tab),
+        VncSession vnc => new VncSessionView(vnc, tab, loggerFactory.CreateLogger<VncSessionView>()),
 
         _ => new System.Windows.Controls.TextBlock
         {

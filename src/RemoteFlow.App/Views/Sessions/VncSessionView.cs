@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MarcusW.VncClient;
+using Microsoft.Extensions.Logging;
 using RemoteFlow.App.ViewModels;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Protocol.Vnc;
@@ -22,6 +23,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
 {
     private readonly VncSession _session;
     private readonly SessionTabViewModel _viewModel;
+    private readonly ILogger<VncSessionView> _logger;
     private readonly Image _image;
     private readonly ScrollViewer _scroll;
 
@@ -34,10 +36,11 @@ public sealed class VncSessionView : ContentControl, IDisposable
     private bool _connectStarted;
     private bool _disposed;
 
-    public VncSessionView(VncSession session, SessionTabViewModel viewModel)
+    public VncSessionView(VncSession session, SessionTabViewModel viewModel, ILogger<VncSessionView> logger)
     {
         _session = session;
         _viewModel = viewModel;
+        _logger = logger;
 
         _image = new Image
         {
@@ -217,24 +220,36 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
     private void OnMouseMove(object sender, MouseEventArgs e)
     {
-        if (ToRemotePosition(e.GetPosition(_image)) is { } position)
+        var local = e.GetPosition(_image);
+        if (ToRemotePosition(local) is { } position)
         {
+            _logger.LogInformation(
+                "[VNC INPUT] MouseMove local=({lx:0},{ly:0}) remote={position} mask=0x{mask:x2}",
+                local.X, local.Y, position, (int)GetPressedButtons());
             _session.SendPointerEvent(position, GetPressedButtons());
         }
     }
 
     private void OnMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (ToRemotePosition(e.GetPosition(_image)) is { } position)
+        var local = e.GetPosition(_image);
+        if (ToRemotePosition(local) is { } position)
         {
+            _logger.LogInformation(
+                "[VNC INPUT] MouseDown button={button} remote={position} mask=0x{mask:x2}",
+                e.ChangedButton, position, (int)GetPressedButtons());
             _session.SendPointerEvent(position, GetPressedButtons());
         }
     }
 
     private void OnMouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (ToRemotePosition(e.GetPosition(_image)) is { } position)
+        var local = e.GetPosition(_image);
+        if (ToRemotePosition(local) is { } position)
         {
+            _logger.LogInformation(
+                "[VNC INPUT] MouseUp button={button} remote={position} mask=0x{mask:x2}",
+                e.ChangedButton, position, (int)GetPressedButtons());
             _session.SendPointerEvent(position, GetPressedButtons());
         }
     }
@@ -261,6 +276,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         if (VncKeyMapper.TryMapSpecialKey(key, out var keySymbol))
         {
+            _logger.LogInformation("[VNC INPUT] KeyDown key={key} keysym={keySymbol}", key, keySymbol);
             _session.SendKeyEvent(keySymbol, isDown: true);
             e.Handled = true;
         }
@@ -272,6 +288,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         if (VncKeyMapper.TryMapSpecialKey(key, out var keySymbol))
         {
+            _logger.LogInformation("[VNC INPUT] KeyUp key={key} keysym={keySymbol}", key, keySymbol);
             _session.SendKeyEvent(keySymbol, isDown: false);
             e.Handled = true;
         }
@@ -290,6 +307,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         foreach (var rune in e.Text.EnumerateRunes())
         {
+            _logger.LogInformation("[VNC INPUT] TextInput char='{char}' cp=0x{cp:x4}", rune, rune.Value);
             _session.SendKeyStroke(VncKeyMapper.MapCharacter(rune.Value));
         }
 
