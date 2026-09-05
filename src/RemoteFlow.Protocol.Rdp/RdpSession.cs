@@ -389,6 +389,9 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         // 与「证书异常必须可见」的安全原则一致。
         TrySet("authenticationLevel", () => advanced.authenticationLevel = 2u);
 
+        // 显式启用控件库内自动重连，使 Reconnecting 状态映射不依赖控件默认值。
+        TrySet("EnableAutoReconnect", () => advanced.EnableAutoReconnect = true);
+
         // 连接超时相关（单位：秒）。
         TrySet("singleConnectionTimeout", () => advanced.singleConnectionTimeout = 30);
         TrySet("overallConnectionTimeout", () => advanced.overallConnectionTimeout = 30);
@@ -538,7 +541,14 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
 
     public void OnConnected()
     {
-        // 自动重连成功后回到已连接；初次连接的「真正可用」仍由 OnLoginComplete 置 Connected。
+        if (_disposed)
+        {
+            return;
+        }
+
+        // 自动重连成功后回到已连接。初次连接阶段不置 Connected：真正的「可用」由
+        // OnLoginComplete 完成，避免认证尚未通过就把会话标记为已连接（否则登录失败
+        // 会走 OnDisconnected 的已连接分支被记成正常断开而非 Failed）。
         if (State == ConnectionState.Reconnecting)
         {
             SetState(ConnectionState.Connected);
@@ -550,10 +560,20 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
     /// <summary>登录完成才算真正建立可用会话。</summary>
     public void OnLoginComplete()
     {
-        SetState(ConnectionState.Connected);
-        _connectSignal?.TrySetResult(true);
+        if (_disposed)
+        {
+            return;
+        }
 
-        _logger.LogInformation("RDP 会话 {SessionId} 已连接 {Host}:{Port}", SessionId, Profile.Host, Profile.Port);
+        // 仅当仍处于连接中 / 自动重连中才推进到 Connected：迟到的成功回调不得把
+        // 已 Failed / 已断开 / 已释放的会话复活为 Connected。
+        if (State is ConnectionState.Connecting or ConnectionState.Reconnecting)
+        {
+            SetState(ConnectionState.Connected);
+            _connectSignal?.TrySetResult(true);
+
+            _logger.LogInformation("RDP 会话 {SessionId} 已连接 {Host}:{Port}", SessionId, Profile.Host, Profile.Port);
+        }
     }
 
     public void OnDisconnected(int discReason)
