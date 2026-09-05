@@ -29,6 +29,12 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
     private ResolvedCredential? _credential;
     private volatile bool _disposed;
 
+    /// <summary>
+    /// 会话级连接取消源：连接中关闭会话（Disconnect / Dispose）时取消它，
+    /// 使在途 <see cref="ConnectAsync"/> 立刻中断，而不是挂死在 _connectSignal 上。
+    /// </summary>
+    private readonly CancellationTokenSource _lifecycleCts = new();
+
     /// <summary>连接完成（成功或失败）的信号，用于让 ConnectAsync 等待 COM 事件回调。</summary>
     private TaskCompletionSource<bool>? _connectSignal;
 
@@ -71,12 +77,22 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
             return;
         }
 
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(RdpSession));
+        }
+
         SetState(ConnectionState.Connecting);
 
         try
         {
+            // 会话级取消：视图/调用方传入的外部 token 与会话自身生命周期 CTS 任一取消，
+            // 都会打断本次连接。连接中关闭会话（Manager 关闭或视图释放）因此能立刻中断。
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _lifecycleCts.Token);
+
             // 等待宿主控件完成句柄创建，否则 GetOcx() 返回 null。
-            var ocx = await WaitForActiveXAsync(cancellationToken)
+            var ocx = await WaitForActiveXAsync(linkedCts.Token)
                 ?? throw new ConnectionException(
                     ConnectionErrorCode.ComponentUnavailable,
                     "远程桌面控件未能初始化，请确认本机的远程桌面客户端组件完整。");
@@ -90,28 +106,35 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
             client.Connect();
 
             // 连接结果通过 COM 事件回调返回，这里等待信号或取消。
-            await using (cancellationToken.Register(() => _connectSignal?.TrySetCanceled()))
+            await using (linkedCts.Token.Register(() => _connectSignal?.TrySetCanceled()))
             {
-                await _connectSignal.Task;
+                var ok = await _connectSignal.Task;
+
+                // 信号返回但未真正进入 Connected（失败回调已 Fail）：兜底执行与 Dispose
+                // 同源的收口，确保本对象不会残留 COM Advise（同对象重试不会重复订阅）。
+                if (!ok && State != ConnectionState.Connected)
+                {
+                    UnsubscribeEvents();
+                    SafeDisconnect();
+                }
             }
         }
         catch (OperationCanceledException)
         {
-            SafeDisconnect();
-            Fail(ConnectionErrorCode.Cancelled, null);
+            FailCleanup(ConnectionErrorCode.Cancelled, null);
         }
         catch (ConnectionException ex)
         {
-            SafeDisconnect();
-            Fail(ex.ErrorCode, ex);
+            FailCleanup(ex.ErrorCode, ex);
         }
         catch (Exception ex)
         {
-            SafeDisconnect();
-            Fail(ConnectionErrorCode.Unknown, ex);
+            FailCleanup(ConnectionErrorCode.Unknown, ex);
         }
         finally
         {
+            _connectSignal = null;
+
             // 密码已交给控件，托管侧不再保留。
             _credential?.Dispose();
             _credential = null;
@@ -120,6 +143,16 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
 
     public Task DisconnectAsync()
     {
+        // 中断进行中的连接等待：连接中关闭会话时让 ConnectAsync 立即退出，而不是挂死等待。
+        try
+        {
+            _lifecycleCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // CTS 已释放属预期，忽略。
+        }
+
         SafeDisconnect();
 
         if (State is not (ConnectionState.Failed or ConnectionState.Disconnected))
@@ -139,6 +172,16 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
 
         _disposed = true;
 
+        // 先取消在途连接等待，让 ConnectAsync 退出，避免后续退订事件后它永远等不到回调。
+        try
+        {
+            _lifecycleCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // CTS 已释放属预期，忽略。
+        }
+
         // 顺序很重要：先解除事件挂接，再断开，最后释放控件。
         // 否则控件会持有托管事件接收对象，导致会话对象无法回收。
         UnsubscribeEvents();
@@ -151,6 +194,15 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "RDP 会话 {SessionId} 释放宿主控件失败", SessionId);
+        }
+
+        try
+        {
+            _lifecycleCts.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+            // CTS 已释放属预期，忽略。
         }
 
         _credential?.Dispose();
@@ -383,6 +435,10 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
 
     private void SubscribeEvents(object ocx)
     {
+        // 同对象重试（失败后再次 Connect）时上一轮订阅可能尚未清理：先退订再订，
+        // 保证控件上永远只有一份 Advise，不会覆盖丢失旧 cookie。
+        UnsubscribeEvents();
+
         try
         {
             var container = (IConnectionPointContainer)ocx;
@@ -408,16 +464,23 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         }
     }
 
+    /// <summary>解除 COM 事件挂接。幂等：从未订阅 / 已退订再调用直接返回，不抛。</summary>
     private void UnsubscribeEvents()
     {
-        if (_connectionPoint is null)
+        var connectionPoint = _connectionPoint;
+        if (connectionPoint is null)
         {
             return;
         }
 
+        // 先置空再 Unadvise：重入 / 重复调用时第二次直接走上面的空判返回。
+        _connectionPoint = null;
+        var cookie = _adviseCookie;
+        _adviseCookie = 0;
+
         try
         {
-            _connectionPoint.Unadvise(_adviseCookie);
+            connectionPoint.Unadvise(cookie);
         }
         catch (Exception ex)
         {
@@ -425,9 +488,14 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         }
         finally
         {
-            Marshal.ReleaseComObject(_connectionPoint);
-            _connectionPoint = null;
-            _adviseCookie = 0;
+            try
+            {
+                Marshal.ReleaseComObject(connectionPoint);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "RDP 会话 {SessionId} 释放事件连接点失败", SessionId);
+            }
         }
     }
 
@@ -444,13 +512,40 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         });
     }
 
+    /// <summary>
+    /// 失败统一收口：与 <see cref="DisposeAsync"/> 同一顺序——先退订 COM 事件、再断开，最后置 Failed。
+    /// 保证失败 / 取消 / 致命错误 / 连接中远端断开等所有失败出口都不会在控件上残留 Advise。
+    /// 会话已释放（<see cref="_disposed"/>）时只清理不广播状态，避免收尾期间向订阅者发出 Failed。
+    /// </summary>
+    private void FailCleanup(ConnectionErrorCode code, Exception? ex)
+    {
+        UnsubscribeEvents();
+        SafeDisconnect();
+
+        if (!_disposed)
+        {
+            Fail(code, ex);
+        }
+
+        // 唤醒仍在等待的 ConnectAsync；对已取消的信号是 no-op。
+        _connectSignal?.TrySetResult(false);
+    }
+
     // ── IMsTscAxEvents 回调 ───────────────────────────────────────
 
     public void OnConnecting()
         => _logger.LogDebug("RDP 会话 {SessionId} 正在连接 {Host}", SessionId, Profile.Host);
 
     public void OnConnected()
-        => _logger.LogDebug("RDP 会话 {SessionId} 传输层已连接", SessionId);
+    {
+        // 自动重连成功后回到已连接；初次连接的「真正可用」仍由 OnLoginComplete 置 Connected。
+        if (State == ConnectionState.Reconnecting)
+        {
+            SetState(ConnectionState.Connected);
+        }
+
+        _logger.LogDebug("RDP 会话 {SessionId} 传输层已连接", SessionId);
+    }
 
     /// <summary>登录完成才算真正建立可用会话。</summary>
     public void OnLoginComplete()
@@ -468,15 +563,14 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         {
             SetState(ConnectionState.Disconnected);
             _logger.LogInformation("RDP 会话 {SessionId} 已断开，原因码 {Reason}", SessionId, discReason);
-        }
-        else
-        {
-            var code = MapDisconnectReason(discReason);
-            ErrorMessage = DescribeDisconnect(discReason) ?? ConnectionException.Describe(code);
-            Fail(code, null);
+            return;
         }
 
-        _connectSignal?.TrySetResult(false);
+        // 连接中 / 自动重连失败等非已连接阶段断开：按失败统一收口（退订 + 断开 + Failed）。
+        var code = MapDisconnectReason(discReason);
+        ErrorMessage = DescribeDisconnect(discReason) ?? ConnectionException.Describe(code);
+        _logger.LogDebug("RDP 会话 {SessionId} 连接阶段断开，原因码 {Reason}", SessionId, discReason);
+        FailCleanup(code, null);
     }
 
     public void OnFatalError(int errorCode)
@@ -484,8 +578,7 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         _logger.LogError("RDP 会话 {SessionId} 控件致命错误，错误码 {ErrorCode}", SessionId, errorCode);
 
         ErrorMessage = $"远程桌面控件发生错误（代码 {errorCode}）。";
-        Fail(ConnectionErrorCode.Unknown, null);
-        _connectSignal?.TrySetResult(false);
+        FailCleanup(ConnectionErrorCode.Unknown, null);
     }
 
     public void OnLogonError(int lError)
@@ -505,6 +598,12 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
     {
         _logger.LogInformation(
             "RDP 会话 {SessionId} 正在自动重连（第 {Attempt} 次）", SessionId, attemptCount);
+
+        // 已连接后掉线进入自动重连：把状态推进到 Reconnecting，让 UI/管理器感知断线中。
+        if (State == ConnectionState.Connected)
+        {
+            SetState(ConnectionState.Reconnecting);
+        }
 
         // 交由控件按自身策略继续重连，UI 通过状态层展示断线提示。
         continueReconnecting = true;
