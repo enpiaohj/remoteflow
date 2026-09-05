@@ -49,6 +49,9 @@ public sealed class SshSessionView : ContentControl, IDisposable
     private bool _connectStarted;
     private bool _disposed;
 
+    /// <summary>是否已从 <see cref="SharedWebView2Environment"/> 取得共享环境引用（Dispose 时归还）。</summary>
+    private bool _holdsSharedEnvironment;
+
     public SshSessionView(
         SshSession session,
         SessionTabViewModel viewModel,
@@ -107,15 +110,22 @@ public sealed class SshSessionView : ContentControl, IDisposable
     private async Task InitializeWebViewAsync()
     {
         // WebView2 需要可写的用户数据目录；程序目录可能只读，因此放到本地应用数据。
+        // 用户数据目录与共享环境的创建统一由 SharedWebView2Environment 负责。
         var userDataFolder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "RemoteFlow", "WebView2");
 
-        Directory.CreateDirectory(userDataFolder);
+        // 进程内所有 SSH 终端共享同一个 WebView2 环境：运行时按环境复用浏览器子进程，
+        // 多个会话不再各自拉起一套 msedgewebview2 进程（见 SharedWebView2Environment）。
+        var environment = await SharedWebView2Environment.Instance.AcquireAsync(userDataFolder);
+        _holdsSharedEnvironment = true;
 
-        var environment = await CoreWebView2Environment.CreateAsync(
-            browserExecutableFolder: null,
-            userDataFolder: userDataFolder);
+        // 等待环境期间会话已被关闭：不再初始化 WebView2，立即归还共享环境引用。
+        if (_disposed)
+        {
+            ReleaseSharedEnvironment();
+            return;
+        }
 
         await _webView.EnsureCoreWebView2Async(environment);
 
@@ -361,6 +371,21 @@ public sealed class SshSessionView : ContentControl, IDisposable
             _webView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
         }
 
+        // 先释放本会话持有的 WebView2/Controller，再归还共享环境引用——
+        // 每个会话只释放自己拥有的那一份，共享环境本身由引用计数守护到进程退出。
         _webView.Dispose();
+        ReleaseSharedEnvironment();
+    }
+
+    /// <summary>归还共享 WebView2 环境引用。幂等；仅在确实取得过引用时递减计数。</summary>
+    private void ReleaseSharedEnvironment()
+    {
+        if (!_holdsSharedEnvironment)
+        {
+            return;
+        }
+
+        _holdsSharedEnvironment = false;
+        SharedWebView2Environment.Instance.Release();
     }
 }

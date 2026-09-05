@@ -359,6 +359,10 @@ public partial class App : System.Windows.Application
             _tray?.Dispose();
             _services?.GetService<MainViewModel>()?.Dispose();
 
+            // WebView2 共享环境收尾：会话清理时各 SSH 终端视图已各自 Dispose 并 Release，
+            // 这里禁止后续获取并丢弃环境引用；浏览器进程由 WebView2 运行时自行退出，不按进程名强杀。
+            SharedWebView2Environment.Instance.Shutdown();
+
             _logger?.LogInformation("RemoteFlow 已退出");
         }
         catch (Exception ex)
