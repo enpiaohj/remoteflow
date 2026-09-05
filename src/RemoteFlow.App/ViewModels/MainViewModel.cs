@@ -285,6 +285,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
                 case NavigationPage.Settings:
                     await _settingsPage.LoadHostKeysAsync();
+                    await _settingsPage.LoadGroupsAsync();
                     break;
             }
         }
