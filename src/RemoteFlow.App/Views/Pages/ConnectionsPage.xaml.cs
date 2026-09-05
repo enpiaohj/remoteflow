@@ -404,6 +404,17 @@ public partial class ConnectionsPage : UserControl
         }
     }
 
+    /// <summary>组头 CheckBox 按下 = 全选 / 取消全选该分组（含子分组）。拦截默认三态循环。</summary>
+    private void OnGroupHeaderCheckMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is ConnectionGroupNodeViewModel node)
+        {
+            ViewModel?.ToggleGroupSelection(node);
+        }
+
+        e.Handled = true;
+    }
+
     /// <summary>菜单项的 DataContext 继承自弹出菜单的 PlacementTarget，即所在行。</summary>
     private static ConnectionItemViewModel? ResolveItem(object sender)
         => (sender as MenuItem)?.DataContext as ConnectionItemViewModel;

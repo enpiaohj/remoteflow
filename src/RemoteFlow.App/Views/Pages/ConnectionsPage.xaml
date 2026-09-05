@@ -226,6 +226,24 @@
                 </Grid.InputBindings>
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- 多选模式下的组头三态 Checkbox：未选/部分/全选该分组（含子分组）。 -->
+                    <CheckBox Width="26" Height="26" VerticalAlignment="Center" Margin="0,0,4,0"
+                              IsThreeState="True"
+                              IsChecked="{Binding SelectionState, Mode=OneWay}"
+                              IsEnabled="{Binding HasAnyConnections}"
+                              ToolTip="全选 / 取消全选该分组"
+                              PreviewMouseLeftButtonDown="OnGroupHeaderCheckMouseDown">
+                        <CheckBox.Style>
+                            <Style TargetType="CheckBox">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.IsMultiSelect, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </CheckBox.Style>
+                    </CheckBox>
                     <TextBlock FontFamily="{StaticResource IconFont}" FontSize="10" Width="18" TextAlignment="Center"
                                Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center">
                         <TextBlock.Style>

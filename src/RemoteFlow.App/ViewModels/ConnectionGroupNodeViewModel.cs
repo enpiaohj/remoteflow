@@ -40,9 +40,16 @@ public sealed partial class ConnectionGroupNodeViewModel : ObservableObject
     [ObservableProperty]
     private bool _isVisible = true;
 
+    /// <summary>该分组子树在多选模式下的勾选态：true=全选、false=未选、null=部分。</summary>
+    [ObservableProperty]
+    private bool? _selectionState;
+
     public bool HasChildGroups => ChildGroups.Count > 0;
 
     public bool HasConnections => Connections.Count > 0;
+
+    /// <summary>子树（含子孙分组）存在连接时才在组头显示可勾选。</summary>
+    public bool HasAnyConnections => TotalCount > 0;
 
     [RelayCommand]
     private void ToggleExpand() => IsExpanded = !IsExpanded;

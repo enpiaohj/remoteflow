@@ -917,6 +917,82 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         RefreshSelectionSummary();
     }
 
+    // ── 分组头三态全选 ────────────────────────────────────────────
+
+    /// <summary>
+    /// 点击组头 CheckBox：未全选 → 选中该组全部（含子分组）连接；已全选 → 全部取消。
+    /// 范围 = 该分组子树中「当前筛选结果」的连接（折叠不影响，筛选外的不含）。
+    /// </summary>
+    public void ToggleGroupSelection(ConnectionGroupNodeViewModel? node)
+    {
+        if (node is null)
+        {
+            return;
+        }
+
+        var items = new List<ConnectionItemViewModel>();
+        CollectGroupConnections(node, items);
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        var fullySelected = items.All(SelectedConnections.Contains);
+        foreach (var item in items)
+        {
+            if (fullySelected)
+            {
+                SelectedConnections.Remove(item);
+                item.IsSelected = false;
+            }
+            else if (!SelectedConnections.Contains(item))
+            {
+                SelectedConnections.Add(item);
+                item.IsSelected = true;
+            }
+        }
+
+        RefreshSelectionSummary();
+    }
+
+    /// <summary>递归收集该分组子树（含所有子分组）里的连接行。</summary>
+    private static void CollectGroupConnections(
+        ConnectionGroupNodeViewModel node, List<ConnectionItemViewModel> result)
+    {
+        foreach (var child in node.ChildGroups)
+        {
+            CollectGroupConnections(child, result);
+        }
+
+        result.AddRange(node.Connections);
+    }
+
+    /// <summary>根据当前勾选集合刷新每个组头的三态（含嵌套子分组）。</summary>
+    public void RefreshGroupSelectionStates()
+    {
+        foreach (var root in GroupNodes)
+        {
+            UpdateGroupSelectionStateRecursive(root);
+        }
+    }
+
+    private void UpdateGroupSelectionStateRecursive(ConnectionGroupNodeViewModel node)
+    {
+        var items = new List<ConnectionItemViewModel>();
+        CollectGroupConnections(node, items);
+
+        node.SelectionState = items.Count == 0
+            ? false
+            : items.All(SelectedConnections.Contains) ? true
+            : items.Any(SelectedConnections.Contains) ? null
+            : false;
+
+        foreach (var child in node.ChildGroups)
+        {
+            UpdateGroupSelectionStateRecursive(child);
+        }
+    }
+
     /// <summary>批量连接：逐个走统一漏斗；已开设备由漏斗自动聚焦，不重复建。</summary>
     [RelayCommand]
     private void ConnectSelected()
@@ -1057,6 +1133,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         OnPropertyChanged(nameof(IsBatchBarVisible));
         OnPropertyChanged(nameof(FavoriteActionText));
         OnPropertyChanged(nameof(IsAllSelected));
+
+        // 分组树视图下，同步刷新各组头的三态。
+        RefreshGroupSelectionStates();
     }
 
     // ── 分组命令 ──────────────────────────────────────────────────

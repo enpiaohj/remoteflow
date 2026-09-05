@@ -72,4 +72,63 @@ public sealed class ConnectionSelectionViewModelTests
         Assert.False(vm.IsAllSelected);
         Assert.Equal("已选择 0 项", vm.SelectionSummary);
     }
+
+    [Fact]
+    public void GroupToggle_SelectsAndClearsWholeSubtree()
+    {
+        var vm = CreateVm();
+        var child = new ConnectionGroupNodeViewModel { Name = "子分组" };
+        var c1 = Item("c1");
+        var c2 = Item("c2");
+        child.Connections.Add(c1);
+        child.Connections.Add(c2);
+
+        var root = new ConnectionGroupNodeViewModel { Name = "父分组" };
+        var r = Item("r");
+        root.ChildGroups.Add(child);
+        root.Connections.Add(r);
+        vm.GroupNodes.Add(root);
+
+        vm.ToggleGroupSelection(root);
+        Assert.Equal(3, vm.SelectedConnections.Count);
+        Assert.All(new[] { r, c1, c2 }, i => Assert.True(i.IsSelected));
+
+        vm.ToggleGroupSelection(root);
+        Assert.Empty(vm.SelectedConnections);
+        Assert.All(new[] { r, c1, c2 }, i => Assert.False(i.IsSelected));
+    }
+
+    [Fact]
+    public void GroupState_ReflectsNonePartialFull()
+    {
+        var vm = CreateVm();
+        var child = new ConnectionGroupNodeViewModel { Name = "子分组" };
+        var c1 = Item("c1");
+        var c2 = Item("c2");
+        child.Connections.Add(c1);
+        child.Connections.Add(c2);
+
+        var root = new ConnectionGroupNodeViewModel { Name = "父分组" };
+        var r = Item("r");
+        root.ChildGroups.Add(child);
+        root.Connections.Add(r);
+        vm.GroupNodes.Add(root);
+
+        vm.RefreshGroupSelectionStates();
+        Assert.False(root.SelectionState);
+        Assert.False(child.SelectionState);
+
+        // 只选父分组直属一台 → 父半选(null)、子分组未选(false)
+        vm.ToggleSelect(r);
+        vm.RefreshGroupSelectionStates();
+        Assert.Null(root.SelectionState);
+        Assert.False(child.SelectionState);
+
+        // 再把两台子机也选上 → 全选(true)
+        vm.ToggleSelect(c1);
+        vm.ToggleSelect(c2);
+        vm.RefreshGroupSelectionStates();
+        Assert.True(root.SelectionState);
+        Assert.True(child.SelectionState);
+    }
 }
