@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Threading;
 using RemoteFlow.App.ViewModels;
 
 namespace RemoteFlow.App.Views.Pages;
@@ -11,9 +12,39 @@ namespace RemoteFlow.App.Views.Pages;
 /// </summary>
 public partial class HomePage : UserControl
 {
-    public HomePage() => InitializeComponent();
+    /// <summary>开启「首页显示时间」时，以秒级刷新标题行的时钟。页面不可见时停止。</summary>
+    private readonly DispatcherTimer _clockTimer = new();
+
+    public HomePage()
+    {
+        InitializeComponent();
+        _clockTimer.Interval = TimeSpan.FromSeconds(1);
+        _clockTimer.Tick += OnClockTick;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+    }
 
     private HomePageViewModel? ViewModel => DataContext as HomePageViewModel;
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        // 页面经导航切回可视区时触发。仅当用户开启「显示时间」才计时，
+        // 否则标题行是静态日期，无需秒级刷新。
+        if (DataContext is HomePageViewModel { ShowHomeTimeEnabled: true } && !_clockTimer.IsEnabled)
+        {
+            _clockTimer.Start();
+        }
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e) => _clockTimer.Stop();
+
+    private void OnClockTick(object? sender, EventArgs e)
+    {
+        if (DataContext is HomePageViewModel vm)
+        {
+            vm.RefreshClock();
+        }
+    }
 
     /// <summary>「⋯」按钮点击即在按钮位置弹出其上下文菜单。</summary>
     private void OnItemMenuClick(object sender, RoutedEventArgs e)

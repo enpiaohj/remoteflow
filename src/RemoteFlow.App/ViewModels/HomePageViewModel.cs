@@ -54,9 +54,19 @@ public sealed partial class HomePageViewModel(
     [ObservableProperty]
     private string _greeting = string.Empty;
 
-    /// <summary>首页日期行：如「2026年9月5日 · 周六 · 第36周」。</summary>
+    /// <summary>首页标题日期行：如「2026年9月5日 · 周六 · 第36周」；开启首页时间后依序附时间或保持纯日期。</summary>
     [ObservableProperty]
     private string _dateLine = string.Empty;
+
+    /// <summary>首页时钟行（仅「显示顺序 = 单独一行」时显示），例：<c>14:05:09</c>。</summary>
+    [ObservableProperty]
+    private string _clockLine = string.Empty;
+
+    /// <summary>时钟行是否可见：单独一行时非空。</summary>
+    public bool HasClockLine => !string.IsNullOrEmpty(ClockLine);
+
+    /// <summary>用户是否开启「显示时间」。供视图决定是否启动秒级刷新。</summary>
+    public bool ShowHomeTimeEnabled => settings.ShowHomeTime;
 
     /// <summary>底部安全提示横幅是否可见（用户可关闭，选择记入设置）。</summary>
     [ObservableProperty]
@@ -80,7 +90,7 @@ public sealed partial class HomePageViewModel(
             _ => "夜深了"
         };
 
-        DateLine = RemoteFlow.App.Services.DateTimeDisplay.FullDateHeader(DateTimeOffset.Now);
+        RefreshHeader();
 
         var profiles = await connections.GetAllAsync(ct);
         var groups = (await connections.GetGroupsAsync(ct)).ToDictionary(g => g.Id, g => g.Name);
@@ -122,6 +132,57 @@ public sealed partial class HomePageViewModel(
         OnPropertyChanged(nameof(HasActivity));
         OnPropertyChanged(nameof(IsFirstRun));
     }
+
+    /// <summary>
+    /// 合成首页标题日期行与可选的时钟行。开启「显示时间」时按用户选择的顺序把时钟
+    /// 拼到日期段之后 / 之前，或作为单独一行（<see cref="ClockLine"/>）。
+    /// </summary>
+    private void RefreshHeader()
+    {
+        var now = DateTimeOffset.Now;
+        var parts = new List<string> { DateTimeDisplay.Date(now) };
+        if (settings.ShowWeekday)
+        {
+            parts.Add(DateTimeDisplay.Weekday(now));
+        }
+
+        if (settings.ShowHomeWeekNumber)
+        {
+            parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
+        }
+
+        var core = string.Join(" · ", parts);
+
+        if (!settings.ShowHomeTime)
+        {
+            DateLine = core;
+            ClockLine = "";
+            OnPropertyChanged(nameof(HasClockLine));
+            return;
+        }
+
+        var clock = DateTimeDisplay.Clock(now, settings.ShowHomeSeconds);
+        switch (settings.ShowHomeTimeOrder)
+        {
+            case HomeTimeOrder.Leading:
+                DateLine = $"{clock} · {core}";
+                ClockLine = "";
+                break;
+            case HomeTimeOrder.SeparateLine:
+                DateLine = core;
+                ClockLine = clock;
+                break;
+            default: // Trailing
+                DateLine = $"{core} · {clock}";
+                ClockLine = "";
+                break;
+        }
+
+        OnPropertyChanged(nameof(HasClockLine));
+    }
+
+    /// <summary>供首页视图的秒级定时器调用，刷新日期行与时钟行。</summary>
+    public void RefreshClock() => RefreshHeader();
 
     [RelayCommand]
     private void ViewAllRecent() => NavigationRequested?.Invoke(this, NavigationPage.Recent);

@@ -254,6 +254,11 @@
                 <TextBlock Style="{StaticResource Text.PageTitle}" Text="{Binding Greeting, Mode=OneWay}" />
                 <TextBlock Text="{Binding DateLine, Mode=OneWay}" Style="{StaticResource Text.PageSubtitle}"
                            Foreground="{DynamicResource Text.Tertiary}" Margin="0,3,0,0" />
+                <TextBlock Text="{Binding ClockLine, Mode=OneWay}" Style="{StaticResource Text.PageSubtitle}"
+                           FontFamily="{StaticResource MonoFont}"
+                           Foreground="{DynamicResource Text.Secondary}"
+                           Margin="0,2,0,0"
+                           Visibility="{Binding HasClockLine, Converter={StaticResource BoolToVisibility}}" />
                 <TextBlock Style="{StaticResource Text.PageSubtitle}" Margin="0,7,0,0">
                     <Run Text="{Binding TotalConnections, Mode=OneWay}" FontWeight="SemiBold"
                          Foreground="{DynamicResource Text.Secondary}" />

@@ -59,6 +59,16 @@ public static class DateTimeDisplay
             S.TimeFormat == AppTimeFormat.Hour24 ? "HH:mm" : "h:mm tt",
             CultureInfo.InvariantCulture);
 
+    /// <summary>时钟字符串（含/不含秒），跟随 12/24 小时设置。例：14:05 或 2:05 PM / 14:05:09。</summary>
+    public static string Clock(DateTimeOffset value, bool withSeconds)
+    {
+        var local = value.ToLocalTime();
+        var pattern = S.TimeFormat == AppTimeFormat.Hour24
+            ? (withSeconds ? "HH:mm:ss" : "HH:mm")
+            : (withSeconds ? "h:mm:ss tt" : "h:mm tt");
+        return local.ToString(pattern, CultureInfo.InvariantCulture);
+    }
+
     /// <summary>紧凑的“日期 时间”，用于迷你图悬停等短提示，跟随用户日期与 12/24 小时设置。</summary>
     public static string Compact(DateTimeOffset value)
         => $"{Date(value)} {Time(value)}";
