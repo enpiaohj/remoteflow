@@ -1008,8 +1008,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         }
     }
 
-    /// <summary>TCP 连通性测试：对目标 host:port 发起带约 3 秒超时的连接尝试，不做协议握手。
-    /// 成功 / 失败分别提示，不打开会话。</summary>
+    /// <summary>打开统一「测试连接」对话框：对目标 host:port 自动执行 DNS → Ping → TCP 诊断，
+    /// 不打开会话；命令入口同时被右键菜单与首页快捷操作复用。</summary>
     [RelayCommand]
     private async Task TestConnectionAsync(ConnectionItemViewModel? item)
     {
@@ -1019,28 +1019,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             return;
         }
 
-        var profile = item.Profile;
-        var endpoint = $"{profile.Host}:{profile.Port}";
-
-        try
-        {
-            using var client = new System.Net.Sockets.TcpClient();
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-            await client.ConnectAsync(profile.Host, profile.Port, timeout.Token);
-            await _dialogs.ShowMessageAsync("连接测试成功", $"已能访问 {endpoint}。", DialogKind.Success);
-        }
-        catch (OperationCanceledException)
-        {
-            await _dialogs.ShowMessageAsync("连接测试失败", $"连接 {endpoint} 超时（3 秒）。", DialogKind.Error);
-        }
-        catch (System.Net.Sockets.SocketException ex)
-        {
-            await _dialogs.ShowMessageAsync("连接测试失败", $"无法连接 {endpoint}：{ex.Message}", DialogKind.Error);
-        }
-        catch (Exception ex)
-        {
-            await _dialogs.ShowMessageAsync("连接测试失败", $"无法连接 {endpoint}：{ex.Message}", DialogKind.Error);
-        }
+        await _dialogs.ShowConnectionTestAsync(item.Profile);
     }
 
     [RelayCommand]

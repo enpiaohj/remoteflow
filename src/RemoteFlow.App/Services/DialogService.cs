@@ -1,4 +1,5 @@
 using System.Windows;
+using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using RemoteFlow.App.ViewModels;
 using RemoteFlow.App.Views.Dialogs;
@@ -17,7 +18,8 @@ public sealed class DialogService(
     ConnectionService connections,
     DefaultGroupResolver defaultGroup,
     ICredentialRepository credentials,
-    AppSettings settings) : IDialogService
+    AppSettings settings,
+    ILoggerFactory loggerFactory) : IDialogService
 {
     /// <summary>取当前活动窗口作为对话框宿主，保证居中显示且正确模态。</summary>
     private static Window? Owner =>
@@ -83,6 +85,22 @@ public sealed class DialogService(
         AboutDialog.Show(Owner, version);
         return true;
     });
+
+    public Task ShowConnectionTestAsync(ConnectionProfile profile)
+        => InvokeOnUiAsync(() =>
+        {
+            // 测试连接对话框内部自行驱动诊断：打开即自动测试，可取消 / 重新测试。
+            var testService = new ConnectionTestService(loggerFactory.CreateLogger<ConnectionTestService>());
+            var dialog = new TestConnectionDialog(profile, testService, loggerFactory.CreateLogger<TestConnectionDialog>())
+            {
+                Owner = Owner,
+                WindowStartupLocation = Owner is null
+                    ? WindowStartupLocation.CenterScreen
+                    : WindowStartupLocation.CenterOwner
+            };
+            dialog.ShowDialog();
+            return true;
+        });
 
     public async Task<IReadOnlyList<Tag>> ManageTagsAsync()
     {

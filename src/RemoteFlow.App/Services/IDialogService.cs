@@ -71,6 +71,12 @@ public interface IDialogService
 
     /// <summary>「关于 RemoteFlow」+ 快捷键速查对话框。</summary>
     Task ShowAboutAsync();
+
+    /// <summary>
+    /// 打开统一「测试连接」对话框：对 <paramref name="profile"/> 自动执行
+    /// DNS → Ping → TCP 诊断，对话框关闭后返回。
+    /// </summary>
+    Task ShowConnectionTestAsync(ConnectionProfile profile);
 }
 
 /// <summary>
