@@ -164,6 +164,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedTabChanged(WorkspaceTabViewModel? value)
     {
+        // 多选是临时上下文：从连接列表切到某个会话 Tab 即退出并清空选择。
+        if (value is SessionTabViewModel && IsConnectionListPage)
+        {
+            ConnectionsPage.ExitMultiSelectCommand.Execute(null);
+        }
+
         // 所有 Tab 内容常驻可视树，靠 IsActive 切换可见性，
         // 这样切换 Tab 不会销毁 RDP 控件或终端 WebView。
         foreach (var tab in Tabs)
@@ -185,6 +191,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void NavigateTo(NavigationPage page)
     {
+        // 多选是临时上下文：离开连接页（或切到另一个连接子视图）即退出并清空。
+        if (page != CurrentPage && IsConnectionListPage)
+        {
+            ConnectionsPage.ExitMultiSelectCommand.Execute(null);
+        }
+
         CurrentPage = page;
 
         // 收藏与最近本质上是「我的连接」的两个筛选视图，
