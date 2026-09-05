@@ -71,6 +71,9 @@ public sealed class DialogService(
     public Task<string?> EditGroupNameAsync(GroupNamePrompt prompt)
         => InvokeOnUiAsync(() => GroupNameDialog.Prompt(Owner, prompt));
 
+    public Task<DefaultGroupOption?> PickDefaultGroupAsync(string deletedDefaultName, IReadOnlyList<DefaultGroupOption> options)
+        => InvokeOnUiAsync(() => SelectDefaultGroupDialog.Pick(Owner, deletedDefaultName, options));
+
     public Task<TagEditorResult?> EditTagAsync(TagEditorPrompt prompt)
         => InvokeOnUiAsync(() => TagEditorDialog.Prompt(Owner, prompt));
 

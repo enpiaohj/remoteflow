@@ -368,9 +368,31 @@ public partial class ConnectionsPage : UserControl
         if (sender is Button { ContextMenu: { } menu } button)
         {
             menu.DataContext = button.DataContext;
+            ApplyGroupMenuGuards(menu, button.DataContext as ConnectionGroupNodeViewModel);
             menu.PlacementTarget = button;
             menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
             menu.IsOpen = true;
+        }
+    }
+
+    /// <summary>按分组状态守卫右键菜单项：受保护组禁重命名 / 删除；默认组与未分组不出现「设为默认分组」。</summary>
+    private void ApplyGroupMenuGuards(ContextMenu menu, ConnectionGroupNodeViewModel? node)
+    {
+        foreach (var item in menu.Items.OfType<MenuItem>())
+        {
+            switch (item.Tag as string)
+            {
+                case "rename":
+                case "delete":
+                    item.IsEnabled = node is not null && !node.IsProtected;
+                    break;
+                case "setDefault":
+                    item.Visibility = node is { IsDefault: false, IsUngrouped: false }
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+                    item.IsEnabled = !ViewModel!.HasProtectedDefault;
+                    break;
+            }
         }
     }
 
@@ -401,6 +423,14 @@ public partial class ConnectionsPage : UserControl
         if (ResolveGroup(sender) is { } node)
         {
             ViewModel?.DeleteGroupCommand.Execute(node);
+        }
+    }
+
+    private void OnGroupSetDefaultClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveGroup(sender) is { } node)
+        {
+            ViewModel?.SetDefaultGroupCommand.Execute(node);
         }
     }
 

@@ -285,9 +285,10 @@
                             <MenuItem Header="新建连接" Click="OnGroupNewConnectionClick" />
                             <MenuItem Header="新建子分组" Click="OnGroupNewChildClick" />
                             <Separator />
-                            <MenuItem Header="重命名" Click="OnGroupRenameClick" />
+                            <MenuItem Tag="rename" Header="重命名" Click="OnGroupRenameClick" />
+                            <MenuItem Tag="setDefault" Header="设为默认分组" Click="OnGroupSetDefaultClick" />
                             <Separator />
-                            <MenuItem Header="删除分组" Click="OnGroupDeleteClick" />
+                            <MenuItem Tag="delete" Header="删除分组" Click="OnGroupDeleteClick" />
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>

@@ -21,6 +21,12 @@ public sealed partial class ConnectionGroupNodeViewModel : ObservableObject
     /// <summary>是否系统「未分组」节点——不显示右键的重命名 / 删除 / 新建子分组。</summary>
     public bool IsUngrouped { get; init; }
 
+    /// <summary>是否默认新建连接分组（决定菜单是否出现「设为默认分组」等）。</summary>
+    public bool IsDefault { get; init; }
+
+    /// <summary>该分组是否受保护 / 锁定（重命名 / 删除 / 移动层级被禁）。</summary>
+    public bool IsProtected { get; init; }
+
     public ObservableCollection<ConnectionGroupNodeViewModel> ChildGroups { get; } = [];
 
     public ObservableCollection<ConnectionItemViewModel> Connections { get; } = [];

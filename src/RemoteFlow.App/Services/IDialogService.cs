@@ -37,6 +37,9 @@ public interface IDialogService
     /// </summary>
     Task<string?> EditGroupNameAsync(GroupNamePrompt prompt);
 
+    /// <summary>从候选中单选一个新默认分组。返回 null 表示用户取消。</summary>
+    Task<DefaultGroupOption?> PickDefaultGroupAsync(string deletedDefaultName, IReadOnlyList<DefaultGroupOption> options);
+
     /// <summary>新建 / 编辑单个标签（名称 / 颜色 / 描述）的小对话框。返回 null 表示取消。</summary>
     Task<TagEditorResult?> EditTagAsync(TagEditorPrompt prompt);
 
@@ -80,6 +83,9 @@ public sealed record ConnectionEditorResult(ConnectionProfile Profile, bool Conn
 /// <param name="InitialName">重命名时的原名；新建时为空。</param>
 /// <param name="ParentName">上级分组名，用于副标题提示；根级时为 null。</param>
 public sealed record GroupNamePrompt(string Title, string InitialName = "", string? ParentName = null);
+
+/// <summary>可选作默认分组的候选项。</summary>
+public sealed record DefaultGroupOption(Guid Id, string Name);
 
 /// <summary>标签编辑对话框的上下文。</summary>
 /// <param name="Title">对话框标题，如「新建标签」/「编辑标签」。</param>

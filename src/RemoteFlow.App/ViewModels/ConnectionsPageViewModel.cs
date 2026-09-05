@@ -94,6 +94,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// <summary>搜索开始前的折叠分组集合。搜索期间临时全展开，清空后据此还原。</summary>
     private HashSet<string>? _collapsedBeforeSearch;
 
+    /// <summary>当前是否存在受保护默认组（决定「设为默认分组」菜单是否可用）。</summary>
+    private bool _hasProtectedDefault;
+
     public ConnectionsPageViewModel(
         ConnectionService connections,
         GroupService groupService,
@@ -150,6 +153,17 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     /// <summary>新建连接对话框「分组」的默认值——默认落在「我的设备」。</summary>
     public Guid? DefaultGroupId { get; private set; }
+
+    /// <summary>当前是否存在受保护默认组（决定「设为默认分组」菜单是否可用）。</summary>
+    public bool HasProtectedDefault => _hasProtectedDefault;
+
+    /// <summary>重算默认组保护状态，供右键菜单「设为默认分组」可用性判断。</summary>
+    private void RefreshDefaultGroupState()
+    {
+        var def = _groups.FirstOrDefault(g => !g.IsSystem && g.IsDefault);
+        _hasProtectedDefault = def is { IsProtected: true };
+        OnPropertyChanged(nameof(HasProtectedDefault));
+    }
 
     // ── 详情面板：按连接的历史与迷你图表 ─────────────────────────
 
@@ -459,6 +473,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             }
 
             ApplyFilter();
+            RefreshDefaultGroupState();
         }
         finally
         {
@@ -720,6 +735,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                 GroupId = group.Id,
                 Name = group.Name,
                 Depth = depth,
+                IsDefault = group.IsDefault,
+                IsProtected = group.IsProtected,
                 IsExpanded = _isSearching || !collapsed.Contains(group.Id.ToString())
             };
 
@@ -1338,6 +1355,26 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         }
     }
 
+    /// <summary>把某分组设为默认新建连接分组（分组右键「设为默认分组」）。</summary>
+    [RelayCommand]
+    private async Task SetDefaultGroupAsync(ConnectionGroupNodeViewModel? node)
+    {
+        if (node?.GroupId is not { } groupId)
+        {
+            return;
+        }
+
+        try
+        {
+            await _groupService.SetDefaultAsync(groupId);
+            await LoadAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            await _dialogs.ShowMessageAsync("无法设为默认分组", ex.Message, DialogKind.Warning);
+        }
+    }
+
     [RelayCommand]
     private async Task DeleteGroupAsync(ConnectionGroupNodeViewModel? node)
     {
@@ -1349,7 +1386,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         var confirmed = await _dialogs.ConfirmAsync(
             "删除分组",
             $"确定要删除分组「{node.Name}」吗？\n\n" +
-            "组内连接会移动到「未分组」，子分组会提升到上一级——不会删除任何连接。",
+            "组内连接会移动到「未分组」，子分组会提升到上一级——不会删除任何连接。" +
+            (node.IsDefault ? "\n\n这是当前默认新建连接分组，删除后需要指定新的默认分组。" : ""),
             "删除",
             isDanger: true);
 
@@ -1358,9 +1396,33 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             return;
         }
 
+        Guid? newDefault = null;
+        if (node.IsDefault)
+        {
+            var others = _groups
+                .Where(g => !g.IsSystem && g.Id != groupId)
+                .OrderBy(g => g.SortOrder).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
+                .Select(g => new DefaultGroupOption(g.Id, g.Name))
+                .ToList();
+
+            if (others.Count > 0)
+            {
+                var picked = await _dialogs.PickDefaultGroupAsync(node.Name, others);
+                if (picked is null)
+                {
+                    return; // 用户取消选默认 → 中止删除
+                }
+                newDefault = picked.Id;
+            }
+        }
+
         try
         {
             await _groupService.DeleteAsync(groupId);
+            if (newDefault is { } targetId)
+            {
+                await _groupService.SetDefaultAsync(targetId);
+            }
             await LoadAsync();
         }
         catch (InvalidOperationException ex)
