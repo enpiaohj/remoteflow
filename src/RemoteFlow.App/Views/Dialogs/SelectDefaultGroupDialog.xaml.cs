@@ -11,7 +11,7 @@ public partial class SelectDefaultGroupDialog : Window
     {
         InitializeComponent();
         TitleText.Text = "选择新的默认分组";
-        SubtitleText.Text = $"默认分组「{deletedDefaultName}」已删除，请选择新的默认新建连接分组：";
+        SubtitleText.Text = $"即将删除默认分组「{deletedDefaultName}」，请选择新的默认新建连接分组：";
         GroupList.ItemsSource = options;
         GroupList.SelectedIndex = 0;
 

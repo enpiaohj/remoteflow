@@ -368,10 +368,18 @@ public partial class ConnectionsPage : UserControl
         if (sender is Button { ContextMenu: { } menu } button)
         {
             menu.DataContext = button.DataContext;
-            ApplyGroupMenuGuards(menu, button.DataContext as ConnectionGroupNodeViewModel);
             menu.PlacementTarget = button;
             menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
             menu.IsOpen = true;
+        }
+    }
+
+    /// <summary>右键 / Shift+F10 与左键「⋯」都经 ContextMenu.Opened 统一应用分组菜单守卫。</summary>
+    private void OnGroupContextMenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is ContextMenu menu && menu.PlacementTarget is FrameworkElement owner)
+        {
+            ApplyGroupMenuGuards(menu, owner.DataContext as ConnectionGroupNodeViewModel);
         }
     }
 

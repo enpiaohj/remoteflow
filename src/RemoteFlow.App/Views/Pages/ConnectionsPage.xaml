@@ -281,7 +281,7 @@
                         Visibility="{Binding IsUngrouped, Converter={StaticResource InverseBoolToVisibility}}"
                         Click="OnGroupMenuClick">
                     <Button.ContextMenu>
-                        <ContextMenu>
+                        <ContextMenu Opened="OnGroupContextMenuOpened">
                             <MenuItem Header="新建连接" Click="OnGroupNewConnectionClick" />
                             <MenuItem Header="新建子分组" Click="OnGroupNewChildClick" />
                             <Separator />

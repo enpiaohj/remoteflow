@@ -1383,11 +1383,22 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             return;
         }
 
+        // 候选默认分组提前算好：确认文案只有确实存在可选的其它分组时才提示“需要指定新的默认分组”。
+        List<DefaultGroupOption>? candidates = null;
+        if (node.IsDefault)
+        {
+            candidates = _groups
+                .Where(g => !g.IsSystem && g.Id != groupId)
+                .OrderBy(g => g.SortOrder).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
+                .Select(g => new DefaultGroupOption(g.Id, g.Name))
+                .ToList();
+        }
+
         var confirmed = await _dialogs.ConfirmAsync(
             "删除分组",
             $"确定要删除分组「{node.Name}」吗？\n\n" +
             "组内连接会移动到「未分组」，子分组会提升到上一级——不会删除任何连接。" +
-            (node.IsDefault ? "\n\n这是当前默认新建连接分组，删除后需要指定新的默认分组。" : ""),
+            (candidates is { Count: > 0 } ? "\n\n这是当前默认新建连接分组，删除后需要指定新的默认分组。" : ""),
             "删除",
             isDanger: true);
 
@@ -1397,23 +1408,14 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         }
 
         Guid? newDefault = null;
-        if (node.IsDefault)
+        if (candidates is { Count: > 0 })
         {
-            var others = _groups
-                .Where(g => !g.IsSystem && g.Id != groupId)
-                .OrderBy(g => g.SortOrder).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
-                .Select(g => new DefaultGroupOption(g.Id, g.Name))
-                .ToList();
-
-            if (others.Count > 0)
+            var picked = await _dialogs.PickDefaultGroupAsync(node.Name, candidates);
+            if (picked is null)
             {
-                var picked = await _dialogs.PickDefaultGroupAsync(node.Name, others);
-                if (picked is null)
-                {
-                    return; // 用户取消选默认 → 中止删除
-                }
-                newDefault = picked.Id;
+                return; // 用户取消选默认 → 中止删除
             }
+            newDefault = picked.Id;
         }
 
         try
