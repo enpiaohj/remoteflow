@@ -21,7 +21,6 @@ public sealed partial class HomePageViewModel(
     ConnectionService connections,
     IHistoryRepository history,
     SessionManager sessions,
-    IDialogService dialogs,
     AppSettings settings,
     JsonSettingsStore settingsStore) : ObservableObject
 {
@@ -33,6 +32,9 @@ public sealed partial class HomePageViewModel(
 
     /// <summary>请求主窗口切换到某个一级页面（「查看全部」等）。</summary>
     public event EventHandler<NavigationPage>? NavigationRequested;
+
+    /// <summary>请求打开一个连接（首页卡片 / 收藏行双击等）。由 MainViewModel 统一开会话。</summary>
+    public event EventHandler<ConnectionProfile>? OpenConnectionRequested;
 
     public ObservableCollection<ConnectionItemViewModel> RecentItems { get; } = [];
 
@@ -149,25 +151,15 @@ public sealed partial class HomePageViewModel(
         };
 
     [RelayCommand]
-    private async Task ConnectAsync(ConnectionItemViewModel? item)
+    private void Connect(ConnectionItemViewModel? item)
     {
         if (item is null)
         {
             return;
         }
 
-        try
-        {
-            await sessions.CreateSessionAsync(item.Profile);
-        }
-        catch (ConnectionException ex)
-        {
-            await dialogs.ShowMessageAsync("无法建立连接", ex.Message, DialogKind.Error);
-        }
-        catch (InvalidOperationException ex)
-        {
-            await dialogs.ShowMessageAsync("无法建立连接", ex.Message, DialogKind.Warning);
-        }
+        // 真正的开会话由 MainViewModel 的统一漏斗处理（去重 / 聚焦 / 失败提示）。
+        OpenConnectionRequested?.Invoke(this, item.Profile);
     }
 }
 
