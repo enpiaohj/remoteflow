@@ -69,6 +69,10 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
     [ObservableProperty]
     private bool _hasActiveSession;
 
+    /// <summary>多选模式下是否被勾选。</summary>
+    [ObservableProperty]
+    private bool _isSelected;
+
     /// <summary>「最近连接」视图下的日期分组名（今天 / 昨天 / 更早）。</summary>
     [ObservableProperty]
     private string _recentBucket = "更早";
