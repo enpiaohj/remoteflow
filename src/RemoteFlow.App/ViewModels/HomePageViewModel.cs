@@ -54,6 +54,10 @@ public sealed partial class HomePageViewModel(
     [ObservableProperty]
     private string _greeting = string.Empty;
 
+    /// <summary>首页日期行：如「2026年9月5日 · 周六 · 第36周」。</summary>
+    [ObservableProperty]
+    private string _dateLine = string.Empty;
+
     /// <summary>底部安全提示横幅是否可见（用户可关闭，选择记入设置）。</summary>
     [ObservableProperty]
     private bool _showSecurityTip;
@@ -75,6 +79,8 @@ public sealed partial class HomePageViewModel(
             >= 18 and < 23 => "晚上好",
             _ => "夜深了"
         };
+
+        DateLine = RemoteFlow.App.Services.DateTimeDisplay.FullDateHeader(DateTimeOffset.Now);
 
         var profiles = await connections.GetAllAsync(ct);
         var groups = (await connections.GetGroupsAsync(ct)).ToDictionary(g => g.Id, g => g.Name);
@@ -192,7 +198,7 @@ public sealed class HistoryItemViewModel(ConnectionHistoryEntry entry)
         _ => "VNC"
     };
 
-    public string StartedAtDisplay => entry.StartedAt.ToString("MM-dd HH:mm");
+    public string StartedAtDisplay => RemoteFlow.App.Services.DateTimeDisplay.HistoryTimestamp(entry.StartedAt);
 
     public string DurationDisplay => entry.Duration switch
     {

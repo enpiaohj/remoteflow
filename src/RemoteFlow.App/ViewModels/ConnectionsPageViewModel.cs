@@ -74,6 +74,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// <summary>全量数据。搜索与筛选都在其之上进行，避免每次都回数据库。</summary>
     private readonly List<ConnectionItemViewModel> _allItems = [];
 
+    /// <summary>本次运行是否已确立过选中项：用于“首次默认选最近连接，之后不反复跳”。</summary>
+    private bool _selectionEstablished;
+
     private IReadOnlyList<ConnectionGroup> _groups = [];
     private IReadOnlyDictionary<Guid, string> _groupNames = new Dictionary<Guid, string>();
     private IReadOnlyDictionary<Guid, string> _tagNames = new Dictionary<Guid, string>();
@@ -500,10 +503,29 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                 _ => $"没有找到匹配的连接。"
             };
 
-        // 尽量保留原选中项，避免刷新后右侧详情面板闪烁。
-        SelectedItem = previousSelection is { } id
-            ? Items.FirstOrDefault(i => i.Id == id)
-            : null;
+        // 选中规则（产品约定）：
+        // 1) 本次运行内曾选中 → 保留/恢复；2) 首次进入默认选“最近连接”最新；
+        // 3) 选中项被删除或被筛选隐藏 → 选第一条可见；4) 无数据 → 不选（右侧空态）。
+        ConnectionItemViewModel? selected = null;
+        if (previousSelection is { } prevId)
+        {
+            selected = Items.FirstOrDefault(i => i.Id == prevId);
+            selected ??= Items.FirstOrDefault(); // 被删除 / 被过滤掉 → 第一条可见
+        }
+        else if (Items.Count > 0 && !_selectionEstablished)
+        {
+            selected = Items
+                .OrderByDescending(i => i.LastConnectedAt ?? DateTimeOffset.MinValue)
+                .FirstOrDefault()
+                ?? Items[0];
+        }
+        else if (Items.Count > 0)
+        {
+            selected = Items[0];
+        }
+
+        _selectionEstablished |= selected is not null;
+        SelectedItem = selected;
 
         OnPropertyChanged(nameof(IsEmpty));
 

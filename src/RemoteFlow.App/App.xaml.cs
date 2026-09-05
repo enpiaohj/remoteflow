@@ -83,6 +83,9 @@ public partial class App : System.Windows.Application
             InitializeDatabase();
             ApplyTheme();
 
+            // 让全项目统一日期时间格式跟随用户设置（保存设置后会再次刷新）。
+            DateTimeDisplay.Configure(_services.GetRequiredService<AppSettings>());
+
             ShowMainWindow();
         }
         catch (Exception ex)

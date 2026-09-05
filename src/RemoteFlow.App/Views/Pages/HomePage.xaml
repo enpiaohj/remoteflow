@@ -253,6 +253,8 @@
                  有活动会话时整段染成品牌色并加一个状态点。 -->
             <StackPanel Grid.Row="0" Margin="0,0,0,26">
                 <TextBlock Style="{StaticResource Text.PageTitle}" Text="{Binding Greeting, Mode=OneWay}" />
+                <TextBlock Text="{Binding DateLine, Mode=OneWay}" Style="{StaticResource Text.PageSubtitle}"
+                           Foreground="{DynamicResource Text.Tertiary}" Margin="0,4,0,0" />
                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                     <TextBlock Style="{StaticResource Text.PageSubtitle}">
                         <Run Text="共 " /><Run Text="{Binding TotalConnections, Mode=OneWay}" FontWeight="SemiBold" Foreground="{DynamicResource Text.Secondary}" /><Run Text=" 个连接" />

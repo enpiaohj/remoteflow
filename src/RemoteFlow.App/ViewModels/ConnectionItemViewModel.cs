@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using RemoteFlow.App.Services;
 using RemoteFlow.Core.Models;
 
 namespace RemoteFlow.App.ViewModels;
@@ -79,30 +80,12 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
 
     public DateTimeOffset? LastConnectedAt => Profile.LastConnectedAt;
 
-    /// <summary>最近连接时间的相对描述，比绝对时间更利于快速扫读。</summary>
+    /// <summary>最近连接：刚刚 / N 分钟前；更早则用统一紧凑时间。从未连接给占位。</summary>
     public string LastConnectedDisplay
-    {
-        get
-        {
-            if (Profile.LastConnectedAt is not { } time)
-            {
-                return "从未连接";
-            }
+        => Profile.LastConnectedAt is { } time ? DateTimeDisplay.RelativeRecent(time) : "从未连接";
 
-            var elapsed = DateTimeOffset.Now - time;
-
-            return elapsed switch
-            {
-                { TotalMinutes: < 1 } => "刚刚",
-                { TotalMinutes: < 60 } => $"{(int)elapsed.TotalMinutes} 分钟前",
-                { TotalHours: < 24 } => $"{(int)elapsed.TotalHours} 小时前",
-                { TotalDays: < 30 } => $"{(int)elapsed.TotalDays} 天前",
-                _ => time.ToString("yyyy-MM-dd")
-            };
-        }
-    }
-
-    public string CreatedAtDisplay => Profile.CreatedAt.ToString("yyyy-MM-dd HH:mm");
+    /// <summary>创建时间等档案信息用绝对时间（统一格式）。</summary>
+    public string CreatedAtDisplay => DateTimeDisplay.Absolute(Profile.CreatedAt);
 
     /// <summary>刷新那些依赖外部数据或时间的显示属性。</summary>
     public void RefreshComputed()

@@ -174,6 +174,89 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- 日期与时间 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
+                        <StackPanel>
+                            <StackPanel Style="{StaticResource Settings.CardHeader}">
+                                <TextBlock Text="{StaticResource Icon.Recent}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <TextBlock Text="日期与时间" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
+                            </StackPanel>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="日期格式" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="首页完整日期、创建时间等使用此格式。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding DateFormatOptions}" SelectedItem="{Binding SelectedDateFormat}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="时间格式" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="列表与历史中的时间采用此格式。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding TimeFormatOptions}" SelectedItem="{Binding SelectedTimeFormat}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="显示星期" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="在首页完整日期行显示周一～周日。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" IsChecked="{Binding ShowWeekday}" />
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="首页显示周数" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="在首页显示 ISO 周数（周一为每周第一天）。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" IsChecked="{Binding ShowHomeWeekNumber}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
                     <!-- 启动与托盘 -->
                     <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
                         <StackPanel>

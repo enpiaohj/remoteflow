@@ -36,6 +36,10 @@ public enum SettingsTab
 /// </summary>
 public sealed partial class SettingsPageViewModel : ObservableObject
 {
+    public sealed record DateFormatOption(AppDateFormat Value, string Label);
+
+    public sealed record TimeFormatOption(AppTimeFormat Value, string Label);
+
     private const string StartupRegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string StartupValueName = "RemoteFlow";
 
@@ -119,6 +123,34 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     [ObservableProperty]
     private string _language = "zh-CN";
 
+    // ── 日期与时间 ────────────────────────────────────────────────
+
+    public IReadOnlyList<DateFormatOption> DateFormatOptions { get; } =
+    [
+        new(AppDateFormat.System, "跟随系统"),
+        new(AppDateFormat.Dash, "2026-09-05"),
+        new(AppDateFormat.Slash, "2026/09/05"),
+        new(AppDateFormat.Chinese, "2026年9月5日"),
+    ];
+
+    public IReadOnlyList<TimeFormatOption> TimeFormatOptions { get; } =
+    [
+        new(AppTimeFormat.Hour24, "24 小时"),
+        new(AppTimeFormat.Hour12, "12 小时"),
+    ];
+
+    [ObservableProperty]
+    private DateFormatOption _selectedDateFormat = null!;
+
+    [ObservableProperty]
+    private TimeFormatOption _selectedTimeFormat = null!;
+
+    [ObservableProperty]
+    private bool _showWeekday = true;
+
+    [ObservableProperty]
+    private bool _showHomeWeekNumber = true;
+
     // ── RDP ───────────────────────────────────────────────────────
 
     [ObservableProperty]
@@ -199,6 +231,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         SelectedTheme = _settings.Theme;
         DefaultLandingPage = _settings.DefaultLandingPage;
         Language = string.IsNullOrWhiteSpace(_settings.Language) ? "zh-CN" : _settings.Language;
+        SelectedDateFormat = DateFormatOptions.First(o => o.Value == _settings.DateFormat);
+        SelectedTimeFormat = TimeFormatOptions.First(o => o.Value == _settings.TimeFormat);
+        ShowWeekday = _settings.ShowWeekday;
+        ShowHomeWeekNumber = _settings.ShowHomeWeekNumber;
 
         RdpFitToWindow = _settings.RdpDefaultDisplayMode == RdpDisplayMode.FitToWindow;
         RdpRedirectClipboard = _settings.RdpDefaultRedirectClipboard;
@@ -243,6 +279,29 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     partial void OnDefaultLandingPageChanged(LandingPage value) => Save();
     partial void OnLanguageChanged(string value) => Save();
+
+    partial void OnSelectedDateFormatChanged(DateFormatOption value) => ApplyDateTimeSettings(value.Value);
+    partial void OnSelectedTimeFormatChanged(TimeFormatOption value) => ApplyDateTimeSettings(value.Value);
+    partial void OnShowWeekdayChanged(bool value) => ApplyDateTimeSettings();
+    partial void OnShowHomeWeekNumberChanged(bool value) => ApplyDateTimeSettings();
+
+    private void ApplyDateTimeSettings(AppDateFormat dateFormat)
+    {
+        _settings.DateFormat = dateFormat;
+        ApplyDateTimeSettings();
+    }
+
+    private void ApplyDateTimeSettings(AppTimeFormat timeFormat)
+    {
+        _settings.TimeFormat = timeFormat;
+        ApplyDateTimeSettings();
+    }
+
+    private void ApplyDateTimeSettings()
+    {
+        DateTimeDisplay.Configure(_settings);
+        Save();
+    }
 
     partial void OnRdpFitToWindowChanged(bool value) => Save();
     partial void OnRdpRedirectClipboardChanged(bool value) => Save();

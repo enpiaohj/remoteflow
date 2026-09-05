@@ -18,6 +18,22 @@ public enum WindowCloseBehavior
     MinimizeToTray = 1
 }
 
+/// <summary>日期格式。</summary>
+public enum AppDateFormat
+{
+    System = 0,
+    Dash = 1,
+    Slash = 2,
+    Chinese = 3
+}
+
+/// <summary>时间格式。</summary>
+public enum AppTimeFormat
+{
+    Hour24 = 0,
+    Hour12 = 1
+}
+
 /// <summary>
 /// 应用级设置。持久化为独立 JSON 文件，写入采用原子替换，避免异常退出导致配置损坏。
 /// </summary>
@@ -32,6 +48,12 @@ public sealed class AppSettings
 
     /// <summary>界面语言。V0.1 仅提供简体中文，保留字段以便后续 i18n。</summary>
     public string Language { get; set; } = "zh-CN";
+
+    // ── 日期与时间 ─────────────────────────────────────────
+    public AppDateFormat DateFormat { get; set; } = AppDateFormat.Chinese;
+    public AppTimeFormat TimeFormat { get; set; } = AppTimeFormat.Hour24;
+    public bool ShowWeekday { get; set; } = true;
+    public bool ShowHomeWeekNumber { get; set; } = true;
 
     /// <summary>是否已展示过「全屏工具条自动隐藏」的首次提示。</summary>
     public bool SessionFullScreenHintShown { get; set; }
