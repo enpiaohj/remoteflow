@@ -7,6 +7,20 @@ using RemoteFlow.Core.Models;
 
 namespace RemoteFlow.App.ViewModels;
 
+/// <summary>凭据类型筛选。</summary>
+public enum CredentialTypeFilter
+{
+    All,
+    WindowsDomain,
+    LocalPassword,
+    SshPassword,
+    SshPrivateKey,
+    VncPassword
+}
+
+/// <summary>筛选下拉的一项。</summary>
+public sealed record CredentialTypeOption(CredentialTypeFilter Value, string Label);
+
 /// <summary>
 /// 「凭据」页面。只管理凭据元数据与安全存储，不承担主机列表管理。
 /// <para>
@@ -32,6 +46,43 @@ public sealed partial class CredentialsPageViewModel(
     /// <summary>按名称 / 用户名 / 类型筛选。</summary>
     [ObservableProperty]
     private string _searchText = string.Empty;
+
+    /// <summary>多选模式下被勾选的凭据。</summary>
+    public ObservableCollection<CredentialItemViewModel> SelectedCredentials { get; } = [];
+
+    [ObservableProperty]
+    private bool _isMultiSelect;
+
+    public bool HasSelection => SelectedCredentials.Count > 0;
+
+    public string SelectionSummary => $"已选择 {SelectedCredentials.Count} 项";
+
+    /// <summary>全部类型下拉项。</summary>
+    public IReadOnlyList<CredentialTypeOption> TypeOptions { get; } =
+    [
+        new(CredentialTypeFilter.All, "全部类型"),
+        new(CredentialTypeFilter.WindowsDomain, "Windows 域账号"),
+        new(CredentialTypeFilter.LocalPassword, "本地账号"),
+        new(CredentialTypeFilter.SshPassword, "SSH 口令"),
+        new(CredentialTypeFilter.SshPrivateKey, "SSH 私钥"),
+        new(CredentialTypeFilter.VncPassword, "VNC 口令"),
+    ];
+
+    [ObservableProperty]
+    private CredentialTypeOption _typeOption = new(CredentialTypeFilter.All, "全部类型");
+
+    partial void OnIsMultiSelectChanged(bool value)
+    {
+        foreach (var item in Items)
+        {
+            item.IsSelected = false;
+        }
+
+        SelectedCredentials.Clear();
+        RefreshSelectionSummary();
+    }
+
+    partial void OnTypeOptionChanged(CredentialTypeOption value) => ApplyFilter();
 
     /// <summary>一条凭据都没有（与「筛选无结果」区分）。</summary>
     public bool IsEmpty => _all.Count == 0;
@@ -68,11 +119,17 @@ public sealed partial class CredentialsPageViewModel(
     private void ApplyFilter()
     {
         var q = SearchText?.Trim() ?? string.Empty;
+        var type = TypeOption.Value;
 
         IEnumerable<CredentialItemViewModel> matches = _all;
+        if (type != CredentialTypeFilter.All)
+        {
+            matches = matches.Where(i => FilterMatches(i.Credential.Type, type));
+        }
+
         if (q.Length > 0)
         {
-            matches = _all.Where(i =>
+            matches = matches.Where(i =>
                 i.Name.Contains(q, StringComparison.CurrentCultureIgnoreCase)
                 || i.Username.Contains(q, StringComparison.CurrentCultureIgnoreCase)
                 || i.TypeName.Contains(q, StringComparison.CurrentCultureIgnoreCase));
@@ -84,9 +141,33 @@ public sealed partial class CredentialsPageViewModel(
             Items.Add(item);
         }
 
+        // 筛选后不可见的已勾选项同步移出选择，避免删除/计数错乱。
+        var visible = Items.Select(i => i.Id).ToHashSet();
+        for (var i = SelectedCredentials.Count - 1; i >= 0; i--)
+        {
+            if (!visible.Contains(SelectedCredentials[i].Id))
+            {
+                SelectedCredentials[i].IsSelected = false;
+                SelectedCredentials.RemoveAt(i);
+            }
+        }
+
+        RefreshSelectionSummary();
+
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(HasNoMatch));
     }
+
+    private static bool FilterMatches(CredentialType type, CredentialTypeFilter filter)
+        => filter switch
+        {
+            CredentialTypeFilter.WindowsDomain => type == CredentialType.WindowsDomain,
+            CredentialTypeFilter.LocalPassword => type == CredentialType.LocalPassword,
+            CredentialTypeFilter.SshPassword => type == CredentialType.SshPassword,
+            CredentialTypeFilter.SshPrivateKey => type == CredentialType.SshPrivateKey,
+            CredentialTypeFilter.VncPassword => type == CredentialType.VncPassword,
+            _ => true
+        };
 
     /// <summary>凭据名称映射，供连接列表显示「凭据」列。</summary>
     public IReadOnlyDictionary<Guid, string> GetNameMap()
@@ -155,6 +236,86 @@ public sealed partial class CredentialsPageViewModel(
         await LoadAsync();
     }
 
+    // ── 多选与批量删除 ────────────────────────────────────────────
+
+    public void ToggleSelect(CredentialItemViewModel? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        if (SelectedCredentials.Contains(item))
+        {
+            SelectedCredentials.Remove(item);
+            item.IsSelected = false;
+        }
+        else
+        {
+            SelectedCredentials.Add(item);
+            item.IsSelected = true;
+        }
+
+        RefreshSelectionSummary();
+    }
+
+    [RelayCommand]
+    private void ClearSelection()
+    {
+        SelectedCredentials.Clear();
+        foreach (var item in Items)
+        {
+            item.IsSelected = false;
+        }
+
+        RefreshSelectionSummary();
+    }
+
+    [RelayCommand]
+    private void ExitMultiSelect() => IsMultiSelect = false;
+
+    /// <summary>批量删除所选凭据（强确认；汇总引用影响）。</summary>
+    [RelayCommand]
+    private async Task DeleteSelectedAsync()
+    {
+        var selected = SelectedCredentials.ToList();
+        if (selected.Count == 0)
+        {
+            return;
+        }
+
+        var names = string.Join("、", selected.Select(i => i.Name));
+        var referenced = selected.Sum(i => i.UsageCount);
+        var impact = referenced > 0
+            ? $"\n\n其中 {referenced} 个连接引用到这些凭据，删除后它们将变为「未指定凭据」，需要重新选择后才能连接。"
+            : string.Empty;
+
+        var confirmed = await dialogs.ConfirmAsync(
+            "删除凭据",
+            $"确定要删除这 {selected.Count} 个凭据吗？其保存的密码或私钥会被一并从保险库中清除，该操作无法撤销。\n\n{names}{impact}",
+            "删除",
+            isDanger: true);
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        foreach (var item in selected)
+        {
+            await credentials.DeleteAsync(item.Id);
+        }
+
+        await LoadAsync();
+        ExitMultiSelect();
+    }
+
+    private void RefreshSelectionSummary()
+    {
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(SelectionSummary));
+    }
+
     [RelayCommand]
     private async Task RefreshAsync() => await LoadAsync();
 }
@@ -214,4 +375,8 @@ public sealed partial class CredentialItemViewModel(Credential credential, int u
     public bool HasSecret => Credential.Type == CredentialType.SshPrivateKey
         ? Credential.KeyReference is not null
         : Credential.SecretReference is not null;
+
+    /// <summary>多选模式下是否被勾选。</summary>
+    [ObservableProperty]
+    private bool _isSelected;
 }

@@ -136,11 +136,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsConnectionListPage));
 
-        // 多选是临时上下文：一旦离开连接页（导航常经 RadioButton 的 TwoWay 提前改
+        // 多选是临时上下文：一旦离开对应页面（导航常经 RadioButton 的 TwoWay 提前改
         // CurrentPage，不能只依赖 NavigateTo 里的判断），立即退出并清空选择。
         if (ConnectionsPage.IsMultiSelect)
         {
             ConnectionsPage.ExitMultiSelectCommand.Execute(null);
+        }
+
+        if (_credentialsPage.IsMultiSelect)
+        {
+            _credentialsPage.ExitMultiSelectCommand.Execute(null);
         }
     }
 
@@ -174,10 +179,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedTabChanged(WorkspaceTabViewModel? value)
     {
-        // 多选是临时上下文：从连接列表切到某个会话 Tab 即退出并清空选择。
+        // 多选是临时上下文：从连接/凭据列表切到某个会话 Tab 即退出并清空选择。
         if (value is SessionTabViewModel && IsConnectionListPage)
         {
             ConnectionsPage.ExitMultiSelectCommand.Execute(null);
+        }
+
+        if (value is SessionTabViewModel && CurrentPage == NavigationPage.Credentials)
+        {
+            _credentialsPage.ExitMultiSelectCommand.Execute(null);
         }
 
         // 所有 Tab 内容常驻可视树，靠 IsActive 切换可见性，

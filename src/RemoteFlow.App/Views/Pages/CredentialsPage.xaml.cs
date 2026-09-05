@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using RemoteFlow.App.ViewModels;
 
 namespace RemoteFlow.App.Views.Pages;
@@ -9,9 +10,58 @@ namespace RemoteFlow.App.Views.Pages;
 /// </summary>
 public partial class CredentialsPage : UserControl
 {
-    public CredentialsPage() => InitializeComponent();
+    public CredentialsPage()
+    {
+        InitializeComponent();
+
+        // 多选模式：行单击切换勾选；Esc 退出。
+        CredentialList.PreviewMouseLeftButtonDown += OnListMouseDown;
+        CredentialList.KeyDown += OnListKeyDown;
+    }
 
     private CredentialsPageViewModel? ViewModel => DataContext as CredentialsPageViewModel;
+
+    /// <summary>行勾选框点击 = 切换该行选中（与点行同一入口）。</summary>
+    private void OnRowCheckBoxClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is CredentialItemViewModel item)
+        {
+            ViewModel?.ToggleSelect(item);
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>多选模式下行单击切换勾选；点勾选框本身不重复处理。</summary>
+    private void OnListMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (ViewModel is not { IsMultiSelect: true } vm
+            || e.OriginalSource is not DependencyObject source
+            || e.ClickCount > 1)
+        {
+            return;
+        }
+
+        if (FindAncestor<CheckBox>(source) is not null)
+        {
+            return;
+        }
+
+        if (FindAncestor<ListBoxItem>(source)?.DataContext is CredentialItemViewModel item)
+        {
+            vm.ToggleSelect(item);
+            e.Handled = true;
+        }
+    }
+
+    private void OnListKeyDown(object sender, KeyEventArgs e)
+    {
+        if (ViewModel is { IsMultiSelect: true } vm && e.Key == Key.Escape)
+        {
+            vm.ExitMultiSelectCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
 
     private async void OnEditMenuClick(object sender, RoutedEventArgs e)
     {
@@ -32,4 +82,19 @@ public partial class CredentialsPage : UserControl
     /// <summary>菜单项的 DataContext 继承自弹出菜单的 PlacementTarget，即所在行。</summary>
     private static CredentialItemViewModel? ResolveItem(object sender)
         => (sender as MenuItem)?.DataContext as CredentialItemViewModel;
+
+    private static T? FindAncestor<T>(DependencyObject current) where T : DependencyObject
+    {
+        while (current is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
 }
