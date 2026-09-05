@@ -1,4 +1,6 @@
+using System.Windows;
 using System.Windows.Controls;
+using RemoteFlow.App.ViewModels;
 
 namespace RemoteFlow.App.Views.Pages;
 
@@ -8,4 +10,21 @@ namespace RemoteFlow.App.Views.Pages;
 public partial class ConnectionDetailPanel : UserControl
 {
     public ConnectionDetailPanel() => InitializeComponent();
+
+    /// <summary>复制主机 / IP 到剪贴板。</summary>
+    private void OnCopyHostClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is ConnectionItemViewModel item
+            && !string.IsNullOrEmpty(item.Host))
+        {
+            try
+            {
+                Clipboard.SetText(item.Host);
+            }
+            catch
+            {
+                // 剪贴板被占用等偶发失败不打扰用户。
+            }
+        }
+    }
 }

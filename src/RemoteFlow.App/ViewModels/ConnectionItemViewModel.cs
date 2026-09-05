@@ -18,6 +18,9 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
 
     public string Host => Profile.Host;
 
+    /// <summary>端口（详情面板展示）。</summary>
+    public string PortDisplay => Profile.Port.ToString();
+
     /// <summary>端口为协议默认值时不显示，减少列表噪音。</summary>
     public string HostDisplay => Profile.Port == ConnectionProfile.GetDefaultPort(Profile.Protocol)
         ? Profile.Host

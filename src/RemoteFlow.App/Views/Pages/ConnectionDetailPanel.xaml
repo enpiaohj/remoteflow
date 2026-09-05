@@ -108,6 +108,15 @@
                     </Button>
                 </Grid>
 
+                <!-- 连接状态：未连接 / 正在连接 / 已连接 / 连接失败 -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                    <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                             Fill="{Binding DataContext.SelectedConnectionStatusBrushKey, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource KeyToBrush}}" />
+                    <TextBlock Text="{Binding DataContext.SelectedConnectionStatusText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                               Style="{StaticResource Text.Caption}" FontWeight="SemiBold"
+                               Margin="6,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+
                 <!-- 主操作 -->
                 <Grid Margin="0,0,0,20">
                     <Grid.ColumnDefinitions>
@@ -142,11 +151,28 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="主机" Style="{StaticResource Text.Label}" VerticalAlignment="Top" />
-                    <TextBlock Grid.Column="1" Text="{Binding HostDisplay}"
-                               Style="{StaticResource Text.Body}"
-                               FontFamily="{StaticResource MonoFont}"
-                               FontSize="12"
-                               TextWrapping="Wrap" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <TextBlock Text="{Binding HostDisplay}"
+                                   Style="{StaticResource Text.Body}"
+                                   FontFamily="{StaticResource MonoFont}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                        <Button Width="26" Height="26" Margin="8,0,0,0"
+                                Style="{StaticResource Button.Icon}" FontSize="12"
+                                Content="{StaticResource Icon.Copy}"
+                                ToolTip="复制主机 / IP"
+                                Click="OnCopyHostClick" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Style="{StaticResource FieldRow}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="76" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="端口" Style="{StaticResource Text.Label}" />
+                    <TextBlock Grid.Column="1" Text="{Binding PortDisplay}" Style="{StaticResource Text.Body}" />
                 </Grid>
 
                 <Grid Style="{StaticResource FieldRow}">
@@ -241,13 +267,37 @@
                     <TextBlock Grid.Column="1" Text="{Binding CreatedAtDisplay}" Style="{StaticResource Text.Caption}" />
                 </Grid>
 
-                <Grid>
+                <Grid Style="{StaticResource FieldRow}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="76" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="最近连接" Style="{StaticResource Text.Label}" />
-                    <TextBlock Grid.Column="1" Text="{Binding LastConnectedDisplay}" Style="{StaticResource Text.Caption}" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding DataContext.SelectedLastConnectedText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                               Style="{StaticResource Text.Caption}" />
+                </Grid>
+
+                <Grid Style="{StaticResource FieldRow}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="76" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="上次时长" Style="{StaticResource Text.Label}" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding DataContext.SelectedLastDurationText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                               Style="{StaticResource Text.Caption}" />
+                </Grid>
+
+                <Grid Style="{StaticResource FieldRow}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="76" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="连接次数" Style="{StaticResource Text.Label}" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding DataContext.SelectedTotalConnectionsText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                               Style="{StaticResource Text.Caption}" />
                 </Grid>
 
                 <!-- ── 迷你图表 + 连接历史（数据来自页面 VM，非当前行 VM）── -->

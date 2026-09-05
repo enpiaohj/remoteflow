@@ -65,6 +65,14 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     private readonly JsonSettingsStore _settingsStore;
     private readonly ILogger<ConnectionsPageViewModel> _logger;
 
+    /// <summary>只读会话管理：详情面板展示当前连接状态 / 刷新等用，不在此创建会话。
+    /// 可空以允许单元测试以 null 构造（不测会话相关）。</summary>
+    private readonly SessionManager? _sessions;
+
+    /// <summary>选中连接的历史条数与最近一次时长（供详情「使用信息」）。</summary>
+    private int _selectedHistoryCount;
+    private TimeSpan? _selectedLastDuration;
+
     /// <summary>多选模式下被勾选的连接。批量动作的作用域。</summary>
     public ObservableCollection<ConnectionItemViewModel> SelectedConnections { get; } = [];
 
@@ -93,7 +101,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         IDialogService dialogs,
         AppSettings settings,
         JsonSettingsStore settingsStore,
-        ILogger<ConnectionsPageViewModel> logger)
+        ILogger<ConnectionsPageViewModel> logger,
+        SessionManager sessions)
     {
         _connections = connections;
         _groupService = groupService;
@@ -103,10 +112,18 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         _settings = settings;
         _settingsStore = settingsStore;
         _logger = logger;
+        _sessions = sessions;
 
         Items = [];
         ItemsView = CollectionViewSource.GetDefaultView(Items);
         ApplyGrouping();
+
+        // 会话创建 / 关闭会改变选中连接的实时状态与“最近连接”，进入即刷新详情。
+        if (_sessions is not null)
+        {
+            _sessions.SessionCreated += OnSessionLifecycleChanged;
+            _sessions.SessionClosed += OnSessionLifecycleChanged;
+        }
     }
 
     // ── 分组树（「我的连接」视图）─────────────────────────────────
@@ -150,13 +167,18 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
         if (item is null)
         {
+            _selectedHistoryCount = 0;
+            _selectedLastDuration = null;
             OnPropertyChanged(nameof(SelectedItemHasHistory));
+            RaiseSelectedDetail();
             return;
         }
 
         try
         {
             var entries = await _history.GetByConnectionAsync(item.Id, 50);
+            _selectedHistoryCount = entries.Count;
+            _selectedLastDuration = entries.FirstOrDefault()?.Duration;
 
             foreach (var entry in entries)
             {
@@ -186,6 +208,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(SelectedItemHasHistory));
+        RaiseSelectedDetail();
     }
 
     private static string FormatDuration(TimeSpan d) => d switch
@@ -194,6 +217,91 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         { TotalHours: < 1 } => $"{(int)d.TotalMinutes} 分钟",
         _ => $"{(int)d.TotalHours} 小时 {d.Minutes} 分"
     };
+
+    // ── 详情面板：连接状态与使用信息 ──────────────────────────────
+
+    private readonly Dictionary<Guid, EventHandler<SessionStateChangedEventArgs>> _sessionStateSubscriptions = new();
+
+    private string _selectedStatusText = "未连接";
+    private string _selectedStatusBrushKey = "Status.Idle";
+
+    public string SelectedConnectionStatusText => _selectedStatusText;
+    public string SelectedConnectionStatusBrushKey => _selectedStatusBrushKey;
+
+    public string SelectedLastConnectedText => SelectedItem?.LastConnectedDisplay ?? "—";
+    public string SelectedLastDurationText => _selectedLastDuration is { } d ? FormatDuration(d) : "—";
+    public string SelectedTotalConnectionsText => $"{_selectedHistoryCount} 次";
+    public string SelectedCreatedAtText => SelectedItem?.CreatedAtDisplay ?? "—";
+
+    private void OnSessionLifecycleChanged(object? sender, IRemoteSession session) => RefreshSelectedDetail();
+    private void OnSessionLifecycleChanged(object? sender, Guid sessionId) => RefreshSelectedDetail();
+
+    private void RefreshSelectedDetail()
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(RefreshSelectedDetail);
+            return;
+        }
+
+        // 跟随当前活跃会话（连接中→已连接→失败 / 关闭）的变化刷新状态。
+        IReadOnlyList<IRemoteSession> active = _sessions?.ActiveSessions ?? [];
+        var ids = active.Select(s => s.SessionId).ToHashSet();
+        foreach (var key in _sessionStateSubscriptions.Keys.Where(k => !ids.Contains(k)).ToList())
+        {
+            _sessionStateSubscriptions.Remove(key);
+        }
+
+        foreach (var session in active)
+        {
+            if (!_sessionStateSubscriptions.ContainsKey(session.SessionId))
+            {
+                var handler = new EventHandler<SessionStateChangedEventArgs>((_, _) => RefreshSelectedDetail());
+                session.StateChanged += handler;
+                _sessionStateSubscriptions[session.SessionId] = handler;
+            }
+        }
+
+        RaiseSelectedDetail();
+    }
+
+    private void RaiseSelectedDetail()
+    {
+        var item = SelectedItem;
+        var matches = item is null
+            ? Array.Empty<IRemoteSession>()
+            : (_sessions?.ActiveSessions ?? Array.Empty<IRemoteSession>())
+                .Where(s => s.Profile.Id == item.Id).ToArray();
+
+        if (matches.Any(s => s.State == ConnectionState.Connected))
+        {
+            _selectedStatusText = "已连接";
+            _selectedStatusBrushKey = "Status.Success";
+        }
+        else if (matches.Any(s => s.State == ConnectionState.Connecting))
+        {
+            _selectedStatusText = "正在连接";
+            _selectedStatusBrushKey = "Status.Info";
+        }
+        else if (matches.Any(s => s.State == ConnectionState.Failed))
+        {
+            _selectedStatusText = "连接失败";
+            _selectedStatusBrushKey = "Status.Danger";
+        }
+        else
+        {
+            _selectedStatusText = "未连接";
+            _selectedStatusBrushKey = "Status.Idle";
+        }
+
+        OnPropertyChanged(nameof(SelectedConnectionStatusText));
+        OnPropertyChanged(nameof(SelectedConnectionStatusBrushKey));
+        OnPropertyChanged(nameof(SelectedLastConnectedText));
+        OnPropertyChanged(nameof(SelectedLastDurationText));
+        OnPropertyChanged(nameof(SelectedTotalConnectionsText));
+        OnPropertyChanged(nameof(SelectedCreatedAtText));
+    }
 
     /// <summary>当前显示的连接（已应用搜索与筛选）。</summary>
     public ObservableCollection<ConnectionItemViewModel> Items { get; }
