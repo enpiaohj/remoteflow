@@ -984,12 +984,18 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         await _connections.CreateAsync(copy);
         await LoadAsync();
 
-        var copyItem = Items.FirstOrDefault(i => i.Id == copy.Id);
-        SelectedItem = copyItem;
-        if (copyItem is not null)
+        // 从全量 _allItems 定位新副本，不要只在过滤后的 Items 里找：即使当前搜索 /
+        // 页内筛选与副本名称不匹配，也能保证后续能选中它。随后清掉会把副本滤掉的
+        // 搜索与筛选（SelectById 会置 Filter=All、清 SearchText/PageFilterText/
+        // ProtocolFilter 并展开分组选中可见），确保打开编辑不静默失败。
+        var copyItem = _allItems.FirstOrDefault(i => i.Id == copy.Id);
+        if (copyItem is null)
         {
-            await EditAsync(copyItem);
+            return;
         }
+
+        SelectById(copyItem.Id);
+        await EditAsync(copyItem);
     }
 
     /// <summary>为副本生成不冲突名称：<c>原名称 (2)</c>、<c>原名称 (3)</c>…，跳过库里已存在的同名。</summary>
