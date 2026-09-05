@@ -122,6 +122,12 @@ public sealed class SshSession : IRemoteSession
                 {
                     await CleanupAsync();
 
+                    // 关闭流程已在收尾：不弹窗也不标失败，交由 Disconnect/Dispose 统一收敛。
+                    if (_closing || _disposed)
+                    {
+                        return;
+                    }
+
                     // 只在失败路径打印（正常连接不经过这里），信息量小但对排查
                     // 「未按预期弹出信任确认框」这类问题至关重要，保留在 Information 级别。
                     _logger.LogInformation(
@@ -470,7 +476,7 @@ public sealed class SshSession : IRemoteSession
         {
             // 会话释放与读取循环竞争时的正常结果。
         }
-        catch (Exception ex) when (State == ConnectionState.Connected)
+        catch (Exception ex) when (State == ConnectionState.Connected && !_closing && !_disposed)
         {
             _logger.LogWarning(ex, "SSH 会话 {SessionId} 读取数据中断", SessionId);
             Fail(ConnectionErrorCode.RemoteClosed, ex);
