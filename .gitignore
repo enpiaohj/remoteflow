@@ -75,3 +75,4 @@ vault.dat
 
 ## ── Claude Code 会话运行时（本地工具状态，不入库）───────
 .claude/
+dist/

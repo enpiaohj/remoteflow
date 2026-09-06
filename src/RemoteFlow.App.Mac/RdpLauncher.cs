@@ -12,12 +12,18 @@ namespace RemoteFlow.App.Mac;
 /// </summary>
 public static class RdpLauncher
 {
-    private static readonly string[] FreeRdpCandidates =
+    private static readonly string[] FreeRdpNames =
     {
-        "/usr/local/bin/sdl-freerdp", "/opt/homebrew/bin/sdl-freerdp",
-        "/usr/local/bin/xfreerdp", "/opt/homebrew/bin/xfreerdp",
-        "/usr/local/bin/wlfreerdp", "/opt/homebrew/bin/wlfreerdp",
+        "sdl3-freerdp", "sdl-freerdp", "xfreerdp", "wlfreerdp", "freerdp",
     };
+
+    private static readonly string[] FreeRdpDirs =
+    {
+        "/usr/local/bin", "/opt/homebrew/bin", "/usr/bin",
+    };
+
+    private static IEnumerable<string> FreeRdpCandidates =>
+        from d in FreeRdpDirs from n in FreeRdpNames select Path.Combine(d, n);
 
     public static string Launch(ConnectionProfile profile, ResolvedCredential? credential)
     {

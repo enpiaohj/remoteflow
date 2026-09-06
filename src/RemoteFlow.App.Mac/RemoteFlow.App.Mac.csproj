@@ -28,6 +28,15 @@
       正式发布前应升级 Xcode 或固定匹配的 SDK pack（见 v1.3 §8.A / §13）。
     -->
     <ValidateXcodeVersion>false</ValidateXcodeVersion>
+
+    <!--
+      同上 SDK 版本差：Release 的 ILLink「Setup」+ 静态 registrar 需 macOS 26.5 SDK 头文件（MM0179）。
+      关裁剪 + 动态 registrar（运行期注册，绕过编译期头文件依赖）；正式发布升级 Xcode 后
+      恢复默认（静态 registrar + 裁剪）进一步瘦身 / 提速（见 §8.F）。
+    -->
+    <LinkMode>None</LinkMode>
+    <Registrar>dynamic</Registrar>
+    <RuntimeIdentifiers>osx-x64;osx-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
