@@ -15,6 +15,7 @@ public sealed class MainWindowController : NSWindowController
 {
     private readonly IServiceProvider _services;
     private readonly ConnectionService _connections;
+    private readonly ConnectionsPageViewModel _connectionsVm;
     private readonly SessionManager _sessions;
 
     private readonly NavSidebar _nav;
@@ -34,9 +35,9 @@ public sealed class MainWindowController : NSWindowController
         _connections = services.GetRequiredService<ConnectionService>();
         _sessions = services.GetRequiredService<SessionManager>();
 
-        var connectionsVm = services.GetRequiredService<ConnectionsPageViewModel>();
+        _connectionsVm = services.GetRequiredService<ConnectionsPageViewModel>();
         _nav = new NavSidebar();
-        _listPane = new ConnectionListPane(connectionsVm);
+        _listPane = new ConnectionListPane(_connectionsVm);
 
         Window.Title = "RemoteFlow";
         Window.ContentMinSize = new CGSize(980, 560);
@@ -49,8 +50,11 @@ public sealed class MainWindowController : NSWindowController
 
         _nav.Selected += OnNavSelected;
         _listPane.ConnectionSelected += (_, c) => _detail.ShowConnection(c);
-        _listPane.ConnectionActivated += (_, c) => _ = OpenAsync(c);
-        _detail.ConnectRequested += (_, c) => _ = OpenAsync(c);
+        _listPane.ConnectionActivated += (_, c) => _ = OpenAsync(c.Profile, c.Name);
+        _detail.ConnectRequested += (_, c) => _ = OpenAsync(c.Profile, c.Name);
+
+        _connectionsVm.OpenConnectionRequested += (_, profile) => _ = OpenAsync(profile, profile.Name);
+        _connectionsVm.NavigationRequested += (_, page) => NavigateTo(page);
 
         _ = StartAsync();
     }
@@ -199,36 +203,32 @@ public sealed class MainWindowController : NSWindowController
         _settingsWindow.Window.MakeKeyAndOrderFront(this);
     }
 
-    public void BeginNewConnection()
+    public async void BeginNewConnection()
     {
-        var sheet = new ConnectionEditorSheet();
-        Window.BeginSheet(sheet.Window, result =>
-        {
-            if ((long)result == (long)NSModalResponse.OK && sheet.Result is { } r)
-            {
-                _ = CreateAndReloadAsync(r);
-            }
-        });
+        await _connectionsVm.CreateConnectionAsync();
+        await _listPane.RefreshAsync();
     }
 
-    private async Task CreateAndReloadAsync(ConnectionDraft r)
+    private void NavigateTo(NavigationPage page)
     {
-        await _connections.CreateAsync(new ConnectionProfile
+        var item = page switch
         {
-            Name = r.Name,
-            Host = r.Host,
-            Port = r.Port,
-            Protocol = r.Protocol,
-        });
-        await _listPane.ShowConnectionsAsync();
+            NavigationPage.Home => NavSidebar.Item.Home,
+            NavigationPage.Favorites => NavSidebar.Item.Favorites,
+            NavigationPage.Recent => NavSidebar.Item.Recent,
+            NavigationPage.Credentials => NavSidebar.Item.Credentials,
+            NavigationPage.Settings => NavSidebar.Item.Settings,
+            _ => NavSidebar.Item.Connections,
+        };
+        _nav.Select(item);
     }
 
-    private async Task OpenAsync(ConnectionItemViewModel item)
+    private async Task OpenAsync(ConnectionProfile profile, string name)
     {
-        _detail.ShowConnecting(item);
+        _detail.ShowConnecting(name);
         try
         {
-            var session = await _sessions.CreateSessionAsync(item.Profile);
+            var session = await _sessions.CreateSessionAsync(profile);
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             await session.ConnectAsync(cts.Token);
 
@@ -238,8 +238,8 @@ public sealed class MainWindowController : NSWindowController
                 return;
             }
 
-            _detail.ShowSessionPlaceholder(item, session.SessionId);
-            Window.Title = $"{item.Name} — RemoteFlow";
+            _detail.ShowSessionPlaceholder(name, session.SessionId);
+            Window.Title = $"{name} — RemoteFlow";
         }
         catch (Exception ex)
         {

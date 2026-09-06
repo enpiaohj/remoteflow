@@ -1,25 +1,43 @@
 using AppKit;
 using Microsoft.Extensions.Logging;
+using RemoteFlow.Application.Services;
+using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
+using RemoteFlow.Infrastructure.Settings;
 using RemoteFlow.Presentation.Services;
+using RemoteFlow.Presentation.ViewModels;
 
 namespace RemoteFlow.App.Mac.Host;
 
 /// <summary>
-/// <see cref="IDialogService"/> 的 AppKit 实现（8.B 起步版）。
+/// <see cref="IDialogService"/> 的 AppKit 实现。
 /// <para>
-/// 确认 / 提示 / Host Key 已用 <see cref="NSAlert"/> 落地；
-/// 编辑类 sheet（连接 / 凭据 / 分组 / 标签）与文件选择器在 8.C 逐个补齐——
-/// 未实现的先返回取消并记录，不抛异常，使共享 VM 可完整装配。
+/// 确认 / 提示 / Host Key 用 <see cref="NSAlert"/>；连接编辑用 App-Modal 的
+/// <see cref="ConnectionEditorSheet"/> 绑共享 VM。凭据 / 标签 / 文件选择器逐步补齐。
 /// </para>
 /// </summary>
 public sealed class AppKitDialogService : IDialogService
 {
-    private readonly Microsoft.Extensions.Logging.ILogger<AppKitDialogService> _logger;
+    private readonly ILogger<AppKitDialogService> _logger;
+    private readonly ConnectionService _connections;
+    private readonly DefaultGroupResolver _defaultGroup;
+    private readonly ICredentialRepository _credentials;
+    private readonly AppSettings _settings;
 
-    public AppKitDialogService(Microsoft.Extensions.Logging.ILogger<AppKitDialogService> logger)
-        => _logger = logger;
+    public AppKitDialogService(
+        ILogger<AppKitDialogService> logger,
+        ConnectionService connections,
+        DefaultGroupResolver defaultGroup,
+        ICredentialRepository credentials,
+        AppSettings settings)
+    {
+        _logger = logger;
+        _connections = connections;
+        _defaultGroup = defaultGroup;
+        _credentials = credentials;
+        _settings = settings;
+    }
 
     public Task<bool> ConfirmAsync(string title, string message, string confirmText = "确定", bool isDanger = false)
     {
@@ -71,10 +89,35 @@ public sealed class AppKitDialogService : IDialogService
         return ConfirmAsync(title, body, changed ? "仍然信任" : "信任", isDanger: changed);
     }
 
-    // ── 8.C 逐个补齐 ──────────────────────────────────────────────
+    public async Task<ConnectionEditorResult?> EditConnectionAsync(
+        ConnectionProfile? existing, ProtocolType? preselectedProtocol = null)
+    {
+        // 下拉数据源先在后台取齐，再切主线程开对话框。
+        var credentialList = await _credentials.GetAllAsync();
+        var groups = await _connections.GetGroupsAsync();
+        var tags = await _connections.GetTagsAsync();
+        var defaultGroupId = existing is null ? await _defaultGroup.ResolveDefaultAsync() : (Guid?)null;
 
-    public Task<ConnectionEditorResult?> EditConnectionAsync(ConnectionProfile? existing, ProtocolType? preselectedProtocol = null)
-        => NotYet<ConnectionEditorResult?>("EditConnectionAsync");
+        var tcs = new TaskCompletionSource<ConnectionEditorResult?>();
+        NSApplication.SharedApplication.InvokeOnMainThread(() =>
+        {
+            try
+            {
+                var vm = new ConnectionEditorViewModel(
+                    existing, credentialList, groups, tags, _settings, defaultGroupId, preselectedProtocol);
+                var sheet = new ConnectionEditorSheet(vm);
+                tcs.SetResult(sheet.Run());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "连接编辑器打开失败");
+                tcs.SetResult(null);
+            }
+        });
+        return await tcs.Task;
+    }
+
+    // ── 逐步补齐 ─────────────────────────────────────────────────
 
     public Task<CredentialEditorResult?> EditCredentialAsync(Credential? existing)
         => NotYet<CredentialEditorResult?>("EditCredentialAsync");
@@ -103,7 +146,7 @@ public sealed class AppKitDialogService : IDialogService
 
     private Task<T> NotYet<T>(string what)
     {
-        _logger.LogWarning("IDialogService.{What} 尚未实现（8.C）", what);
+        _logger.LogWarning("IDialogService.{What} 尚未实现", what);
         return Task.FromResult<T>(default!);
     }
 }

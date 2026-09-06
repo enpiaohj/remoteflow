@@ -69,6 +69,16 @@ public sealed class NavSidebar : NSViewController
         Selected?.Invoke(this, Item.Connections);
     }
 
+    /// <summary>按导航项定位并选中对应行（触发 <see cref="Selected"/>）。</summary>
+    public void Select(Item item)
+    {
+        var row = Array.FindIndex(Rows, r => r.Item == item);
+        if (row >= 0)
+        {
+            _table.SelectRow(row, byExtendingSelection: false);
+        }
+    }
+
     private sealed class RowCount : NSTableViewDataSource
     {
         public override nint GetRowCount(NSTableView tableView) => Rows.Length;

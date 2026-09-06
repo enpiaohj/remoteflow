@@ -22,6 +22,7 @@ public sealed class ConnectionListPane : NSViewController
 
     private ConnectionTreeSource? _treeSource;
     private FlatListSource? _flatSource;
+    private Func<Task> _reload;
 
     public event EventHandler<ConnectionItemViewModel>? ConnectionSelected;
     public event EventHandler<ConnectionItemViewModel>? ConnectionActivated;
@@ -29,6 +30,7 @@ public sealed class ConnectionListPane : NSViewController
     public ConnectionListPane(ConnectionsPageViewModel vm)
     {
         _vm = vm;
+        _reload = ShowConnectionsAsync;
 
         _tree.HeaderView = null;
         _tree.SelectionHighlightStyle = NSTableViewSelectionHighlightStyle.SourceList;
@@ -110,8 +112,12 @@ public sealed class ConnectionListPane : NSViewController
 
     // ── 模式切换 ────────────────────────────────────────────────
 
+    /// <summary>按当前形态重新加载（新建 / 编辑连接后刷新用）。</summary>
+    public Task RefreshAsync() => _reload();
+
     public async Task ShowConnectionsAsync()
     {
+        _reload = ShowConnectionsAsync;
         _title.StringValue = "我的连接";
         _recentRange.Hidden = true;
         _vm.Filter = ConnectionFilter.All;
@@ -134,6 +140,7 @@ public sealed class ConnectionListPane : NSViewController
 
     public async Task ShowFavoritesAsync()
     {
+        _reload = ShowFavoritesAsync;
         _title.StringValue = "收藏";
         _recentRange.Hidden = true;
         _vm.Filter = ConnectionFilter.Favorites;
@@ -143,6 +150,7 @@ public sealed class ConnectionListPane : NSViewController
 
     public async Task ShowRecentAsync()
     {
+        _reload = ShowRecentAsync;
         _title.StringValue = "最近连接";
         _recentRange.Hidden = false;
         _vm.Filter = ConnectionFilter.Recent;

@@ -35,13 +35,13 @@ public sealed class DetailView : NSView
 
     public void ShowConnection(ConnectionItemViewModel c) => Swap(BuildInfoCard(c));
 
-    public void ShowConnecting(ConnectionItemViewModel c)
-        => Swap(Centered(Spinner(), $"正在连接 {c.Name} …"));
+    public void ShowConnecting(string name)
+        => Swap(Centered(Spinner(), $"正在连接 {name} …"));
 
-    public void ShowSessionPlaceholder(ConnectionItemViewModel c, Guid sessionId)
+    public void ShowSessionPlaceholder(string name, Guid sessionId)
         => Swap(Centered(
             Icon("checkmark.circle", 40, NSColor.SystemGreen),
-            $"已连接 {c.Name}",
+            $"已连接 {name}",
             "会话画面（SSH 终端 / VNC）将在 Phase 8.D 接入本区域。"));
 
     public void ShowError(string message)
