@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using RemoteFlow.App.ViewModels;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Protocol.Rdp;
+using Forms = System.Windows.Forms;
 
 namespace RemoteFlow.App.Views.Sessions;
 
@@ -25,15 +26,7 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
     private static readonly TimeSpan ResizeDebounce = TimeSpan.FromMilliseconds(400);
 
     /// <summary>聚焦 RDP 控件后、注入按键前的等待时间，让焦点真正落到控件再发键。</summary>
-    private static readonly TimeSpan FocusSettleDelay = TimeSpan.FromMilliseconds(40);
-
-    // 合成快捷键用到的虚拟键码。RDP 没有注入 API，只能 SendInput 发键；
-    // Ctrl+Alt+Del 的远端约定见 SendCtrlAltDeleteAsync。
-    private const ushort VkControl = 0x11;
-    private const ushort VkShift = 0x10;
-    private const ushort VkMenu = 0x12;
-    private const ushort VkEscape = 0x1B;
-    private const ushort VkEnd = 0x23;
+    private static readonly TimeSpan FocusSettleDelay = TimeSpan.FromMilliseconds(50);
 
     private readonly RdpSession _session;
     private readonly SessionTabViewModel _viewModel;
@@ -156,59 +149,75 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
     /// <summary>
     /// 向远程会话发送 Ctrl+Alt+Del。
     /// <para>
-    /// RDP 控件没有直接的 API，其约定是把本机的 <b>Ctrl+Alt+End</b> 翻译成
+    /// RDP 控件没有直接的注入 API，其约定是把本机的 <b>Ctrl+Alt+End</b> 翻译成
     /// 远端的 Ctrl+Alt+Del（本机的真实 Ctrl+Alt+Del 会被 Windows 安全桌面拦截，
-    /// 永远送不到远端）。因此这里合成一次 Ctrl+Alt+End 按键。
+    /// 永远送不到远端）。因此这里用 SendKeys.SendWait 在 UI 线程合成一次
+    /// Ctrl+Alt+End（SendKeys 表达式 <c>^%{END}</c>），由 mstsc 控件转发给远端。
     /// </para>
     /// </summary>
     private Task SendCtrlAltDeleteAsync() =>
-        SendKeyComboAsync("Ctrl+Alt+Del", VkControl, VkMenu, VkEnd);
+        SendKeyComboAsync("Ctrl+Alt+Del", "^%{END}");
 
     /// <summary>
     /// 在远端启动任务管理器：合成一次 Ctrl+Shift+Esc。
     /// <para>
-    /// Ctrl+Shift+Esc 是 Windows 直接打开任务管理器的系统快捷键，不经安全桌面，
-    /// 可像普通按键一样经 SendInput 注入到远端会话。
+    /// Ctrl+Shift+Esc 是 Windows 打开任务管理器的快捷键；对嵌入的 RDP 控件，先把焦点
+    /// 落在控件上再用 SendKeys.SendWait 合成 <c>^+{ESC}</c>，通常会被控件透传到远端会话。
+    /// 若本机系统先拦截该热键（表现为本机打开任务管理器、远端无反应），属已知限制，
+    /// 见 <see cref="SendKeyComboAsync"/> 阶段日志。
     /// </para>
     /// </summary>
     private Task LaunchTaskManagerAsync() =>
-        SendKeyComboAsync("Ctrl+Shift+Esc", VkControl, VkShift, VkEscape);
+        SendKeyComboAsync("Ctrl+Shift+Esc", "^+{ESC}");
 
     /// <summary>
     /// 向远程会话注入一组组合键。
     /// <para>
-    /// SendInput 会把按键投递给<b>前台窗口</b>中持有键盘焦点的控件。全屏时工具条是
-    /// Popup（独立顶层窗口），点击其按钮后 Popup 持有前台与键盘焦点；若不先把承载
-    /// RDP ActiveX 的主窗口带回前台并让 RDP 控件取得焦点，组合键会落到 Popup /
-    /// 其它元素，远端收不到。因此本方法按「置前 → 聚焦 → 延时稳定 → 注入」的顺序执行。
-    /// 只能在 UI 线程调用（命令/事件触发）。
+    /// 用 <see cref="System.Windows.Forms.SendKeys.SendWait"/> 把按键投递给当前持有
+    /// 键盘焦点的窗口/控件。全屏时工具条是 Popup（独立顶层窗口），点击其按钮后 Popup
+    /// 持有前台与键盘焦点；若不先把承载 RDP ActiveX 的主窗口带回前台并让 RDP 控件取得
+    /// 焦点，组合键会落到 Popup / 其它元素，远端收不到。因此本方法按
+    /// 「置前 → 聚焦 → 延时稳定 → 钉焦点 → SendWait」的顺序执行，并对每步保留日志，
+    /// 便于无反应时按日志定位。只能在 UI 线程调用（命令/事件触发）。
     /// </para>
     /// <para>
-    /// 注入顺序：按 <paramref name="virtualKeys"/> 依次按下，再按相反顺序依次抬起
-    /// （例如 Ctrl+Shift+Esc：down Ctrl → down Shift → down Esc → up Esc → up Shift → up Ctrl）。
+    /// <paramref name="sendKeysExpression"/> 是 SendKeys 表达式，调用方须给出与动作名称
+    /// 一致的表达式（例如 Ctrl+Alt+Del → <c>^%{END}</c>）。
     /// </para>
     /// </summary>
-    private async Task SendKeyComboAsync(string actionName, params ushort[] virtualKeys)
+    private async Task SendKeyComboAsync(string actionName, string sendKeysExpression)
     {
         if (_disposed)
         {
             return;
         }
 
+        _logger.LogInformation(
+            "RDP 会话 {SessionId} 收到「{ActionName}」注入请求，当前状态 {State}",
+            _session.SessionId, actionName, _session.State);
+
         if (_session.State != ConnectionState.Connected)
         {
-            _logger.LogInformation(
+            _logger.LogWarning(
                 "RDP 会话 {SessionId} 忽略「{ActionName}」：当前状态 {State}，非已连接",
                 _session.SessionId, actionName, _session.State);
             return;
         }
 
         var control = _session.HostControl;
-        if (control is null || control.IsDisposed || !control.IsHandleCreated)
+        if (control is null)
         {
             _logger.LogWarning(
-                "RDP 会话 {SessionId} 无法「{ActionName}」：RDP 控件未就绪（IsDisposed={IsDisposed}, IsHandleCreated={IsHandleCreated}）",
-                _session.SessionId, actionName, control?.IsDisposed, control?.IsHandleCreated);
+                "RDP 会话 {SessionId} 无法「{ActionName}」：RDP 宿主控件为 null",
+                _session.SessionId, actionName);
+            return;
+        }
+
+        if (control.IsDisposed || !control.IsHandleCreated)
+        {
+            _logger.LogWarning(
+                "RDP 会话 {SessionId} 无法「{ActionName}」：RDP 宿主控件未就绪（IsDisposed={IsDisposed}, IsHandleCreated={IsHandleCreated}）",
+                _session.SessionId, actionName, control.IsDisposed, control.IsHandleCreated);
             return;
         }
 
@@ -216,49 +225,66 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         BringHostWindowToForeground();
 
         // 2) 让 RDP 控件请求键盘焦点。Focus() 返回 false 不代表最终失败，
-        //    注入前还会用 SetFocus 强制把焦点钉到控件句柄上兜底。
-        control.Focus();
+        //    SendWait 前还会用 SetFocus 强制把焦点钉到控件句柄上兜底。
+        var focusResult = control.Focus();
+        _logger.LogInformation(
+            "RDP 会话 {SessionId} 「{ActionName}」宿主窗口已置前，HostControl.Focus()={FocusResult}",
+            _session.SessionId, actionName, focusResult);
 
-        // 3) 焦点稳定后再注入。WPF/WinForms 焦点交接有异步时序，立即 SendInput
+        // 3) 焦点稳定后再注入。WPF/WinForms 焦点交接有异步时序，立即 SendWait
         //    可能抢在焦点真正落到 RDP 控件之前。
         await Task.Delay(FocusSettleDelay);
 
-        // 延迟期间会话可能被关闭 / 断开，注入前复检，避免把按键发到已释放的控件上。
-        if (_disposed || _session.State != ConnectionState.Connected)
+        // 延迟期间会话可能被关闭 / 断开 / 控件被销毁，注入前复检，避免把按键发到已释放的控件上。
+        if (_disposed || _session.State != ConnectionState.Connected
+            || control.IsDisposed || !control.IsHandleCreated)
         {
-            _logger.LogDebug(
-                "RDP 会话 {SessionId} 取消「{ActionName}」：视图已释放或连接状态已变化（{State}）",
-                _session.SessionId, actionName, _session.State);
+            _logger.LogWarning(
+                "RDP 会话 {SessionId} 取消「{ActionName}」：延时后视图已释放 / 状态已变化 / 控件不可用（State={State}, IsDisposed={IsDisposed}, IsHandleCreated={IsHandleCreated}）",
+                _session.SessionId, actionName, _session.State, control.IsDisposed, control.IsHandleCreated);
             return;
         }
 
-        // 4) 注入前最后把键盘焦点钉在 RDP 控件句柄上（覆盖延迟期间 WPF 焦点管理器
-        //    把焦点移回工具条 / 其它元素的场景）。
+        // 4) 注入前把键盘焦点钉在 RDP 控件句柄上（覆盖延时期间焦点管理器把焦点移回
+        //    工具条 / 其它元素的场景），并记录实际焦点句柄，便于无反应时定位。
         if (GetFocus() != control.Handle)
         {
+            _logger.LogInformation(
+                "RDP 会话 {SessionId} 「{ActionName}」当前焦点不在控件句柄上，执行 SetFocus（控件句柄 {ControlHandle}）",
+                _session.SessionId, actionName, control.Handle);
             SetFocus(control.Handle);
         }
 
-        // 5) 依次按下各键、再按相反顺序抬起，合成组合键。
-        var inputs = new Input[virtualKeys.Length * 2];
-        for (var i = 0; i < virtualKeys.Length; i++)
+        _logger.LogInformation(
+            "RDP 会话 {SessionId} 「{ActionName}」延时后焦点句柄 {FocusHandle}，控件句柄 {ControlHandle}（两者一致即已聚焦）",
+            _session.SessionId, actionName, GetFocus(), control.Handle);
+
+        // 5) SendKeys.SendWait 在 UI 线程合成组合键并投递给当前持有焦点的窗口。若被本机
+        //    系统热键拦截（如 Ctrl+Shift+Esc 打开本机任务管理器），则远端无反应，属已知限制。
+        _logger.LogInformation(
+            "RDP 会话 {SessionId} 开始 SendWait({SendKeysExpression}) 注入「{ActionName}」",
+            _session.SessionId, sendKeysExpression, actionName);
+        try
         {
-            inputs[i] = CreateKeyInput(virtualKeys[i], keyUp: false);
-            inputs[virtualKeys.Length + i] =
-                CreateKeyInput(virtualKeys[virtualKeys.Length - 1 - i], keyUp: true);
+            Forms.SendKeys.SendWait(sendKeysExpression);
+            _logger.LogInformation(
+                "RDP 会话 {SessionId} SendWait({SendKeysExpression}) 注入「{ActionName}」完成",
+                _session.SessionId, sendKeysExpression, actionName);
         }
-
-        SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>());
-
-        _logger.LogDebug("RDP 会话 {SessionId} 已发送 {ActionName}", _session.SessionId, actionName);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "RDP 会话 {SessionId} SendWait({SendKeysExpression}) 注入「{ActionName}」抛出异常",
+                _session.SessionId, sendKeysExpression, actionName);
+        }
     }
 
     /// <summary>
     /// 把承载本视图的主窗口带到前台（还原最小化 → WPF Activate → SetForegroundWindow 兜底）。
     /// <para>
-    /// 全屏药丸是 Popup 独立顶层窗口，点击其按钮后 Popup 持有前台；而 SendInput 把按键
-    /// 投递给前台窗口的焦点控件，因此必须先让主窗口抢回前台。置前失败不致命：下方
-    /// Focus / SetFocus 仍会尽力把焦点交给 RDP 控件，故失败仅记日志、不抛。
+    /// 全屏药丸是 Popup 独立顶层窗口，点击其按钮后 Popup 持有前台；而 SendKeys.SendWait
+    /// 把按键投递给前台窗口中持有键盘焦点的控件，因此必须先让主窗口抢回前台。置前失败
+    /// 不致命：下方 Focus / SetFocus 仍会尽力把焦点交给 RDP 控件，故失败仅记日志、不抛。
     /// </para>
     /// </summary>
     private void BringHostWindowToForeground()
@@ -268,6 +294,9 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
             var window = System.Windows.Window.GetWindow(this);
             if (window is null)
             {
+                _logger.LogInformation(
+                    "RDP 会话 {SessionId} 无法置前宿主窗口：未能定位所属 Window",
+                    _session.SessionId);
                 return;
             }
 
@@ -282,15 +311,15 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
             window.Activate();
 
             var hwnd = new WindowInteropHelper(window).Handle;
-            if (hwnd != nint.Zero)
-            {
-                SetForegroundWindow(hwnd);
-            }
+            var foregroundResult = hwnd != nint.Zero && SetForegroundWindow(hwnd);
+            _logger.LogInformation(
+                "RDP 会话 {SessionId} 宿主窗口置前完成（Hwnd={Hwnd}, SetForegroundWindow={Result}）",
+                _session.SessionId, hwnd, foregroundResult);
         }
         catch (Exception ex)
         {
             // 置前失败不阻断后续 Focus + 注入流程；记录后由下方 Focus / SetFocus 兜底。
-            _logger.LogDebug(ex, "RDP 会话 {SessionId} 宿主窗口置前失败", _session.SessionId);
+            _logger.LogWarning(ex, "RDP 会话 {SessionId} 宿主窗口置前失败", _session.SessionId);
         }
     }
 
@@ -320,52 +349,7 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         _host.Dispose();
     }
 
-    // ── SendInput 互操作 ──────────────────────────────────────────
-
-    private static Input CreateKeyInput(ushort virtualKey, bool keyUp) => new()
-    {
-        Type = InputTypeKeyboard,
-        Data = new InputUnion
-        {
-            Keyboard = new KeyboardInput
-            {
-                VirtualKey = virtualKey,
-                ScanCode = 0,
-                Flags = keyUp ? KeyEventFlagKeyUp : 0u,
-                Time = 0,
-                ExtraInfo = nint.Zero
-            }
-        }
-    };
-
-    private const uint InputTypeKeyboard = 1;
-    private const uint KeyEventFlagKeyUp = 0x0002;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Input
-    {
-        public uint Type;
-        public InputUnion Data;
-    }
-
-    [StructLayout(LayoutKind.Explicit)]
-    private struct InputUnion
-    {
-        [FieldOffset(0)] public KeyboardInput Keyboard;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct KeyboardInput
-    {
-        public ushort VirtualKey;
-        public ushort ScanCode;
-        public uint Flags;
-        public uint Time;
-        public nint ExtraInfo;
-    }
-
-    [LibraryImport("user32.dll", SetLastError = true)]
-    private static partial uint SendInput(uint numberOfInputs, [In] Input[] inputs, int sizeOfInput);
+    // ── 焦点互操作 ────────────────────────────────────────────────
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
