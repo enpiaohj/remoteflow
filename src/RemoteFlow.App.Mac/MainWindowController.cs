@@ -56,6 +56,8 @@ public sealed class MainWindowController : NSWindowController
         _connectionsVm.OpenConnectionRequested += (_, profile) => _ = OpenAsync(profile, profile.Name);
         _connectionsVm.NavigationRequested += (_, page) => NavigateTo(page);
 
+        _search.Changed += (_, _) => _listPane.ApplySearch(_search.StringValue);
+
         _ = StartAsync();
     }
 

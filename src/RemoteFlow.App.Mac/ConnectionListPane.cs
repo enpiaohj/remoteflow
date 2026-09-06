@@ -115,6 +115,16 @@ public sealed class ConnectionListPane : NSViewController
     /// <summary>按当前形态重新加载（新建 / 编辑连接后刷新用）。</summary>
     public Task RefreshAsync() => _reload();
 
+    /// <summary>工具栏搜索框联动：写入 VM 搜索词并就地刷新当前视图。</summary>
+    public void ApplySearch(string text)
+    {
+        _vm.SearchText = text;
+        _tree.ReloadData();
+        _tree.ExpandItem(null, expandChildren: true);
+        _flatSource?.Reload();
+        RefreshCount();
+    }
+
     public async Task ShowConnectionsAsync()
     {
         _reload = ShowConnectionsAsync;

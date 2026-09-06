@@ -151,11 +151,57 @@ public sealed class AppKitDialogService : IDialogService
     public Task<string?> PromptPasswordAsync(string title, string message, bool confirm)
         => NotYet<string?>("PromptPasswordAsync");
 
-    public string? PickFileToOpen(string title, string filter) => null;
+    public string? PickFileToOpen(string title, string filter)
+    {
+        string? result = null;
+        NSApplication.SharedApplication.InvokeOnMainThread(() =>
+        {
+            var panel = NSOpenPanel.OpenPanel;
+            panel.Title = title;
+            panel.CanChooseFiles = true;
+            panel.CanChooseDirectories = false;
+            panel.AllowsMultipleSelection = false;
+            if (panel.RunModal() == 1)
+            {
+                result = panel.Url?.Path;
+            }
+        });
+        return result;
+    }
 
-    public string? PickFileToSave(string title, string filter, string defaultFileName) => null;
+    public string? PickFileToSave(string title, string filter, string defaultFileName)
+    {
+        string? result = null;
+        NSApplication.SharedApplication.InvokeOnMainThread(() =>
+        {
+            var panel = NSSavePanel.SavePanel;
+            panel.Title = title;
+            panel.NameFieldStringValue = defaultFileName;
+            if (panel.RunModal() == 1)
+            {
+                result = panel.Url?.Path;
+            }
+        });
+        return result;
+    }
 
-    public string? PickFolder(string title) => null;
+    public string? PickFolder(string title)
+    {
+        string? result = null;
+        NSApplication.SharedApplication.InvokeOnMainThread(() =>
+        {
+            var panel = NSOpenPanel.OpenPanel;
+            panel.Title = title;
+            panel.CanChooseFiles = false;
+            panel.CanChooseDirectories = true;
+            panel.AllowsMultipleSelection = false;
+            if (panel.RunModal() == 1)
+            {
+                result = panel.Url?.Path;
+            }
+        });
+        return result;
+    }
 
     public Task ShowAboutAsync() => ShowMessageAsync("RemoteFlow", "统一远程连接工作台（macOS）");
 
