@@ -1,7 +1,7 @@
 using System.Globalization;
 using RemoteFlow.Core.Models;
 
-namespace RemoteFlow.App.Services;
+namespace RemoteFlow.Presentation.Services;
 
 /// <summary>
 /// 全项目统一的日期 / 时间显示格式化。

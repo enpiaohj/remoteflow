@@ -8,6 +8,7 @@ using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 using RemoteFlow.Infrastructure.Settings;
+using RemoteFlow.Presentation.Services;
 
 namespace RemoteFlow.App.ViewModels;
 
@@ -418,7 +419,7 @@ public sealed class HistoryItemViewModel(ConnectionHistoryEntry entry)
         _ => "VNC"
     };
 
-    public string StartedAtDisplay => RemoteFlow.App.Services.DateTimeDisplay.HistoryTimestamp(entry.StartedAt);
+    public string StartedAtDisplay => RemoteFlow.Presentation.Services.DateTimeDisplay.HistoryTimestamp(entry.StartedAt);
 
     public string DurationDisplay => entry.Duration switch
     {

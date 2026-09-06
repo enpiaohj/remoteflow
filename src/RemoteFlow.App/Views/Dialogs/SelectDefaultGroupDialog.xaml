@@ -1,7 +1,7 @@
 <Window x:Class="RemoteFlow.App.Views.Dialogs.SelectDefaultGroupDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:svc="clr-namespace:RemoteFlow.App.Services"
+        xmlns:svc="clr-namespace:RemoteFlow.Presentation.Services;assembly=RemoteFlow.Presentation"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" ShowInTaskbar="False" SizeToContent="Height" Width="440"
         WindowStartupLocation="CenterOwner" FontFamily="{StaticResource UiFont}" UseLayoutRounding="True">

@@ -1,7 +1,7 @@
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 
-namespace RemoteFlow.App.Services;
+namespace RemoteFlow.Presentation.Services;
 
 /// <summary>对话框类型，决定图标与强调色。</summary>
 public enum DialogKind

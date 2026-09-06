@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 
-namespace RemoteFlow.App.Services;
+namespace RemoteFlow.Presentation.Services;
 
 /// <summary>
 /// 连接质量等级。仅由 <see cref="QualityGradeEvaluator"/> 产生，

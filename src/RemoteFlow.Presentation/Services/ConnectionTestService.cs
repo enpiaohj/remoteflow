@@ -4,7 +4,7 @@ using System.Net.NetworkInformation;
 using Microsoft.Extensions.Logging;
 using RemoteFlow.Core.Models;
 
-namespace RemoteFlow.App.Services;
+namespace RemoteFlow.Presentation.Services;
 
 /// <summary>单步诊断状态。颜色只作用于图标与少量文字，不整块上色。</summary>
 public enum StepStatus

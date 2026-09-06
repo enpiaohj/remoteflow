@@ -13,6 +13,7 @@ using RemoteFlow.Presentation.Terminal;
 using RemoteFlow.App.ViewModels;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Protocol.Ssh;
+using RemoteFlow.Presentation.Services;
 
 namespace RemoteFlow.App.Views.Sessions;
 

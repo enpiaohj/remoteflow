@@ -2,7 +2,7 @@ using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Infrastructure.Settings;
 
-namespace RemoteFlow.App.Services;
+namespace RemoteFlow.Presentation.Services;
 
 /// <summary>
 /// 默认新建连接分组的 App 层编排：决定「是否首次、是否需要创建默认组」并维护

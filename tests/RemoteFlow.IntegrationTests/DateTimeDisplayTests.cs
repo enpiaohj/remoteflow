@@ -1,6 +1,6 @@
-using RemoteFlow.App.Services;
 using RemoteFlow.Core.Models;
 using Xunit;
+using RemoteFlow.Presentation.Services;
 
 namespace RemoteFlow.IntegrationTests;
 
