@@ -430,9 +430,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnSessionActionRequested(object? sender, SessionAction action)
     {
-        if (action == SessionAction.ToggleFullScreen)
+        switch (action)
         {
-            IsSessionFullScreen = !IsSessionFullScreen;
+            case SessionAction.ToggleFullScreen:
+                IsSessionFullScreen = !IsSessionFullScreen;
+                break;
+
+            case SessionAction.EnterFullScreen:
+                // 只进不退：供「启动后进入全屏」在连接成功后把应用切入全屏。
+                IsSessionFullScreen = true;
+                break;
         }
     }
 

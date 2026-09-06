@@ -56,6 +56,14 @@
         <Style x:Key="FormRow" TargetType="Grid">
             <Setter Property="Margin" Value="0,0,0,12" />
         </Style>
+
+        <!-- RDP 高级设置的分区小标题 -->
+        <Style x:Key="RdpSectionHeader" TargetType="TextBlock" BasedOn="{StaticResource Text.Label}">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,2,0,8" />
+        </Style>
     </Window.Resources>
 
     <Border Background="{DynamicResource Bg.Layer}"
@@ -301,18 +309,73 @@
 
                                 <!-- RDP 高级设置 -->
                                 <StackPanel Visibility="{Binding IsRdp, Converter={StaticResource BoolToVisibility}}">
+
+                                    <!-- 显示 -->
+                                    <TextBlock Text="显示" Style="{StaticResource RdpSectionHeader}" />
                                     <Grid Style="{StaticResource FormRow}">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="90" />
                                             <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="域" Style="{StaticResource Text.FieldLabel}" />
-                                        <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
-                                                 Text="{Binding Rdp.Domain, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Grid.Column="0" Text="显示模式" Style="{StaticResource Text.FieldLabel}"
+                                                   VerticalAlignment="Top" Margin="0,8,12,0" />
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                            <RadioButton Style="{StaticResource Segment}"
+                                                         IsChecked="{Binding RdpDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=FitToWindow, Mode=TwoWay}"
+                                                         Content="适应窗口" />
+                                            <RadioButton Style="{StaticResource Segment}"
+                                                         IsChecked="{Binding RdpDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=FixedResolution, Mode=TwoWay}"
+                                                         Content="固定分辨率" />
+                                        </StackPanel>
                                     </Grid>
+
+                                    <Grid Style="{StaticResource FormRow}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="90" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="分辨率" Style="{StaticResource Text.FieldLabel}" />
+                                        <StackPanel Grid.Column="1">
+                                            <ComboBox Style="{StaticResource Input.ComboBox}"
+                                                      ItemsSource="{Binding AvailableResolutions}"
+                                                      SelectedItem="{Binding SelectedResolution}"
+                                                      DisplayMemberPath="Label"
+                                                      HorizontalAlignment="Left" MinWidth="220" />
+                                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,3,0,0"
+                                                       Text="仅固定分辨率下生效；适应窗口时随窗口自动调整。" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Grid Style="{StaticResource FormRow}"
+                                          Visibility="{Binding IsCustomResolution, Converter={StaticResource BoolToVisibility}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="90" />
+                                            <ColumnDefinition Width="96" />
+                                            <ColumnDefinition Width="16" />
+                                            <ColumnDefinition Width="96" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="自定义尺寸" Style="{StaticResource Text.FieldLabel}" />
+                                        <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
+                                                 Text="{Binding RdpCustomWidth, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Grid.Column="2" Text="×" Style="{StaticResource Text.BodySecondary}"
+                                                   HorizontalAlignment="Center" />
+                                        <TextBox Grid.Column="3" Style="{StaticResource Input.TextBox}"
+                                                 Text="{Binding RdpCustomHeight, UpdateSourceTrigger=PropertyChanged}" />
+                                    </Grid>
+
+                                    <CheckBox Style="{StaticResource Input.CheckBox}" Content="启动后进入全屏"
+                                              IsChecked="{Binding Rdp.StartFullScreen}" />
+                                    <CheckBox Style="{StaticResource Input.CheckBox}" Content="使用全部显示器"
+                                              IsChecked="{Binding Rdp.UseMultimon}" />
+
+                                    <Border Style="{StaticResource Surface.Divider}" Margin="0,2,0,12" />
+
+                                    <!-- 本地资源 -->
+                                    <TextBlock Text="本地资源" Style="{StaticResource RdpSectionHeader}" />
                                     <CheckBox Style="{StaticResource Input.CheckBox}" Content="剪贴板重定向"
                                               IsChecked="{Binding Rdp.RedirectClipboard}" />
-                                    <CheckBox Style="{StaticResource Input.CheckBox}" Content="音频重定向到本机"
+                                    <CheckBox Style="{StaticResource Input.CheckBox}" Content="音频播放到本机"
                                               IsChecked="{Binding Rdp.RedirectAudio}" />
                                     <CheckBox Style="{StaticResource Input.CheckBox}" Content="打印机重定向"
                                               IsChecked="{Binding Rdp.RedirectPrinters}" />
@@ -324,8 +387,20 @@
                                                        Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                         </StackPanel>
                                     </CheckBox>
-                                    <CheckBox Style="{StaticResource Input.CheckBox}" Content="使用全部显示器"
-                                              IsChecked="{Binding Rdp.UseMultimon}" />
+
+                                    <Border Style="{StaticResource Surface.Divider}" Margin="0,2,0,12" />
+
+                                    <!-- 连接与安全 -->
+                                    <TextBlock Text="连接与安全" Style="{StaticResource RdpSectionHeader}" />
+                                    <Grid Style="{StaticResource FormRow}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="90" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="域" Style="{StaticResource Text.FieldLabel}" />
+                                        <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
+                                                 Text="{Binding Rdp.Domain, UpdateSourceTrigger=PropertyChanged}" />
+                                    </Grid>
                                     <CheckBox Style="{StaticResource Input.CheckBox}"
                                               IsChecked="{Binding Rdp.EnableNla}">
                                         <StackPanel>

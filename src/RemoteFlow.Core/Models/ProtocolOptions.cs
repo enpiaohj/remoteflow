@@ -34,6 +34,9 @@ public sealed class RdpOptions
     /// <summary>使用全部显示器（多显示器增强项）。</summary>
     public bool UseMultimon { get; set; }
 
+    /// <summary>连接成功后自动进入应用级全屏。默认关闭。</summary>
+    public bool StartFullScreen { get; set; }
+
     /// <summary>启用网络级别身份验证（NLA）。</summary>
     public bool EnableNla { get; set; } = true;
 

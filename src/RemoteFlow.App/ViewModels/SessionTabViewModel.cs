@@ -79,6 +79,9 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     [ObservableProperty]
     private bool _isInterrupted;
 
+    /// <summary>是否已按「启动后全屏」发起过一次进入全屏请求。同一会话实例只触发一次。</summary>
+    private bool _startFullScreenRequested;
+
     /// <summary>失败原因（面向用户的中文说明，不含任何 Secret）。</summary>
     [ObservableProperty]
     private string _interruptionMessage = string.Empty;
@@ -193,6 +196,7 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
                 StateIcon = "\uE930";
                 StateBrushKey = "Status.Success";
                 InterruptionMessage = string.Empty;
+                RequestStartFullScreenIfConfigured();
                 break;
 
             case ConnectionState.Reconnecting:
@@ -233,6 +237,26 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         }
     }
 
+    /// <summary>
+    /// 连接配置勾选「启动后进入全屏」时，首次进入 Connected 后向宿主请求应用级全屏。
+    /// 只在当前会话可见（选中）时生效；自动重连回到 Connected 不重复请求。
+    /// </summary>
+    private void RequestStartFullScreenIfConfigured()
+    {
+        if (_startFullScreenRequested || !IsActive)
+        {
+            return;
+        }
+
+        if (Protocol != ProtocolType.Rdp || !Profile.Rdp.StartFullScreen)
+        {
+            return;
+        }
+
+        _startFullScreenRequested = true;
+        ActionRequested?.Invoke(this, SessionAction.EnterFullScreen);
+    }
+
     public void Dispose() => Session.StateChanged -= OnSessionStateChanged;
 }
 
@@ -240,6 +264,7 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
 public enum SessionAction
 {
     ToggleFullScreen,
+    EnterFullScreen,
     ToggleScaling,
     SendCtrlAltDelete,
     Copy,

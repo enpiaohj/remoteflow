@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RemoteFlow.Core.Models;
@@ -85,7 +86,23 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
                               ?? AvailableCredentials[0];
         _selectedGroup = AvailableGroups.FirstOrDefault(g => g.Id == _profile.GroupId)
                          ?? AvailableGroups[0];
+
+        // 用既有 Profile 的 RDP 显示状态初始化编辑器；直接写字段避免构造期触发联动。
+        _rdpDisplayMode = _profile.Rdp.DisplayMode;
+        if (_rdpDisplayMode == RdpDisplayMode.FitToWindow)
+        {
+            _selectedResolution = AutoResolution;
+        }
+        else
+        {
+            _rdpCustomWidth = _profile.Rdp.DesktopWidth.ToString(CultureInfo.InvariantCulture);
+            _rdpCustomHeight = _profile.Rdp.DesktopHeight.ToString(CultureInfo.InvariantCulture);
+            _selectedResolution = MatchPreset(_profile.Rdp.DesktopWidth, _profile.Rdp.DesktopHeight) ?? CustomResolution;
+        }
     }
+
+    private ResolutionOption? MatchPreset(int width, int height)
+        => AvailableResolutions.FirstOrDefault(r => r.Width == width && r.Height == height);
 
     public string Title { get; }
 
@@ -97,6 +114,45 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
 
     public IReadOnlyList<ProtocolType> AvailableProtocols { get; } =
         [ProtocolType.Rdp, ProtocolType.Ssh, ProtocolType.Vnc];
+
+    // ── RDP 显示 / 分辨率 ─────────────────────────────────────────
+
+    private static readonly ResolutionOption AutoResolution = new(RdpDisplayResolution.Auto, "自动（随窗口）", null, null);
+    private static readonly ResolutionOption CustomResolution = new(RdpDisplayResolution.Custom, "自定义…", null, null);
+
+    /// <summary>分辨率预设下拉项。Auto = 适应窗口（不写死桌面尺寸）。</summary>
+    public IReadOnlyList<ResolutionOption> AvailableResolutions { get; } =
+    [
+        AutoResolution,
+        new(RdpDisplayResolution.Res1280x720, "1280 × 720", 1280, 720),
+        new(RdpDisplayResolution.Res1366x768, "1366 × 768", 1366, 768),
+        new(RdpDisplayResolution.Res1600x900, "1600 × 900", 1600, 900),
+        new(RdpDisplayResolution.Res1920x1080, "1920 × 1080", 1920, 1080),
+        new(RdpDisplayResolution.Res2560x1440, "2560 × 1440", 2560, 1440),
+        CustomResolution
+    ];
+
+    /// <summary>RDP 显示模式。写回 <see cref="RdpOptions.DisplayMode"/>。</summary>
+    [ObservableProperty]
+    private RdpDisplayMode _rdpDisplayMode;
+
+    /// <summary>当前选中的分辨率预设。</summary>
+    [ObservableProperty]
+    private ResolutionOption? _selectedResolution;
+
+    /// <summary>自定义分辨率宽度输入（仅「自定义」时生效）。</summary>
+    [ObservableProperty]
+    private string _rdpCustomWidth = "1920";
+
+    /// <summary>自定义分辨率高度输入（仅「自定义」时生效）。</summary>
+    [ObservableProperty]
+    private string _rdpCustomHeight = "1080";
+
+    /// <summary>当前是否选择了「自定义」分辨率。</summary>
+    public bool IsCustomResolution => SelectedResolution == CustomResolution;
+
+    /// <summary>分辨率选择 / 显示模式互斥联动是否在进行中，用于抑制回调递归。</summary>
+    private bool _syncingDisplay;
 
     // ── 基本字段 ──────────────────────────────────────────────────
 
@@ -168,6 +224,116 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
 
     partial void OnValidationMessageChanged(string value) => OnPropertyChanged(nameof(HasValidationMessage));
 
+    partial void OnRdpDisplayModeChanged(RdpDisplayMode value)
+    {
+        OnPropertyChanged(nameof(IsCustomResolution));
+
+        // 由分辨率下拉联动设置显示模式时跳过，避免覆盖用户刚选的分辨率。
+        if (_syncingDisplay)
+        {
+            return;
+        }
+
+        if (value == RdpDisplayMode.FitToWindow)
+        {
+            // 适应窗口：分辨率随窗口，下拉归一到「自动」，不改动已存宽高。
+            if (SelectedResolution != AutoResolution)
+            {
+                SelectedResolution = AutoResolution;
+            }
+        }
+        else
+        {
+            // 固定分辨率：按连接里已存宽高回填分辨率预设（或自定义）。
+            SyncResolutionFromProfile();
+        }
+    }
+
+    partial void OnSelectedResolutionChanged(ResolutionOption? value)
+    {
+        OnPropertyChanged(nameof(IsCustomResolution));
+
+        if (value is null)
+        {
+            return;
+        }
+
+        switch (value.Value)
+        {
+            case RdpDisplayResolution.Auto:
+                // 自动 = 随窗口自适应（适应窗口），宽高交由窗口尺寸决定，不改动已存值。
+                _syncingDisplay = true;
+                try
+                {
+                    RdpDisplayMode = RdpDisplayMode.FitToWindow;
+                }
+                finally
+                {
+                    _syncingDisplay = false;
+                }
+                break;
+
+            case RdpDisplayResolution.Custom:
+                // 先落显示模式再展开自定义输入，自定义宽高回填当前已存桌面尺寸。
+                _syncingDisplay = true;
+                try
+                {
+                    RdpDisplayMode = RdpDisplayMode.FixedResolution;
+                }
+                finally
+                {
+                    _syncingDisplay = false;
+                }
+
+                RdpCustomWidth = _profile.Rdp.DesktopWidth.ToString(CultureInfo.InvariantCulture);
+                RdpCustomHeight = _profile.Rdp.DesktopHeight.ToString(CultureInfo.InvariantCulture);
+                break;
+
+            default:
+                if (value.Width is { } w && value.Height is { } h)
+                {
+                    // 先写宽高、再切固定分辨率，使固定分辨率回调按新宽高回填而非旧值。
+                    _profile.Rdp.DesktopWidth = w;
+                    _profile.Rdp.DesktopHeight = h;
+                    RdpCustomWidth = w.ToString(CultureInfo.InvariantCulture);
+                    RdpCustomHeight = h.ToString(CultureInfo.InvariantCulture);
+
+                    _syncingDisplay = true;
+                    try
+                    {
+                        RdpDisplayMode = RdpDisplayMode.FixedResolution;
+                    }
+                    finally
+                    {
+                        _syncingDisplay = false;
+                    }
+                }
+                break;
+        }
+    }
+
+    /// <summary>固定分辨率下，按 Profile 已存的桌面尺寸回填分辨率预设 / 自定义输入。</summary>
+    private void SyncResolutionFromProfile()
+    {
+        var match = MatchPreset(_profile.Rdp.DesktopWidth, _profile.Rdp.DesktopHeight);
+        if (match is not null)
+        {
+            if (SelectedResolution != match)
+            {
+                SelectedResolution = match;
+            }
+        }
+        else
+        {
+            RdpCustomWidth = _profile.Rdp.DesktopWidth.ToString(CultureInfo.InvariantCulture);
+            RdpCustomHeight = _profile.Rdp.DesktopHeight.ToString(CultureInfo.InvariantCulture);
+            if (SelectedResolution != CustomResolution)
+            {
+                SelectedResolution = CustomResolution;
+            }
+        }
+    }
+
     /// <summary>校验并生成最终的连接配置。校验不通过返回 null 并设置提示。</summary>
     public ConnectionProfile? Build()
     {
@@ -189,6 +355,30 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
             return null;
         }
 
+        // RDP 显示：把编辑器里的显示模式 / 分辨率写回 Profile。
+        // 适应窗口时宽高对协议无意义（随窗口），保留已存值、不覆盖。
+        _profile.Rdp.DisplayMode = RdpDisplayMode;
+        if (RdpDisplayMode == RdpDisplayMode.FixedResolution)
+        {
+            if (SelectedResolution is { Value: RdpDisplayResolution.Custom })
+            {
+                if (!TryParseDimension(RdpCustomWidth, out var customWidth)
+                    || !TryParseDimension(RdpCustomHeight, out var customHeight))
+                {
+                    ValidationMessage = "自定义分辨率需填写有效的宽与高（如 1920 与 1080）。";
+                    return null;
+                }
+
+                _profile.Rdp.DesktopWidth = customWidth;
+                _profile.Rdp.DesktopHeight = customHeight;
+            }
+            else if (SelectedResolution is { Width: { } presetWidth, Height: { } presetHeight })
+            {
+                _profile.Rdp.DesktopWidth = presetWidth;
+                _profile.Rdp.DesktopHeight = presetHeight;
+            }
+        }
+
         ValidationMessage = string.Empty;
 
         _profile.Name = Name.Trim();
@@ -203,6 +393,11 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
 
         return _profile;
     }
+
+    /// <summary>解析自定义分辨率输入。仅接受 1~16384 的正整数。</summary>
+    private static bool TryParseDimension(string? text, out int value)
+        => int.TryParse(text?.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out value)
+           && value is > 0 and <= 16384;
 
     [RelayCommand]
     private void ToggleAdvanced() => IsAdvancedExpanded = !IsAdvancedExpanded;
@@ -249,4 +444,10 @@ public sealed partial class TagSelection(Guid id, string name, string color) : O
 
     [ObservableProperty]
     private bool _isSelected;
+}
+
+/// <summary>RDP 分辨率下拉项。Width/Height 为 null 表示自动或自定义（无固定尺寸）。</summary>
+public sealed record ResolutionOption(RdpDisplayResolution Value, string Label, int? Width, int? Height)
+{
+    public override string ToString() => Label;
 }
