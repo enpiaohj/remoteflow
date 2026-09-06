@@ -2,7 +2,7 @@
 
 > **产品名称：** RemoteFlow
 > **文档类型：** 技术方案 / 实施路线
-> **文档版本：** V1.2
+> **文档版本：** V1.2.1
 > **日期：** 2026-09-06
 > **状态：** Phase 0 门禁 POC 已完成并通过 / 可进入 Phase 1
 > **关联基线：** `docs/01-产品设计/2026-09-03-RemoteFlow产品设计文档-v1.1.md`
@@ -14,6 +14,7 @@
 | 版本 | 日期 | 主要变更 |
 |---|---|---|
 | V1.0 | 2026-09-06 | 初版（commit `3a3ff58`，原文可从 Git 历史检出） |
+| V1.2.1 | 2026-09-06 | Phase 1 实施中的实测更正：`LocalApplicationData` 在 macOS 上已正确解析到 `~/Library/Application Support`，原「需平台分支」判断错误，§6.3 相应收敛为加回归测试 |
 | V1.2 | 2026-09-06 | **Phase 0 门禁 POC 实测完成，G1 / G2 均通过**，据实测结果修订。① 目标架构改为 universal（开发机为 Intel，见 §2）；② G2 前提修正：Avalonia 有一方 MIT WebView，原「无一方 WebView」判断错误；③ airspace 结论细化：RDP / VNC 已消除，**SSH 终端仍存在**（WebView 为 NativeControlHost）；④ §5 改为实测结果记录；⑤ §7.1 补 FreeRDP 精确构建配置（不可用 brew formula）；⑥ §7.5 按实测更新音频 / 色深行；⑦ 新增 §5.5 已知问题（WKWebView 延迟挂载、`chrome.webview` shim）；⑧ §11 补 universal 双架构打包；⑨ 里程碑扣除已完成的 Phase 0 |
 | V1.1 | 2026-09-06 | 代码级复核后修订。① 阶段重排：新增 Phase 0 可行性门禁 POC，解决原 Phase 1 对 Avalonia 壳的依赖倒置；② RDP 承载方式由「原生 NSView + NativeControlHost」改为「帧回调 + 托管位图渲染」，规避 airspace；③ Avalonia WebView 从普通风险升级为门禁项；④ 新增 §8 数据迁移、§9 测试策略、§7.5 RDP 选项映射表；⑤ 估算由 2–3 个月上调为 4–6 个月；⑥ 补充 ICMP 退化、`TerminalAssetStore` 下沉、许可合规、SDK 前置条件 |
 
@@ -331,8 +332,20 @@ Phase 1 需把该通道抽象为宿主无关的形式（宿主侧注入适配层
 
 - Windows：`%LOCALAPPDATA%\RemoteFlow`（不变）。
 - macOS：`~/Library/Application Support/RemoteFlow`。
-  - ⚠️ .NET 在 macOS 上 `Environment.SpecialFolder.LocalApplicationData` 解析为 `~/.local/share`（遵循 XDG），不符合 macOS 惯例，**必须显式处理**。
-  - 同一坑存在于 `TerminalAssetStore`（也用了 `LocalApplicationData`），随 §6.5 一并修正。
+  - ✅ **实测更正（V1.2.1）：无需平台分支。** V1.0–V1.2 曾断言 .NET 在 macOS 上会把
+    `Environment.SpecialFolder.LocalApplicationData` 解析到 XDG 的 `~/.local/share`。
+    **该断言错误**——那是 Linux 行为。在 .NET 10 / macOS 15 上实测结果为：
+
+    ```
+    LocalApplicationData = /Users/<user>/Library/Application Support
+    ```
+
+    即已正确落在 macOS 惯例位置，`AppPaths` **零改动**即可产出
+    `~/Library/Application Support/RemoteFlow`。
+  - 因此本项收敛为：抽出不产生副作用的 `AppPaths.ResolveDefaultDataDirectory()`
+    并补 `AppPathsTests` 锁定各平台落点，防止运行时行为变化导致用户数据悄悄换位置。
+  - `TerminalAssetStore` 同样使用 `LocalApplicationData`，同理**无需**平台分支；
+    它在 §6.5 中的迁移原因仅是「`internal` 且绑死 `RemoteFlow.App` 的嵌入资源名」。
 - 日志目录统一放数据目录下 `logs/`（与 Windows 版一致，简化备份说明）。
 - `DataDirectory` 自定义覆盖逻辑保留。
 
