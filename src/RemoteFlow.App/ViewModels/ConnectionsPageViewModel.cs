@@ -952,9 +952,16 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task CreateAsync()
+    private Task CreateAsync() => CreateConnectionAsync(null);
+
+    /// <summary>
+    /// 打开「新建连接」对话框并落库。<paramref name="preselectedProtocol"/> 供托盘
+    /// 「新建连接 → 协议」入口预选协议；null 时沿用默认 RDP。保存后刷新列表并选中新连接，
+    /// 勾选「保存并连接」则继续走统一开会话漏斗。
+    /// </summary>
+    public async Task CreateConnectionAsync(ProtocolType? preselectedProtocol = null)
     {
-        var result = await _dialogs.EditConnectionAsync(null);
+        var result = await _dialogs.EditConnectionAsync(null, preselectedProtocol);
         if (result is null)
         {
             return;

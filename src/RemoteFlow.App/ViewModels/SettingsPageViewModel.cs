@@ -725,6 +725,35 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 由托盘等外部入口修改「开机启动」：写 / 删注册表并落盘设置，与设置页开关共享同一
+    /// <see cref="AppSettings"/> 单例与同一注册表键，因此两处始终一致。
+    /// </summary>
+    public void SetLaunchOnStartup(bool enabled)
+    {
+        if (_isLoading)
+        {
+            return;
+        }
+
+        LaunchOnStartup = enabled; // setter → OnLaunchOnStartupChanged → ApplyStartupRegistration + Save
+    }
+
+    /// <summary>
+    /// 进入设置页时把 <see cref="AppSettings.LaunchOnStartup"/> 的最新值同步回开关
+    /// （托盘可能已通过 <see cref="SetLaunchOnStartup"/> 改过）。属性值与设置一致时不做
+    /// 任何写注册表 / 落盘动作。
+    /// </summary>
+    public void ReloadStartup()
+    {
+        if (_isLoading || LaunchOnStartup == _settings.LaunchOnStartup)
+        {
+            return;
+        }
+
+        LaunchOnStartup = _settings.LaunchOnStartup;
+    }
+
     // ── 安全命令 ──────────────────────────────────────────────────
 
     [RelayCommand]

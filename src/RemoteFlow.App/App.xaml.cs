@@ -338,8 +338,15 @@ public partial class App : System.Windows.Application
         MainWindow = window;
 
         // 托盘图标让「关闭即最小化」有一个明确的退出入口。
-        _tray = new TrayService(window, Services.GetRequiredService<AppServices.SessionManager>());
-        _tray.SessionActivateRequested += OnTraySessionActivateRequested;
+        // 菜单动作（新建连接 / 最近连接 / 切换会话 / 设置）统一收敛到 MainViewModel，托盘不重复实现。
+        _tray = new TrayService(
+            window,
+            Services.GetRequiredService<MainViewModel>(),
+            Services.GetRequiredService<AppServices.SessionManager>(),
+            Services.GetRequiredService<AppServices.ConnectionService>(),
+            Services.GetRequiredService<IDialogService>(),
+            Services.GetRequiredService<SettingsPageViewModel>(),
+            Services.GetRequiredService<ILogger<TrayService>>());
         _tray.Initialize();
 
         window.Show();
@@ -372,10 +379,6 @@ public partial class App : System.Windows.Application
 
         _sessionStateStore.Save(cleanExit: false, timestamp: DateTimeOffset.Now);
     }
-
-    /// <summary>托盘右键菜单点选某个已连接会话：让主窗口选中对应会话 Tab。</summary>
-    private void OnTraySessionActivateRequested(object? sender, Guid sessionId)
-        => Services.GetRequiredService<MainViewModel>().ActivateSession(sessionId);
 
     protected override void OnExit(ExitEventArgs e)
     {

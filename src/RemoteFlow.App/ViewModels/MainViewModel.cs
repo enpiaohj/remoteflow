@@ -267,6 +267,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 break;
 
             case NavigationPage.Settings:
+                // 托盘可经 SettingsPageViewModel.SetLaunchOnStartup 改开机启动，
+                // 进入设置页时把 AppSettings 最新值同步回开关，保证双向一致。
+                _settingsPage.ReloadStartup();
                 WorkspaceTab.Page = _settingsPage;
                 WorkspaceTab.Title = "设置";
                 break;
@@ -383,10 +386,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     // ── 顶部动作 ──────────────────────────────────────────────────
 
     [RelayCommand]
-    private async Task NewConnectionAsync()
+    private Task NewConnectionAsync() => CreateConnectionAsync(null);
+
+    /// <summary>
+    /// 打开「新建连接」对话框并落库。托盘「新建连接 → RDP / SSH / VNC」入口会传入
+    /// <paramref name="preselectedProtocol"/>，让编辑器新建分支按该协议初始化（含默认端口与
+    /// 全局协议默认值）；顶部「新建连接」按钮不传协议，沿用默认 RDP。复用
+    /// ConnectionsPageViewModel 的落库 / 刷新 / 选中 / 可选立即连接链路，不在调用侧重复实现。
+    /// </summary>
+    public Task CreateConnectionAsync(ProtocolType? preselectedProtocol = null)
     {
         NavigateTo(NavigationPage.Connections);
-        await ConnectionsPage.CreateCommand.ExecuteAsync(null);
+        return ConnectionsPage.CreateConnectionAsync(preselectedProtocol);
     }
 
     /// <summary>Ctrl+K：聚焦全局搜索。实际聚焦由视图处理。</summary>

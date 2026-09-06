@@ -36,7 +36,7 @@ public sealed class DialogService(
             return true;
         });
 
-    public async Task<ConnectionEditorResult?> EditConnectionAsync(ConnectionProfile? existing)
+    public async Task<ConnectionEditorResult?> EditConnectionAsync(ConnectionProfile? existing, ProtocolType? preselectedProtocol = null)
     {
         // 编辑器需要凭据、分组、标签作为下拉数据源，先在后台取齐再开对话框。
         var credentialList = await credentials.GetAllAsync();
@@ -47,7 +47,7 @@ public sealed class DialogService(
 
         return await InvokeOnUiAsync<ConnectionEditorResult?>(() =>
         {
-            var viewModel = new ConnectionEditorViewModel(existing, credentialList, groups, tags, settings, defaultGroupId);
+            var viewModel = new ConnectionEditorViewModel(existing, credentialList, groups, tags, settings, defaultGroupId, preselectedProtocol);
             var dialog = new ConnectionEditorDialog(viewModel, ManageTagsAsync) { Owner = Owner };
 
             return dialog.ShowDialog() == true && dialog.Result is { } profile

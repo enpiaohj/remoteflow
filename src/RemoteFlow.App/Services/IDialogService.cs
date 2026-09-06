@@ -25,9 +25,10 @@ public interface IDialogService
 
     /// <summary>
     /// 新建或编辑连接。<paramref name="existing"/> 为 null 表示新建。
-    /// 返回 null 表示用户取消。
+    /// <paramref name="preselectedProtocol"/> 在新建时预选协议（托盘「新建连接 → 协议」入口用），
+    /// null 沿用默认 RDP。返回 null 表示用户取消。
     /// </summary>
-    Task<ConnectionEditorResult?> EditConnectionAsync(ConnectionProfile? existing);
+    Task<ConnectionEditorResult?> EditConnectionAsync(ConnectionProfile? existing, ProtocolType? preselectedProtocol = null);
 
     /// <summary>新建或编辑凭据。返回 null 表示用户取消。</summary>
     Task<CredentialEditorResult?> EditCredentialAsync(Credential? existing);

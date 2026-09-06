@@ -27,7 +27,8 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         IReadOnlyList<ConnectionGroup> groups,
         IReadOnlyList<Tag> tags,
         AppSettings defaults,
-        Guid? defaultGroupId = null)
+        Guid? defaultGroupId = null,
+        ProtocolType? preselectedProtocol = null)
     {
         _isNew = existing is null;
         _profile = existing is null ? new ConnectionProfile() : existing.Clone(existing.Name);
@@ -42,9 +43,10 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         }
         else
         {
-            // 新建连接时套用设置页中的协议默认值。
-            _profile.Protocol = ProtocolType.Rdp;
-            _profile.Port = ConnectionProfile.GetDefaultPort(ProtocolType.Rdp);
+            // 新建连接时套用设置页中的协议默认值；协议按托盘入口预选，null 默认 RDP。
+            var initialProtocol = preselectedProtocol ?? ProtocolType.Rdp;
+            _profile.Protocol = initialProtocol;
+            _profile.Port = ConnectionProfile.GetDefaultPort(initialProtocol);
             _profile.Rdp.DisplayMode = defaults.RdpDefaultDisplayMode;
             _profile.Rdp.RedirectClipboard = defaults.RdpDefaultRedirectClipboard;
             _profile.Rdp.RedirectAudio = defaults.RdpDefaultRedirectAudio;
