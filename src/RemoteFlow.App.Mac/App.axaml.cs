@@ -14,6 +14,8 @@ using RemoteFlow.Infrastructure.Security;
 using RemoteFlow.Infrastructure.Settings;
 using RemoteFlow.Presentation.Services;
 using RemoteFlow.Presentation.Terminal;
+using RemoteFlow.Presentation.ViewModels;
+using RemoteFlow.Presentation.Host;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Protocol.Ssh;
 using RemoteFlow.Protocol.Vnc;
@@ -83,6 +85,7 @@ public partial class App : Avalonia.Application
                 desktop.MainWindow = _mainWindow;
             }
 
+            _mainWindow.Title = "RemoteFlow · 工作台装配 OK";
             _mainWindow.Show();
         }
         catch (Exception ex)
@@ -131,6 +134,23 @@ public partial class App : Avalonia.Application
         services.AddSingleton<IConnectionProvider, VncConnectionProvider>();
 
         services.AddSingleton<DefaultGroupResolver>();
+
+        // ── UI 抽象与平台服务（macOS / Avalonia）────────────────
+        services.AddSingleton<RemoteFlow.Presentation.Host.IUiDispatcher, AvaloniaUiDispatcher>();
+        services.AddSingleton<RemoteFlow.Presentation.Host.IUiTimerFactory, AvaloniaUiTimerFactory>();
+        services.AddSingleton<RemoteFlow.Presentation.Host.IThemeService>(_ =>
+            new AvaloniaThemeService(Current as Avalonia.Application
+                ?? throw new InvalidOperationException("Application 尚未初始化。")));
+        services.AddSingleton<RemoteFlow.Presentation.Host.ILaunchOnStartupService,
+            NoOpLaunchOnStartupService>();
+        services.AddSingleton<RemoteFlow.Presentation.Services.IDialogService, AvaloniaDialogService>();
+
+        // ── 共享 ViewModel（工作台 UI 的装配根；页面逐步接入）────
+        services.AddSingleton<RemoteFlow.Presentation.ViewModels.HomePageViewModel>();
+        services.AddSingleton<RemoteFlow.Presentation.ViewModels.ConnectionsPageViewModel>();
+        services.AddSingleton<RemoteFlow.Presentation.ViewModels.CredentialsPageViewModel>();
+        services.AddSingleton<RemoteFlow.Presentation.ViewModels.SettingsPageViewModel>();
+        services.AddSingleton<RemoteFlow.Presentation.ViewModels.MainViewModel>();
 
         return services.BuildServiceProvider();
     }
