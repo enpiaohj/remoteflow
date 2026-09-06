@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RemoteFlow.App.Mac —— macOS 客户端（Avalonia UI / Composition Root）。
+    复用平台无关的 RemoteFlow.Presentation（ViewModel / 服务 / 终端资产）
+    与 RemoteFlow.Protocol.* / Infrastructure.Mac，Windows 与 macOS 两端
+    共享同一份呈现与协议逻辑。
+    对应 macOS 版技术方案 §6.6 / §8。
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RemoteFlow.App.Mac</RootNamespace>
+    <SupportedOSPlatform>macos</SupportedOSPlatform>
+    <AssemblyName>RemoteFlow</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Controls.WebView" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Sinks.File" />
+    <PackageReference Include="Serilog.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RemoteFlow.Core\RemoteFlow.Core.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Application\RemoteFlow.Application.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Presentation\RemoteFlow.Presentation.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Infrastructure\RemoteFlow.Infrastructure.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Infrastructure.Mac\RemoteFlow.Infrastructure.Mac.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Protocol.Ssh\RemoteFlow.Protocol.Ssh.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Protocol.Vnc\RemoteFlow.Protocol.Vnc.csproj" />
+  </ItemGroup>
+
+</Project>

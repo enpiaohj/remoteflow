@@ -5,6 +5,7 @@
     <Project Path="src/RemoteFlow.Core/RemoteFlow.Core.csproj" />
     <Project Path="src/RemoteFlow.Infrastructure/RemoteFlow.Infrastructure.csproj" />
     <Project Path="src/RemoteFlow.Infrastructure.Mac/RemoteFlow.Infrastructure.Mac.csproj" />
+    <Project Path="src/RemoteFlow.App.Mac/RemoteFlow.App.Mac.csproj" />
     <Project Path="src/RemoteFlow.Infrastructure.Windows/RemoteFlow.Infrastructure.Windows.csproj" />
     <Project Path="src/RemoteFlow.Presentation/RemoteFlow.Presentation.csproj" />
     <Project Path="src/RemoteFlow.Protocol.Rdp/RemoteFlow.Protocol.Rdp.csproj" />
