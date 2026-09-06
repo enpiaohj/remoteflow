@@ -261,13 +261,22 @@ public sealed class MainWindowController : NSWindowController
 
     private async Task OpenAsync(ConnectionProfile profile, string name)
     {
-        // macOS RDP 首版：交系统 RDP 客户端（方案 §8.E，FreeRDP 内嵌待接）。
+        // macOS RDP 首版：FreeRDP CLI（带凭据）或回落系统客户端（方案 §8.E，内嵌待接）。
         if (profile.Protocol == ProtocolType.Rdp)
         {
             try
             {
-                var note = RdpLauncher.Launch(profile);
-                _detail.ShowSessionInfo(name, "已在系统 RDP 客户端中打开", note);
+                RemoteFlow.Core.Models.ResolvedCredential? cred = null;
+                if (profile.CredentialId is { } cid)
+                {
+                    cred = await _services.GetRequiredService<CredentialService>().ResolveAsync(cid);
+                }
+
+                using (cred)
+                {
+                    var note = RdpLauncher.Launch(profile, cred);
+                    _detail.ShowSessionInfo(name, "RDP 会话已启动", note);
+                }
             }
             catch (Exception ex)
             {
