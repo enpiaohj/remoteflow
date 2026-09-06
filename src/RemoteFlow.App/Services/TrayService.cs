@@ -200,7 +200,7 @@ public sealed class TrayService : IDisposable
 
         foreach (var session in activeSessions)
         {
-            var label = $"● {session.Profile.Name}（{FormatProtocolName(session.Profile.Protocol)}）";
+            var label = $"● {EscapeMnemonic(session.Profile.Name)}（{FormatProtocolName(session.Profile.Protocol)}）";
             var item = new ToolStripMenuItem(label);
             var sessionId = session.SessionId;
             item.Click += (_, _) => ActivateSession(sessionId);
@@ -219,14 +219,14 @@ public sealed class TrayService : IDisposable
 
     /// <summary>
     /// 从数据库读取最近连接（LastConnectedAt 非空，倒序，最多 <see cref="RecentConnectionLimit"/> 条）。
-    /// 菜单 Opening 在 UI 线程同步重建，这里直接同步读库；SQLite 的 async 当前是同步实现，
-    /// 因此不会产生 sync-over-async 死锁，代价只是打开瞬间的微小阻塞。
+    /// 菜单 Opening 在 UI 线程同步重建，这里把读库丢到线程池再等待（与 App 初始化种子的既有约定一致），
+    /// 避免在 DispatcherSynchronizationContext 下对 async SQLite 做 sync-over-async 死锁。
     /// </summary>
     private List<ConnectionProfile> LoadRecentProfiles()
     {
         try
         {
-            return _connections.GetAllAsync()
+            return Task.Run(() => _connections.GetAllAsync())
                 .GetAwaiter().GetResult()
                 .Where(p => p.LastConnectedAt is not null)
                 .OrderByDescending(p => p.LastConnectedAt)
@@ -241,7 +241,10 @@ public sealed class TrayService : IDisposable
     }
 
     private static string FormatRecentLabel(ConnectionProfile profile)
-        => $"{profile.Name}（{FormatProtocolName(profile.Protocol)}）";
+        => $"{EscapeMnemonic(profile.Name)}（{FormatProtocolName(profile.Protocol)}）";
+
+    /// <summary>WinForms 菜单项把 <c>&amp;</c> 当作助记符前缀；名称里的字面 <c>&amp;</c> 需转义为 <c>&amp;&amp;</c>。</summary>
+    private static string EscapeMnemonic(string text) => text.Replace("&", "&&");
 
     private static string FormatProtocolName(ProtocolType protocol) => protocol switch
     {
@@ -327,11 +330,10 @@ public sealed class TrayService : IDisposable
             return;
         }
 
-        // 让确认框有可见宿主；断开动作本身不改变主窗口显示状态。
-        RestoreWindow();
-
         try
         {
+            // 确认不先弹出主窗口：用户可能刻意把窗口隐藏着，仅因托盘操作打断会造成打扰；
+            // 确认框自身带可见宿主（Owner 回退 MainWindow），取消时保持现状即可。
             var confirmed = await _dialogs.ConfirmAsync(
                 "断开全部会话",
                 $"确定要断开全部 {sessions.Count} 个活动会话吗？\n\n此操作不会删除连接配置或凭据。",
@@ -342,7 +344,9 @@ public sealed class TrayService : IDisposable
                 return;
             }
 
-            // 逐个走 SessionManager 的标准清理（非删 Tab / 非强杀）。
+            // 确认成功后把主窗口带到前台，让用户看到 Tab 逐个关闭与状态回落；
+            // 断开动作本身仍走 SessionManager 的标准清理（非删 Tab / 非强杀）。
+            RestoreWindow();
             foreach (var session in _sessions.ActiveSessions.ToList())
             {
                 await _sessions.CloseSessionAsync(session.SessionId);
