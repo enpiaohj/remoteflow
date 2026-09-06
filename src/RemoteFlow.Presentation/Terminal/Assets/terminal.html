@@ -98,6 +98,13 @@
   <script>
     'use strict';
 
+    /**
+     * WKWebView 下宿主注册的 message handler 名称。
+     * Windows 的 WebView2 不用它（那边走 window.chrome.webview）。
+     * 宿主侧必须以同名注册，见 post() 的说明。
+     */
+    const RF_HOST_CHANNEL = 'remoteflow';
+
     // ────────────────────────────────────────────────────────────
     // RemoteFlow 终端前端
     //
@@ -328,9 +335,42 @@
       return bytes;
     }
 
+    /**
+     * 向宿主投递消息。
+     *
+     * 宿主有两种：Windows 用 WebView2，macOS 用 WKWebView，二者的 JS→宿主
+     * 通道 API 完全不同——WebView2 是 window.chrome.webview.postMessage，
+     * WKWebView 是 window.webkit.messageHandlers.<name>.postMessage。
+     * 这里按可用性依次探测，页面本身不感知宿主类型。
+     *
+     * 曾经此处只认 WebView2，且用 if 静默守卫，在 WKWebView 下会**无声丢弃**
+     * 全部用户输入（Phase 0 门禁实测发现）。因此现在探测不到通道时明确告警，
+     * 而不是假装成功。
+     */
     function post(message) {
-      if (window.chrome && window.chrome.webview) {
-        window.chrome.webview.postMessage(JSON.stringify(message));
+      const payload = JSON.stringify(message);
+
+      // WebView2（Windows）
+      if (window.chrome && window.chrome.webview &&
+          typeof window.chrome.webview.postMessage === 'function') {
+        window.chrome.webview.postMessage(payload);
+        return;
+      }
+
+      // WKWebView（macOS）：宿主注册的 message handler 名称
+      if (window.webkit && window.webkit.messageHandlers) {
+        const handler = window.webkit.messageHandlers[RF_HOST_CHANNEL] ||
+                        window.webkit.messageHandlers[Object.keys(window.webkit.messageHandlers)[0]];
+        if (handler && typeof handler.postMessage === 'function') {
+          handler.postMessage(payload);
+          return;
+        }
+      }
+
+      // 没有可用通道：不能静默吞掉，否则表现为「终端完全没反应」且无从排查。
+      if (!post.__warned) {
+        post.__warned = true;
+        console.error('[RemoteFlow] 未找到宿主消息通道，终端输入无法送达宿主。');
       }
     }
 

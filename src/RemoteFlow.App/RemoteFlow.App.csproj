@@ -51,6 +51,7 @@
   <ItemGroup>
     <ProjectReference Include="..\RemoteFlow.Core\RemoteFlow.Core.csproj" />
     <ProjectReference Include="..\RemoteFlow.Application\RemoteFlow.Application.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Presentation\RemoteFlow.Presentation.csproj" />
     <ProjectReference Include="..\RemoteFlow.Infrastructure\RemoteFlow.Infrastructure.csproj" />
     <ProjectReference Include="..\RemoteFlow.Infrastructure.Windows\RemoteFlow.Infrastructure.Windows.csproj" />
     <ProjectReference Include="..\RemoteFlow.Protocol.Rdp\RemoteFlow.Protocol.Rdp.csproj" />
@@ -74,18 +75,5 @@
     <InternalsVisibleTo Include="RemoteFlow.IntegrationTests.Windows" />
   </ItemGroup>
 
-  <!--
-    终端前端资源（xterm.js）既保留在普通 publish 目录，又嵌入 RemoteFlow.exe。
-    嵌入副本由 TerminalAssetStore 在运行时释放到 %LOCALAPPDATA%，确保用户只下载
-    单个 exe 时 SSH 终端也能初始化；不能依赖 exe 旁边恰好存在 Assets/Terminal。
-  -->
-  <ItemGroup>
-    <Content Include="Assets\Terminal\**\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <EmbeddedResource Include="Assets\Terminal\**\*">
-      <LogicalName>RemoteFlow.App.Assets.Terminal.%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
-  </ItemGroup>
 
 </Project>

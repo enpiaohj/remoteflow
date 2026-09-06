@@ -1,8 +1,13 @@
 using System.Windows.Input;
 using MarcusW.VncClient;
 
-namespace RemoteFlow.Protocol.Vnc;
+namespace RemoteFlow.App.Views.Sessions;
 
+/// <remarks>
+/// 本类做的是「WPF <c>Key</c> 枚举 → VNC keysym」的映射，属 UI 层职责：
+/// 协议层不应认识任何 UI 框架的输入枚举。因此它随 macOS 移植从
+/// RemoteFlow.Protocol.Vnc 移入本工程；Avalonia 侧会有对应的自有映射。
+/// </remarks>
 /// <summary>
 /// WPF 按键 → X11 KeySymbol 映射。RFB 协议使用 X11 keysym 表达按键，
 /// 与 Windows 的虚拟键码体系不同，必须显式转换。

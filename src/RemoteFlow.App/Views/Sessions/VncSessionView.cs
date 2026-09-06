@@ -7,6 +7,7 @@ using MarcusW.VncClient;
 using Microsoft.Extensions.Logging;
 using RemoteFlow.App.ViewModels;
 using RemoteFlow.Core.Models;
+using RemoteFlow.Core.Sessions;
 using RemoteFlow.Protocol.Vnc;
 using VncSize = MarcusW.VncClient.Size;
 
@@ -77,7 +78,8 @@ public sealed class VncSessionView : ContentControl, IDisposable
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
         VerticalContentAlignment = VerticalAlignment.Stretch;
 
-        _session.RenderTarget.FramebufferSizeChanged += OnFramebufferSizeChanged;
+        _session.RenderTarget.FrameSizeChanged += OnFrameSizeChanged;
+        _session.ClipboardTextReceived += OnClipboardTextReceived;
         _viewModel.ActionRequested += OnActionRequested;
 
         Loaded += OnLoaded;
@@ -120,10 +122,10 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
     // ── 帧渲染 ────────────────────────────────────────────────────
 
-    private void OnFramebufferSizeChanged(object? sender, VncSize size)
+    private void OnFrameSizeChanged(object? sender, FrameSize size)
     {
         // 该事件来自协议线程，这里只登记尺寸，实际重建位图放到 UI 线程。
-        _pendingSize = size;
+        _pendingSize = new VncSize(size.Width, size.Height);
     }
 
     private void OnRendering(object? sender, EventArgs e)
@@ -141,8 +143,71 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         if (_bitmap is not null)
         {
-            // RenderTo 内部有脏标记判断，无新帧时会直接返回，不做任何拷贝。
-            _session.RenderTarget.RenderTo(_bitmap);
+            CopyLatestFrame(_bitmap);
+        }
+    }
+
+    /// <summary>
+    /// 把协议层最新一帧拷入 WPF 位图。
+    /// <para>
+    /// 协议层只提供 <see cref="IFrameSource"/>（一块 BGRA32 缓冲 + 脏标记），
+    /// 具体位图类型由 UI 层承接——这样 RemoteFlow.Protocol.Vnc 不必引用 WPF，
+    /// macOS 侧用同一接口对接 Avalonia 位图（技术方案 §6.5）。
+    /// </para>
+    /// <para>内部有脏标记判断，无新帧时不做任何拷贝，空闲时不消耗 CPU。</para>
+    /// </summary>
+    private void CopyLatestFrame(WriteableBitmap bitmap)
+    {
+        bitmap.Lock();
+        try
+        {
+            var copied = _session.RenderTarget.TryCopyLatestFrame(
+                destination: bitmap.BackBuffer,
+                destinationCapacityBytes: (long)bitmap.BackBufferStride * bitmap.PixelHeight,
+                destinationStride: bitmap.BackBufferStride,
+                expectedWidth: bitmap.PixelWidth,
+                expectedHeight: bitmap.PixelHeight);
+
+            if (copied)
+            {
+                bitmap.AddDirtyRect(new Int32Rect(0, 0, bitmap.PixelWidth, bitmap.PixelHeight));
+            }
+        }
+        finally
+        {
+            bitmap.Unlock();
+        }
+    }
+
+    /// <summary>
+    /// 远端剪贴板文本到达。事件来自协议线程，须封送到 UI 线程再写系统剪贴板。
+    /// <para>剪贴板正文可能含密码等敏感信息，<b>绝不写入日志</b>。</para>
+    /// </summary>
+    private void OnClipboardTextReceived(object? sender, string text)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.HasShutdownStarted)
+        {
+            return;
+        }
+
+        try
+        {
+            dispatcher.InvokeAsync(() =>
+            {
+                try
+                {
+                    System.Windows.Clipboard.SetText(text);
+                }
+                catch (Exception)
+                {
+                    // 剪贴板被其它进程占用等场景：静默放弃，不打断会话。
+                }
+            });
+        }
+        catch (Exception)
+        {
+            // 调度失败（应用正在退出）同样静默放弃。
         }
     }
 
@@ -400,7 +465,8 @@ public sealed class VncSessionView : ContentControl, IDisposable
         Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;
 
-        _session.RenderTarget.FramebufferSizeChanged -= OnFramebufferSizeChanged;
+        _session.RenderTarget.FrameSizeChanged -= OnFrameSizeChanged;
+        _session.ClipboardTextReceived -= OnClipboardTextReceived;
         _viewModel.ActionRequested -= OnActionRequested;
 
         // 断开 WriteableBitmap 引用：即使控件仍在可视树中也不再取帧。
