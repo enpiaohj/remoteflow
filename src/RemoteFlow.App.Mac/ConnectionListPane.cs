@@ -308,6 +308,20 @@ public sealed class ConnectionListPane : NSViewController
             menu.AddItem(Item(conn.IsFavorite ? "取消收藏" : "收藏",
                 () => _pane.RunConnItem(_pane._vm.ToggleFavoriteCommand, conn)));
             menu.AddItem(Item("测试连接…", () => _pane.RunConnItem(_pane._vm.TestConnectionCommand, conn)));
+
+            var move = new NSMenuItem("移动到分组");
+            var sub = new NSMenu();
+            foreach (var t in _pane._vm.GroupTargets)
+            {
+                var target = t;
+                var mi = new NSMenuItem(new string(' ', target.Depth * 2) + target.Name);
+                mi.Activated += (_, _) => _pane.RunMoveToGroup(conn, target.GroupId);
+                sub.AddItem(mi);
+            }
+            move.Submenu = sub;
+            move.Enabled = sub.Count > 0;
+            menu.AddItem(move);
+
             menu.AddItem(NSMenuItem.SeparatorItem);
             menu.AddItem(Item("删除…", () => _pane.RunConnItem(_pane._vm.DeleteCommand, conn)));
         }
@@ -338,6 +352,20 @@ public sealed class ConnectionListPane : NSViewController
         catch
         {
             // 命令内部已负责用户提示。
+        }
+
+        await RefreshAsync();
+    }
+
+    private async void RunMoveToGroup(ConnectionItemViewModel conn, Guid? groupId)
+    {
+        try
+        {
+            await _vm.MoveConnectionToGroupAsync(conn, groupId);
+        }
+        catch
+        {
+            // VM 内部已负责用户提示。
         }
 
         await RefreshAsync();
