@@ -170,6 +170,25 @@ public sealed class ConnectionListPane : NSViewController
         _treeScroll.Hidden = false;
         _flatScroll.Hidden = true;
         RefreshCount();
+        SelectFirstTree();
+    }
+
+    /// <summary>选中树里第一个连接行（分组头跳过），并触发选中事件。</summary>
+    private void SelectFirstTree()
+    {
+        for (nint r = 0; r < _tree.RowCount; r++)
+        {
+            if (_treeSource?.RowObject(_tree, r) is ConnectionItemViewModel)
+            {
+                _tree.SelectRow(r, byExtendingSelection: false);
+                if (_treeSource?.SelectedConnection is { } c)
+                {
+                    ConnectionSelected?.Invoke(this, c);
+                }
+
+                return;
+            }
+        }
     }
 
     public async Task ShowFavoritesAsync()
@@ -204,6 +223,16 @@ public sealed class ConnectionListPane : NSViewController
         _treeScroll.Hidden = true;
         _flatScroll.Hidden = false;
         RefreshCount();
+
+        // 默认选中第一项（最近连接列表按最近一次连接倒序 → 即最后连过的那台）。
+        if (_vm.Items.Count > 0)
+        {
+            _flat.SelectRow(0, byExtendingSelection: false);
+            if (_flatSource.Selected is { } first)
+            {
+                ConnectionSelected?.Invoke(this, first);
+            }
+        }
     }
 
     private void RefreshCount()

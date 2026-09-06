@@ -55,6 +55,9 @@ public sealed class DetailView : NSView
     public void ShowError(string message)
         => Swap(Centered(Icon("exclamationmark.triangle", 40, NSColor.SystemOrange), "连接失败", message));
 
+    public void ShowSessionInfo(string name, string title, string body)
+        => Swap(Centered(Icon("display", 40, NSColor.SystemBlue), title, body));
+
     public void ShowHome(HomePageViewModel vm)
     {
         Swap(BuildHome(vm));
