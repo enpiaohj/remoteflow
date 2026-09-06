@@ -12,12 +12,12 @@ namespace RemoteFlow.App.Mac;
 /// </summary>
 public sealed class ConnectionDialog : Window
 {
-    private readonly TextBox _nameBox = new() { Watermark = "显示名称", WatermarkForeground = Brushes.Gray };
+    private readonly TextBox _nameBox = new() { PlaceholderText = "显示名称", PlaceholderForeground = Brushes.Gray };
     private readonly ComboBox _protoBox = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
-    private readonly TextBox _hostBox = new() { Watermark = "主机 / IP" };
+    private readonly TextBox _hostBox = new() { PlaceholderText = "主机 / IP" };
     private readonly TextBox _portBox = new() { Text = "22" };
-    private readonly TextBox _userBox = new() { Watermark = "账号" };
-    private readonly TextBox _passBox = new() { PasswordChar = '●', Watermark = "口令" };
+    private readonly TextBox _userBox = new() { PlaceholderText = "账号" };
+    private readonly TextBox _passBox = new() { PasswordChar = '●', PlaceholderText = "口令" };
 
     public ConnectionDialog()
     {

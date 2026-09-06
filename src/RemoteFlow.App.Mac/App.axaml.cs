@@ -72,18 +72,12 @@ public partial class App : Avalonia.Application
             _logger = _services.GetRequiredService<ILogger<App>>();
             _logger.LogInformation("RemoteFlow (macOS) 启动，数据目录 {DataDirectory}", paths.DataDirectory);
 
-            var sshProvider = (RemoteFlow.Protocol.Ssh.SshConnectionProvider)_services
-                .GetServices<IConnectionProvider>()
-                .First(p => p.Protocol == RemoteFlow.Core.Models.ProtocolType.Ssh);
-            var vncProvider = (RemoteFlow.Protocol.Vnc.VncConnectionProvider)_services
-                .GetServices<IConnectionProvider>()
-                .First(p => p.Protocol == RemoteFlow.Core.Models.ProtocolType.Vnc);
+            InitializeDatabase(_services);
 
             _mainWindow = new MainWindow(
-                paths, sshProvider, vncProvider,
+                paths,
                 _services.GetRequiredService<RemoteFlow.Application.Services.ConnectionService>(),
                 _services.GetRequiredService<RemoteFlow.Application.Services.CredentialService>(),
-                _services.GetRequiredService<ICredentialVault>(),
                 _services.GetRequiredService<RemoteFlow.Application.Services.SessionManager>(),
                 _services.GetRequiredService<RemoteFlow.Presentation.ViewModels.ConnectionsPageViewModel>());
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -91,7 +85,6 @@ public partial class App : Avalonia.Application
                 desktop.MainWindow = _mainWindow;
             }
 
-            _mainWindow.Title = "RemoteFlow · 工作台装配 OK";
             _mainWindow.Show();
         }
         catch (Exception ex)
@@ -99,6 +92,28 @@ public partial class App : Avalonia.Application
             _logger?.LogCritical(ex, "应用启动失败");
             throw;
         }
+    }
+
+    /// <summary>建表并补种子数据（对齐 WPF 版 App.xaml.cs 的 InitializeDatabase）。</summary>
+    private static void InitializeDatabase(IServiceProvider services)
+    {
+        services.GetRequiredService<RemoteFlowDatabase>().Initialize();
+
+        // 种子：默认分组（首启）+ 默认标签。放线程池跑，避免 sync-over-async 依赖巧合。
+        Task.Run(async () =>
+        {
+            await services.GetRequiredService<DefaultGroupResolver>().ResolveDefaultAsync();
+
+            var tags = services.GetRequiredService<ITagRepository>();
+            if ((await tags.GetAllAsync()).Count == 0)
+            {
+                foreach (var (name, color) in new[]
+                         { ("生产", "#C42B1C"), ("测试", "#9D5D00"), ("开发", "#0F7B0F") })
+                {
+                    await tags.AddAsync(new RemoteFlow.Core.Models.Tag { Name = name, Color = color });
+                }
+            }
+        }).GetAwaiter().GetResult();
     }
 
     private static ServiceProvider BuildServiceProvider(AppPaths paths, ILoggerFactory loggerFactory)

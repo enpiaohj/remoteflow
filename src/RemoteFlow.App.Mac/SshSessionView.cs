@@ -162,7 +162,7 @@ public sealed class SshSessionView : UserControl
         return text;
     }
 
-    private void HandlePageMessage(string body)
+    private void HandlePageMessage(string? body)
     {
         if (string.IsNullOrWhiteSpace(body) || !_webReady)
         {
