@@ -125,12 +125,13 @@ public enum RdpDisplayMode
 /// 编辑连接里的 RDP 分辨率预设。仅用于编辑器 UI 的组织与映射，
 /// 不单独持久化——选择结果写回 <see cref="RdpOptions.DisplayMode"/> 与
 /// <see cref="RdpOptions.DesktopWidth"/> / <see cref="RdpOptions.DesktopHeight"/>。
+/// <para>
+/// 不包含「自动」项：适应窗口是独立显示模式（<see cref="RdpDisplayMode.FitToWindow"/>），
+/// 不再混入分辨率下拉（历史上 <c>Auto</c> 已被移除，无需为其保留成员）。
+/// </para>
 /// </summary>
 public enum RdpDisplayResolution
 {
-    /// <summary>自动：沿用全局默认，即「适应窗口」随窗口调整，不写死桌面尺寸。</summary>
-    Auto = 0,
-
     Res1280x720 = 1,
     Res1366x768 = 2,
     Res1600x900 = 3,

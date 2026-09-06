@@ -102,6 +102,8 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         _selectedResolution = MatchPreset(_profile.Rdp.DesktopWidth, _profile.Rdp.DesktopHeight) ?? CustomResolution;
         _rdpStartFullScreen = _profile.Rdp.StartFullScreen;
         _rdpUseMultimon = _profile.Rdp.UseMultimon;
+        _rdpRedirectAudio = _profile.Rdp.RedirectAudio;
+        _rdpRedirectMicrophone = _profile.Rdp.RedirectMicrophone;
         _selectedConnectionQuality = MatchQuality(_profile.Rdp.ConnectionQuality);
     }
 
@@ -196,6 +198,14 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         _ when RdpStartFullScreen => "已联动勾选「启动后进入全屏」：多显示器布局需要会话进入全屏后才会真正扩展。",
         _ => "已保留「使用全部显示器」，但它需要「启动后进入全屏」才会真正生效。"
     };
+
+    /// <summary>「音频播放到本机」。勾选「麦克风重定向」会自动联动勾选此项（音频捕获依赖本机播放通道）。</summary>
+    [ObservableProperty]
+    private bool _rdpRedirectAudio;
+
+    /// <summary>「麦克风重定向」。勾选时自动联动「音频播放到本机」。</summary>
+    [ObservableProperty]
+    private bool _rdpRedirectMicrophone;
 
     /// <summary>分辨率选择 / 显示模式互斥联动是否在进行中，用于抑制回调递归。</summary>
     private bool _syncingDisplay;
@@ -318,6 +328,23 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(UseMultimonHint));
     }
 
+    partial void OnRdpRedirectAudioChanged(bool value)
+    {
+        _profile.Rdp.RedirectAudio = value;
+    }
+
+    partial void OnRdpRedirectMicrophoneChanged(bool value)
+    {
+        _profile.Rdp.RedirectMicrophone = value;
+
+        // 麦克风捕获依赖远端音频通道：勾选「麦克风重定向」时自动勾选「音频播放到本机」。
+        // 取消麦克风不联动取消音频播放，避免打断用户对音频输出的独立选择。
+        if (value && !_profile.Rdp.RedirectAudio)
+        {
+            RdpRedirectAudio = true;
+        }
+    }
+
     partial void OnSelectedResolutionChanged(ResolutionOption? value)
     {
         OnPropertyChanged(nameof(IsCustomResolution));
@@ -435,9 +462,11 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
             }
         }
 
-        // 全屏 / 多显示器 / 连接质量由编辑器属性写回（属性已 write-through，这里再确保与 VM 一致）。
+        // 全屏 / 多显示器 / 音频重定向 / 连接质量由编辑器属性写回（属性已 write-through，这里再确保与 VM 一致）。
         _profile.Rdp.StartFullScreen = RdpStartFullScreen;
         _profile.Rdp.UseMultimon = RdpUseMultimon;
+        _profile.Rdp.RedirectAudio = RdpRedirectAudio;
+        _profile.Rdp.RedirectMicrophone = RdpRedirectMicrophone;
         _profile.Rdp.ConnectionQuality = SelectedConnectionQuality?.Value ?? RdpConnectionQuality.Auto;
 
         ValidationMessage = string.Empty;
@@ -507,7 +536,7 @@ public sealed partial class TagSelection(Guid id, string name, string color) : O
     private bool _isSelected;
 }
 
-/// <summary>RDP 分辨率下拉项。Width/Height 为 null 表示自动或自定义（无固定尺寸）。</summary>
+/// <summary>RDP 分辨率下拉项。Width/Height 为 null 表示「自定义」（无固定尺寸）。</summary>
 public sealed record ResolutionOption(RdpDisplayResolution Value, string Label, int? Width, int? Height)
 {
     public override string ToString() => Label;

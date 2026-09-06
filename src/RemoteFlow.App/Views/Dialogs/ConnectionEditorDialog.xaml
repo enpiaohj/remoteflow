@@ -404,12 +404,12 @@
                                 <CheckBox Style="{StaticResource Dialog.CheckBox}" Content="剪贴板重定向"
                                           IsChecked="{Binding Rdp.RedirectClipboard}" />
                                 <CheckBox Style="{StaticResource Dialog.CheckBox}" Content="音频播放到本机"
-                                          IsChecked="{Binding Rdp.RedirectAudio}" />
+                                          IsChecked="{Binding RdpRedirectAudio}" />
                                 <CheckBox Style="{StaticResource Dialog.CheckBox}"
-                                          IsChecked="{Binding Rdp.RedirectMicrophone}">
+                                          IsChecked="{Binding RdpRedirectMicrophone}">
                                     <StackPanel>
                                         <TextBlock Text="麦克风重定向" Style="{StaticResource Text.Body}" />
-                                        <TextBlock Text="把本机麦克风声音送入远端；需本机/远端支持 RDP 音频捕获"
+                                        <TextBlock Text="需同时开启「音频播放到本机」，并依赖本机/远端支持 RDP 音频捕获"
                                                    Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                     </StackPanel>
                                 </CheckBox>
