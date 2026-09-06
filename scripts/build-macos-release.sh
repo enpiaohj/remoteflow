@@ -78,6 +78,13 @@ case "$ARCH" in
     echo "未知架构：$ARCH（x64 | arm64 | universal）" >&2; exit 1;;
 esac
 
+echo "==> 收 FreeRDP 依赖进 Contents/Frameworks（内嵌 RDP 脱离 brew）"
+if find "$APP/Contents" -name libremoteflow_rdp.dylib | grep -q .; then
+  scripts/bundle-freerdp.sh "$APP"
+else
+  echo "   （未见 libremoteflow_rdp.dylib，跳过——RDP 将回落外部客户端）"
+fi
+
 echo "==> ad-hoc 签名（开发用；正式发布替换为 Developer ID）"
 sign_bundle "$APP"
 

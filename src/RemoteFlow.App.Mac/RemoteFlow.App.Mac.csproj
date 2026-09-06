@@ -51,6 +51,14 @@
     <ProjectReference Include="..\RemoteFlow.Infrastructure.Mac\RemoteFlow.Infrastructure.Mac.csproj" />
     <ProjectReference Include="..\RemoteFlow.Protocol.Ssh\RemoteFlow.Protocol.Ssh.csproj" />
     <ProjectReference Include="..\RemoteFlow.Protocol.Vnc\RemoteFlow.Protocol.Vnc.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Protocol.Rdp.Mac\RemoteFlow.Protocol.Rdp.Mac.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 内嵌 RDP 的 FreeRDP 封装 dylib（native/rdp/build.sh 产出）。缺失时应用仍启动，
+         RDP 回落外部客户端（见 RdpConnectionProvider.IsAvailable / RdpLauncher）。 -->
+    <NativeReference Include="..\RemoteFlow.Protocol.Rdp.Mac\runtimes\osx-x64\native\libremoteflow_rdp.dylib"
+                     Kind="Dynamic" Condition="Exists('..\RemoteFlow.Protocol.Rdp.Mac\runtimes\osx-x64\native\libremoteflow_rdp.dylib')" />
   </ItemGroup>
 
   <ItemGroup>

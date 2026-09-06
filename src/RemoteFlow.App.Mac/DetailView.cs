@@ -45,6 +45,8 @@ public sealed class DetailView : NSView
 
     public VncScreenView MakeVncScreen(VncSession session) => new(session);
 
+    public RdpScreenView MakeRdpScreen(RemoteFlow.Protocol.Rdp.Mac.RdpSession session) => new(session);
+
     public NSView MakeSessionPlaceholder(string name)
         => Centered(Icon("checkmark.circle", 40, NSColor.SystemGreen), $"已连接 {name}",
             "该协议的会话画面尚未接入本区域。");

@@ -189,6 +189,7 @@ public sealed class AppDelegate : NSApplicationDelegate
 
         services.AddSingleton<IConnectionProvider, RemoteFlow.Protocol.Ssh.SshConnectionProvider>();
         services.AddSingleton<IConnectionProvider, RemoteFlow.Protocol.Vnc.VncConnectionProvider>();
+        services.AddSingleton<IConnectionProvider, RemoteFlow.Protocol.Rdp.Mac.RdpConnectionProvider>();
 
         services.AddSingleton<DefaultGroupResolver>();
 

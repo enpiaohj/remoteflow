@@ -335,8 +335,9 @@ public sealed class MainWindowController : NSWindowController
 
     private async Task OpenAsync(ConnectionProfile profile, string name)
     {
-        // macOS RDP 首版：FreeRDP CLI（带凭据）或回落系统客户端（方案 §8.E，内嵌待接）。
-        if (profile.Protocol == ProtocolType.Rdp)
+        // RDP：内嵌 FreeRDP 可用则走会话 / Tab（同 SSH/VNC）；否则回落外部客户端。
+        if (profile.Protocol == ProtocolType.Rdp
+            && !_sessions.IsProtocolAvailable(ProtocolType.Rdp, out _))
         {
             try
             {
@@ -349,7 +350,7 @@ public sealed class MainWindowController : NSWindowController
                 using (cred)
                 {
                     var note = RdpLauncher.Launch(profile, cred);
-                    _detail.ShowSessionInfo(name, "RDP 会话已启动", note);
+                    _detail.ShowSessionInfo(name, "RDP 会话已启动（外部客户端）", note);
                 }
             }
             catch (Exception ex)
@@ -387,15 +388,20 @@ public sealed class MainWindowController : NSWindowController
             {
                 RemoteFlow.Protocol.Ssh.SshSession ssh => _detail.MakeSshTerminal(ssh),
                 RemoteFlow.Protocol.Vnc.VncSession vnc => _detail.MakeVncScreen(vnc),
+                RemoteFlow.Protocol.Rdp.Mac.RdpSession rdp => _detail.MakeRdpScreen(rdp),
                 _ => _detail.MakeSessionPlaceholder(name),
             };
-            if (view is SshTerminalView st)
+            switch (view)
             {
-                st.ReconnectRequested += (_, _) => _ = OpenAsync(profile, name);
-            }
-            else if (view is VncScreenView vv)
-            {
-                vv.ReconnectRequested += (_, _) => _ = OpenAsync(profile, name);
+                case SshTerminalView st:
+                    st.ReconnectRequested += (_, _) => _ = OpenAsync(profile, name);
+                    break;
+                case VncScreenView vv:
+                    vv.ReconnectRequested += (_, _) => _ = OpenAsync(profile, name);
+                    break;
+                case RdpScreenView rv:
+                    rv.ReconnectRequested += (_, _) => _ = OpenAsync(profile, name);
+                    break;
             }
 
             _sessionViews[session.SessionId] = view;
@@ -432,6 +438,7 @@ public sealed class MainWindowController : NSWindowController
         {
             (view as SshTerminalView)?.Detach();
             (view as VncScreenView)?.Detach();
+            (view as RdpScreenView)?.Detach();
             view.RemoveFromSuperview();
         }
 

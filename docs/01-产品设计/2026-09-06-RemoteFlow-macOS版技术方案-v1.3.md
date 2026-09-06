@@ -14,6 +14,7 @@
 | 版本 | 日期 | 主要变更 |
 |---|---|---|
 | V1.0 | 2026-09-06 | 初版（commit `3a3ff58`，原文可从 Git 历史检出） |
+| **V1.3.4** | **2026-09-07** | **8.E 应用内嵌入式 FreeRDP 打通**：`native/rdp` C ABI 封装 + `RemoteFlow.Protocol.Rdp.Mac`（`RdpSession`/`RdpFrameBuffer`/`RdpConnectionProvider`）+ `RdpScreenView`/`AppKitRdpKeyMapper`；`TaskCompletionSource` 连接门闩修 teardown 打断连接的竞态；代理旁路；实测 `192.0.2.11` Windows Server 桌面应用内渲染。8.F `scripts/bundle-freerdp.sh` 收 FreeRDP 全依赖进 `Contents/Frameworks` + `@rpath`，接进发布脚本 |
 | **V1.3.3** | **2026-09-07** | 8.D 多会话 Tab 落地（`SessionTabBar`，撤回单会话折中）；钥匙串授权框修复（`SecAccessCreate` 开放 ACL）；VNC 剪贴板 + 断开重连按钮实测通过 |
 | **V1.3.2** | **2026-09-07** | 8.C 补右键菜单（连接 / 分组 / 移动到分组）+ 详情卡编辑删除入口；8.D 补 VNC 剪贴板同步 + 断开重连按钮 + 列表默认选中；8.E RDP 改为 FreeRDP CLI 带凭据直连（`CredentialService.ResolveAsync`）/ 系统客户端回落；8.F 打包脚本 + Release 绕法（`LinkMode=None` + `Registrar=dynamic`）+ Entitlements 模板，产出 x64 `.app` + `.dmg`；图标改版 |
 | **V1.3.1** | **2026-09-07** | **8.B/8.C/8.D 实施进度回填（§8）。** 8.B 外壳、8.C 连接 / 凭据 / 分组 / 标签 / 设置管理 UI 及全套 `IDialogService` 已落地；8.D SSH 终端（含快速输入掉字修复）、VNC 画面（含 keysym 映射）实机连通；8.E RDP 首版走系统客户端交接（FreeRDP 内嵌仍待接）；多会话 Tab 按用户反馈暂做单会话。App 图标已接。移除开发期示例连接种子 |
@@ -597,14 +598,31 @@ void             rf_rdp_destroy(rf_rdp_session*);
 - ✅ 会话生命周期：`SessionManager`（不变）。
 - ✅ 剪贴板：VNC 远端复制 → 本机 `NSPasteboard`（连接级 `ClipboardToLocal` 开关把关）。
 
-### 8.E macOS RDP —— 【FreeRDP CLI（带凭据）/ 系统客户端回落；内嵌式待接】
+### 8.E macOS RDP —— 【应用内嵌入式 FreeRDP 实机通过；CLI / 系统客户端回落保留】
 
-- ✅ `MainWindowController.OpenAsync` 对 RDP 先解析连接所引凭据（`CredentialService.ResolveAsync`，用后 Dispose）。
-- ✅ `RdpLauncher`：检测到 FreeRDP CLI（`sdl-freerdp` / `xfreerdp`，`brew install freerdp`）
-  → `/v /u /d /p /cert:ignore +clipboard /dynamic-resolution` **带完整凭据直连**（口令不进日志）；
-  否则回落生成 `.rdp`（预填 username/domain，口令由系统客户端提示）。
-- ⏳ **内嵌式**（原 §7 计划）：`libfreerdp` dylib P/Invoke（§7.1）；帧 → `CGImage`（与 VNC 同路径）；
-  输入注入；证书信任（§7.4）。让 RDP 画面进 RemoteFlow 窗口而非 FreeRDP 独立窗。
+- ✅ **内嵌式（首选路径）**：`native/rdp/remoteflow_rdp.c` —— FreeRDP 3.x 的极小 C ABI 封装
+  （`freerdp_new` → `PreConnect`/`PostConnect` 装 `gdi_init(PIXEL_FORMAT_BGRX32)` → 后台线程
+  `freerdp_connect` + `freerdp_check_event_handles` 事件循环）。`native/rdp/build.sh` 现编
+  `libremoteflow_rdp.dylib`（rpath 优先 `@loader_path/../Frameworks`）。
+- ✅ 托管侧 `RemoteFlow.Protocol.Rdp.Mac`（`net10.0`，不引 AppKit）：`NativeRdp`（`LibraryImport`）、
+  `RdpFrameBuffer`（`IFrameSource`，帧回调线程 `Ingest` → UI 线程 `TryCopyLatestFrame`，与 VNC 同路径）、
+  `RdpSession : RemoteSessionBase`（`TaskCompletionSource` 连接门闩由 native 状态回调驱动，
+  避免 `OpenAsync` 在连接在途时 teardown → `freerdp_abort_connect_context` 打断）、
+  `RdpConnectionProvider`（`NativeLibrary.TryLoad` 探测 dylib + FreeRDP 依赖可解析性）。
+- ✅ `RdpScreenView`（AppKit，`CALayer` + `CGImage` 渲染环）+ `AppKitRdpKeyMapper`
+  （虚拟键码 → RDP scancode / extended）；画面进 RemoteFlow 多会话 Tab，非 FreeRDP 独立窗。
+- ✅ 代理旁路：shim 在 `create` / `connect` 两处 `unsetenv` `HTTP(S)_PROXY` 等 + `FreeRDP_ProxyType=PROXY_TYPE_NONE`
+  （否则进程内嵌时 FreeRDP 读到本机 `HTTP_PROXY` 把 3389 直连改道）。
+- ✅ 实测：`192.0.2.11:3389`（Windows Server 2016，`cygdi\testadmin`）—— TLS/NLA 连上，
+  服务器管理器桌面在应用内实时渲染；打包进 `Contents/Frameworks` 后再测仍渲染。
+- ✅ `MainWindowController.OpenAsync`：RDP 优先走 `SessionManager`（`IsProtocolAvailable(Rdp)` 为真时），
+  否则回落 `RdpLauncher`；凭据经 `CredentialService.ResolveAsync` 解析、用后 Dispose。
+- ✅ `RdpLauncher`（回落）：FreeRDP CLI（`sdl-freerdp` / `xfreerdp`）
+  → `/v /u /d /p /cert:ignore +clipboard /dynamic-resolution` 带凭据直连（口令不进日志）；
+  再无则生成 `.rdp`（预填 username/domain）。
+- ⏳ 证书信任仍是「本次接受」（`rf_verify_cert_ex` 返回 1），未接「首次记录 / 变化强警告」（§7.4）。
+- ⏳ arm64 `libremoteflow_rdp.dylib`：开发机为 Intel、brew FreeRDP 仅 x86_64，无法交叉编译；
+  待 arm64 Mac 或 arm64 FreeRDP 依赖（CI）。
 
 ### 8.F 打包与分发 —— 【x64 .app + .dmg 已通；universal / 公证待补】
 
@@ -617,9 +635,16 @@ void             rf_rdp_destroy(rf_rdp_session*);
   "Microsoft.macOS: Failed to initialize the VM"（疑似 .NET host 自校验与切片签名冲突）。
   开发机为 Intel，`x64` 包已够用；universal 待 CI（Xcode 26.6 + Developer ID 逐 Mach-O 签）补。
 - ⏳ **正式签名 + 公证**：Developer ID Application + Hardened Runtime + `notarytool` + `staple` —— 需 Apple 账号，脚本尾部留模板。
-- ⏳ FreeRDP / OpenSSL dylib 打进 `Contents/Frameworks/` + `@rpath`（内嵌式 RDP 落地时一并做）。
+- ✅ FreeRDP 依赖打包：`scripts/bundle-freerdp.sh` 从 shim 的 `otool -L` 出发 BFS 收全部非系统
+  传递依赖（FreeRDP 3 + winpr + ffmpeg + openssl + libX11 …共 32 个 dylib，约 60 MB）进
+  `Contents/Frameworks/`，逐个 `install_name_tool -id @rpath/<name>` + `-change` 改写互引，
+  shim 对 FreeRDP 的引用同改 `@rpath`。已接进 `build-macos-release.sh`（签名前执行）。
+  实测：打包后应用内 RDP 仍正常渲染（rpath 顺序 Frameworks 优先于 brew）。
+  ⏳ 体积优化（去 ffmpeg / 自编不带 VAAPI 的 FreeRDP）留后续。
 - ✅ 钥匙串授权框：`KeychainCredentialVault` 新写入用开放 ACL（`SecAccessCreate` trustedlist=NULL），
-  ad-hoc 构建 hash 变化不再触发「不能验证真实性」。老条目需重新写入才生效。
+  ad-hoc 构建 hash 变化不再触发「不能验证真实性」。老条目需重新写入才生效；
+  Debug 每次 `rm -rf bin` 全量重建后签名丢失仍会触发一次系统钥匙串弹窗（`security add-generic-password -A`
+  重新种子或改用「Apple Development」稳定证书可免）。
 
 ### 8.G 验收
 
