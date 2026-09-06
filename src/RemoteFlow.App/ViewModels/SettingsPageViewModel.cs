@@ -44,11 +44,53 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     public sealed record SshTerminalThemeOption(SshTerminalTheme Value, string Label);
 
+    /// <summary>终端主题预览里的单个 ANSI 色块。</summary>
+    public sealed record TerminalPreviewSwatch(string Hex);
+
     private const string StartupRegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string StartupValueName = "RemoteFlow";
 
     private const string CsvFilter = "CSV 文件 (*.csv)|*.csv|所有文件 (*.*)|*.*";
     private const string BackupFilter = "RemoteFlow 加密备份 (*.rfbackup)|*.rfbackup|所有文件 (*.*)|*.*";
+
+    /// <summary>终端主题预览的调色板。色值与 Assets/Terminal/terminal.html 的 THEMES 保持一致。</summary>
+    private sealed record TerminalThemeColors(string Background, string Foreground, string[] Ansi);
+
+    // ANSI 16 色顺序：黑/红/绿/黄/蓝/紫/青/白 + 对应 bright。
+    private static readonly IReadOnlyDictionary<string, TerminalThemeColors> TerminalPreviewPalettes =
+        new Dictionary<string, TerminalThemeColors>
+        {
+            ["dark"] = new("#1E1E1E", "#CCCCCC", new[]
+            {
+                "#000000", "#CD3131", "#0DBC79", "#E5E510", "#2472C8", "#BC3FBC", "#11A8CD", "#E5E5E5",
+                "#666666", "#F14C4C", "#23D18B", "#F5F543", "#3B8EEA", "#D670D6", "#29B8DB", "#FFFFFF"
+            }),
+            ["light"] = new("#FFFFFF", "#333333", new[]
+            {
+                "#000000", "#CD3131", "#00BC00", "#949800", "#0451A5", "#BC05BC", "#0598BC", "#555555",
+                "#666666", "#CD3131", "#14CE14", "#B5BA00", "#0451A5", "#BC05BC", "#0598BC", "#A5A5A5"
+            }),
+            ["darkGray"] = new("#1E1E1E", "#D4D4D4", new[]
+            {
+                "#000000", "#CD3131", "#0DBC79", "#E5E510", "#2472C8", "#BC3FBC", "#11A8CD", "#E5E5E5",
+                "#666666", "#F14C4C", "#23D18B", "#F5F543", "#3B8EEA", "#D670D6", "#29B8DB", "#FFFFFF"
+            }),
+            ["black"] = new("#000000", "#D7D7D7", new[]
+            {
+                "#000000", "#CC0000", "#4E9A06", "#C4A000", "#3465A4", "#75507B", "#06989A", "#D3D7CF",
+                "#555753", "#EF2929", "#8AE234", "#FCE94F", "#729FCF", "#AD7FA8", "#34E2E2", "#EEEEEC"
+            }),
+            ["navy"] = new("#0B1B33", "#CFD8E3", new[]
+            {
+                "#14283F", "#E06C75", "#98C379", "#E5C07B", "#61AFEF", "#C678DD", "#56B6C2", "#D5DAE3",
+                "#5C7080", "#FF7A85", "#A6E3A1", "#FFD580", "#79B8FF", "#D79BE0", "#6CD6DD", "#FFFFFF"
+            }),
+            ["solarizedDark"] = new("#002B36", "#839496", new[]
+            {
+                "#073642", "#DC322F", "#859900", "#B58900", "#268BD2", "#D33682", "#2AA198", "#EEE8D5",
+                "#586E75", "#CB4B16", "#859900", "#B58900", "#268BD2", "#D33682", "#2AA198", "#FDF6E3"
+            }),
+        };
 
     private readonly AppSettings _settings;
     private readonly JsonSettingsStore _store;
@@ -98,6 +140,17 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
         LoadFromSettings();
         _isLoading = false;
+
+        RefreshTerminalPreview();
+
+        // 应用深浅切换（常规页改主题 / 系统跟随变化）会联动「跟随应用」的终端预览。
+        _themeService.EffectiveThemeChanged += (_, _) =>
+        {
+            if (SelectedSshTerminalTheme?.Value == SshTerminalTheme.FollowApp)
+            {
+                RefreshTerminalPreview();
+            }
+        };
     }
 
     /// <summary>导入 / 导出 / 备份改动了本地数据，外部需要据此刷新连接与凭据列表。</summary>
@@ -264,6 +317,17 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     ];
 
     public IReadOnlyList<int> FontSizeOptions { get; } = [11, 12, 13, 14, 15, 16, 18, 20];
+
+    // ── SSH → 终端外观预览 ────────────────────────────────────────
+
+    [ObservableProperty]
+    private string _terminalPreviewBackground = "#1E1E1E";
+
+    [ObservableProperty]
+    private string _terminalPreviewForeground = "#D4D4D4";
+
+    [ObservableProperty]
+    private IReadOnlyList<TerminalPreviewSwatch> _terminalPreviewColors = [];
 
     // ── VNC ───────────────────────────────────────────────────────
 
@@ -517,6 +581,34 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 刷新「终端外观」预览的配色。跟随应用时取当前实际生效的深浅（dark/light），
+    /// 固定预设直接按预设取色。色值与 terminal.html 的 THEMES 保持一致，仅是轻量近似。
+    /// </summary>
+    private void RefreshTerminalPreview()
+    {
+        var value = SelectedSshTerminalTheme?.Value ?? _settings.SshTerminalTheme;
+        var key = value switch
+        {
+            SshTerminalTheme.FollowApp => _themeService.IsDark ? "dark" : "light",
+            SshTerminalTheme.DarkGray => "darkGray",
+            SshTerminalTheme.Black => "black",
+            SshTerminalTheme.Navy => "navy",
+            SshTerminalTheme.SolarizedDark => "solarizedDark",
+            SshTerminalTheme.Light => "light",
+            _ => "darkGray",
+        };
+
+        if (!TerminalPreviewPalettes.TryGetValue(key, out var colors))
+        {
+            colors = TerminalPreviewPalettes["darkGray"];
+        }
+
+        TerminalPreviewBackground = colors.Background;
+        TerminalPreviewForeground = colors.Foreground;
+        TerminalPreviewColors = colors.Ansi.Select(c => new TerminalPreviewSwatch(c)).ToArray();
+    }
+
     partial void OnRdpFitToWindowChanged(bool value) => Save();
     partial void OnRdpRedirectClipboardChanged(bool value) => Save();
     partial void OnRdpRedirectAudioChanged(bool value) => Save();
@@ -526,7 +618,12 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     partial void OnSshKeepAliveSecondsChanged(int value) => Save();
     partial void OnSshTerminalTypeChanged(string value) => Save();
     partial void OnSshEncodingChanged(string value) => Save();
-    partial void OnSelectedSshTerminalThemeChanged(SshTerminalThemeOption value) => Save();
+    partial void OnSelectedSshTerminalThemeChanged(SshTerminalThemeOption value)
+    {
+        Save();
+        RefreshTerminalPreview();
+    }
+
     partial void OnSshConfirmMultilinePasteChanged(bool value) => Save();
     partial void OnSshWarnLargePasteChanged(bool value) => Save();
     partial void OnVncFitToWindowChanged(bool value) => Save();

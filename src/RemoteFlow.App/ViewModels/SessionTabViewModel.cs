@@ -120,6 +120,12 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     private void PasteClipboard() => ActionRequested?.Invoke(this, SessionAction.Paste);
 
     [RelayCommand]
+    private void ClearTerminal() => ActionRequested?.Invoke(this, SessionAction.ClearTerminal);
+
+    [RelayCommand]
+    private void SearchTerminal() => ActionRequested?.Invoke(this, SessionAction.SearchTerminal);
+
+    [RelayCommand]
     private void ToggleScaling()
     {
         ScaleToFit = !ScaleToFit;
@@ -268,5 +274,7 @@ public enum SessionAction
     ToggleScaling,
     SendCtrlAltDelete,
     Copy,
-    Paste
+    Paste,
+    ClearTerminal,
+    SearchTerminal
 }

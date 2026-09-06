@@ -25,6 +25,7 @@ public interface ISessionViewFactory
 public sealed class SessionViewFactory(
     AppSettings settings,
     ThemeService theme,
+    IDialogService dialogs,
     ILoggerFactory loggerFactory) : ISessionViewFactory
 {
     public FrameworkElement Create(SessionTabViewModel tab) => tab.Session switch
@@ -32,7 +33,7 @@ public sealed class SessionViewFactory(
         RdpSession rdp => new RdpSessionView(rdp, tab),
 
         SshSession ssh => new SshSessionView(
-            ssh, tab, settings, theme, loggerFactory.CreateLogger<SshSessionView>()),
+            ssh, tab, settings, theme, dialogs, loggerFactory.CreateLogger<SshSessionView>()),
 
         VncSession vnc => new VncSessionView(vnc, tab, loggerFactory.CreateLogger<VncSessionView>()),
 

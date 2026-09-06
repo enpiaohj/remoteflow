@@ -85,6 +85,14 @@
                                 Content="{StaticResource Icon.Paste}"
                                 ToolTip="粘贴 (Ctrl+Shift+V)"
                                 Command="{Binding PasteClipboardCommand}" />
+                        <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                                Content="{StaticResource Icon.Clear}"
+                                ToolTip="清屏"
+                                Command="{Binding ClearTerminalCommand}" />
+                        <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                                Content="{StaticResource Icon.Search}"
+                                ToolTip="在输出中查找"
+                                Command="{Binding SearchTerminalCommand}" />
                     </StackPanel>
 
                     <StackPanel x:Name="VncToolsDock" Orientation="Horizontal" Visibility="Collapsed">
@@ -310,6 +318,14 @@
                                 Content="{StaticResource Icon.Paste}"
                                 ToolTip="粘贴 (Ctrl+Shift+V)"
                                 Command="{Binding PasteClipboardCommand}" />
+                        <Button Style="{StaticResource Session.BarButton}"
+                                Content="{StaticResource Icon.Clear}"
+                                ToolTip="清屏"
+                                Command="{Binding ClearTerminalCommand}" />
+                        <Button Style="{StaticResource Session.BarButton}"
+                                Content="{StaticResource Icon.Search}"
+                                ToolTip="在输出中查找"
+                                Command="{Binding SearchTerminalCommand}" />
                     </StackPanel>
 
                     <StackPanel x:Name="VncToolsPill" Orientation="Horizontal" Visibility="Collapsed">

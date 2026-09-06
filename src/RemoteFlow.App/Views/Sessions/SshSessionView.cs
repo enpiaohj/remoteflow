@@ -32,10 +32,14 @@ public sealed class SshSessionView : ContentControl, IDisposable
     /// <summary>输出合批间隔。远端刷屏时逐包调用 JS 开销过大，按帧合并后再写入。</summary>
     private static readonly TimeSpan FlushInterval = TimeSpan.FromMilliseconds(16);
 
+    /// <summary>粘贴大文本的字符数阈值，超过即触发「大文本粘贴警告」。</summary>
+    private const int LargePasteThreshold = 4096;
+
     private readonly SshSession _session;
     private readonly SessionTabViewModel _viewModel;
     private readonly AppSettings _settings;
     private readonly ThemeService _theme;
+    private readonly IDialogService _dialogs;
     private readonly ILogger _logger;
 
     private readonly WebView2 _webView;
@@ -57,12 +61,14 @@ public sealed class SshSessionView : ContentControl, IDisposable
         SessionTabViewModel viewModel,
         AppSettings settings,
         ThemeService theme,
+        IDialogService dialogs,
         ILogger logger)
     {
         _session = session;
         _viewModel = viewModel;
         _settings = settings;
         _theme = theme;
+        _dialogs = dialogs;
         _logger = logger;
 
         _webView = new WebView2 { DefaultBackgroundColor = System.Drawing.Color.FromArgb(30, 30, 30) };
@@ -181,6 +187,15 @@ public sealed class SshSessionView : ContentControl, IDisposable
                         root.GetProperty("width").GetInt32(),
                         root.GetProperty("height").GetInt32());
                     break;
+
+                case "paste-intercepted":
+                    // WebView 内 Ctrl+V 被页面拦下后转交到这里，与工具条粘贴走同一套安全确认。
+                    var pasteText = root.GetProperty("text").GetString();
+                    if (!string.IsNullOrEmpty(pasteText))
+                    {
+                        await ConfirmAndSendPasteAsync(pasteText);
+                    }
+                    break;
             }
         }
         catch (Exception ex)
@@ -221,9 +236,35 @@ public sealed class SshSessionView : ContentControl, IDisposable
 
     private async Task ApplyTerminalOptionsAsync()
     {
-        await InvokeTerminalAsync("setTheme", _theme.IsDark ? "dark" : "light");
+        await ApplyTerminalThemeAsync();
         await InvokeTerminalAsync("setFont", _settings.SshFontFamily, _settings.SshFontSize);
     }
+
+    /// <summary>
+    /// 按「设置 → SSH → 终端主题」应用配色。
+    /// 跟随应用主题时传 follow + 当前深浅；选择固定预设时直接传预设名。
+    /// </summary>
+    private async Task ApplyTerminalThemeAsync()
+    {
+        if (_settings.SshTerminalTheme == SshTerminalTheme.FollowApp)
+        {
+            await InvokeTerminalAsync("setTheme", "follow", _theme.IsDark);
+        }
+        else
+        {
+            await InvokeTerminalAsync("setTheme", TerminalThemeName(_settings.SshTerminalTheme));
+        }
+    }
+
+    private static string TerminalThemeName(SshTerminalTheme theme) => theme switch
+    {
+        SshTerminalTheme.DarkGray => "darkGray",
+        SshTerminalTheme.Black => "black",
+        SshTerminalTheme.Navy => "navy",
+        SshTerminalTheme.SolarizedDark => "solarizedDark",
+        SshTerminalTheme.Light => "light",
+        _ => "darkGray",
+    };
 
     // ── 输出合批 ──────────────────────────────────────────────────
 
@@ -297,7 +338,21 @@ public sealed class SshSessionView : ContentControl, IDisposable
                 break;
 
             case SessionAction.Paste:
-                PasteFromClipboard();
+                await PasteFromClipboardAsync();
+                break;
+
+            case SessionAction.ClearTerminal:
+                if (_terminalReady)
+                {
+                    await InvokeTerminalAsync("clear");
+                }
+                break;
+
+            case SessionAction.SearchTerminal:
+                if (_terminalReady)
+                {
+                    await InvokeTerminalAsync("openSearch");
+                }
                 break;
         }
     }
@@ -325,27 +380,98 @@ public sealed class SshSessionView : ContentControl, IDisposable
         }
     }
 
-    private void PasteFromClipboard()
+    private async Task PasteFromClipboardAsync()
     {
+        string text;
         try
         {
-            if (Clipboard.ContainsText())
+            if (!Clipboard.ContainsText())
             {
-                // 粘贴内容直接作为输入送往远端，绝不写入日志。
-                _session.SendInput(Clipboard.GetText());
+                return;
             }
+
+            text = Clipboard.GetText();
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "读取剪贴板失败");
+            return;
         }
+
+        if (!string.IsNullOrEmpty(text))
+        {
+            await ConfirmAndSendPasteAsync(text);
+        }
+    }
+
+    /// <summary>
+    /// 粘贴安全漏斗：多行 / 大文本按设置先确认，普通小段文本直接放行。
+    /// 无论来自工具条按钮还是 WebView 内 Ctrl+V（页面已拦截转发），都收敛到这里再发往远端。
+    /// 换行统一转成 <c>\r</c>（终端回车），避免 <c>\r\n</c> / <c>\n</c> 混用产生空行。
+    /// </summary>
+    private async Task ConfirmAndSendPasteAsync(string rawText)
+    {
+        if (_session.State != ConnectionState.Connected)
+        {
+            return;
+        }
+
+        var normalized = rawText.Replace("\r\n", "\n").Replace('\r', '\n');
+        var lineCount = normalized.Split('\n').Length;
+        var multiline = lineCount > 1;
+        var large = normalized.Length > LargePasteThreshold;
+
+        var needConfirm =
+            (multiline && _settings.SshConfirmMultilinePaste)
+            || (large && _settings.SshWarnLargePaste);
+
+        if (needConfirm)
+        {
+            var message = BuildPasteConfirmMessage(multiline, large, lineCount, normalized.Length);
+            var confirmed = await _dialogs.ConfirmAsync("粘贴确认", message, "仍要粘贴", isDanger: true);
+
+            if (!confirmed)
+            {
+                // 用户取消则不发送任何内容。不要把本地提示写进终端——
+                // 那样会让终端画面与远端 readline 状态脱节，反而制造混乱。
+                return;
+            }
+        }
+
+        // 粘贴内容作为输入送往远端，绝不写入日志。
+        _session.SendInput(normalized.Replace('\n', '\r'));
+    }
+
+    private static string BuildPasteConfirmMessage(bool multiline, bool large, int lineCount, int charCount)
+    {
+        var builder = new StringBuilder("剪贴板内容");
+        if (multiline)
+        {
+            builder.Append($"包含 {lineCount} 行");
+        }
+
+        if (multiline && large)
+        {
+            builder.Append('、');
+        }
+
+        if (large)
+        {
+            builder.Append($"约 {charCount} 个字符");
+        }
+
+        builder.AppendLine("。粘贴后内容会被逐条发送并可能立即执行。");
+        builder.AppendLine();
+        builder.Append("确定要粘贴吗？");
+        return builder.ToString();
     }
 
     private async void OnThemeChanged(object? sender, EventArgs e)
     {
-        if (_terminalReady)
+        // 应用深浅切换只联动「跟随应用」；固定预设不因应用主题改变而变化。
+        if (_terminalReady && _settings.SshTerminalTheme == SshTerminalTheme.FollowApp)
         {
-            await InvokeTerminalAsync("setTheme", _theme.IsDark ? "dark" : "light");
+            await InvokeTerminalAsync("setTheme", "follow", _theme.IsDark);
         }
     }
 
