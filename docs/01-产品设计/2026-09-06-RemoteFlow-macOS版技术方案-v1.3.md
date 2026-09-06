@@ -2,9 +2,9 @@
 
 > **产品名称：** RemoteFlow
 > **文档类型：** 技术方案 / 实施路线
-> **文档版本：** V1.2.1
+> **文档版本：** V1.3
 > **日期：** 2026-09-06
-> **状态：** Phase 0 门禁 POC 已完成并通过 / 可进入 Phase 1
+> **状态：** Phase 1 已完成；UI 技术调整为原生 AppKit（见 §3.4）
 > **关联基线：** `docs/01-产品设计/2026-09-03-RemoteFlow产品设计文档-v1.1.md`
 
 ---
@@ -14,6 +14,7 @@
 | 版本 | 日期 | 主要变更 |
 |---|---|---|
 | V1.0 | 2026-09-06 | 初版（commit `3a3ff58`，原文可从 Git 历史检出） |
+| **V1.3** | **2026-09-06** | **UI 技术调整：Avalonia → .NET for macOS（`net10.0-macos`，真 AppKit）。见 §3.4。** 起因：Avalonia 控件为 Skia 自绘、非 AppKit，无法达到「原生」观感（用户实机验收否决）。`.NET for macOS` 仍完整复用共享 .NET 栈（含 Presentation 14 个 VM 与 143 测试），一套工具链，WKWebView/FreeRDP/Keychain 直调更简单。原 §8「Phase 3 — Avalonia UI 层」整体重写为「原生 AppKit UI 层」（§8 新版，A–F 子阶段）。当前 Avalonia `RemoteFlow.App.Mac` 视为管路验证成果（证明共享栈→macOS→真机连接→渲染整链通），代码留 Git 历史，view 层重建 |
 | V1.2.1 | 2026-09-06 | Phase 1 实施中的实测更正：`LocalApplicationData` 在 macOS 上已正确解析到 `~/Library/Application Support`，原「需平台分支」判断错误，§6.3 相应收敛为加回归测试 |
 | V1.2 | 2026-09-06 | **Phase 0 门禁 POC 实测完成，G1 / G2 均通过**，据实测结果修订。① 目标架构改为 universal（开发机为 Intel，见 §2）；② G2 前提修正：Avalonia 有一方 MIT WebView，原「无一方 WebView」判断错误；③ airspace 结论细化：RDP / VNC 已消除，**SSH 终端仍存在**（WebView 为 NativeControlHost）；④ §5 改为实测结果记录；⑤ §7.1 补 FreeRDP 精确构建配置（不可用 brew formula）；⑥ §7.5 按实测更新音频 / 色深行；⑦ 新增 §5.5 已知问题（WKWebView 延迟挂载、`chrome.webview` shim）；⑧ §11 补 universal 双架构打包；⑨ 里程碑扣除已完成的 Phase 0 |
 | V1.1 | 2026-09-06 | 代码级复核后修订。① 阶段重排：新增 Phase 0 可行性门禁 POC，解决原 Phase 1 对 Avalonia 壳的依赖倒置；② RDP 承载方式由「原生 NSView + NativeControlHost」改为「帧回调 + 托管位图渲染」，规避 airspace；③ Avalonia WebView 从普通风险升级为门禁项；④ 新增 §8 数据迁移、§9 测试策略、§7.5 RDP 选项映射表；⑤ 估算由 2–3 个月上调为 4–6 个月；⑥ 补充 ICMP 退化、`TerminalAssetStore` 下沉、许可合规、SDK 前置条件 |
@@ -125,6 +126,51 @@ v0.8.0 的会话常驻条、全屏药丸、连接质量详情浮层全部依赖�
 **G2 的原风险判断是错的，须更正：** V1.1 称「Avalonia 无一方 WebView，社区方案成熟度参差」。
 实际情况是 **`Avalonia.Controls.WebView` 12.1.0 由 AvaloniaUI OÜ 官方发布，MIT 许可，原生 `net10.0` target**。
 该项风险等级由「高」降至「低」。
+
+### 3.4 UI 技术调整（V1.3）：Avalonia → .NET for macOS（AppKit）
+
+**背景。** V1.0 选 Avalonia 的核心理由是「最大化复用 C#、不作废共享 ViewModel」。
+Phase 1 完成、`RemoteFlow.App.Mac`（Avalonia）跑通 SSH/VNC 真机连接后，用户实机验收
+**否决了 Avalonia 的观感**：Avalonia 的按钮 / 列表 / 滚动条 / 焦点环 / sheet 全部是
+Skia 自绘的跨平台仿制控件，`FluentTheme` 本质是 Windows Fluent 风格，**无法真正原生**
+（只能无限接近，最终仍差一截）。
+
+**新选型：`.NET for macOS`（`net10.0-macos` TFM + `macos` workload，纯 AppKit，不引入 MAUI）。**
+
+| 维度 | Avalonia（原） | .NET for macOS（新） |
+|---|---|---|
+| 控件 | Skia 自绘仿制 | 真 `NSButton` / `NSOutlineView` / `NSToolbar` / `NSSplitViewController` |
+| 共享 .NET 栈复用 | 全部 | **全部**（`net10.0-macos` 可直接引用 `net10.0` 库；Presentation 14 VM + 143 测试照用） |
+| WebView（xterm.js） | 包装层 + WKWebView SIGILL 延迟挂载绕法 | **直接 `WKWebView`** + `WKScriptMessageHandler`，无绕法 |
+| VNC/RDP 画面 | `WriteableBitmap` 抽象 | **`CALayer` + `CGImage`** 直绘（`IFrameSource` 抽象不变，换承接方） |
+| FreeRDP | dylib P/Invoke | dylib P/Invoke（**完全一致**，无额外成本） |
+| Keychain | 现有 Security.framework P/Invoke | 可选用官方 Security 绑定简化（非必须） |
+| 打包签名 | 手工组 `.app` | workload 产出真 `.app` + `notarytool` 工具链 |
+| 工具链 | dotnet | dotnet + `macos` workload（**仍一套**）；构建 `.app` 需 Xcode（本机 26.3 已在） |
+| 绑定 | XAML 声明式 | **手工**（`NSTextField ↔ VM` 属性、`NSOutlineView ↔ ObservableCollection` 逐个连；先写 ~200 行绑定辅助，之后机械化） |
+
+**与 V1.0 初衷一致，非推翻。** V1.0 的目标是「最大化 C# 复用」，`.NET for macOS` 同样满足
+（甚至更彻底，因它连打包工具链都统一）；V1.0 只是未把 `net10.0-macos` 列进候选。
+SwiftUI + .NET 引擎进程方案（100% 原生但作废 Presentation 层、两套工具链、传帧需 IPC）
+已在本轮评估中否决。
+
+**Phase 1 抽象的红利兑现。** §6.6 把 Presentation 做成 UI 框架无关（`IUiDispatcher` /
+`IUiTimer` / `IThemeService` / `ILaunchOnStartupService`），正是本次换视图技术几乎零成本的原因：
+只需为这些接口提供 AppKit 实现（`InvokeOnMainThread` / `NSTimer` / `NSApp.Appearance`）。
+
+**保留 vs 重建：**
+
+- **完全保留（零改动）**：Core、Application、Presentation（全 14 VM）、Infrastructure、
+  Infrastructure.Mac（Keychain）、Protocol.Ssh、Protocol.Vnc、143 测试、FreeRDP POC 产物与经验、
+  `terminal.html` + 桥接协议、VNC 键映射表（数据）、`IFrameSource` 抽象。
+- **移植（换宿主不重写逻辑）**：`App.axaml.cs` 的 `BuildServiceProvider` DI 图、
+  `DevTrustHostKeyPolicy`、`TerminalAssetStore` 用法、SSH/VNC 会话视图的事件接线 / 缓冲 /
+  键映射**逻辑形状**。
+- **重建（当前 Avalonia `App.Mac`，~1200 行本轮新代码，沉没成本低）**：`MainWindow.cs` /
+  `SshSessionView.cs` / `VncSessionView.cs` / `ConnectionDialog.cs` / `HostServices.cs` 的
+  Avalonia 实现 / `AvaloniaDialogService.cs` / `AvaloniaVncKeyMapper.cs` / `App.axaml*`。
+- 当前 Avalonia 提交留在 Git 历史，作为「共享栈 → macOS → 真机连接 → 渲染」整链通的管路验证。
+
 
 ---
 
@@ -487,50 +533,78 @@ void             rf_rdp_destroy(rf_rdp_session*);
 
 ---
 
-## 8. Phase 3 — Avalonia UI 层
+## 8. Phase 3 — 原生 AppKit UI 层（V1.3 重写）
 
-**目标：** `RemoteFlow.App.Mac` 达到与 Windows 版对齐的功能面。
-**预估：** 约 6–8 周。
+**目标：** `RemoteFlow.App.Mac` 用真 AppKit 达到与 Windows 版对齐的功能面。
+**技术：** `net10.0-macos`（`macos` workload），纯 AppKit，不引入 MAUI / Catalyst。
+**预估：** A–D 约 4–6 周做出扎实原生工作台；E（RDP）、F（打包）另计。
 
-### 8.1 工程
+### 8.A Spike（2–3 天，门禁）
 
-- `src/RemoteFlow.App.Mac`，Avalonia（`net10.0`），`CommunityToolkit.Mvvm`（已在用，复用）。
-- Composition Root 对齐 `App.xaml.cs` 的装配：Repository / Vault（Keychain）/ Application 服务 / 三个 `IConnectionProvider`（Ssh / Vnc / Rdp.Mac）/ UI 服务 / ViewModel。
-- ⚠️ `RemoteFlow.Application` 命名空间会遮蔽 `Avalonia.Application`（与 WPF 下遮蔽 `System.Windows.Application` 同理）→ UI 代码用完全限定名。
+- `dotnet workload install macos`；建一次性 `net10.0-macos` 工程。
+- 验证：引用 `RemoteFlow.Presentation` + `Protocol.Ssh` + `Infrastructure.Mac` 编译通过；
+  `NSWindow` + `NSToolbar` + `NSSplitViewController`（侧栏 + 详情）起窗；嵌 `WKWebView`
+  加载 `terminal.html` 并双向通信（`evaluateJavaScript` / `WKScriptMessageHandler`）；
+  P/Invoke 一个 FreeRDP 平凡调用；跑通一个 VM → `NSTableView` 的 `ObservableCollection`
+  绑定适配器。
+- **门禁：** 绑定 glue 是否可承受、有无框架墙。不通则回 §3.4 重议。
 
-### 8.2 视图迁移
+### 8.B 应用外壳（~1 周）
 
-- WPF XAML → Avalonia XAML 差异：`Trigger` / `DataTrigger` → `Style` selector + 伪类；`x:Name` 作用域；`Visibility` → `IsVisible`；`Style.Resources` 与 `ResourceDictionary` 合并语义；附加属性写法。
-- 布局与信息架构照搬设计稿（`docs/01-产品设计/UI/`）与现有 WPF 视图。
-- 主题：`Theme.Light.xaml` / `Theme.Dark.xaml` → Avalonia `ThemeVariant` + `ResourceDictionary`；`ThemeService` 改用 `RequestedThemeVariant` + 系统跟随（`PlatformSettings.ColorValuesChanged`）。
-- 图标资源 `Icons.xaml` 迁移为 Avalonia `StreamGeometry` / `PathIcon` 资源。
-- **浮层策略（V1.2 修正，按协议区分）**：
-  - **RDP / VNC 会话**：托管位图渲染，无 airspace，浮层用普通 Avalonia 控件即可。
-  - **SSH 会话**：WebView 为 `NativeControlHost`，**airspace 依然存在**，浮层仍需独立顶层窗口（比照 `SessionHostView.xaml:206` 的 WPF `Popup` 做法）。**必须在本阶段早期验证 Avalonia popup 能否稳定盖住 WKWebView**，这是 Phase 3 的头号未知项。
+- `NSApplicationDelegate` + 原生菜单栏（`NSMenu`）；`NSWindowController`；
+  `NSSplitViewController`（侧栏 + 详情两栏）；`NSToolbar`（原生工具项）。
+- DI 组合根：把 Avalonia `App.axaml.cs` 的 `BuildServiceProvider` 挪进普通类，几乎逐行照搬。
+- 平台服务落地：`IUiDispatcher`（`NSApplication.SharedApplication.InvokeOnMainThread` /
+  `DispatchQueue.MainQueue`）、`IUiTimer`（`NSTimer`）、`IThemeService`（`NSApp.Appearance` +
+  `effectiveAppearance` KVO）、`ILaunchOnStartupService`（`SMAppService`，或先 NoOp）。
+- 单实例：`NSRunningApplication` 检测 + Apple Event 唤醒。
+- 数据库建表 / 种子：对齐 WPF `App.xaml.cs` 的 `InitializeDatabase`。
 
-### 8.3 平台服务在 Mac 侧的实现
+### 8.C 连接管理 UI（~1.5 周）
 
-| 服务 | Windows（现有） | macOS（新实现） |
-|---|---|---|
-| `IUiDispatcher` | `Dispatcher` | `Avalonia.Threading.Dispatcher.UIThread` |
-| 托盘 | `TrayService`（WinForms NotifyIcon） | Avalonia `TrayIcon` + `NativeMenu`（macOS 状态栏项） |
-| 单实例 | `Local\` 命名 Mutex | Unix domain socket / `NSRunningApplication` 检测 + 唤醒已有实例 |
-| `IDialogService` | WPF 无边框对话框 | Avalonia 窗口 / `Window.ShowDialog` |
-| SSH 终端宿主 | WebView2 + xterm.js | `Avalonia.Controls.WebView` 12.1.x（WKWebView）+ 同一套 xterm.js 资产。**必须封装延迟挂载宿主控件**，见 §5.4① |
-| 会话画面宿主 | `WindowsFormsHost`（RDP）/ WPF `Image`（VNC） | Avalonia `Image` + `WriteableBitmap`，**RDP / VNC 统一** |
+- 侧栏 `NSOutlineView` ← `ConnectionsPageViewModel`（分组 → 连接树、右键菜单、拖拽排序、
+  收藏 / 最近切换）。
+- 连接编辑器：原生 sheet（`NSWindow` 作 sheet）← `ConnectionEditorViewModel`。
+- 凭据库：`NSTableView` ← `CredentialsPageViewModel`；编辑 sheet ← `CredentialEditorViewModel`。
+- 设置：Preferences 窗口（`NSToolbar` 分页或 `NSTabView`）← `SettingsPageViewModel`。
+- 工具栏 `NSSearchField` → `ConnectionSearchService`（`Ctrl+K` / `Cmd+F` 聚焦）。
+- 标签管理 ← `TagManagerViewModel`。
+- **`IDialogService` 真实实现**：`NSAlert` / sheet / open-save panel，替掉当前 Avalonia stub。
+- 绑定基础设施：`Bind(control, getter, setter)` + PropertyChanged 订阅；
+  `TableSource<T>(ObservableCollection<T>)`（CollectionChanged → `reloadData` / 动画更新）。~200 行，一次性。
 
-### 8.4 ICMP 与连接质量
+### 8.D 会话画面（~1 周）
 
-- `ConnectionQualityProbe` / `ConnectionTestService` 使用 `System.Net.NetworkInformation.Ping`。
-- ⚠️ .NET 在 Unix 上因权限限制会**退化为调用 `/sbin/ping` 子进程**，保真度下降（部分 `PingOptions` 不生效），且 hardened runtime / 未来沙盒下的可用性需实测。
-- 若不可用，需给出降级策略：仅 TCP 连通探测 + UI 明确标注「本机无 ICMP，抖动 / 丢包无参考值」（现有 `ConnectionQualityProbe` 已有 `IcmpAvailable` 字段可承载该语义）。
+- **SSH**：`WKWebView` 子视图 + `WKScriptMessageHandler`（JS→宿主）+ `evaluateJavaScript`
+  （宿主→JS）。`terminal.html` 与桥接协议**原样复用**。**无 SIGILL 延迟挂载绕法**（直调）。
+- **VNC**：`NSView` + `CALayer`；`IFrameSource` → 每帧 BGRA 写进 `CGImage`（`CADisplayLink`
+  或计时器驱动）；`NSEvent` → keysym（移植现有 `AvaloniaVncKeyMapper` 键表逻辑）。
+- **多会话**：Tab（`NSTabView` 或自绘 Tab 条）或窗口-per-会话。
+- 会话生命周期：`SessionManager`（不变）。
+- 剪贴板：`NSPasteboard`（远端 → 本机接收，补上 Avalonia 版留的 TODO）。
+- **airspace 不再是问题**：AppKit 下浮层用 `NSPopover` / child window，直接盖住 `WKWebView` /
+  `CALayer`，无 Avalonia `NativeControlHost` 的遮挡限制。
 
-### 8.5 Phase 3 验收
+### 8.E Phase 2 — macOS RDP 适配层（原 §7，难度不变）
 
-- 功能面对齐 Windows v0.8.0 的 macOS 可达子集，**其中 RDP 以 §7.5 表为准**。
-- SSH 终端六套主题 / 粘贴安全 / 清屏 / 搜索可用。
-- VNC 画面 + 输入 + 剪贴板接收可用。
-- 数据迁移（§9）端到端可用。
+- FreeRDP 3.31.0 dylib P/Invoke（构建配置见 §7.1，**完全不变**）。
+- 帧 → `CGImage`（与 VNC 同路径）；输入注入；证书信任（首次记录 / 变化强警告，见 §7.4）。
+- 原生外壳不增加 RDP 难度。
+
+### 8.F 打包与分发（原 §11）
+
+- `macos` workload 产出 `.app`：`Info.plist`（`CFBundleIdentifier` / `LSMinimumSystemVersion` /
+  `NSHighResolutionCapable` / 按需 `NSMicrophoneUsageDescription`）、`.icns`。
+- FreeRDP / OpenSSL dylib 放 `Contents/Frameworks/`，`@rpath` 修正。
+- codesign（Developer ID Application + Hardened Runtime + entitlements）+ `notarytool` + staple。
+- universal（x86_64 + arm64，workload 支持；OpenSSL 双架构见 §11.2）。
+- `.dmg`：`RemoteFlow-v<X.Y.Z>-macos-universal.dmg`。
+
+### 8.G 验收
+
+- 功能面对齐 Windows v0.8.0 的 macOS 可达子集（RDP 以 §7.5 表为准）。
+- 观感通过用户实机验收（原生控件、菜单栏、vibrancy、sheet、红绿灯集成）。
+- SSH 终端六套主题 / 粘贴安全 / 清屏 / 搜索；VNC 画面 + 输入 + 剪贴板；数据迁移（§9）端到端。
 
 ---
 
@@ -622,6 +696,10 @@ FreeRDP 自身可用 `-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"` 一次产出 uni
 
 ---
 
+> **V1.3 更新**：原「Phase 3 — Avalonia UI 层 6–8 周」替换为「Phase 3 — 原生 AppKit UI 层」
+> A–D 约 4–6 周（+E RDP +F 打包）。当前 Avalonia `App.Mac` 的 view 层重建，
+> 但共享栈、Phase 0/1 成果、SSH/VNC 真机验证全部转移，净增量主要是手工绑定 glue。
+
 ## 13. 风险登记
 
 | 风险 | 等级 | 缓解 |
@@ -639,7 +717,9 @@ FreeRDP 自身可用 `-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"` 一次产出 uni
 | Phase 1 大范围重构引入 Windows 版回归 | 中 | §6.1 测试拆分置于第一项；Windows 版冒烟清单 |
 | `Microsoft.Data.Sqlite` / `SQLitePCLRaw` 在 `osx-arm64` 的原生库打包 | 低 | 官方支持，Phase 1 验证 publish 产物 |
 | `.NET 10` + Avalonia 版本兼容 | 低 | Phase 0 锁定并写入 `Directory.Packages.props` |
-| 命名空间遮蔽（`RemoteFlow.Application` vs `Avalonia.Application`） | 低 | UI 层统一完全限定名（已有先例） |
+| 命名空间遮蔽（`RemoteFlow.Application` vs `Avalonia.Application`） | 低 | 已随 Avalonia 弃用消解 |
+| AppKit 手工绑定 glue 量（`NSTextField↔VM` / `NSOutlineView↔ObservableCollection`） | 中 | Phase 8.A 门禁先验；先写 ~200 行可复用绑定辅助再机械化；这是 Xamarin.Mac 成熟套路 |
+| `net10.0-macos` 构建 `.app` 依赖 Xcode | 低 | 本机 Xcode 26.3 已在；CI 需 macOS runner + Xcode（原 Avalonia 打包也需 macOS runner） |
 
 ---
 
