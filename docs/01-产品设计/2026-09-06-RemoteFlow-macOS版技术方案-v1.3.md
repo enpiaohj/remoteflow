@@ -14,6 +14,7 @@
 | 版本 | 日期 | 主要变更 |
 |---|---|---|
 | V1.0 | 2026-09-06 | 初版（commit `3a3ff58`，原文可从 Git 历史检出） |
+| **V1.3.3** | **2026-09-07** | 8.D 多会话 Tab 落地（`SessionTabBar`，撤回单会话折中）；钥匙串授权框修复（`SecAccessCreate` 开放 ACL）；VNC 剪贴板 + 断开重连按钮实测通过 |
 | **V1.3.2** | **2026-09-07** | 8.C 补右键菜单（连接 / 分组 / 移动到分组）+ 详情卡编辑删除入口；8.D 补 VNC 剪贴板同步 + 断开重连按钮 + 列表默认选中；8.E RDP 改为 FreeRDP CLI 带凭据直连（`CredentialService.ResolveAsync`）/ 系统客户端回落；8.F 打包脚本 + Release 绕法（`LinkMode=None` + `Registrar=dynamic`）+ Entitlements 模板，产出 x64 `.app` + `.dmg`；图标改版 |
 | **V1.3.1** | **2026-09-07** | **8.B/8.C/8.D 实施进度回填（§8）。** 8.B 外壳、8.C 连接 / 凭据 / 分组 / 标签 / 设置管理 UI 及全套 `IDialogService` 已落地；8.D SSH 终端（含快速输入掉字修复）、VNC 画面（含 keysym 映射）实机连通；8.E RDP 首版走系统客户端交接（FreeRDP 内嵌仍待接）；多会话 Tab 按用户反馈暂做单会话。App 图标已接。移除开发期示例连接种子 |
 | **V1.3** | **2026-09-06** | **UI 技术调整：Avalonia → .NET for macOS（`net10.0-macos`，真 AppKit）。见 §3.4。** 起因：Avalonia 控件为 Skia 自绘、非 AppKit，无法达到「原生」观感（用户实机验收否决）。`.NET for macOS` 仍完整复用共享 .NET 栈（含 Presentation 14 个 VM 与 143 测试），一套工具链，WKWebView/FreeRDP/Keychain 直调更简单。原 §8「Phase 3 — Avalonia UI 层」整体重写为「原生 AppKit UI 层」（§8 新版，A–F 子阶段）。当前 Avalonia `RemoteFlow.App.Mac` 视为管路验证成果（证明共享栈→macOS→真机连接→渲染整链通），代码留 Git 历史，view 层重建 |
@@ -590,8 +591,9 @@ void             rf_rdp_destroy(rf_rdp_session*);
 - ✅ **VNC**：`VncScreenView` = `NSView` + `CALayer`；`IFrameSource` → ~30fps `CGImage`（`GCHandle` 固定
   BGRA 缓冲）；`NSEvent`（硬件虚拟键码 + `CharactersIgnoringModifiers`）→ X11 keysym（`AppKitVncKeyMapper`）。
   实机连通 `192.0.2.173:5900`（VNC 口令认证，keysym SEND OK）。
-- ⏸ **多会话**：按用户反馈「详情页只留一个连接即可」暂做**单会话**（开新会话前收旧，文件菜单
-  「断开会话」⌘⇧W；断开后覆盖层有「重新连接」按钮）。多 Tab 为后续项。
+- ✅ **多会话**：`SessionTabBar`（详情区顶部 Tab 条，协议图标 + 名称 + 关闭，空时隐藏）；
+  `MainWindowController._sessionViews` 管理各会话视图生命周期；同一连接已有会话 → 切 Tab 不重开；
+  `SessionManager.SessionClosed` → 清 Tab；「断开会话」⌘⇧W 关当前 Tab；断开覆盖层「重新连接」。
 - ✅ 会话生命周期：`SessionManager`（不变）。
 - ✅ 剪贴板：VNC 远端复制 → 本机 `NSPasteboard`（连接级 `ClipboardToLocal` 开关把关）。
 
@@ -611,12 +613,13 @@ void             rf_rdp_destroy(rf_rdp_session*);
 - ✅ csproj Release 绕法：`LinkMode=None` + `Registrar=dynamic`（绕 Xcode 26.3 缺 macOS 26.5 SDK 头文件的
   MM0179；升级 Xcode 后删除、恢复裁剪 + 静态 registrar 瘦身提速）。
 - ✅ `Info.plist`（图标 / 高分屏 / category）、`Entitlements.plist` 模板（jit / network.client / user-selected files）。
-- ⏳ **universal**：`lipo` 合并已实现，但合并后需逐层自底向上 ad-hoc 重签（`--deep` 会致
-  "Failed to initialize the VM"）；脚本已按此序处理，仍建议正式发布逐个 Mach-O 用 Developer ID 签。
+- ⏳ **universal**：`lipo` 合并已实现，但合并 CoreCLR 运行时 dylib 后 ad-hoc 重签仍偶发
+  "Microsoft.macOS: Failed to initialize the VM"（疑似 .NET host 自校验与切片签名冲突）。
+  开发机为 Intel，`x64` 包已够用；universal 待 CI（Xcode 26.6 + Developer ID 逐 Mach-O 签）补。
 - ⏳ **正式签名 + 公证**：Developer ID Application + Hardened Runtime + `notarytool` + `staple` —— 需 Apple 账号，脚本尾部留模板。
 - ⏳ FreeRDP / OpenSSL dylib 打进 `Contents/Frameworks/` + `@rpath`（内嵌式 RDP 落地时一并做）。
-- 说明：开发期每次 `dotnet build` ad-hoc 签名 hash 变化，钥匙串弹「不能验证真实性」授权；
-  正式 Developer ID 稳定签名后消失（非代码缺陷）。
+- ✅ 钥匙串授权框：`KeychainCredentialVault` 新写入用开放 ACL（`SecAccessCreate` trustedlist=NULL），
+  ad-hoc 构建 hash 变化不再触发「不能验证真实性」。老条目需重新写入才生效。
 
 ### 8.G 验收
 
