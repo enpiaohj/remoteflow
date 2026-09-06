@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using AppKit;
 using CoreGraphics;
 using Foundation;
@@ -13,10 +14,10 @@ namespace RemoteFlow.App.Mac;
 /// SSH 会话视图：<see cref="WKWebView"/> 承载 xterm.js 终端（复用 Presentation 的
 /// <c>terminal.html</c> 前端）。
 /// <para>
-/// 数据流：远端字节（<see cref="SshSession.DataReceived"/>，协议线程）→ 主线程 →
+/// 数据流：远端字节（<see cref="SshSession.DataReceived"/>，协议线程）→ 主线程按帧合批 →
 /// <c>window.rfTerminal.write(base64)</c>；页面 <c>post({type:'input'|'resize'|…})</c>
 /// 经 <c>window.webkit.messageHandlers.remoteflow</c> 回到 <see cref="Bridge"/> →
-/// <see cref="SshSession.SendInput"/> / <see cref="SshSession.Resize"/>。
+/// 后台串行泵 <see cref="SshSession.SendInput"/>（不占 UI 线程，避免按键掉字 / 卡顿）。
 /// </para>
 /// </summary>
 public sealed class SshTerminalView : NSView
@@ -25,9 +26,16 @@ public sealed class SshTerminalView : NSView
     private readonly WKWebView _web;
     private readonly NSTextField _status;
 
+    // 入向：协议线程写入、主线程按帧取走的合批缓冲。
+    private readonly object _rxLock = new();
+    private readonly List<byte> _rx = new();
+    private NSTimer? _rxTimer;
+
+    // 出向：主线程投递、后台单线程串行发送，保证顺序且不阻塞 UI。
+    private readonly Channel<byte[]> _outbound =
+        Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions { SingleReader = true });
+
     private bool _webReady;
-    private readonly List<byte[]> _pending = new();
-    private int _pendingBytes;
     private readonly bool _verify = Environment.GetEnvironmentVariable("RF_VERIFY") == "1";
 
     public SshTerminalView(SshSession session)
@@ -74,41 +82,88 @@ public sealed class SshTerminalView : NSView
         _session.DataReceived += OnDataReceived;
         _session.StateChanged += OnStateChanged;
 
+        _ = PumpOutboundAsync();
+
+        // ~60fps 取帧：把突发的逐字符回显合并成一次 write，降低 JS 桥往返。
+        _rxTimer = NSTimer.CreateRepeatingTimer(TimeSpan.FromMilliseconds(16), _ => FlushInbound());
+        NSRunLoop.Main.AddTimer(_rxTimer, NSRunLoopMode.Common);
+
         var dir = TerminalAssetStore.EnsureAvailable();
         var html = Path.Combine(dir, "terminal.html");
         _web.LoadFileUrl(NSUrl.FromFilename(html), NSUrl.FromFilename(dir));
     }
 
-    /// <summary>由宿主在视图移出详情区时调用，解开会话回调。</summary>
+    public override bool AcceptsFirstResponder() => true;
+
+    public override bool BecomeFirstResponder() => Window?.MakeFirstResponder(_web) ?? false;
+
+    public override void ViewDidMoveToWindow()
+    {
+        base.ViewDidMoveToWindow();
+        // 让 WKWebView 成为窗口第一响应者，键盘事件直达终端，避免首击需先点一下。
+        FocusWeb();
+    }
+
+    private void FocusWeb()
+    {
+        Window?.MakeFirstResponder(_web);
+        if (_webReady)
+        {
+            _web.EvaluateJavaScript("window.rfTerminal && window.rfTerminal.focus()", (_, _) => { });
+        }
+    }
+
+    /// <summary>由宿主在视图移出详情区时调用，解开会话回调与后台泵。</summary>
     public void Detach()
     {
         _session.DataReceived -= OnDataReceived;
         _session.StateChanged -= OnStateChanged;
+        _outbound.Writer.TryComplete();
+        _rxTimer?.Invalidate();
+        _rxTimer = null;
     }
 
-    // ── 远端 → 终端 ────────────────────────────────────────────
+    // ── 远端 → 终端（合批）────────────────────────────────────────
     private void OnDataReceived(object? sender, byte[] data)
     {
-        NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
+        lock (_rxLock)
         {
-            if (_verify)
+            // 上限保护：极端刷屏时丢最旧的，优先保证响应而非完整回放。
+            if (_rx.Count + data.Length > 1_048_576)
             {
-                Console.WriteLine($"[RF][rx] {data.Length} bytes");
+                _rx.Clear();
             }
 
-            if (!_webReady)
-            {
-                if (_pendingBytes + data.Length < 64 * 1024)
-                {
-                    _pending.Add(data);
-                    _pendingBytes += data.Length;
-                }
+            _rx.AddRange(data);
+        }
+    }
 
+    private void FlushInbound()
+    {
+        if (!_webReady)
+        {
+            return;
+        }
+
+        byte[] chunk;
+        lock (_rxLock)
+        {
+            if (_rx.Count == 0)
+            {
                 return;
             }
 
-            WriteToTerminal(data);
-        });
+            chunk = _rx.ToArray();
+            _rx.Clear();
+        }
+
+        if (_verify)
+        {
+            Console.WriteLine($"[RF][rx] {chunk.Length} bytes");
+        }
+
+        var payload = Convert.ToBase64String(chunk);
+        Eval($"window.rfTerminal && window.rfTerminal.write('{payload}')");
     }
 
     private void OnStateChanged(object? sender, SessionStateChangedEventArgs e)
@@ -131,12 +186,6 @@ public sealed class SshTerminalView : NSView
         });
     }
 
-    private void WriteToTerminal(byte[] data)
-    {
-        var payload = Convert.ToBase64String(data);
-        Eval($"window.rfTerminal && window.rfTerminal.write('{payload}')");
-    }
-
     private void Eval(string js)
     {
         if (!_webReady)
@@ -145,6 +194,29 @@ public sealed class SshTerminalView : NSView
         }
 
         _web.EvaluateJavaScript(js, (_, _) => { });
+    }
+
+    // ── 出向：后台串行发送 ─────────────────────────────────────────
+    private async Task PumpOutboundAsync()
+    {
+        try
+        {
+            await foreach (var data in _outbound.Reader.ReadAllAsync().ConfigureAwait(false))
+            {
+                try
+                {
+                    _session.SendInput(data);
+                }
+                catch
+                {
+                    // 单条发送失败不影响后续输入。
+                }
+            }
+        }
+        catch
+        {
+            // 通道关闭 / 视图销毁，正常结束。
+        }
     }
 
     // ── 页面 → 宿主 ────────────────────────────────────────────
@@ -156,14 +228,8 @@ public sealed class SshTerminalView : NSView
             case "ready":
                 _webReady = true;
                 _status.Hidden = true;
-                var replay = _pending.ToArray();
-                _pending.Clear();
-                _pendingBytes = 0;
-                foreach (var chunk in replay)
-                {
-                    WriteToTerminal(chunk);
-                }
-                Eval("window.rfTerminal.focus()");
+                FocusWeb();
+                FlushInbound();
                 break;
 
             case "input":
@@ -173,7 +239,7 @@ public sealed class SshTerminalView : NSView
                 {
                     try
                     {
-                        _session.SendInput(Convert.FromBase64String(b64));
+                        _outbound.Writer.TryWrite(Convert.FromBase64String(b64));
                     }
                     catch (FormatException)
                     {
@@ -188,7 +254,7 @@ public sealed class SshTerminalView : NSView
                 var text = Unescape(Extract(body, "\"text\":\"", "\"}"));
                 if (text.Length > 0)
                 {
-                    _session.SendInput(text);
+                    _outbound.Writer.TryWrite(System.Text.Encoding.UTF8.GetBytes(text));
                 }
                 break;
             }
