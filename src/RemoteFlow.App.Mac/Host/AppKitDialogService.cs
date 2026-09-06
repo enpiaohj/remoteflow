@@ -139,10 +139,63 @@ public sealed class AppKitDialogService : IDialogService
         return tcs.Task;
     }
 
-    public Task<string?> EditGroupNameAsync(GroupNamePrompt prompt) => NotYet<string?>("EditGroupNameAsync");
+    public Task<string?> EditGroupNameAsync(GroupNamePrompt prompt)
+    {
+        var tcs = new TaskCompletionSource<string?>();
+        NSApplication.SharedApplication.InvokeOnMainThread(() =>
+        {
+            var input = new AppKit.NSTextField(new CoreGraphics.CGRect(0, 0, 260, 24))
+            {
+                StringValue = prompt.InitialName,
+            };
+            var alert = new NSAlert
+            {
+                MessageText = prompt.Title,
+                InformativeText = prompt.ParentName is { Length: > 0 } p ? $"上级分组：{p}" : string.Empty,
+                AccessoryView = input,
+            };
+            alert.AddButton("确定");
+            alert.AddButton("取消");
+            alert.Window.InitialFirstResponder = input;
+            var name = alert.RunModal() == (nint)NSAlertButtonReturn.First ? input.StringValue.Trim() : null;
+            tcs.SetResult(string.IsNullOrEmpty(name) ? null : name);
+        });
+        return tcs.Task;
+    }
 
-    public Task<DefaultGroupOption?> PickDefaultGroupAsync(string deletedDefaultName, IReadOnlyList<DefaultGroupOption> options)
-        => NotYet<DefaultGroupOption?>("PickDefaultGroupAsync");
+    public Task<DefaultGroupOption?> PickDefaultGroupAsync(
+        string deletedDefaultName, IReadOnlyList<DefaultGroupOption> options)
+    {
+        var tcs = new TaskCompletionSource<DefaultGroupOption?>();
+        NSApplication.SharedApplication.InvokeOnMainThread(() =>
+        {
+            if (options.Count == 0)
+            {
+                tcs.SetResult(null);
+                return;
+            }
+
+            var popup = new AppKit.NSPopUpButton(new CoreGraphics.CGRect(0, 0, 260, 26), pullsDown: false);
+            foreach (var o in options)
+            {
+                popup.AddItem(o.Name);
+            }
+            popup.SelectItem(0);
+
+            var alert = new NSAlert
+            {
+                MessageText = "选择新的默认分组",
+                InformativeText = $"「{deletedDefaultName}」是当前默认新建连接分组，删除后新连接将进入所选分组。",
+                AccessoryView = popup,
+            };
+            alert.AddButton("确定");
+            alert.AddButton("取消");
+            tcs.SetResult(alert.RunModal() == (nint)NSAlertButtonReturn.First
+                ? options[(int)popup.IndexOfSelectedItem]
+                : null);
+        });
+        return tcs.Task;
+    }
 
     public Task<TagEditorResult?> EditTagAsync(TagEditorPrompt prompt) => NotYet<TagEditorResult?>("EditTagAsync");
 

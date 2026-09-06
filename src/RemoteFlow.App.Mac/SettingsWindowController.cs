@@ -105,11 +105,43 @@ public sealed class SettingsWindowController : NSWindowController
         var landing = Popup(new[] { "首页", "我的连接", "收藏", "最近连接", "凭据" }, (int)_vm.DefaultLandingPage,
             i => _vm.DefaultLandingPage = (LandingPage)i);
 
+        // ── 分组：保护默认分组 ──────────────────────────────────
+        var protect = new NSButton { Title = _vm.DefaultGroupSwitchLabel, TranslatesAutoresizingMaskIntoConstraints = false };
+        protect.SetButtonType(NSButtonType.Switch);
+        protect.State = _vm.DefaultGroupProtected ? NSCellStateValue.On : NSCellStateValue.Off;
+        protect.Enabled = _vm.ProtectionSwitchEnabled;
+        protect.Activated += (_, _) => _vm.DefaultGroupProtected = protect.State == NSCellStateValue.On;
+
+        var protectHint = Muted(_vm.DefaultGroupDescription);
+
+        // LoadGroupsAsync 完成后同步开关标题 / 状态 / 副文案。
+        _vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(SettingsPageViewModel.DefaultGroupProtected)
+                or nameof(SettingsPageViewModel.DefaultGroupSwitchLabel)
+                or nameof(SettingsPageViewModel.DefaultGroupLabel)
+                or nameof(SettingsPageViewModel.ProtectionSwitchEnabled)
+                or nameof(SettingsPageViewModel.DefaultGroupDescription))
+            {
+                NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
+                {
+                    protect.Title = _vm.DefaultGroupSwitchLabel;
+                    protect.State = _vm.DefaultGroupProtected ? NSCellStateValue.On : NSCellStateValue.Off;
+                    protect.Enabled = _vm.ProtectionSwitchEnabled;
+                    protectHint.StringValue = _vm.DefaultGroupDescription;
+                });
+            }
+        };
+
         return Page(
             Row("主题", theme),
             Row("默认页面", landing),
             Check("登录时自动启动 RemoteFlow", _vm.LaunchOnStartup, v => _vm.LaunchOnStartup = v),
-            Check("关闭窗口时最小化到菜单栏而非退出", _vm.MinimizeToTrayOnClose, v => _vm.MinimizeToTrayOnClose = v));
+            Check("关闭窗口时最小化到菜单栏而非退出", _vm.MinimizeToTrayOnClose, v => _vm.MinimizeToTrayOnClose = v),
+            Gap(8),
+            SectionLabel("分组"),
+            protect,
+            protectHint);
     }
 
     // ── RDP ─────────────────────────────────────────────────────
