@@ -32,11 +32,21 @@ echo "==> 清理"
 rm -rf "$DIST" "$OUT"
 mkdir -p "$DIST"
 
-sign_bundle() { # 自底向上 ad-hoc 签名（先所有嵌套 Mach-O，再 bundle 本体）
+# 优先用本机 Apple Development 证书（稳定身份 → 钥匙串 ACL 跨构建不失效）；
+# 没有则回落 ad-hoc（"-"）。正式发布传 RF_SIGN_IDENTITY="Developer ID Application: ..."。
+SIGN_ID="${RF_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null \
+  | grep -m1 -oE '"Apple Development:[^"]+"' | tr -d '"')}"
+SIGN_ID="${SIGN_ID:--}"
+ENTITLEMENTS="src/RemoteFlow.App.Mac/Entitlements.plist"
+
+sign_bundle() { # 自底向上签名（先所有嵌套 Mach-O，再 bundle 本体）
   local app="$1"
-  find "$app/Contents" -type f -name "*.dylib" -exec codesign --force --sign - {} \;
-  codesign --force --sign - "$app/Contents/MacOS/RemoteFlow.App.Mac"
-  codesign --force --sign - "$app"
+  echo "   身份：$SIGN_ID"
+  local ent=()
+  [ "$SIGN_ID" != "-" ] && ent=(--options runtime --entitlements "$ENTITLEMENTS")
+  find "$app/Contents" -type f -name "*.dylib" -exec codesign --force --timestamp=none --sign "$SIGN_ID" {} \;
+  codesign --force --timestamp=none "${ent[@]}" --sign "$SIGN_ID" "$app/Contents/MacOS/RemoteFlow.App.Mac"
+  codesign --force --timestamp=none "${ent[@]}" --sign "$SIGN_ID" "$app"
   codesign --verify --verbose "$app"
 }
 
@@ -86,12 +96,16 @@ echo
 echo "完成： $APP  /  $DMG"
 cat <<'NOTARIZE'
 
-── 正式发布补充（需 Apple Developer 账号）─────────────────────
-codesign --force --options runtime --timestamp \
-  --entitlements src/RemoteFlow.App.Mac/Entitlements.plist \
-  --sign "Developer ID Application: <团队名> (<TEAMID>)" dist/RemoteFlow.app
-xcrun notarytool submit "<dmg>" --apple-id <apple-id> --team-id <TEAMID> \
-  --password <app-专用密码> --wait
-xcrun stapler staple dist/RemoteFlow.app && xcrun stapler staple "<dmg>"
+── 正式发布（需 Apple「Developer ID Application」证书；本机现有的是「Apple Development」）─
+# 1) 在 Apple Developer 后台创建 Developer ID Application 证书并下载到钥匙串
+# 2) 存一次公证凭据（Team ID 4HFW56UM65）：
+xcrun notarytool store-credentials rf-notary \
+  --apple-id <apple-id> --team-id 4HFW56UM65 --password <App 专用密码>
+# 3) 重签 + 公证 + 装订：
+RF_SIGN_IDENTITY="Developer ID Application: <名字> (4HFW56UM65)" \
+  scripts/build-macos-release.sh x64
+xcrun notarytool submit dist/RemoteFlow-v*-macos-x64.dmg --keychain-profile rf-notary --wait
+xcrun stapler staple dist/RemoteFlow.app
+xcrun stapler staple dist/RemoteFlow-v*-macos-x64.dmg
 ────────────────────────────────────────────────────────────
 NOTARIZE
