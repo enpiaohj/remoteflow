@@ -40,6 +40,7 @@ public sealed class ConnectionListPane : NSViewController
         _tree.AddColumn(new NSTableColumn("c") { ResizingMask = NSTableColumnResizing.Autoresizing });
         _tree.OutlineTableColumn = _tree.TableColumns()[0];
         _tree.DoubleClick += (_, _) => ActivateTree();
+        _tree.Menu = new NSMenu { Delegate = new RowMenu(this, flat: false) };
 
         _flat.HeaderView = null;
         _flat.SelectionHighlightStyle = NSTableViewSelectionHighlightStyle.Regular;
@@ -49,6 +50,7 @@ public sealed class ConnectionListPane : NSViewController
         _flat.Style = NSTableViewStyle.Inset;
         _flat.AddColumn(new NSTableColumn("c") { ResizingMask = NSTableColumnResizing.Autoresizing });
         _flat.DoubleClick += (_, _) => ActivateFlat();
+        _flat.Menu = new NSMenu { Delegate = new RowMenu(this, flat: true) };
 
         _treeScroll = Scroll(_tree);
         _flatScroll = Scroll(_flat);
@@ -197,6 +199,109 @@ public sealed class ConnectionListPane : NSViewController
     private void ActivateFlat()
     {
         if (_flatSource?.Selected is { } c) ConnectionActivated?.Invoke(this, c);
+    }
+
+    // ── 右键菜单 ────────────────────────────────────────────────
+
+    private sealed class RowMenu : NSMenuDelegate
+    {
+        private readonly ConnectionListPane _pane;
+        private readonly bool _flat;
+
+        public RowMenu(ConnectionListPane pane, bool flat)
+        {
+            _pane = pane;
+            _flat = flat;
+        }
+
+        public override void MenuWillOpen(NSMenu menu)
+        {
+            menu.RemoveAllItems();
+
+            var (conn, group) = TargetRow();
+            if (conn is not null)
+            {
+                BuildConnectionMenu(menu, conn);
+            }
+            else if (group is not null && !_flat)
+            {
+                BuildGroupMenu(menu, group);
+            }
+        }
+
+        private (ConnectionItemViewModel? Conn, ConnectionGroupNodeViewModel? Group) TargetRow()
+        {
+            if (_flat)
+            {
+                var r = (int)_pane._flat.ClickedRow;
+                return r >= 0 && r < _pane._vm.Items.Count ? (_pane._vm.Items[r], null) : (null, null);
+            }
+
+            var row = _pane._tree.ClickedRow;
+            return _pane._treeSource?.RowObject(_pane._tree, row) switch
+            {
+                ConnectionItemViewModel c => (c, null),
+                ConnectionGroupNodeViewModel g => (null, g),
+                _ => (null, null),
+            };
+        }
+
+        private void BuildConnectionMenu(NSMenu menu, ConnectionItemViewModel conn)
+        {
+            menu.AddItem(Item("连接", () => _pane.ConnectionActivated?.Invoke(_pane, conn)));
+            menu.AddItem(NSMenuItem.SeparatorItem);
+            menu.AddItem(Item("编辑…", () => _pane.RunConnItem(_pane._vm.EditCommand, conn)));
+            menu.AddItem(Item("复制", () => _pane.RunConnItem(_pane._vm.DuplicateCommand, conn)));
+            menu.AddItem(Item(conn.IsFavorite ? "取消收藏" : "收藏",
+                () => _pane.RunConnItem(_pane._vm.ToggleFavoriteCommand, conn)));
+            menu.AddItem(Item("测试连接…", () => _pane.RunConnItem(_pane._vm.TestConnectionCommand, conn)));
+            menu.AddItem(NSMenuItem.SeparatorItem);
+            menu.AddItem(Item("删除…", () => _pane.RunConnItem(_pane._vm.DeleteCommand, conn)));
+        }
+
+        private void BuildGroupMenu(NSMenu menu, ConnectionGroupNodeViewModel group)
+        {
+            menu.AddItem(Item("新建子分组…", () => _pane.RunGroupItem(_pane._vm.CreateChildGroupCommand, group)));
+            menu.AddItem(Item("重命名…", () => _pane.RunGroupItem(_pane._vm.RenameGroupCommand, group)));
+            menu.AddItem(Item("设为默认分组", () => _pane.RunGroupItem(_pane._vm.SetDefaultGroupCommand, group)));
+            menu.AddItem(NSMenuItem.SeparatorItem);
+            menu.AddItem(Item("删除…", () => _pane.RunGroupItem(_pane._vm.DeleteGroupCommand, group)));
+        }
+
+        private static NSMenuItem Item(string title, Action action)
+        {
+            var item = new NSMenuItem(title);
+            item.Activated += (_, _) => action();
+            return item;
+        }
+    }
+
+    private async void RunConnItem(CommunityToolkit.Mvvm.Input.IAsyncRelayCommand command, ConnectionItemViewModel conn)
+    {
+        try
+        {
+            await command.ExecuteAsync(conn);
+        }
+        catch
+        {
+            // 命令内部已负责用户提示。
+        }
+
+        await RefreshAsync();
+    }
+
+    private async void RunGroupItem(CommunityToolkit.Mvvm.Input.IAsyncRelayCommand command, ConnectionGroupNodeViewModel group)
+    {
+        try
+        {
+            await command.ExecuteAsync(group);
+        }
+        catch
+        {
+            // 命令内部已负责用户提示。
+        }
+
+        await RefreshAsync();
     }
 
     // ── helpers ─────────────────────────────────────────────────

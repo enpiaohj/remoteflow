@@ -14,6 +14,8 @@ public sealed class DetailView : NSView
     private readonly NSView _container = new() { TranslatesAutoresizingMaskIntoConstraints = false };
 
     public event EventHandler<ConnectionItemViewModel>? ConnectRequested;
+    public event EventHandler<ConnectionItemViewModel>? EditRequested;
+    public event EventHandler<ConnectionItemViewModel>? DeleteRequested;
 
     public DetailView()
     {
@@ -89,6 +91,21 @@ public sealed class DetailView : NSView
         connect.ControlSize = NSControlSize.Large;
         connect.KeyEquivalent = "\r";
 
+        var edit = NSButton.CreateButton("编辑…", () => EditRequested?.Invoke(this, c));
+        edit.BezelStyle = NSBezelStyle.Rounded;
+        var delete = NSButton.CreateButton("删除…", () => DeleteRequested?.Invoke(this, c));
+        delete.BezelStyle = NSBezelStyle.Rounded;
+
+        var actions = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Spacing = 8,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        actions.AddArrangedSubview(connect);
+        actions.AddArrangedSubview(edit);
+        actions.AddArrangedSubview(delete);
+
         var stack = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
@@ -100,7 +117,7 @@ public sealed class DetailView : NSView
         stack.AddArrangedSubview(title);
         stack.AddArrangedSubview(subtitle);
         stack.AddArrangedSubview(Gap(8));
-        stack.AddArrangedSubview(connect);
+        stack.AddArrangedSubview(actions);
         stack.AddArrangedSubview(Gap(12));
         stack.AddArrangedSubview(SectionLabel("连接信息"));
         stack.AddArrangedSubview(InfoGrid(new (string, string)[]

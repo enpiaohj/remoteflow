@@ -66,6 +66,17 @@ public sealed class ConnectionTreeSource : NSOutlineViewDelegate, INSOutlineView
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>行对象：连接行返回 <see cref="ConnectionItemViewModel"/>，分组行返回 <see cref="ConnectionGroupNodeViewModel"/>。</summary>
+    public object? RowObject(NSOutlineView outline, nint row)
+        => row < 0
+            ? null
+            : outline.ItemAtRow(row) switch
+            {
+                ConnRef c => c.Item,
+                NodeRef n => n.Node,
+                _ => null,
+            };
+
     // ── cell ────────────────────────────────────────────────────
 
     private static NSView GroupCell(NSOutlineView outline, ConnectionGroupNodeViewModel node)

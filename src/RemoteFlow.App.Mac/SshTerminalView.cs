@@ -25,6 +25,7 @@ public sealed class SshTerminalView : NSView
     private readonly SshSession _session;
     private readonly WKWebView _web;
     private readonly NSTextField _status;
+    private readonly Bridge _bridge; // 强引用：防止 ObjC 侧回调时托管桥被 GC。
 
     // 入向：协议线程写入、主线程按帧取走的合批缓冲。
     private readonly object _rxLock = new();
@@ -46,7 +47,8 @@ public sealed class SshTerminalView : NSView
         Layer!.BackgroundColor = NSColor.Black.CGColor;
 
         var config = new WKWebViewConfiguration();
-        config.UserContentController.AddScriptMessageHandler(new Bridge(this), "remoteflow");
+        _bridge = new Bridge(this);
+        config.UserContentController.AddScriptMessageHandler(_bridge, "remoteflow");
 
         _web = new WKWebView(new CGRect(0, 0, 640, 400), config)
         {

@@ -52,6 +52,8 @@ public sealed class MainWindowController : NSWindowController
         _listPane.ConnectionSelected += (_, c) => _detail.ShowConnection(c);
         _listPane.ConnectionActivated += (_, c) => _ = OpenAsync(c.Profile, c.Name);
         _detail.ConnectRequested += (_, c) => _ = OpenAsync(c.Profile, c.Name);
+        _detail.EditRequested += (_, c) => _ = EditConnectionAsync(c);
+        _detail.DeleteRequested += (_, c) => _ = DeleteConnectionAsync(c);
 
         _connectionsVm.OpenConnectionRequested += (_, profile) => _ = OpenAsync(profile, profile.Name);
         _connectionsVm.NavigationRequested += (_, page) => NavigateTo(page);
@@ -211,6 +213,33 @@ public sealed class MainWindowController : NSWindowController
         {
             await _connectionsVm.CreateConnectionAsync();
             await _listPane.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _detail.ShowError(ex.Message);
+        }
+    }
+
+    private async Task EditConnectionAsync(ConnectionItemViewModel c)
+    {
+        try
+        {
+            await _connectionsVm.EditCommand.ExecuteAsync(c);
+            await _listPane.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _detail.ShowError(ex.Message);
+        }
+    }
+
+    private async Task DeleteConnectionAsync(ConnectionItemViewModel c)
+    {
+        try
+        {
+            await _connectionsVm.DeleteCommand.ExecuteAsync(c);
+            await _listPane.RefreshAsync();
+            _detail.ShowEmpty();
         }
         catch (Exception ex)
         {
