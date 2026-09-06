@@ -27,6 +27,14 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
     /// <summary>聚焦 RDP 控件后、注入按键前的等待时间，让焦点真正落到控件再发键。</summary>
     private static readonly TimeSpan FocusSettleDelay = TimeSpan.FromMilliseconds(40);
 
+    // 合成快捷键用到的虚拟键码。RDP 没有注入 API，只能 SendInput 发键；
+    // Ctrl+Alt+Del 的远端约定见 SendCtrlAltDeleteAsync。
+    private const ushort VkControl = 0x11;
+    private const ushort VkShift = 0x10;
+    private const ushort VkMenu = 0x12;
+    private const ushort VkEscape = 0x1B;
+    private const ushort VkEnd = 0x23;
+
     private readonly RdpSession _session;
     private readonly SessionTabViewModel _viewModel;
     private readonly ILogger<RdpSessionView> _logger;
@@ -130,6 +138,18 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
                     _logger.LogWarning(ex, "RDP 会话 {SessionId} 「发送 Ctrl+Alt+Del」失败", _session.SessionId);
                 }
                 break;
+
+            case SessionAction.LaunchTaskManager:
+                try
+                {
+                    await LaunchTaskManagerAsync();
+                }
+                catch (Exception ex)
+                {
+                    // async void 事件处理器：吞掉并记录异常，避免未观察异常击穿 UI。
+                    _logger.LogWarning(ex, "RDP 会话 {SessionId} 「启动任务管理器」失败", _session.SessionId);
+                }
+                break;
         }
     }
 
@@ -140,14 +160,35 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
     /// 远端的 Ctrl+Alt+Del（本机的真实 Ctrl+Alt+Del 会被 Windows 安全桌面拦截，
     /// 永远送不到远端）。因此这里合成一次 Ctrl+Alt+End 按键。
     /// </para>
+    /// </summary>
+    private Task SendCtrlAltDeleteAsync() =>
+        SendKeyComboAsync("Ctrl+Alt+Del", VkControl, VkMenu, VkEnd);
+
+    /// <summary>
+    /// 在远端启动任务管理器：合成一次 Ctrl+Shift+Esc。
+    /// <para>
+    /// Ctrl+Shift+Esc 是 Windows 直接打开任务管理器的系统快捷键，不经安全桌面，
+    /// 可像普通按键一样经 SendInput 注入到远端会话。
+    /// </para>
+    /// </summary>
+    private Task LaunchTaskManagerAsync() =>
+        SendKeyComboAsync("Ctrl+Shift+Esc", VkControl, VkShift, VkEscape);
+
+    /// <summary>
+    /// 向远程会话注入一组组合键。
     /// <para>
     /// SendInput 会把按键投递给<b>前台窗口</b>中持有键盘焦点的控件。全屏时工具条是
     /// Popup（独立顶层窗口），点击其按钮后 Popup 持有前台与键盘焦点；若不先把承载
-    /// RDP ActiveX 的主窗口带回前台并让 RDP 控件取得焦点，Ctrl+Alt+End 会落到
-    /// Popup / 其它元素，远端收不到。因此本方法按「置前 → 聚焦 → 延时稳定 → 注入」
-    /// 的顺序执行。只能在 UI 线程调用（命令/事件触发）。
+    /// RDP ActiveX 的主窗口带回前台并让 RDP 控件取得焦点，组合键会落到 Popup /
+    /// 其它元素，远端收不到。因此本方法按「置前 → 聚焦 → 延时稳定 → 注入」的顺序执行。
+    /// 只能在 UI 线程调用（命令/事件触发）。
+    /// </para>
+    /// <para>
+    /// 注入顺序：按 <paramref name="virtualKeys"/> 依次按下，再按相反顺序依次抬起
+    /// （例如 Ctrl+Shift+Esc：down Ctrl → down Shift → down Esc → up Esc → up Shift → up Ctrl）。
+    /// </para>
     /// </summary>
-    private async Task SendCtrlAltDeleteAsync()
+    private async Task SendKeyComboAsync(string actionName, params ushort[] virtualKeys)
     {
         if (_disposed)
         {
@@ -157,8 +198,8 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         if (_session.State != ConnectionState.Connected)
         {
             _logger.LogInformation(
-                "RDP 会话 {SessionId} 忽略「发送 Ctrl+Alt+Del」：当前状态 {State}，非已连接",
-                _session.SessionId, _session.State);
+                "RDP 会话 {SessionId} 忽略「{ActionName}」：当前状态 {State}，非已连接",
+                _session.SessionId, actionName, _session.State);
             return;
         }
 
@@ -166,8 +207,8 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         if (control is null || control.IsDisposed || !control.IsHandleCreated)
         {
             _logger.LogWarning(
-                "RDP 会话 {SessionId} 无法「发送 Ctrl+Alt+Del」：RDP 控件未就绪（IsDisposed={IsDisposed}, IsHandleCreated={IsHandleCreated}）",
-                _session.SessionId, control?.IsDisposed, control?.IsHandleCreated);
+                "RDP 会话 {SessionId} 无法「{ActionName}」：RDP 控件未就绪（IsDisposed={IsDisposed}, IsHandleCreated={IsHandleCreated}）",
+                _session.SessionId, actionName, control?.IsDisposed, control?.IsHandleCreated);
             return;
         }
 
@@ -186,8 +227,8 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         if (_disposed || _session.State != ConnectionState.Connected)
         {
             _logger.LogDebug(
-                "RDP 会话 {SessionId} 取消「发送 Ctrl+Alt+Del」：视图已释放或连接状态已变化（{State}）",
-                _session.SessionId, _session.State);
+                "RDP 会话 {SessionId} 取消「{ActionName}」：视图已释放或连接状态已变化（{State}）",
+                _session.SessionId, actionName, _session.State);
             return;
         }
 
@@ -198,23 +239,18 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
             SetFocus(control.Handle);
         }
 
-        const ushort VkControl = 0x11;
-        const ushort VkMenu = 0x12;
-        const ushort VkEnd = 0x23;
-
-        var inputs = new[]
+        // 5) 依次按下各键、再按相反顺序抬起，合成组合键。
+        var inputs = new Input[virtualKeys.Length * 2];
+        for (var i = 0; i < virtualKeys.Length; i++)
         {
-            CreateKeyInput(VkControl, keyUp: false),
-            CreateKeyInput(VkMenu, keyUp: false),
-            CreateKeyInput(VkEnd, keyUp: false),
-            CreateKeyInput(VkEnd, keyUp: true),
-            CreateKeyInput(VkMenu, keyUp: true),
-            CreateKeyInput(VkControl, keyUp: true)
-        };
+            inputs[i] = CreateKeyInput(virtualKeys[i], keyUp: false);
+            inputs[virtualKeys.Length + i] =
+                CreateKeyInput(virtualKeys[virtualKeys.Length - 1 - i], keyUp: true);
+        }
 
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>());
 
-        _logger.LogDebug("RDP 会话 {SessionId} 已发送 Ctrl+Alt+Del（Ctrl+Alt+End）", _session.SessionId);
+        _logger.LogDebug("RDP 会话 {SessionId} 已发送 {ActionName}", _session.SessionId, actionName);
     }
 
     /// <summary>

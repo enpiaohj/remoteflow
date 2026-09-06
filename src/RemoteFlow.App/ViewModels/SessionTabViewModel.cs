@@ -113,6 +113,10 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     [RelayCommand]
     private void SendCtrlAltDelete() => ActionRequested?.Invoke(this, SessionAction.SendCtrlAltDelete);
 
+    /// <summary>请求 RDP 视图向远端发送 Ctrl+Shift+Esc（启动任务管理器）。</summary>
+    [RelayCommand]
+    private void SendTaskManager() => ActionRequested?.Invoke(this, SessionAction.LaunchTaskManager);
+
     [RelayCommand]
     private void CopySelection() => ActionRequested?.Invoke(this, SessionAction.Copy);
 
@@ -273,6 +277,7 @@ public enum SessionAction
     EnterFullScreen,
     ToggleScaling,
     SendCtrlAltDelete,
+    LaunchTaskManager,
     Copy,
     Paste,
     ClearTerminal,

@@ -54,6 +54,9 @@
     <sys:String x:Key="Icon.Scale">&#xE9A6;</sys:String>
     <sys:String x:Key="Icon.Clipboard">&#xE8C8;</sys:String>
     <sys:String x:Key="Icon.Keyboard">&#xE765;</sys:String>
+    <!-- 启动任务管理器：Segoe Fluent 的 Diagnostic(U+E9D9，仪表/诊断形)，
+         贴近远端任务管理器的性能/进程仪表语义；目测不理想可换 E9F3(Process)/文字兜底。 -->
+    <sys:String x:Key="Icon.TaskManager">&#xE9D9;</sys:String>
     <sys:String x:Key="Icon.Paste">&#xE77F;</sys:String>
     <sys:String x:Key="Icon.Pin">&#xE718;</sys:String>
     <sys:String x:Key="Icon.Unpin">&#xE77A;</sys:String>

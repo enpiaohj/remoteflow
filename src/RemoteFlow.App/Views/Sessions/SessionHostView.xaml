@@ -74,6 +74,10 @@
                                 Content="{StaticResource Icon.Keyboard}"
                                 ToolTip="发送 Ctrl+Alt+Del"
                                 Command="{Binding SendCtrlAltDeleteCommand}" />
+                        <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                                Content="{StaticResource Icon.TaskManager}"
+                                ToolTip="启动任务管理器"
+                                Command="{Binding SendTaskManagerCommand}" />
                     </StackPanel>
 
                     <StackPanel x:Name="SshToolsDock" Orientation="Horizontal" Visibility="Collapsed">
@@ -307,6 +311,10 @@
                                 Content="{StaticResource Icon.Keyboard}"
                                 ToolTip="发送 Ctrl+Alt+Del"
                                 Command="{Binding SendCtrlAltDeleteCommand}" />
+                        <Button Style="{StaticResource Session.BarButton}"
+                                Content="{StaticResource Icon.TaskManager}"
+                                ToolTip="启动任务管理器"
+                                Command="{Binding SendTaskManagerCommand}" />
                     </StackPanel>
 
                     <StackPanel x:Name="SshToolsPill" Orientation="Horizontal" Visibility="Collapsed">
