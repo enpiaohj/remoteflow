@@ -214,7 +214,7 @@ public sealed partial class SessionQualityState : ObservableObject, IDisposable
 
         if (!last.TcpReachable)
         {
-            return "目标端口当前不可达，延迟 / 抖动 / 丢包无参考值。";
+            return "目标端口当前不可达，延迟 / 抖动 / 丢包暂不可用。";
         }
 
         if (!last.IcmpAvailable)
@@ -224,7 +224,7 @@ public sealed partial class SessionQualityState : ObservableObject, IDisposable
 
         if (last.SuccessfulPings < last.TotalPings)
         {
-            return $"参考探测丢失 {last.TotalPings - last.SuccessfulPings}/{last.TotalPings} 个包。";
+            return $"探测丢失 {last.TotalPings - last.SuccessfulPings}/{last.TotalPings} 个包。";
         }
 
         return string.Empty;

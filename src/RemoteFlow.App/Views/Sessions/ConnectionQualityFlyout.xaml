@@ -103,9 +103,9 @@
                     <!-- 左列：指标名 -->
                     <StackPanel Grid.Column="0" Margin="0,8,0,8">
                         <TextBlock Text="连接质量" Style="{StaticResource Text.Caption}" Height="26" />
-                        <TextBlock Text="延迟（参考）" Style="{StaticResource Text.Caption}" Height="26" />
-                        <TextBlock Text="抖动（参考）" Style="{StaticResource Text.Caption}" Height="26" />
-                        <TextBlock Text="丢包（参考）" Style="{StaticResource Text.Caption}" Height="26" />
+                        <TextBlock Text="延迟" Style="{StaticResource Text.Caption}" Height="26" />
+                        <TextBlock Text="抖动" Style="{StaticResource Text.Caption}" Height="26" />
+                        <TextBlock Text="丢包" Style="{StaticResource Text.Caption}" Height="26" />
                         <TextBlock Text="会话时长" Style="{StaticResource Text.Caption}" Height="26" />
                         <TextBlock Text="重连次数" Style="{StaticResource Text.Caption}" Height="26" />
                         <TextBlock Text="协议" Style="{StaticResource Text.Caption}" Height="26" />
