@@ -14,6 +14,7 @@ public sealed class DetailView : NSView
     private readonly NSView _container = new() { TranslatesAutoresizingMaskIntoConstraints = false };
 
     public event EventHandler<ConnectionItemViewModel>? ConnectRequested;
+    public event EventHandler<RemoteFlow.Core.Models.ConnectionProfile>? ReconnectRequested;
 
     public DetailView()
     {
@@ -47,10 +48,20 @@ public sealed class DetailView : NSView
             "该协议的会话画面尚未接入本区域。"));
 
     /// <summary>SSH 会话：xterm.js 终端。</summary>
-    public void ShowSshTerminal(SshSession session) => Swap(new SshTerminalView(session));
+    public void ShowSshTerminal(SshSession session)
+    {
+        var view = new SshTerminalView(session);
+        view.ReconnectRequested += (_, _) => ReconnectRequested?.Invoke(this, view.Profile);
+        Swap(view);
+    }
 
     /// <summary>VNC 会话：远端画面。</summary>
-    public void ShowVncScreen(VncSession session) => Swap(new VncScreenView(session));
+    public void ShowVncScreen(VncSession session)
+    {
+        var view = new VncScreenView(session);
+        view.ReconnectRequested += (_, _) => ReconnectRequested?.Invoke(this, view.Profile);
+        Swap(view);
+    }
 
     public void ShowError(string message)
         => Swap(Centered(Icon("exclamationmark.triangle", 40, NSColor.SystemOrange), "连接失败", message));

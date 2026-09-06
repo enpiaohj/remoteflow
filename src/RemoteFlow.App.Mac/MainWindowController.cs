@@ -50,6 +50,7 @@ public sealed class MainWindowController : NSWindowController
         _listPane.ConnectionSelected += (_, c) => _detail.ShowConnection(c);
         _listPane.ConnectionActivated += (_, c) => _ = OpenAsync(c.Profile, c.Name);
         _detail.ConnectRequested += (_, c) => _ = OpenAsync(c.Profile, c.Name);
+        _detail.ReconnectRequested += (_, p) => _ = OpenAsync(p, p.Name);
 
         _connectionsVm.OpenConnectionRequested += (_, profile) => _ = OpenAsync(profile, profile.Name);
         _connectionsVm.NavigationRequested += (_, page) => NavigateTo(page);

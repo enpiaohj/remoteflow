@@ -25,7 +25,13 @@ public sealed class SshTerminalView : NSView
     private readonly SshSession _session;
     private readonly WKWebView _web;
     private readonly NSTextField _status;
+    private readonly NSButton _reconnect;
     private readonly Bridge _bridge; // 强引用：防止 ObjC 侧回调时托管桥被 GC。
+
+    /// <summary>会话断开后用户点「重新连接」。宿主据此对同一 Profile 重开会话。</summary>
+    public event EventHandler? ReconnectRequested;
+
+    public RemoteFlow.Core.Models.ConnectionProfile Profile => _session.Profile;
 
     // 入向：协议线程写入、主线程按帧取走的合批缓冲。
     private readonly object _rxLock = new();
@@ -68,9 +74,14 @@ public sealed class SshTerminalView : NSView
             Font = NSFont.SystemFontOfSize(14),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
+        _reconnect = NSButton.CreateButton("重新连接", () => ReconnectRequested?.Invoke(this, EventArgs.Empty));
+        _reconnect.BezelStyle = NSBezelStyle.Rounded;
+        _reconnect.Hidden = true;
+        _reconnect.TranslatesAutoresizingMaskIntoConstraints = false;
 
         AddSubview(_web);
         AddSubview(_status);
+        AddSubview(_reconnect);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
             _web.LeadingAnchor.ConstraintEqualTo(LeadingAnchor),
@@ -79,6 +90,8 @@ public sealed class SshTerminalView : NSView
             _web.BottomAnchor.ConstraintEqualTo(BottomAnchor),
             _status.CenterXAnchor.ConstraintEqualTo(CenterXAnchor),
             _status.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
+            _reconnect.CenterXAnchor.ConstraintEqualTo(CenterXAnchor),
+            _reconnect.TopAnchor.ConstraintEqualTo(_status.BottomAnchor, 12),
         });
 
         _session.DataReceived += OnDataReceived;
@@ -184,6 +197,7 @@ public sealed class SshTerminalView : NSView
                     ?? (_session.ErrorCode == ConnectionErrorCode.None ? null : _session.ErrorCode.ToString());
                 _status.StringValue = reason is null ? what : $"{what}：{reason}";
                 _status.Hidden = false;
+                _reconnect.Hidden = false;
             }
         });
     }

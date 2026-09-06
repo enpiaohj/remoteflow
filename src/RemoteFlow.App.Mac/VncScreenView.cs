@@ -24,6 +24,12 @@ public sealed class VncScreenView : NSView
     private readonly IFrameSource _frames;
     private readonly CALayer _screen = new() { ContentsGravity = CALayer.GravityResizeAspect };
     private readonly NSTextField _overlay;
+    private readonly NSButton _reconnect;
+
+    /// <summary>会话断开后用户点「重新连接」。</summary>
+    public event EventHandler? ReconnectRequested;
+
+    public RemoteFlow.Core.Models.ConnectionProfile Profile => _session.Profile;
 
     private NSTimer? _timer;
     private byte[] _buffer = Array.Empty<byte>();
@@ -55,15 +61,24 @@ public sealed class VncScreenView : NSView
             Font = NSFont.SystemFontOfSize(14),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
+        _reconnect = NSButton.CreateButton("重新连接", () => ReconnectRequested?.Invoke(this, EventArgs.Empty));
+        _reconnect.BezelStyle = NSBezelStyle.Rounded;
+        _reconnect.Hidden = true;
+        _reconnect.TranslatesAutoresizingMaskIntoConstraints = false;
+
         AddSubview(_overlay);
+        AddSubview(_reconnect);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
             _overlay.CenterXAnchor.ConstraintEqualTo(CenterXAnchor),
             _overlay.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
+            _reconnect.CenterXAnchor.ConstraintEqualTo(CenterXAnchor),
+            _reconnect.TopAnchor.ConstraintEqualTo(_overlay.BottomAnchor, 12),
         });
 
         _frames.FrameSizeChanged += OnFrameSizeChanged;
         _session.StateChanged += OnStateChanged;
+        _session.ClipboardTextReceived += OnClipboardTextReceived;
 
         _pendingSize = _frames.FrameSize;
         StartLoop();
@@ -75,7 +90,17 @@ public sealed class VncScreenView : NSView
         StopLoop();
         _frames.FrameSizeChanged -= OnFrameSizeChanged;
         _session.StateChanged -= OnStateChanged;
+        _session.ClipboardTextReceived -= OnClipboardTextReceived;
     }
+
+    // 远端复制 → 本机剪贴板（连接级开关 Profile.Vnc.ClipboardToLocal 已在会话层把关）。
+    private void OnClipboardTextReceived(object? sender, string text)
+        => NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
+        {
+            var pb = NSPasteboard.GeneralPasteboard;
+            pb.ClearContents();
+            pb.SetStringForType(text, "public.utf8-plain-text");
+        });
 
     public override bool AcceptsFirstResponder() => true;
 
@@ -183,6 +208,7 @@ public sealed class VncScreenView : NSView
                         : _session.ErrorCode.ToString());
                 _overlay.StringValue = reason is null ? what : $"{what}：{reason}";
                 _overlay.Hidden = false;
+                _reconnect.Hidden = false;
             }
         });
     }
