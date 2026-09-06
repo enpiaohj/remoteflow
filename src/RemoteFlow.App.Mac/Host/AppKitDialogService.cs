@@ -197,12 +197,148 @@ public sealed class AppKitDialogService : IDialogService
         return tcs.Task;
     }
 
-    public Task<TagEditorResult?> EditTagAsync(TagEditorPrompt prompt) => NotYet<TagEditorResult?>("EditTagAsync");
+    public Task<TagEditorResult?> EditTagAsync(TagEditorPrompt prompt)
+    {
+        var tcs = new TaskCompletionSource<TagEditorResult?>();
+        NSApplication.SharedApplication.InvokeOnMainThread(() =>
+        {
+            var name = new AppKit.NSTextField(new CoreGraphics.CGRect(0, 0, 280, 24)) { StringValue = prompt.InitialName };
+            var desc = new AppKit.NSTextField(new CoreGraphics.CGRect(0, 0, 280, 24)) { StringValue = prompt.InitialDescription };
+            var well = new AppKit.NSColorWell(new CoreGraphics.CGRect(0, 0, 44, 24))
+            {
+                Color = ColorFromHex(prompt.InitialColor) ?? AppKit.NSColor.SystemBlue,
+            };
 
-    public Task<IReadOnlyList<Tag>> ManageTagsAsync() => NotYet<IReadOnlyList<Tag>>("ManageTagsAsync");
+            var grid = AppKit.NSGridView.Create(new AppKit.NSView[][]
+            {
+                new AppKit.NSView[] { Label("名称"), name },
+                new AppKit.NSView[] { Label("颜色"), well },
+                new AppKit.NSView[] { Label("描述"), desc },
+            });
+            grid.RowSpacing = 8;
+            grid.ColumnSpacing = 10;
+            grid.SetFrameSize(new CoreGraphics.CGSize(340, 96));
+
+            var alert = new NSAlert { MessageText = prompt.Title, AccessoryView = grid };
+            alert.AddButton("保存");
+            alert.AddButton("取消");
+            alert.Window.InitialFirstResponder = name;
+
+            if (alert.RunModal() != (nint)NSAlertButtonReturn.First || string.IsNullOrWhiteSpace(name.StringValue))
+            {
+                tcs.SetResult(null);
+                return;
+            }
+
+            tcs.SetResult(new TagEditorResult(
+                name.StringValue.Trim(),
+                HexFromColor(well.Color),
+                desc.StringValue.Trim()));
+        });
+        return tcs.Task;
+    }
+
+    public async Task<IReadOnlyList<Tag>> ManageTagsAsync()
+    {
+        var initial = await _connections.GetTagsAsync();
+        var tcs = new TaskCompletionSource();
+        NSApplication.SharedApplication.InvokeOnMainThread(() =>
+        {
+            try
+            {
+                var vm = new TagManagerViewModel(_connections, this, initial);
+                new TagManagerSheet(vm).Run();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "标签管理器打开失败");
+            }
+
+            tcs.SetResult();
+        });
+        await tcs.Task;
+        return await _connections.GetTagsAsync();
+    }
 
     public Task<string?> PromptPasswordAsync(string title, string message, bool confirm)
-        => NotYet<string?>("PromptPasswordAsync");
+    {
+        var tcs = new TaskCompletionSource<string?>();
+        NSApplication.SharedApplication.InvokeOnMainThread(() =>
+        {
+            var pw = new AppKit.NSSecureTextField(new CoreGraphics.CGRect(0, 0, 280, 24));
+            AppKit.NSView accessory = pw;
+
+            AppKit.NSSecureTextField? confirmPw = null;
+            if (confirm)
+            {
+                confirmPw = new AppKit.NSSecureTextField(new CoreGraphics.CGRect(0, 0, 280, 24));
+                var grid = AppKit.NSGridView.Create(new AppKit.NSView[][]
+                {
+                    new AppKit.NSView[] { Label("口令"), pw },
+                    new AppKit.NSView[] { Label("确认"), confirmPw },
+                });
+                grid.RowSpacing = 8;
+                grid.ColumnSpacing = 10;
+                grid.SetFrameSize(new CoreGraphics.CGSize(340, 64));
+                accessory = grid;
+            }
+
+            var alert = new NSAlert { MessageText = title, InformativeText = message, AccessoryView = accessory };
+            alert.AddButton("确定");
+            alert.AddButton("取消");
+            alert.Window.InitialFirstResponder = pw;
+
+            if (alert.RunModal() != (nint)NSAlertButtonReturn.First)
+            {
+                tcs.SetResult(null);
+                return;
+            }
+
+            if (confirmPw is not null && pw.StringValue != confirmPw.StringValue)
+            {
+                new NSAlert { MessageText = "两次输入不一致", AlertStyle = NSAlertStyle.Warning }.RunModal();
+                tcs.SetResult(null);
+                return;
+            }
+
+            tcs.SetResult(pw.StringValue);
+        });
+        return tcs.Task;
+    }
+
+    private static AppKit.NSTextField Label(string text) => new()
+    {
+        StringValue = text,
+        Bordered = false,
+        Editable = false,
+        Selectable = false,
+        DrawsBackground = false,
+        Alignment = AppKit.NSTextAlignment.Right,
+        TextColor = AppKit.NSColor.SecondaryLabel,
+    };
+
+    private static AppKit.NSColor? ColorFromHex(string hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex))
+        {
+            return null;
+        }
+
+        var s = hex.TrimStart('#');
+        if (s.Length != 6 || !int.TryParse(s, System.Globalization.NumberStyles.HexNumber, null, out var v))
+        {
+            return null;
+        }
+
+        return AppKit.NSColor.FromRgb(((v >> 16) & 0xFF) / 255f, ((v >> 8) & 0xFF) / 255f, (v & 0xFF) / 255f);
+    }
+
+    private static string HexFromColor(AppKit.NSColor color)
+    {
+        var c = color.UsingColorSpace(AppKit.NSColorSpace.SRGBColorSpace) ?? color;
+        c.GetRgba(out var r, out var g, out var b, out _);
+        return $"#{(int)Math.Round(r * 255):X2}{(int)Math.Round(g * 255):X2}{(int)Math.Round(b * 255):X2}";
+    }
 
     public string? PickFileToOpen(string title, string filter)
     {
@@ -258,7 +394,24 @@ public sealed class AppKitDialogService : IDialogService
 
     public Task ShowAboutAsync() => ShowMessageAsync("RemoteFlow", "统一远程连接工作台（macOS）");
 
-    public Task ShowConnectionTestAsync(ConnectionProfile profile) => NotYet<object?>("ShowConnectionTestAsync");
+    public Task ShowConnectionTestAsync(ConnectionProfile profile)
+    {
+        var tcs = new TaskCompletionSource();
+        NSApplication.SharedApplication.InvokeOnMainThread(() =>
+        {
+            try
+            {
+                new ConnectionTestWindow(profile).Run();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "测试连接对话框失败");
+            }
+
+            tcs.SetResult();
+        });
+        return tcs.Task;
+    }
 
     private Task<T> NotYet<T>(string what)
     {
