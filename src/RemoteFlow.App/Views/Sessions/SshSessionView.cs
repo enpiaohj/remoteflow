@@ -417,7 +417,9 @@ public sealed class SshSessionView : ContentControl, IDisposable
         }
 
         var normalized = rawText.Replace("\r\n", "\n").Replace('\r', '\n');
-        var lineCount = normalized.Split('\n').Length;
+        // 行数只用于判定与提示：先去掉尾换行再数，避免「单行命令 + 尾换行」被误判成
+        // 两行、提示 N+1。发送时仍保留原文（尾换行会转成 \r，恰好是提交回车）。
+        var lineCount = normalized.TrimEnd('\n').Split('\n').Length;
         var multiline = lineCount > 1;
         var large = normalized.Length > LargePasteThreshold;
 
