@@ -82,8 +82,13 @@ public sealed class VncOptions
     /// <summary>
     /// 剪贴板同步（远端 → 本机）：接收远端复制的内容并写入本机剪贴板。
     /// 仅覆盖协议官方承诺的 server → client 方向；本机 → 远端发送暂不支持。
+    /// <para>
+    /// 类型默认 <c>false</c> 是存量保守：老连接反序列化时缺字段取类型默认，
+    /// 不会因升级而静默开启“远端 → 本机剪贴板覆盖”。新建连接由连接编辑器从
+    /// <see cref="AppSettings.VncDefaultClipboardToLocal"/> 显式赋值（全局默认 true）。
+    /// </para>
     /// </summary>
-    public bool ClipboardToLocal { get; set; } = true;
+    public bool ClipboardToLocal { get; set; } = false;
 
     /// <summary>连接超时（秒）。</summary>
     public int ConnectTimeoutSeconds { get; set; } = 15;
