@@ -103,6 +103,12 @@ public sealed class AppDelegate : NSApplicationDelegate
         fileItem.Submenu = fileMenu;
         fileMenu.AddItem(new NSMenuItem("新建连接…", "n", (_, _) =>
             (NSApplication.SharedApplication.Delegate as AppDelegate)?._mainWindow?.BeginNewConnection()));
+        fileMenu.AddItem(NSMenuItem.SeparatorItem);
+        fileMenu.AddItem(new NSMenuItem("断开会话", "w", (_, _) =>
+            (NSApplication.SharedApplication.Delegate as AppDelegate)?._mainWindow?.DisconnectCurrentSession())
+        {
+            KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.ShiftKeyMask,
+        });
 
         var editItem = new NSMenuItem();
         menubar.AddItem(editItem);

@@ -216,6 +216,34 @@ public sealed class MainWindowController : NSWindowController
         }
     }
 
+    /// <summary>菜单「断开会话」：收掉当前会话并回到连接信息卡。</summary>
+    public async void DisconnectCurrentSession()
+    {
+        if (_sessions.ActiveSessionCount == 0)
+        {
+            return;
+        }
+
+        await CloseActiveSessionsAsync();
+        Window.Title = "RemoteFlow";
+        await _listPane.RefreshAsync();
+    }
+
+    private async Task CloseActiveSessionsAsync()
+    {
+        foreach (var s in _sessions.ActiveSessions.ToArray())
+        {
+            try
+            {
+                await _sessions.CloseSessionAsync(s.SessionId);
+            }
+            catch
+            {
+                // 收尾尽力而为。
+            }
+        }
+    }
+
     private void NavigateTo(NavigationPage page)
     {
         var item = page switch
@@ -247,6 +275,9 @@ public sealed class MainWindowController : NSWindowController
 
             return;
         }
+
+        // 单会话详情：开新会话前先收掉旧的（用户反馈「详情页只留一个连接」）。
+        await CloseActiveSessionsAsync();
 
         _detail.ShowConnecting(name);
         try
