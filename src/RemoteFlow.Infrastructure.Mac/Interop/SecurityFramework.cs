@@ -44,9 +44,37 @@ internal static partial class SecurityFramework
     internal static nint SecReturnData => Constant("kSecReturnData");
     internal static nint SecMatchLimit => Constant("kSecMatchLimit");
     internal static nint SecMatchLimitOne => Constant("kSecMatchLimitOne");
+    internal static nint SecAttrAccess => Constant("kSecAttrAccess");
 
     private static nint Constant(string name)
         => Marshal.ReadIntPtr(NativeLibrary.GetExport(LibraryHandle, name));
+
+    /// <summary>
+    /// 创建「所有应用可访问、不弹授权框」的 SecAccessRef（<c>trustedlist = NULL</c>）。
+    /// <para>
+    /// 用途：ad-hoc 签名的开发构建每次 hash 变化会让默认「仅创建方」ACL 失效，
+    /// 触发钥匙串授权框。桌面单用户应用里「钥匙串本身已解锁」即是安全边界，
+    /// 因此新写入的条目放开 app 限制，避免每次构建都要重新授权。
+    /// 失败（如权限不足）返回 <c>nint.Zero</c>，调用方回落默认 ACL。
+    /// </para>
+    /// </summary>
+    internal static nint CreateOpenAccess(string label)
+    {
+        try
+        {
+            using var descriptor = CoreFoundation.CreateString(label);
+            var rc = SecAccessCreate(descriptor.Handle, nint.Zero, out var access);
+            return rc == ErrSecSuccess ? access : nint.Zero;
+        }
+        catch
+        {
+            // 老 API 不可用等：回落默认 ACL。
+            return nint.Zero;
+        }
+    }
+
+    [LibraryImport(Library)]
+    private static partial int SecAccessCreate(nint descriptor, nint trustedList, out nint accessRef);
 
     // ── CoreFoundation 布尔常量（供 kSecReturnData 使用）─────────
 

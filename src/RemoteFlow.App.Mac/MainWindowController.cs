@@ -20,9 +20,15 @@ public sealed class MainWindowController : NSWindowController
     private readonly NavSidebar _nav;
     private readonly ConnectionListPane _listPane;
     private readonly DetailView _detail = new();
+    private readonly SessionTabBar _tabBar = new();
+    private readonly NSView _stage = new() { TranslatesAutoresizingMaskIntoConstraints = false };
     private readonly NSSplitViewController _split = new();
     private readonly NSSearchField _search = new() { PlaceholderString = "搜索连接" };
     private NSSplitViewItem? _listItem;
+
+    // 会话 Id → 其画面视图（SshTerminalView / VncScreenView）。多 Tab 并存。
+    private readonly Dictionary<Guid, NSView> _sessionViews = new();
+    private readonly Dictionary<Guid, string> _sessionNames = new();
 
     private SettingsWindowController? _settingsWindow;
     private NavSidebar.Item? _currentNav;
@@ -47,10 +53,14 @@ public sealed class MainWindowController : NSWindowController
         BuildToolbar();
 
         _nav.Selected += OnNavSelected;
-        _listPane.ConnectionSelected += (_, c) => _detail.ShowConnection(c);
+        _listPane.ConnectionSelected += (_, c) => ShowInfoCard(c);
         _listPane.ConnectionActivated += (_, c) => _ = OpenAsync(c.Profile, c.Name);
         _detail.ConnectRequested += (_, c) => _ = OpenAsync(c.Profile, c.Name);
-        _detail.ReconnectRequested += (_, p) => _ = OpenAsync(p, p.Name);
+
+        _tabBar.TabSelected += (_, id) => ShowSessionStage(id);
+        _tabBar.TabClosed += (_, id) => _ = CloseSessionAsync(id);
+        _sessions.SessionClosed += (_, id) =>
+            NSApplication.SharedApplication.BeginInvokeOnMainThread(() => DropSession(id));
 
         _connectionsVm.OpenConnectionRequested += (_, profile) => _ = OpenAsync(profile, profile.Name);
         _connectionsVm.NavigationRequested += (_, page) => NavigateTo(page);
@@ -88,12 +98,89 @@ public sealed class MainWindowController : NSWindowController
         _listItem.CanCollapse = true;
         _split.AddSplitViewItem(_listItem);
 
-        var detailVc = new NSViewController { View = _detail };
+        // 详情区 = [会话 Tab 条（空时隐藏）] + [舞台：详情卡 / 会话画面]。
+        var detailRoot = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        detailRoot.AddSubview(_tabBar);
+        detailRoot.AddSubview(_stage);
+        _tabBar.Hidden = true;
+
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            _tabBar.TopAnchor.ConstraintEqualTo(detailRoot.SafeAreaLayoutGuide.TopAnchor),
+            _tabBar.LeadingAnchor.ConstraintEqualTo(detailRoot.LeadingAnchor),
+            _tabBar.TrailingAnchor.ConstraintEqualTo(detailRoot.TrailingAnchor),
+            _stage.LeadingAnchor.ConstraintEqualTo(detailRoot.LeadingAnchor),
+            _stage.TrailingAnchor.ConstraintEqualTo(detailRoot.TrailingAnchor),
+            _stage.BottomAnchor.ConstraintEqualTo(detailRoot.BottomAnchor),
+        });
+        _stageTop = _stage.TopAnchor.ConstraintEqualTo(detailRoot.SafeAreaLayoutGuide.TopAnchor);
+        _stageTopWithTabs = _stage.TopAnchor.ConstraintEqualTo(_tabBar.BottomAnchor);
+        _stageTop.Active = true;
+
+        ShowStage(_detail);
+
+        var detailVc = new NSViewController { View = detailRoot };
         var detailItem = NSSplitViewItem.FromViewController(detailVc);
         detailItem.MinimumThickness = 420;
         _split.AddSplitViewItem(detailItem);
 
         Window.ContentViewController = _split;
+    }
+
+    private NSLayoutConstraint _stageTop = null!;
+    private NSLayoutConstraint _stageTopWithTabs = null!;
+
+    private void SyncTabBarVisibility()
+    {
+        var show = _tabBar.Count > 0;
+        _tabBar.Hidden = !show;
+        _stageTop.Active = !show;
+        _stageTopWithTabs.Active = show;
+    }
+
+    private void ShowStage(NSView view)
+    {
+        foreach (var v in _stage.Subviews.ToArray())
+        {
+            v.RemoveFromSuperview();
+        }
+
+        view.TranslatesAutoresizingMaskIntoConstraints = false;
+        _stage.AddSubview(view);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            view.TopAnchor.ConstraintEqualTo(_stage.TopAnchor),
+            view.LeadingAnchor.ConstraintEqualTo(_stage.LeadingAnchor),
+            view.TrailingAnchor.ConstraintEqualTo(_stage.TrailingAnchor),
+            view.BottomAnchor.ConstraintEqualTo(_stage.BottomAnchor),
+        });
+    }
+
+    private void ShowInfoCard(ConnectionItemViewModel c)
+    {
+        _tabBar.ClearHighlight();
+        _detail.ShowConnection(c);
+        ShowStage(_detail);
+    }
+
+    private void ShowDetailStage()
+    {
+        _tabBar.ClearHighlight();
+        ShowStage(_detail);
+    }
+
+    private void ShowSessionStage(Guid id)
+    {
+        if (_sessionViews.TryGetValue(id, out var view))
+        {
+            _activeSessionId = id;
+            _tabBar.HighlightOnly(id);
+            ShowStage(view);
+            if (_sessionNames.TryGetValue(id, out var n))
+            {
+                Window.Title = $"{n} — RemoteFlow";
+            }
+        }
     }
 
     private void BuildToolbar()
@@ -157,6 +244,12 @@ public sealed class MainWindowController : NSWindowController
 
         _currentNav = item;
 
+        if (item != NavSidebar.Item.Settings)
+        {
+            _tabBar.ClearHighlight();
+            ShowStage(_detail);
+        }
+
         switch (item)
         {
             case NavSidebar.Item.Connections:
@@ -217,31 +310,12 @@ public sealed class MainWindowController : NSWindowController
         }
     }
 
-    /// <summary>菜单「断开会话」：收掉当前会话并回到连接信息卡。</summary>
+    /// <summary>菜单「断开会话」⌘⇧W：关闭当前 Tab 的会话。</summary>
     public async void DisconnectCurrentSession()
     {
-        if (_sessions.ActiveSessionCount == 0)
+        if (_activeSessionId != Guid.Empty)
         {
-            return;
-        }
-
-        await CloseActiveSessionsAsync();
-        Window.Title = "RemoteFlow";
-        await _listPane.RefreshAsync();
-    }
-
-    private async Task CloseActiveSessionsAsync()
-    {
-        foreach (var s in _sessions.ActiveSessions.ToArray())
-        {
-            try
-            {
-                await _sessions.CloseSessionAsync(s.SessionId);
-            }
-            catch
-            {
-                // 收尾尽力而为。
-            }
+            await CloseSessionAsync(_activeSessionId);
         }
     }
 
@@ -286,10 +360,16 @@ public sealed class MainWindowController : NSWindowController
             return;
         }
 
-        // 单会话详情：开新会话前先收掉旧的（用户反馈「详情页只留一个连接」）。
-        await CloseActiveSessionsAsync();
+        // 已有同一连接的活动会话 → 切到它的 Tab，不重复建。
+        var existing = _sessions.ActiveSessions.FirstOrDefault(s => s.Profile.Id == profile.Id);
+        if (existing is not null && _sessionViews.ContainsKey(existing.SessionId))
+        {
+            ShowSessionStage(existing.SessionId);
+            return;
+        }
 
         _detail.ShowConnecting(name);
+        ShowStage(_detail);
         try
         {
             var session = await _sessions.CreateSessionAsync(profile);
@@ -299,22 +379,30 @@ public sealed class MainWindowController : NSWindowController
             if (session.State != RemoteFlow.Core.Models.ConnectionState.Connected)
             {
                 _detail.ShowError(session.ErrorMessage ?? session.ErrorCode.ToString());
+                await _sessions.CloseSessionAsync(session.SessionId);
                 return;
             }
 
-            switch (session)
+            NSView view = session switch
             {
-                case RemoteFlow.Protocol.Ssh.SshSession ssh:
-                    _detail.ShowSshTerminal(ssh);
-                    break;
-                case RemoteFlow.Protocol.Vnc.VncSession vnc:
-                    _detail.ShowVncScreen(vnc);
-                    break;
-                default:
-                    _detail.ShowSessionPlaceholder(name, session.SessionId);
-                    break;
+                RemoteFlow.Protocol.Ssh.SshSession ssh => _detail.MakeSshTerminal(ssh),
+                RemoteFlow.Protocol.Vnc.VncSession vnc => _detail.MakeVncScreen(vnc),
+                _ => _detail.MakeSessionPlaceholder(name),
+            };
+            if (view is SshTerminalView st)
+            {
+                st.ReconnectRequested += (_, _) => _ = OpenAsync(profile, name);
+            }
+            else if (view is VncScreenView vv)
+            {
+                vv.ReconnectRequested += (_, _) => _ = OpenAsync(profile, name);
             }
 
+            _sessionViews[session.SessionId] = view;
+            _sessionNames[session.SessionId] = name;
+            _tabBar.AddTab(session.SessionId, name, profile.Protocol);
+            SyncTabBarVisibility();
+            ShowSessionStage(session.SessionId);
             Window.Title = $"{name} — RemoteFlow";
         }
         catch (Exception ex)
@@ -323,4 +411,41 @@ public sealed class MainWindowController : NSWindowController
         }
     }
 
+    private async Task CloseSessionAsync(Guid id)
+    {
+        try
+        {
+            await _sessions.CloseSessionAsync(id);
+        }
+        catch
+        {
+            // 收尾尽力而为。
+        }
+
+        DropSession(id);
+    }
+
+    /// <summary>会话（本地关 / 远端断）后清理 Tab 与视图。</summary>
+    private void DropSession(Guid id)
+    {
+        if (_sessionViews.Remove(id, out var view))
+        {
+            (view as SshTerminalView)?.Detach();
+            (view as VncScreenView)?.Detach();
+            view.RemoveFromSuperview();
+        }
+
+        _sessionNames.Remove(id);
+        _tabBar.RemoveTab(id); // 若还有 Tab，内部会重选最后一个并触发 ShowSessionStage
+        SyncTabBarVisibility();
+
+        if (_tabBar.Count == 0)
+        {
+            _activeSessionId = Guid.Empty;
+            Window.Title = "RemoteFlow";
+            ShowDetailStage();
+        }
+    }
+
+    private Guid _activeSessionId;
 }

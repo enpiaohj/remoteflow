@@ -14,7 +14,6 @@ public sealed class DetailView : NSView
     private readonly NSView _container = new() { TranslatesAutoresizingMaskIntoConstraints = false };
 
     public event EventHandler<ConnectionItemViewModel>? ConnectRequested;
-    public event EventHandler<RemoteFlow.Core.Models.ConnectionProfile>? ReconnectRequested;
 
     public DetailView()
     {
@@ -41,27 +40,14 @@ public sealed class DetailView : NSView
     public void ShowConnecting(string name)
         => Swap(Centered(Spinner(), $"正在连接 {name} …"));
 
-    public void ShowSessionPlaceholder(string name, Guid sessionId)
-        => Swap(Centered(
-            Icon("checkmark.circle", 40, NSColor.SystemGreen),
-            $"已连接 {name}",
-            "该协议的会话画面尚未接入本区域。"));
+    // 会话视图的生命周期与多 Tab 由 MainWindowController 管理，这里只负责构造。
+    public SshTerminalView MakeSshTerminal(SshSession session) => new(session);
 
-    /// <summary>SSH 会话：xterm.js 终端。</summary>
-    public void ShowSshTerminal(SshSession session)
-    {
-        var view = new SshTerminalView(session);
-        view.ReconnectRequested += (_, _) => ReconnectRequested?.Invoke(this, view.Profile);
-        Swap(view);
-    }
+    public VncScreenView MakeVncScreen(VncSession session) => new(session);
 
-    /// <summary>VNC 会话：远端画面。</summary>
-    public void ShowVncScreen(VncSession session)
-    {
-        var view = new VncScreenView(session);
-        view.ReconnectRequested += (_, _) => ReconnectRequested?.Invoke(this, view.Profile);
-        Swap(view);
-    }
+    public NSView MakeSessionPlaceholder(string name)
+        => Centered(Icon("checkmark.circle", 40, NSColor.SystemGreen), $"已连接 {name}",
+            "该协议的会话画面尚未接入本区域。");
 
     public void ShowError(string message)
         => Swap(Centered(Icon("exclamationmark.triangle", 40, NSColor.SystemOrange), "连接失败", message));
@@ -303,8 +289,6 @@ public sealed class DetailView : NSView
     {
         foreach (var v in _container.Subviews.ToArray())
         {
-            (v as SshTerminalView)?.Detach();
-            (v as VncScreenView)?.Detach();
             v.RemoveFromSuperview();
         }
 

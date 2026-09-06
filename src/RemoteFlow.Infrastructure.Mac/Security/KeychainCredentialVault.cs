@@ -192,23 +192,43 @@ public sealed class KeychainCredentialVault : ICredentialVault
 
         // kSecAttrAccessibleAfterFirstUnlock：登录后即可访问，避免后台重连时因
         // 钥匙串未解锁而失败；同时不降级到「始终可访问」这种更弱的等级。
-        using var attributes = CoreFoundation.CreateDictionary(
+        // kSecAttrAccess（trustedlist=NULL）：放开 app 签名限制，避免 ad-hoc 构建
+        // 每次 hash 变化触发授权框（见 SecurityFramework.CreateOpenAccess 说明）。
+        var access = SecurityFramework.CreateOpenAccess(_service);
+        try
+        {
+            List<nint> keys =
             [
                 SecurityFramework.SecClass,
                 SecurityFramework.SecAttrService,
                 SecurityFramework.SecAttrAccount,
                 SecurityFramework.SecValueData,
                 SecurityFramework.SecAttrAccessible,
-            ],
+            ];
+            List<nint> values =
             [
                 SecurityFramework.SecClassGenericPassword,
                 service.Handle,
                 account.Handle,
                 data.Handle,
                 SecurityFramework.SecAttrAccessibleAfterFirstUnlock,
-            ]);
+            ];
+            if (access != nint.Zero)
+            {
+                keys.Add(SecurityFramework.SecAttrAccess);
+                values.Add(access);
+            }
 
-        return SecurityFramework.SecItemAdd(attributes.Handle, nint.Zero);
+            using var attributes = CoreFoundation.CreateDictionary([.. keys], [.. values]);
+            return SecurityFramework.SecItemAdd(attributes.Handle, nint.Zero);
+        }
+        finally
+        {
+            if (access != nint.Zero)
+            {
+                CoreFoundation.CFRelease(access);
+            }
+        }
     }
 
     private int Update(string reference, byte[] secretBytes)
