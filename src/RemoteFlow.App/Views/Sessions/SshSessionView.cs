@@ -354,7 +354,28 @@ public sealed class SshSessionView : ContentControl, IDisposable
                     await InvokeTerminalAsync("openSearch");
                 }
                 break;
+
+            case SessionAction.ReturnFocusToSession:
+                FocusTerminal();
+                break;
         }
+    }
+
+    /// <summary>Flyout / 浮层关闭后把键盘焦点还给终端 WebView。</summary>
+    private void FocusTerminal()
+    {
+        if (_disposed || !_terminalReady)
+        {
+            return;
+        }
+
+        var window = Window.GetWindow(this);
+        if (window is not null && window.WindowState == WindowState.Minimized)
+        {
+            window.WindowState = WindowState.Normal;
+        }
+
+        _webView.Focus();
     }
 
     private async Task CopySelectionAsync()

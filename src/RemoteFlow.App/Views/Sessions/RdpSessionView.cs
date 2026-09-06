@@ -143,6 +143,36 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
                     _logger.LogWarning(ex, "RDP 会话 {SessionId} 「启动任务管理器」失败", _session.SessionId);
                 }
                 break;
+
+            case SessionAction.ReturnFocusToSession:
+                ReturnFocusToRemoteSurface();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Flyout / 下拉等浮层关闭后把键盘焦点还给 RDP 画面：
+    /// 置前主窗 → 聚焦控件 → SetFocus 兜底。RDP 接收不到键时，多半是焦点仍停在浮层上。
+    /// </summary>
+    private void ReturnFocusToRemoteSurface()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        BringHostWindowToForeground();
+
+        var control = _session.HostControl;
+        if (control is null || control.IsDisposed || !control.IsHandleCreated)
+        {
+            return;
+        }
+
+        control.Focus();
+        if (GetFocus() != control.Handle)
+        {
+            SetFocus(control.Handle);
         }
     }
 

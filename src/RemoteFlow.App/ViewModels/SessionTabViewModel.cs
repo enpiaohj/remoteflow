@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RemoteFlow.Core.Models;
@@ -19,6 +21,12 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     private readonly Func<Guid, Task> _closeCallback;
     private readonly Func<ConnectionProfile, Task> _reconnectCallback;
 
+    /// <summary>会话时长走秒刷新；仅在已连接（含自动重连期间）运行，空闲不打扰。</summary>
+    private readonly DispatcherTimer _durationTimer;
+
+    /// <summary>首次进入 Connected 的时刻（UTC）。自动重连不重置，UI 刷新不重置。</summary>
+    private DateTime? _connectedAtUtc;
+
     public SessionTabViewModel(
         IRemoteSession session,
         Func<Guid, Task> closeCallback,
@@ -36,6 +44,14 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
             _ => "\uE7F8"
         };
 
+        // 连接质量详情（Flyout 数据源）。同一实例贯穿整个会话生命周期，
+        // 由宿主视图在点击状态入口时读取；探测只在打开 / 重新检测时执行。
+        Quality = new SessionQualityState(this, session.Profile.Host, session.Profile.Port);
+        Quality.PropertyChanged += OnQualityPropertyChanged;
+
+        _durationTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _durationTimer.Tick += OnDurationTick;
+
         session.StateChanged += OnSessionStateChanged;
         UpdateStateDisplay(session.State, session.ErrorCode, session.ErrorMessage);
 
@@ -51,6 +67,33 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     public ProtocolType Protocol => Session.Protocol;
 
     public ConnectionProfile Profile => Session.Profile;
+
+    /// <summary>连接质量详情状态（Flyout 绑定源）。</summary>
+    public SessionQualityState Quality { get; }
+
+    /// <summary>Host:Port 摘要，供 Flyout 头部展示。</summary>
+    public string HostPortLine => $"{Profile.Host}:{Profile.Port}";
+
+    // ── Flyout 头部（统一连接状态，叠加「网络波动」派生）───────────
+
+    /// <summary>Flyout 头部状态文案：通常等于 <see cref="StateText"/>；
+    /// 已连接但质量为较差时显示「网络波动」。常驻条不用这三者。</summary>
+    [ObservableProperty]
+    private string _flyoutStateText = "准备中";
+
+    [ObservableProperty]
+    private string _flyoutStateIcon = "";
+
+    [ObservableProperty]
+    private string _flyoutStateBrushKey = "Status.Idle";
+
+    /// <summary>会话真实自动重连次数（进入 Reconnecting 才 +1，首次连接不计）。</summary>
+    [ObservableProperty]
+    private int _reconnectCount;
+
+    /// <summary>会话时长 HH:mm:ss，从首次 ConnectedAt 起算，重连不重置。</summary>
+    [ObservableProperty]
+    private string _sessionDurationText = "--";
 
     /// <summary>面向用户的状态短语，如「已连接」「正在连接…」。</summary>
     [ObservableProperty]
@@ -165,6 +208,9 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         await _reconnectCallback(profile);
     }
 
+    /// <summary>请求宿主把键盘焦点还给会话画面（RDP ActiveX / 终端 / VNC）。由 Flyout 关闭等场景调用。</summary>
+    public void RequestSessionFocus() => ActionRequested?.Invoke(this, SessionAction.ReturnFocusToSession);
+
     private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs e)
     {
         // 状态事件可能来自协议库的后台线程，切回 UI 线程再更新绑定属性。
@@ -172,10 +218,86 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         if (dispatcher is null || dispatcher.CheckAccess())
         {
             UpdateStateDisplay(e.NewState, e.ErrorCode, e.ErrorMessage);
+            TrackSessionStats(e.NewState);
         }
         else
         {
-            dispatcher.BeginInvoke(() => UpdateStateDisplay(e.NewState, e.ErrorCode, e.ErrorMessage));
+            dispatcher.BeginInvoke(() =>
+            {
+                UpdateStateDisplay(e.NewState, e.ErrorCode, e.ErrorMessage);
+                TrackSessionStats(e.NewState);
+            });
+        }
+    }
+
+    /// <summary>
+    /// 跟踪会话时长与重连次数（Flyout 数据）。首次进入 Connected 记起点；
+    /// 每次真实自动重连（Reconnecting）计数 +1；断开 / 失败 / 终结时停表并复位展示。
+    /// </summary>
+    private void TrackSessionStats(ConnectionState state)
+    {
+        switch (state)
+        {
+            case ConnectionState.Connected when _connectedAtUtc is null:
+                _connectedAtUtc = DateTime.UtcNow;
+                _durationTimer.Start();
+                RefreshDurationText();
+                break;
+
+            case ConnectionState.Reconnecting:
+                ReconnectCount++;
+                break;
+
+            case ConnectionState.Failed or ConnectionState.Disconnected or ConnectionState.Closed:
+                _connectedAtUtc = null;
+                _durationTimer.Stop();
+                SessionDurationText = "--";
+                break;
+        }
+
+        RefreshFlyoutStateDisplay();
+    }
+
+    private void OnDurationTick(object? sender, EventArgs e) => RefreshDurationText();
+
+    private void RefreshDurationText()
+    {
+        if (_connectedAtUtc is not { } connectedAt)
+        {
+            SessionDurationText = "--";
+            return;
+        }
+
+        var elapsed = DateTime.UtcNow - connectedAt;
+        SessionDurationText = $"{(int)elapsed.TotalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
+    }
+
+    /// <summary>Quality 状态（网络波动判定）变化时同步 Flyout 头部。</summary>
+    private void OnQualityPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SessionQualityState.IsVolatile))
+        {
+            RefreshFlyoutStateDisplay();
+        }
+    }
+
+    /// <summary>
+    /// 计算 Flyout 头部状态：常驻条始终显示 <see cref="StateText"/>；
+    /// Flyout 在「已连接但网络波动」时改显「网络波动」（橙色），其余情况与常驻条一致。
+    /// </summary>
+    private void RefreshFlyoutStateDisplay()
+    {
+        if (IsConnected && Quality.IsVolatile)
+        {
+            FlyoutStateText = "网络波动";
+            FlyoutStateIcon = ((char)0xE7BA).ToString();
+            FlyoutStateBrushKey = "Status.Warning";
+        }
+        else
+        {
+            FlyoutStateText = StateText;
+            FlyoutStateIcon = StateIcon;
+            FlyoutStateBrushKey = StateBrushKey;
         }
     }
 
@@ -245,6 +367,8 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
                 StateBrushKey = "Status.Idle";
                 break;
         }
+
+        RefreshFlyoutStateDisplay();
     }
 
     /// <summary>
@@ -267,7 +391,14 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         ActionRequested?.Invoke(this, SessionAction.EnterFullScreen);
     }
 
-    public void Dispose() => Session.StateChanged -= OnSessionStateChanged;
+    public void Dispose()
+    {
+        Session.StateChanged -= OnSessionStateChanged;
+        Quality.PropertyChanged -= OnQualityPropertyChanged;
+        Quality.Dispose();
+        _durationTimer.Stop();
+        _durationTimer.Tick -= OnDurationTick;
+    }
 }
 
 /// <summary>会话工具条动作。由 ViewModel 发出，具体行为交给对应的协议视图执行。</summary>
@@ -281,5 +412,8 @@ public enum SessionAction
     Copy,
     Paste,
     ClearTerminal,
-    SearchTerminal
+    SearchTerminal,
+
+    /// <summary>Flyout 等浮层关闭后把键盘焦点还给会话画面（RDP ActiveX / 终端 / VNC 画面）。</summary>
+    ReturnFocusToSession
 }

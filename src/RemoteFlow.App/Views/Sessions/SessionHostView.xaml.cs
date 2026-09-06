@@ -84,6 +84,12 @@ public partial class SessionHostView : UserControl
     /// <summary>会话切换下拉菜单（代码构建，独立 HWND，可盖在 airspace 之上）。</summary>
     private ContextMenu? _sessionMenu;
 
+    /// <summary>连接质量详情 Flyout（同一会话 Tab 同时只允许一个）。</summary>
+    private ConnectionQualityFlyout? _flyout;
+
+    /// <summary>Flyout 的锚点（常驻条状态入口或全屏药丸状态入口）。</summary>
+    private FrameworkElement? _flyoutAnchor;
+
     private DateTime _shownAt = DateTime.MinValue;
 
     /// <summary>低级鼠标钩子：全屏未固定时，单击药丸以外区域立即收起药丸。</summary>
@@ -161,6 +167,7 @@ public partial class SessionHostView : UserControl
         _autoHideTimer.Stop();
         _edgeWatch.Stop();
         RemoveMouseHook();
+        CloseQualityFlyout();
         ToolbarPopup.IsOpen = false;
 
         if (_window is not null)
@@ -367,7 +374,7 @@ public partial class SessionHostView : UserControl
     {
         _autoHideTimer.Stop();
 
-        if (_pinned || _dragging || PillBar.IsMouseOver || _sessionMenu is { IsOpen: true })
+        if (_pinned || _dragging || PillBar.IsMouseOver || _sessionMenu is { IsOpen: true } || _flyout is { IsVisible: true })
         {
             return;
         }
@@ -377,7 +384,8 @@ public partial class SessionHostView : UserControl
 
     private void ScheduleAutoHide(TimeSpan delay)
     {
-        if (_pinned)
+        // 连接质量 Flyout 打开期间不自动收起药丸（Flyout 由它呼出，需保持可见）。
+        if (_pinned || _flyout is { IsVisible: true })
         {
             return;
         }
@@ -448,7 +456,8 @@ public partial class SessionHostView : UserControl
 
     private nint LowLevelMouseHook(int nCode, nint wParam, nint lParam)
     {
-        if (nCode >= 0 && !_pinned && ToolbarPopup.IsOpen && IsButtonDown(wParam))
+        // 连接质量 Flyout 打开期间不因「点击药丸以外」收起药丸——Flyout 也需要被交互。
+        if (nCode >= 0 && !_pinned && ToolbarPopup.IsOpen && _flyout is not { IsVisible: true } && IsButtonDown(wParam))
         {
             var x = Marshal.ReadInt32(lParam);
             var y = Marshal.ReadInt32(lParam, 4);
@@ -658,6 +667,145 @@ public partial class SessionHostView : UserControl
         {
             _window.WindowState = WindowState.Minimized;
         }
+    }
+
+    // ── 连接质量详情 Flyout ──────────────────────────────────────
+
+    /// <summary>常驻条 / 全屏药丸的状态入口点击 → 打开 Flyout。</summary>
+    private void OnStatusEntryClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement anchor)
+        {
+            OpenQualityFlyout(anchor);
+        }
+    }
+
+    /// <summary>
+    /// 打开（或切换）连接质量详情 Flyout。同一会话 Tab 只允许一个实例：
+    /// 已打开时再次点击同一入口 = 关闭；点击另一入口 = 重新定位。
+    /// Flyout 用独立顶层窗口承载，因此能盖在 RDP ActiveX airspace 之上。
+    /// </summary>
+    private void OpenQualityFlyout(FrameworkElement anchor)
+    {
+        if (_tab is null)
+        {
+            return;
+        }
+
+        if (_flyout is { IsVisible: true })
+        {
+            if (ReferenceEquals(_flyoutAnchor, anchor))
+            {
+                CloseQualityFlyout();
+            }
+            else
+            {
+                _flyoutAnchor = anchor;
+                PositionQualityFlyout();
+            }
+
+            return;
+        }
+
+        _flyout = null; // 上一实例已关闭，清引用重建
+        _flyoutAnchor = anchor;
+
+        var window = _window ?? Window.GetWindow(this);
+        var flyout = new ConnectionQualityFlyout
+        {
+            Owner = window,
+            DataContext = _tab
+        };
+        flyout.Closed += OnQualityFlyoutClosed;
+        _flyout = flyout;
+
+        // 先按估算高度定位，Show 后拿到真实高度再精修，避免闪到 (0,0)。
+        PositionQualityFlyout();
+        flyout.Show();
+        flyout.UpdateLayout();
+        PositionQualityFlyout();
+
+        // 打开即测一次（命令运行中自动禁用，天然防重入）。
+        _tab.Quality.RedetectCommand.Execute(null);
+    }
+
+    private void CloseQualityFlyout()
+    {
+        if (_flyout is not { } flyout)
+        {
+            return;
+        }
+
+        flyout.Closed -= OnQualityFlyoutClosed;
+        flyout.Close();
+        _flyout = null;
+        _flyoutAnchor = null;
+    }
+
+    private void OnQualityFlyoutClosed(object? sender, EventArgs e)
+    {
+        if (sender is ConnectionQualityFlyout flyout)
+        {
+            flyout.Closed -= OnQualityFlyoutClosed;
+            _tab?.Quality.CancelRunningProbe();
+
+            // Esc / 关闭按钮等用户主动关闭时，把键盘焦点还给会话画面（RDP ActiveX 等）；
+            // 因点击外部（Deactivated）而关闭时焦点已由该点击决定，不再争夺。
+            if (flyout.CloseByUserIntent)
+            {
+                _tab?.RequestSessionFocus();
+            }
+        }
+
+        if (ReferenceEquals(_flyout, sender))
+        {
+            _flyout = null;
+        }
+
+        _flyoutAnchor = null;
+    }
+
+    /// <summary>把 Flyout 定位到锚点按钮下方，并夹在主窗口可视区内。</summary>
+    private void PositionQualityFlyout()
+    {
+        if (_flyout is not { } flyout || _flyoutAnchor is not { } anchor)
+        {
+            return;
+        }
+
+        var window = flyout.Owner;
+        if (window is null)
+        {
+            return;
+        }
+
+        var source = PresentationSource.FromVisual(window);
+        var toDiu = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+
+        var windowOriginPx = window.PointToScreen(new Point(0, 0));
+        var anchorBottomPx = anchor.PointToScreen(new Point(0, anchor.ActualHeight));
+        var relDiu = toDiu.Transform(new Point(
+            anchorBottomPx.X - windowOriginPx.X,
+            anchorBottomPx.Y - windowOriginPx.Y));
+
+        const double gap = 8;
+        const double edgeMargin = 8;
+        var flyoutWidth = flyout.ActualWidth > 0 ? flyout.ActualWidth : flyout.Width;
+        var flyoutHeight = flyout.ActualHeight > 0 ? flyout.ActualHeight : 430;
+
+        var x = Math.Clamp(
+            window.Left + relDiu.X,
+            window.Left + edgeMargin,
+            window.Left + window.ActualWidth - flyoutWidth - edgeMargin);
+
+        var yBelow = window.Top + relDiu.Y + gap;
+        var yMax = window.Top + window.ActualHeight - flyoutHeight - edgeMargin;
+        var y = yBelow > yMax
+            ? Math.Max(window.Top + edgeMargin, window.Top + relDiu.Y - gap - flyoutHeight)
+            : yBelow;
+
+        flyout.Left = Math.Round(x);
+        flyout.Top = Math.Round(y);
     }
 
     // ── 互操作 ───────────────────────────────────────────────────

@@ -359,13 +359,24 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
     private void OnActionRequested(object? sender, SessionAction action)
     {
-        if (action != SessionAction.ToggleScaling)
+        switch (action)
         {
-            return;
-        }
+            case SessionAction.ToggleScaling:
+                ApplyScaleMode();
+                _session.Profile.Vnc.ScaleMode = _viewModel.VncScale;
+                break;
 
-        ApplyScaleMode();
-        _session.Profile.Vnc.ScaleMode = _viewModel.VncScale;
+            case SessionAction.ReturnFocusToSession:
+                // Flyout / 浮层关闭后把键盘焦点还给 VNC 画面（后续按键才能送向远端）。
+                var window = Window.GetWindow(this);
+                if (window is not null && window.WindowState == WindowState.Minimized)
+                {
+                    window.WindowState = WindowState.Normal;
+                }
+
+                _image.Focus();
+                break;
+        }
     }
 
     public void Dispose()
