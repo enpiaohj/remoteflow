@@ -1,0 +1,38 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#0EA5A4"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E9EEF5"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="26" flood-color="#0B3B54" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <!-- app tile -->
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="#FFFFFF" opacity="0.06"/>
+
+  <!-- remote-connection arc: node -> screen -->
+  <path d="M262 320 C 262 200, 470 176, 560 214" fill="none" stroke="#FFFFFF" stroke-opacity="0.85"
+        stroke-width="34" stroke-linecap="round"/>
+  <circle cx="262" cy="330" r="46" fill="#FFFFFF"/>
+
+  <!-- screen -->
+  <g filter="url(#soft)">
+    <rect x="266" y="300" width="536" height="392" rx="52" fill="url(#screen)"/>
+  </g>
+
+  <!-- terminal prompt: chevron + cursor -->
+  <path d="M360 430 L 452 496 L 360 562" fill="none" stroke="#1E3A5F" stroke-width="46"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="512" y="536" width="180" height="40" rx="20" fill="#1E3A5F"/>
+
+  <!-- stand -->
+  <rect x="486" y="692" width="96" height="70" fill="#DCE3EC"/>
+  <rect x="396" y="756" width="276" height="40" rx="20" fill="#CBD5E1"/>
+</svg>
