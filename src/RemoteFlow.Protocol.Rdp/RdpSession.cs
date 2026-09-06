@@ -394,6 +394,10 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         // 0 = 在本机播放，2 = 不播放。
         TrySet("AudioRedirectionMode", () => advanced.AudioRedirectionMode = options.RedirectAudio ? 0 : 2);
 
+        // 麦克风重定向（音频输入）。属性来自 IMsRdpClientAdvancedSettings7 及更高版本，
+        // 属于 RDP 8+ 的音频捕获能力；本机 / 远端不支持时该 set 会失败并被 TrySet 跳过。
+        TrySet("AudioCaptureRedirectionMode", () => advanced.AudioCaptureRedirectionMode = options.RedirectMicrophone);
+
         // NLA（CredSSP）。关闭后服务器若强制要求 NLA 仍会拒绝连接。
         TrySet("EnableCredSspSupport", () => advanced.EnableCredSspSupport = options.EnableNla);
 
@@ -407,6 +411,21 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         // 连接超时相关（单位：秒）。
         TrySet("singleConnectionTimeout", () => advanced.singleConnectionTimeout = 30);
         TrySet("overallConnectionTimeout", () => advanced.overallConnectionTimeout = 30);
+
+        // 连接质量（体验）：Auto 不写入，让控件/系统自行决定；其余按 IMsRdpClientAdvancedSettings7
+        // NetworkConnectionType 的文档常量映射（LAN=6 / 高速宽带=4 / 低带宽=2），远端据此调整体验。
+        // 该映射是 ActiveX 上已文档化、可 TrySet 的唯一“连接质量”入口，不额外伪造逐位体验开关。
+        if (options.ConnectionQuality != RdpConnectionQuality.Auto)
+        {
+            var connectionType = options.ConnectionQuality switch
+            {
+                RdpConnectionQuality.Lan => 6u,
+                RdpConnectionQuality.HighSpeed => 4u,
+                RdpConnectionQuality.LowBandwidth => 2u,
+                _ => 6u
+            };
+            TrySet("NetworkConnectionType", () => advanced.NetworkConnectionType = connectionType);
+        }
 
         if (options.UseMultimon)
         {

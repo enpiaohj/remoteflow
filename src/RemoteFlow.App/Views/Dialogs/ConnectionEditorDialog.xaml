@@ -25,6 +25,7 @@
         <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
         <conv:ColorStringToBrushConverter x:Key="ColorToBrush" />
+        <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
 
         <!-- 协议选择项 -->
         <Style x:Key="ProtocolOption" TargetType="RadioButton">
@@ -32,6 +33,7 @@
             <Setter Property="Height" Value="40" />
             <Setter Property="Margin" Value="0,0,0,4" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource Nav.FocusVisual}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
@@ -57,12 +59,27 @@
             <Setter Property="Margin" Value="0,0,0,12" />
         </Style>
 
-        <!-- RDP 高级设置的分区小标题 -->
+        <!-- 高级设置展开区的分区小标题（RDP / SSH / VNC 统一使用） -->
         <Style x:Key="RdpSectionHeader" TargetType="TextBlock" BasedOn="{StaticResource Text.Label}">
             <Setter Property="FontSize" Value="12" />
             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Margin" Value="0,2,0,8" />
+        </Style>
+
+        <!--
+            本对话框的 Focus Visual：鼠标点击不显示默认虚线，键盘 Tab 聚焦时
+            显示轻量蓝色圆角环。只做对话框内收敛（样式在 Window.Resources 内），
+            不扩散到全局。按钮 / 主按钮模板自带键盘焦点环，不重复叠加。
+        -->
+        <Style x:Key="Dialog.CheckBox" TargetType="CheckBox" BasedOn="{StaticResource Input.CheckBox}">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource Nav.FocusVisual}" />
+        </Style>
+        <Style x:Key="Dialog.ComboBox" TargetType="ComboBox" BasedOn="{StaticResource Input.ComboBox}">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource Nav.FocusVisual}" />
+        </Style>
+        <Style x:Key="Dialog.Segment" TargetType="RadioButton" BasedOn="{StaticResource Segment}">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource Nav.FocusVisual}" />
         </Style>
     </Window.Resources>
 
@@ -93,7 +110,8 @@
                         HorizontalAlignment="Right"
                         Margin="0,0,12,0"
                         IsCancel="True"
-                        Click="OnCancelClick" />
+                        Click="OnCancelClick"
+                        FocusVisualStyle="{x:Null}" />
             </Grid>
 
             <Border Grid.Row="0" Style="{StaticResource Surface.Divider}" VerticalAlignment="Bottom" />
@@ -184,7 +202,7 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="凭据" Style="{StaticResource Text.FieldLabel}" />
-                            <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}"
+                            <ComboBox Grid.Column="1" Style="{StaticResource Dialog.ComboBox}"
                                       ItemsSource="{Binding AvailableCredentials}"
                                       SelectedItem="{Binding SelectedCredential}"
                                       DisplayMemberPath="Name" />
@@ -196,7 +214,7 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="分组" Style="{StaticResource Text.FieldLabel}" />
-                            <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}"
+                            <ComboBox Grid.Column="1" Style="{StaticResource Dialog.ComboBox}"
                                       ItemsSource="{Binding AvailableGroups}"
                                       SelectedItem="{Binding SelectedGroup}"
                                       DisplayMemberPath="Name" />
@@ -221,7 +239,8 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:TagSelection}">
                                             <ToggleButton IsChecked="{Binding IsSelected}"
-                                                          Margin="0,0,6,6" Cursor="Hand">
+                                                          Margin="0,0,6,6" Cursor="Hand"
+                                                          FocusVisualStyle="{StaticResource Nav.FocusVisual}">
                                                 <ToggleButton.Template>
                                                     <ControlTemplate TargetType="ToggleButton">
                                                         <Border x:Name="Root" CornerRadius="4" Padding="9,4"
@@ -248,6 +267,7 @@
                                 </ItemsControl>
 
                                 <Button Content="+ 管理标签" Margin="0,0,6,6" Cursor="Hand"
+                                        FocusVisualStyle="{StaticResource Nav.FocusVisual}"
                                         Click="OnManageTagsClick">
                                     <Button.Template>
                                         <ControlTemplate TargetType="Button">
@@ -277,7 +297,8 @@
                         <ToggleButton IsChecked="{Binding IsAdvancedExpanded}"
                                       HorizontalAlignment="Left"
                                       Margin="0,4,0,0"
-                                      Cursor="Hand">
+                                      Cursor="Hand"
+                                      FocusVisualStyle="{StaticResource Nav.FocusVisual}">
                             <ToggleButton.Template>
                                 <ControlTemplate TargetType="ToggleButton">
                                     <Border Background="Transparent" Padding="0,6">
@@ -300,195 +321,232 @@
                             </ToggleButton.Template>
                         </ToggleButton>
 
-                        <Border Background="{DynamicResource Bg.Subtle}"
-                                CornerRadius="8"
-                                Padding="16"
-                                Margin="0,8,0,0"
-                                Visibility="{Binding IsAdvancedExpanded, Converter={StaticResource BoolToVisibility}}">
-                            <StackPanel>
+                        <!--
+                            高级设置展开区：去卡片化，与外部编辑表单同底色（不再垫一块浅灰底板），
+                            层级只靠 Section Title + 很淡的 1px Divider + 组间留白。RDP / SSH / VNC
+                            三套分区统一使用同一轻量视觉语言，功能字段与结构不变。
+                        -->
+                        <StackPanel Margin="0,10,0,0"
+                                    Visibility="{Binding IsAdvancedExpanded, Converter={StaticResource BoolToVisibility}}">
 
-                                <!-- RDP 高级设置 -->
-                                <StackPanel Visibility="{Binding IsRdp, Converter={StaticResource BoolToVisibility}}">
+                            <!-- RDP 高级设置 -->
+                            <StackPanel Visibility="{Binding IsRdp, Converter={StaticResource BoolToVisibility}}">
 
-                                    <!-- 显示 -->
-                                    <TextBlock Text="显示" Style="{StaticResource RdpSectionHeader}" />
-                                    <Grid Style="{StaticResource FormRow}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="90" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="显示模式" Style="{StaticResource Text.FieldLabel}"
-                                                   VerticalAlignment="Top" Margin="0,8,12,0" />
-                                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                            <RadioButton Style="{StaticResource Segment}"
-                                                         IsChecked="{Binding RdpDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=FitToWindow, Mode=TwoWay}"
-                                                         Content="适应窗口" />
-                                            <RadioButton Style="{StaticResource Segment}"
-                                                         IsChecked="{Binding RdpDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=FixedResolution, Mode=TwoWay}"
-                                                         Content="固定分辨率" />
-                                        </StackPanel>
-                                    </Grid>
+                                <!-- 显示 -->
+                                <TextBlock Text="显示" Style="{StaticResource RdpSectionHeader}" />
+                                <Grid Style="{StaticResource FormRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="显示模式" Style="{StaticResource Text.FieldLabel}"
+                                               VerticalAlignment="Top" Margin="0,8,12,0" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                        <RadioButton Style="{StaticResource Dialog.Segment}"
+                                                     IsChecked="{Binding RdpDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=FitToWindow, Mode=TwoWay}"
+                                                     Content="适应窗口" />
+                                        <RadioButton Style="{StaticResource Dialog.Segment}"
+                                                     IsChecked="{Binding RdpDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=FixedResolution, Mode=TwoWay}"
+                                                     Content="固定分辨率" />
+                                    </StackPanel>
+                                </Grid>
 
-                                    <Grid Style="{StaticResource FormRow}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="90" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="分辨率" Style="{StaticResource Text.FieldLabel}" />
-                                        <StackPanel Grid.Column="1">
-                                            <ComboBox Style="{StaticResource Input.ComboBox}"
-                                                      ItemsSource="{Binding AvailableResolutions}"
-                                                      SelectedItem="{Binding SelectedResolution}"
-                                                      DisplayMemberPath="Label"
-                                                      HorizontalAlignment="Left" MinWidth="220" />
-                                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,3,0,0"
-                                                       Text="仅固定分辨率下生效；适应窗口时随窗口自动调整。" />
-                                        </StackPanel>
-                                    </Grid>
+                                <!-- 适应窗口 = 远程随会话自适应，分辨率行整体隐藏（不出现“仅固定生效”噪音） -->
+                                <Grid Style="{StaticResource FormRow}"
+                                      Visibility="{Binding IsFixedResolution, Converter={StaticResource BoolToVisibility}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="分辨率" Style="{StaticResource Text.FieldLabel}" />
+                                    <StackPanel Grid.Column="1">
+                                        <ComboBox Style="{StaticResource Dialog.ComboBox}"
+                                                  ItemsSource="{Binding AvailableResolutions}"
+                                                  SelectedItem="{Binding SelectedResolution}"
+                                                  DisplayMemberPath="Label"
+                                                  HorizontalAlignment="Left" MinWidth="220" />
+                                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,3,0,0"
+                                                   Text="固定分辨率下按所选尺寸显示；超出窗口时提供滚动条。" />
+                                    </StackPanel>
+                                </Grid>
 
-                                    <Grid Style="{StaticResource FormRow}"
-                                          Visibility="{Binding IsCustomResolution, Converter={StaticResource BoolToVisibility}}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="90" />
-                                            <ColumnDefinition Width="96" />
-                                            <ColumnDefinition Width="16" />
-                                            <ColumnDefinition Width="96" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="自定义尺寸" Style="{StaticResource Text.FieldLabel}" />
-                                        <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
-                                                 Text="{Binding RdpCustomWidth, UpdateSourceTrigger=PropertyChanged}" />
-                                        <TextBlock Grid.Column="2" Text="×" Style="{StaticResource Text.BodySecondary}"
-                                                   HorizontalAlignment="Center" />
-                                        <TextBox Grid.Column="3" Style="{StaticResource Input.TextBox}"
-                                                 Text="{Binding RdpCustomHeight, UpdateSourceTrigger=PropertyChanged}" />
-                                    </Grid>
+                                <Grid Style="{StaticResource FormRow}"
+                                      Visibility="{Binding IsCustomResolution, Converter={StaticResource BoolToVisibility}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="96" />
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="96" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="自定义尺寸" Style="{StaticResource Text.FieldLabel}" />
+                                    <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
+                                             Text="{Binding RdpCustomWidth, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock Grid.Column="2" Text="×" Style="{StaticResource Text.BodySecondary}"
+                                               HorizontalAlignment="Center" />
+                                    <TextBox Grid.Column="3" Style="{StaticResource Input.TextBox}"
+                                             Text="{Binding RdpCustomHeight, UpdateSourceTrigger=PropertyChanged}" />
+                                </Grid>
 
-                                    <CheckBox Style="{StaticResource Input.CheckBox}" Content="启动后进入全屏"
-                                              IsChecked="{Binding Rdp.StartFullScreen}" />
-                                    <CheckBox Style="{StaticResource Input.CheckBox}" Content="使用全部显示器"
-                                              IsChecked="{Binding Rdp.UseMultimon}" />
+                                <CheckBox Style="{StaticResource Dialog.CheckBox}" Content="启动后进入全屏"
+                                          IsChecked="{Binding RdpStartFullScreen}" />
+                                <CheckBox Style="{StaticResource Dialog.CheckBox}" Content="使用全部显示器"
+                                          IsChecked="{Binding RdpUseMultimon}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                           Margin="28,-2,0,8"
+                                           Visibility="{Binding UseMultimonHint, Converter={StaticResource NullToVisibility}}"
+                                           Text="{Binding UseMultimonHint}" />
 
-                                    <Border Style="{StaticResource Surface.Divider}" Margin="0,2,0,12" />
+                                <Border Style="{StaticResource Surface.Divider}" Margin="0,4,0,14" />
 
-                                    <!-- 本地资源 -->
-                                    <TextBlock Text="本地资源" Style="{StaticResource RdpSectionHeader}" />
-                                    <CheckBox Style="{StaticResource Input.CheckBox}" Content="剪贴板重定向"
-                                              IsChecked="{Binding Rdp.RedirectClipboard}" />
-                                    <CheckBox Style="{StaticResource Input.CheckBox}" Content="音频播放到本机"
-                                              IsChecked="{Binding Rdp.RedirectAudio}" />
-                                    <CheckBox Style="{StaticResource Input.CheckBox}" Content="打印机重定向"
-                                              IsChecked="{Binding Rdp.RedirectPrinters}" />
-                                    <CheckBox Style="{StaticResource Input.CheckBox}"
-                                              IsChecked="{Binding Rdp.RedirectDrives}">
-                                        <StackPanel>
-                                            <TextBlock Text="本地驱动器重定向" Style="{StaticResource Text.Body}" />
-                                            <TextBlock Text="会把本机磁盘暴露给远程主机，仅在信任目标时开启"
-                                                       Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
-                                        </StackPanel>
-                                    </CheckBox>
+                                <!-- 本地资源 -->
+                                <TextBlock Text="本地资源" Style="{StaticResource RdpSectionHeader}" />
+                                <CheckBox Style="{StaticResource Dialog.CheckBox}" Content="剪贴板重定向"
+                                          IsChecked="{Binding Rdp.RedirectClipboard}" />
+                                <CheckBox Style="{StaticResource Dialog.CheckBox}" Content="音频播放到本机"
+                                          IsChecked="{Binding Rdp.RedirectAudio}" />
+                                <CheckBox Style="{StaticResource Dialog.CheckBox}"
+                                          IsChecked="{Binding Rdp.RedirectMicrophone}">
+                                    <StackPanel>
+                                        <TextBlock Text="麦克风重定向" Style="{StaticResource Text.Body}" />
+                                        <TextBlock Text="把本机麦克风声音送入远端；需本机/远端支持 RDP 音频捕获"
+                                                   Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </CheckBox>
+                                <CheckBox Style="{StaticResource Dialog.CheckBox}" Content="打印机重定向"
+                                          IsChecked="{Binding Rdp.RedirectPrinters}" />
+                                <CheckBox Style="{StaticResource Dialog.CheckBox}"
+                                          IsChecked="{Binding Rdp.RedirectDrives}">
+                                    <StackPanel>
+                                        <TextBlock Text="本地驱动器重定向" Style="{StaticResource Text.Body}" />
+                                        <TextBlock Text="会把本机磁盘暴露给远程主机，仅在信任目标时开启"
+                                                   Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </CheckBox>
 
-                                    <Border Style="{StaticResource Surface.Divider}" Margin="0,2,0,12" />
+                                <Border Style="{StaticResource Surface.Divider}" Margin="0,4,0,14" />
 
-                                    <!-- 连接与安全 -->
-                                    <TextBlock Text="连接与安全" Style="{StaticResource RdpSectionHeader}" />
-                                    <Grid Style="{StaticResource FormRow}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="90" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="域" Style="{StaticResource Text.FieldLabel}" />
-                                        <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
-                                                 Text="{Binding Rdp.Domain, UpdateSourceTrigger=PropertyChanged}" />
-                                    </Grid>
-                                    <CheckBox Style="{StaticResource Input.CheckBox}"
-                                              IsChecked="{Binding Rdp.EnableNla}">
-                                        <StackPanel>
-                                            <TextBlock Text="启用网络级别身份验证（NLA）" Style="{StaticResource Text.Body}" />
-                                            <TextBlock Text="建议保持开启；关闭会降低连接的安全性"
-                                                       Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
-                                        </StackPanel>
-                                    </CheckBox>
-                                </StackPanel>
+                                <!-- 体验 -->
+                                <TextBlock Text="体验" Style="{StaticResource RdpSectionHeader}" />
+                                <Grid Style="{StaticResource FormRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="连接质量" Style="{StaticResource Text.FieldLabel}" />
+                                    <StackPanel Grid.Column="1">
+                                        <ComboBox Style="{StaticResource Dialog.ComboBox}"
+                                                  ItemsSource="{Binding ConnectionQualityOptions}"
+                                                  SelectedItem="{Binding SelectedConnectionQuality}"
+                                                  DisplayMemberPath="Label"
+                                                  HorizontalAlignment="Left" MinWidth="220" />
+                                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,3,0,0"
+                                                   Text="把所选网络类型发给远端，远端据此调整画面体验；自动表示不主动指定。" />
+                                    </StackPanel>
+                                </Grid>
 
-                                <!-- SSH 高级设置 -->
-                                <StackPanel Visibility="{Binding IsSsh, Converter={StaticResource BoolToVisibility}}">
-                                    <Grid Style="{StaticResource FormRow}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="90" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="终端类型" Style="{StaticResource Text.FieldLabel}" />
-                                        <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}"
-                                                  ItemsSource="{Binding TerminalTypeOptions}"
-                                                  SelectedItem="{Binding Ssh.TerminalType}" />
-                                    </Grid>
-                                    <Grid Style="{StaticResource FormRow}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="90" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="字符编码" Style="{StaticResource Text.FieldLabel}" />
-                                        <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}"
-                                                  ItemsSource="{Binding EncodingOptions}"
-                                                  SelectedItem="{Binding Ssh.Encoding}" />
-                                    </Grid>
-                                    <Grid Style="{StaticResource FormRow}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="90" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="KeepAlive" Style="{StaticResource Text.FieldLabel}" />
-                                        <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
-                                                 Text="{Binding Ssh.KeepAliveSeconds, UpdateSourceTrigger=PropertyChanged}" />
-                                    </Grid>
-                                    <Grid Style="{StaticResource FormRow}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="90" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="登录后执行" Style="{StaticResource Text.FieldLabel}" />
-                                        <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
-                                                 FontFamily="{StaticResource MonoFont}"
-                                                 Text="{Binding Ssh.InitialCommand, UpdateSourceTrigger=PropertyChanged}" />
-                                    </Grid>
-                                </StackPanel>
+                                <Border Style="{StaticResource Surface.Divider}" Margin="0,4,0,14" />
 
-                                <!-- VNC 高级设置 -->
-                                <StackPanel Visibility="{Binding IsVnc, Converter={StaticResource BoolToVisibility}}">
-                                    <CheckBox Style="{StaticResource Input.CheckBox}"
-                                              IsChecked="{Binding Vnc.SharedConnection}">
-                                        <StackPanel>
-                                            <TextBlock Text="共享连接" Style="{StaticResource Text.Body}" />
-                                            <TextBlock Text="允许其他客户端同时连接，不断开已有会话"
-                                                       Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
-                                        </StackPanel>
-                                    </CheckBox>
-                                    <CheckBox Style="{StaticResource Input.CheckBox}" Content="只读模式（不发送键盘鼠标）"
-                                              IsChecked="{Binding Vnc.ViewOnly}" />
-                                    <CheckBox Style="{StaticResource Input.CheckBox}" Margin="0,10,0,0"
-                                              IsChecked="{Binding Vnc.ClipboardToLocal}">
-                                        <StackPanel>
-                                            <TextBlock Text="剪贴板同步（远端 → 本机）" Style="{StaticResource Text.Body}" />
-                                            <TextBlock Text="接收远端复制内容到本机剪贴板；发送暂不支持"
-                                                       Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
-                                        </StackPanel>
-                                    </CheckBox>
-
-                                    <Border Background="{DynamicResource Bg.Layer}" CornerRadius="6" Padding="12,10" Margin="0,10,0,0">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{StaticResource Icon.Warning}"
-                                                       FontFamily="{StaticResource IconFont}" FontSize="13"
-                                                       Foreground="{DynamicResource Status.Warning}"
-                                                       VerticalAlignment="Top" Margin="0,1,0,0" />
-                                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
-                                                       Margin="9,0,0,0" MaxWidth="380" HorizontalAlignment="Left"
-                                                       Text="VNC 协议自身的加密能力有限，建议只在内网、VPN 或 SSH 隧道中使用，不要把 VNC 端口直接暴露到公网。" />
-                                        </StackPanel>
-                                    </Border>
-                                </StackPanel>
+                                <!-- 连接与安全 -->
+                                <TextBlock Text="连接与安全" Style="{StaticResource RdpSectionHeader}" />
+                                <Grid Style="{StaticResource FormRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="域" Style="{StaticResource Text.FieldLabel}" />
+                                    <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
+                                             Text="{Binding Rdp.Domain, UpdateSourceTrigger=PropertyChanged}" />
+                                </Grid>
+                                <CheckBox Style="{StaticResource Dialog.CheckBox}"
+                                          IsChecked="{Binding Rdp.EnableNla}">
+                                    <StackPanel>
+                                        <TextBlock Text="启用网络级别身份验证（NLA）" Style="{StaticResource Text.Body}" />
+                                        <TextBlock Text="建议保持开启；关闭会降低连接的安全性"
+                                                   Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </CheckBox>
                             </StackPanel>
-                        </Border>
+
+                            <!-- SSH 高级设置 -->
+                            <StackPanel Visibility="{Binding IsSsh, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="会话" Style="{StaticResource RdpSectionHeader}" />
+                                <Grid Style="{StaticResource FormRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="终端类型" Style="{StaticResource Text.FieldLabel}" />
+                                    <ComboBox Grid.Column="1" Style="{StaticResource Dialog.ComboBox}"
+                                              ItemsSource="{Binding TerminalTypeOptions}"
+                                              SelectedItem="{Binding Ssh.TerminalType}" />
+                                </Grid>
+                                <Grid Style="{StaticResource FormRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="字符编码" Style="{StaticResource Text.FieldLabel}" />
+                                    <ComboBox Grid.Column="1" Style="{StaticResource Dialog.ComboBox}"
+                                              ItemsSource="{Binding EncodingOptions}"
+                                              SelectedItem="{Binding Ssh.Encoding}" />
+                                </Grid>
+                                <Grid Style="{StaticResource FormRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="KeepAlive" Style="{StaticResource Text.FieldLabel}" />
+                                    <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
+                                             Text="{Binding Ssh.KeepAliveSeconds, UpdateSourceTrigger=PropertyChanged}" />
+                                </Grid>
+                                <Grid Style="{StaticResource FormRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="登录后执行" Style="{StaticResource Text.FieldLabel}" />
+                                    <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
+                                             FontFamily="{StaticResource MonoFont}"
+                                             Text="{Binding Ssh.InitialCommand, UpdateSourceTrigger=PropertyChanged}" />
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- VNC 高级设置 -->
+                            <StackPanel Visibility="{Binding IsVnc, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="会话" Style="{StaticResource RdpSectionHeader}" />
+                                <CheckBox Style="{StaticResource Dialog.CheckBox}"
+                                          IsChecked="{Binding Vnc.SharedConnection}">
+                                    <StackPanel>
+                                        <TextBlock Text="共享连接" Style="{StaticResource Text.Body}" />
+                                        <TextBlock Text="允许其他客户端同时连接，不断开已有会话"
+                                                   Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </CheckBox>
+                                <CheckBox Style="{StaticResource Dialog.CheckBox}" Content="只读模式（不发送键盘鼠标）"
+                                          IsChecked="{Binding Vnc.ViewOnly}" />
+                                <CheckBox Style="{StaticResource Dialog.CheckBox}" Margin="0,8,0,0"
+                                          IsChecked="{Binding Vnc.ClipboardToLocal}">
+                                    <StackPanel>
+                                        <TextBlock Text="剪贴板同步（远端 → 本机）" Style="{StaticResource Text.Body}" />
+                                        <TextBlock Text="接收远端复制内容到本机剪贴板；发送暂不支持"
+                                                   Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </CheckBox>
+
+                                <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="6" Padding="12,10" Margin="0,12,0,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{StaticResource Icon.Warning}"
+                                                   FontFamily="{StaticResource IconFont}" FontSize="13"
+                                                   Foreground="{DynamicResource Status.Warning}"
+                                                   VerticalAlignment="Top" Margin="0,1,0,0" />
+                                        <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                                   Margin="9,0,0,0" MaxWidth="380" HorizontalAlignment="Left"
+                                                   Text="VNC 协议自身的加密能力有限，建议只在内网、VPN 或 SSH 隧道中使用，不要把 VNC 端口直接暴露到公网。" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
@@ -511,12 +569,16 @@
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <!-- 按钮模板自带键盘焦点蓝环（IsKeyboardFocused），这里关掉系统默认虚线即可 -->
                         <Button Style="{StaticResource Button.Secondary}" Content="取消"
-                                IsCancel="True" Click="OnCancelClick" />
+                                IsCancel="True" Click="OnCancelClick"
+                                FocusVisualStyle="{x:Null}" />
                         <Button Style="{StaticResource Button.Secondary}" Content="保存"
-                                Margin="8,0,0,0" Click="OnSaveClick" />
+                                Margin="8,0,0,0" Click="OnSaveClick"
+                                FocusVisualStyle="{x:Null}" />
                         <Button Style="{StaticResource Button.Primary}" Content="保存并连接"
-                                MinWidth="104" Margin="8,0,0,0" IsDefault="True" Click="OnSaveAndConnectClick" />
+                                MinWidth="104" Margin="8,0,0,0" IsDefault="True" Click="OnSaveAndConnectClick"
+                                FocusVisualStyle="{x:Null}" />
                     </StackPanel>
                 </Grid>
             </Border>

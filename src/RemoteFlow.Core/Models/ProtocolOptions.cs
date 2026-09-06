@@ -25,6 +25,13 @@ public sealed class RdpOptions
     /// <summary>音频重定向到本机。</summary>
     public bool RedirectAudio { get; set; }
 
+    /// <summary>
+    /// 麦克风重定向（把本机麦克风交给远端录制）。依赖本机 / 远端对 RDP 8+ 音频捕获的支持；
+    /// 连接时按 <c>IMsRdpClientAdvancedSettings7.AudioCaptureRedirectionMode</c> 尽力设置，
+    /// 控件版本过低或不支持时跳过（TrySet 容错），不会让连接失败。
+    /// </summary>
+    public bool RedirectMicrophone { get; set; }
+
     /// <summary>打印机重定向。</summary>
     public bool RedirectPrinters { get; set; }
 
@@ -39,6 +46,12 @@ public sealed class RdpOptions
 
     /// <summary>启用网络级别身份验证（NLA）。</summary>
     public bool EnableNla { get; set; } = true;
+
+    /// <summary>
+    /// 连接质量预设（体验）。映射到 ActiveX <c>NetworkConnectionType</c>，
+    /// 由远端按所选网络类型调整体验参数。<c>Auto</c> 为默认，不主动写入。
+    /// </summary>
+    public RdpConnectionQuality ConnectionQuality { get; set; } = RdpConnectionQuality.Auto;
 
     public RdpOptions Clone() => (RdpOptions)MemberwiseClone();
 }

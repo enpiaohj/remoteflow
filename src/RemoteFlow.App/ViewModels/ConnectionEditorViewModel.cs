@@ -49,6 +49,12 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
             _profile.Rdp.RedirectClipboard = defaults.RdpDefaultRedirectClipboard;
             _profile.Rdp.RedirectAudio = defaults.RdpDefaultRedirectAudio;
             _profile.Rdp.UseMultimon = defaults.RdpDefaultUseMultimon;
+            // 「使用全部显示器」依赖全屏才真正生效；若全局默认开启了多显示器，
+            // 新建连接联动默认进入全屏，避免出现「勾了多显示器却不全屏」的无效态。
+            if (_profile.Rdp.UseMultimon)
+            {
+                _profile.Rdp.StartFullScreen = true;
+            }
             _profile.Ssh.KeepAliveSeconds = defaults.SshDefaultKeepAliveSeconds;
             _profile.Ssh.TerminalType = defaults.SshDefaultTerminalType;
             _profile.Ssh.Encoding = defaults.SshDefaultEncoding;
@@ -88,18 +94,15 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         _selectedGroup = AvailableGroups.FirstOrDefault(g => g.Id == _profile.GroupId)
                          ?? AvailableGroups[0];
 
-        // 用既有 Profile 的 RDP 显示状态初始化编辑器；直接写字段避免构造期触发联动。
+        // 用既有 Profile 的 RDP 状态初始化编辑器；直接写字段避免构造期触发联动。
+        // 分辨率始终按已存桌面尺寸回填：适应窗口时该行隐藏，切到固定分辨率时即为当前预设。
         _rdpDisplayMode = _profile.Rdp.DisplayMode;
-        if (_rdpDisplayMode == RdpDisplayMode.FitToWindow)
-        {
-            _selectedResolution = AutoResolution;
-        }
-        else
-        {
-            _rdpCustomWidth = _profile.Rdp.DesktopWidth.ToString(CultureInfo.InvariantCulture);
-            _rdpCustomHeight = _profile.Rdp.DesktopHeight.ToString(CultureInfo.InvariantCulture);
-            _selectedResolution = MatchPreset(_profile.Rdp.DesktopWidth, _profile.Rdp.DesktopHeight) ?? CustomResolution;
-        }
+        _rdpCustomWidth = _profile.Rdp.DesktopWidth.ToString(CultureInfo.InvariantCulture);
+        _rdpCustomHeight = _profile.Rdp.DesktopHeight.ToString(CultureInfo.InvariantCulture);
+        _selectedResolution = MatchPreset(_profile.Rdp.DesktopWidth, _profile.Rdp.DesktopHeight) ?? CustomResolution;
+        _rdpStartFullScreen = _profile.Rdp.StartFullScreen;
+        _rdpUseMultimon = _profile.Rdp.UseMultimon;
+        _selectedConnectionQuality = MatchQuality(_profile.Rdp.ConnectionQuality);
     }
 
     private ResolutionOption? MatchPreset(int width, int height)
@@ -118,13 +121,15 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
 
     // ── RDP 显示 / 分辨率 ─────────────────────────────────────────
 
-    private static readonly ResolutionOption AutoResolution = new(RdpDisplayResolution.Auto, "自动（随窗口）", null, null);
     private static readonly ResolutionOption CustomResolution = new(RdpDisplayResolution.Custom, "自定义…", null, null);
 
-    /// <summary>分辨率预设下拉项。Auto = 适应窗口（不写死桌面尺寸）。</summary>
+    /// <summary>
+    /// 分辨率预设下拉项（固定分辨率模式可见）。不包含「自动」项——
+    /// 适应窗口是独立的显示模式（<see cref="RdpDisplayMode.FitToWindow"/>），
+    /// 由会话随窗口自适应，与固定分辨率互斥，语义上不应混入分辨率下拉。
+    /// </summary>
     public IReadOnlyList<ResolutionOption> AvailableResolutions { get; } =
     [
-        AutoResolution,
         new(RdpDisplayResolution.Res1280x720, "1280 × 720", 1280, 720),
         new(RdpDisplayResolution.Res1366x768, "1366 × 768", 1366, 768),
         new(RdpDisplayResolution.Res1600x900, "1600 × 900", 1600, 900),
@@ -132,6 +137,20 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         new(RdpDisplayResolution.Res2560x1440, "2560 × 1440", 2560, 1440),
         CustomResolution
     ];
+
+    /// <summary>「体验」连接质量下拉项。Auto 表示不主动写入连接类型。</summary>
+    public IReadOnlyList<ConnectionQualityOption> ConnectionQualityOptions => ConnectionQualityOptionItems;
+
+    private static readonly IReadOnlyList<ConnectionQualityOption> ConnectionQualityOptionItems =
+    [
+        new(RdpConnectionQuality.Auto, "自动"),
+        new(RdpConnectionQuality.Lan, "局域网（LAN）"),
+        new(RdpConnectionQuality.HighSpeed, "高速宽带"),
+        new(RdpConnectionQuality.LowBandwidth, "低带宽")
+    ];
+
+    private static ConnectionQualityOption MatchQuality(RdpConnectionQuality value)
+        => ConnectionQualityOptionItems.FirstOrDefault(o => o.Value == value) ?? ConnectionQualityOptionItems[0];
 
     /// <summary>RDP 显示模式。写回 <see cref="RdpOptions.DisplayMode"/>。</summary>
     [ObservableProperty]
@@ -149,8 +168,34 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
     [ObservableProperty]
     private string _rdpCustomHeight = "1080";
 
-    /// <summary>当前是否选择了「自定义」分辨率。</summary>
-    public bool IsCustomResolution => SelectedResolution == CustomResolution;
+    /// <summary>是否处于「固定分辨率」显示模式。适应窗口时分辨率下拉 / 自定义输入整体隐藏。</summary>
+    public bool IsFixedResolution => RdpDisplayMode == RdpDisplayMode.FixedResolution;
+
+    /// <summary>当前是否选择了「自定义」分辨率（且处于固定分辨率模式）。</summary>
+    public bool IsCustomResolution => IsFixedResolution && SelectedResolution == CustomResolution;
+
+    /// <summary>当前选中的连接质量预设。写回 <see cref="RdpOptions.ConnectionQuality"/>。</summary>
+    [ObservableProperty]
+    private ConnectionQualityOption? _selectedConnectionQuality;
+
+    /// <summary>「启动后进入全屏」。勾选「使用全部显示器」会自动联动勾选此项。</summary>
+    [ObservableProperty]
+    private bool _rdpStartFullScreen;
+
+    /// <summary>「使用全部显示器」。取消勾选不会联动取消「启动后进入全屏」。</summary>
+    [ObservableProperty]
+    private bool _rdpUseMultimon;
+
+    /// <summary>
+    /// 多显示器相关的行内提示文案。未勾选多显示器时为 null（隐藏）；
+    /// 勾选后给出说明，若「启动后全屏」被取消则明确指出其仍生效需全屏配合。
+    /// </summary>
+    public string? UseMultimonHint => RdpUseMultimon switch
+    {
+        false => null,
+        _ when RdpStartFullScreen => "已联动勾选「启动后进入全屏」：多显示器布局需要会话进入全屏后才会真正扩展。",
+        _ => "已保留「使用全部显示器」，但它需要「启动后进入全屏」才会真正生效。"
+    };
 
     /// <summary>分辨率选择 / 显示模式互斥联动是否在进行中，用于抑制回调递归。</summary>
     private bool _syncingDisplay;
@@ -228,6 +273,7 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
     partial void OnRdpDisplayModeChanged(RdpDisplayMode value)
     {
         OnPropertyChanged(nameof(IsCustomResolution));
+        OnPropertyChanged(nameof(IsFixedResolution));
 
         // 由分辨率下拉联动设置显示模式时跳过，避免覆盖用户刚选的分辨率。
         if (_syncingDisplay)
@@ -235,19 +281,41 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
             return;
         }
 
-        if (value == RdpDisplayMode.FitToWindow)
-        {
-            // 适应窗口：分辨率随窗口，下拉归一到「自动」，不改动已存宽高。
-            if (SelectedResolution != AutoResolution)
-            {
-                SelectedResolution = AutoResolution;
-            }
-        }
-        else
+        if (value == RdpDisplayMode.FixedResolution)
         {
             // 固定分辨率：按连接里已存宽高回填分辨率预设（或自定义）。
             SyncResolutionFromProfile();
         }
+        // 适应窗口：分辨率随窗口自动调整，不写死桌面尺寸；不改动已存宽高，
+        // 分辨率行整体隐藏，切回固定分辨率时仍按已存宽高回填。
+    }
+
+    partial void OnSelectedConnectionQualityChanged(ConnectionQualityOption? value)
+    {
+        if (value is not null)
+        {
+            _profile.Rdp.ConnectionQuality = value.Value;
+        }
+    }
+
+    partial void OnRdpStartFullScreenChanged(bool value)
+    {
+        _profile.Rdp.StartFullScreen = value;
+        OnPropertyChanged(nameof(UseMultimonHint));
+    }
+
+    partial void OnRdpUseMultimonChanged(bool value)
+    {
+        _profile.Rdp.UseMultimon = value;
+
+        // 勾选「使用全部显示器」自动联动勾选「启动后进入全屏」（多显示器需在全屏下才真正生效）；
+        // 取消多显示器不联动取消全屏，避免打断用户对全屏的独立选择。
+        if (value && !_profile.Rdp.StartFullScreen)
+        {
+            RdpStartFullScreen = true;
+        }
+
+        OnPropertyChanged(nameof(UseMultimonHint));
     }
 
     partial void OnSelectedResolutionChanged(ResolutionOption? value)
@@ -261,19 +329,6 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
 
         switch (value.Value)
         {
-            case RdpDisplayResolution.Auto:
-                // 自动 = 随窗口自适应（适应窗口），宽高交由窗口尺寸决定，不改动已存值。
-                _syncingDisplay = true;
-                try
-                {
-                    RdpDisplayMode = RdpDisplayMode.FitToWindow;
-                }
-                finally
-                {
-                    _syncingDisplay = false;
-                }
-                break;
-
             case RdpDisplayResolution.Custom:
                 // 先落显示模式再展开自定义输入，自定义宽高回填当前已存桌面尺寸。
                 _syncingDisplay = true;
@@ -380,6 +435,11 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
             }
         }
 
+        // 全屏 / 多显示器 / 连接质量由编辑器属性写回（属性已 write-through，这里再确保与 VM 一致）。
+        _profile.Rdp.StartFullScreen = RdpStartFullScreen;
+        _profile.Rdp.UseMultimon = RdpUseMultimon;
+        _profile.Rdp.ConnectionQuality = SelectedConnectionQuality?.Value ?? RdpConnectionQuality.Auto;
+
         ValidationMessage = string.Empty;
 
         _profile.Name = Name.Trim();
@@ -449,6 +509,12 @@ public sealed partial class TagSelection(Guid id, string name, string color) : O
 
 /// <summary>RDP 分辨率下拉项。Width/Height 为 null 表示自动或自定义（无固定尺寸）。</summary>
 public sealed record ResolutionOption(RdpDisplayResolution Value, string Label, int? Width, int? Height)
+{
+    public override string ToString() => Label;
+}
+
+/// <summary>RDP 连接质量下拉项。</summary>
+public sealed record ConnectionQualityOption(RdpConnectionQuality Value, string Label)
 {
     public override string ToString() => Label;
 }

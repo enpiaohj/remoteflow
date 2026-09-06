@@ -142,6 +142,29 @@ public enum RdpDisplayResolution
 }
 
 /// <summary>
+/// RDP「体验」里的连接质量预设。
+/// <para>
+/// 选择结果映射到 RDP ActiveX 的 <c>NetworkConnectionType</c>
+/// （<c>IMsRdpClientAdvancedSettings7</c>），由远端据此调整体验参数。
+/// <c>Auto</c> 表示不主动写入，交由控件与系统自动处理。
+/// </para>
+/// </summary>
+public enum RdpConnectionQuality
+{
+    /// <summary>自动：不写入连接类型，交由控件 / 系统决定。</summary>
+    Auto = 0,
+
+    /// <summary>局域网（LAN）：对应 <c>CONNECTION_TYPE_LAN</c>（6）。</summary>
+    Lan = 1,
+
+    /// <summary>高速宽带：对应 <c>CONNECTION_TYPE_BROADBAND_HIGH</c>（4）。</summary>
+    HighSpeed = 2,
+
+    /// <summary>低带宽：对应 <c>CONNECTION_TYPE_BROADBAND_LOW</c>（2），提示远端降低体验开销。</summary>
+    LowBandwidth = 3
+}
+
+/// <summary>
 /// VNC 缩放模式。
 /// </summary>
 public enum VncScaleMode
