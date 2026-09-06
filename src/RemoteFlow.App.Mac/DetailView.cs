@@ -199,7 +199,39 @@ public sealed class DetailView : NSView
             Style = NSTableViewStyle.Inset,
         };
         table.AddColumn(new NSTableColumn("c") { ResizingMask = NSTableColumnResizing.Autoresizing });
-        _ = new CredentialListSource(table, vm.Items);
+
+        var editButton = new NSButton { Title = "编辑", Enabled = false, BezelStyle = NSBezelStyle.Rounded };
+        var deleteButton = new NSButton { Title = "删除", Enabled = false, BezelStyle = NSBezelStyle.Rounded };
+        var empty = Muted("还没有凭据。点「新建凭据」把常用账号 / 私钥交给钥匙串保管。", 12);
+
+        _ = new CredentialListSource(table, vm.Items,
+            onSelect: item =>
+            {
+                vm.SelectedItem = item;
+                editButton.Enabled = item is not null;
+                deleteButton.Enabled = item is not null;
+            },
+            onActivate: item => _ = vm.EditCommand.ExecuteAsync(item));
+
+        void SyncEmpty() => empty.Hidden = vm.Items.Count > 0;
+        vm.Items.CollectionChanged += (_, _) =>
+            NSApplication.SharedApplication.BeginInvokeOnMainThread(SyncEmpty);
+        SyncEmpty();
+
+        var newButton = NSButton.CreateButton("新建凭据", () => _ = vm.CreateCommand.ExecuteAsync(null));
+        newButton.BezelStyle = NSBezelStyle.Rounded;
+        editButton.Activated += (_, _) => _ = vm.EditCommand.ExecuteAsync(null);
+        deleteButton.Activated += (_, _) => _ = vm.DeleteCommand.ExecuteAsync(null);
+
+        var actions = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Spacing = 8,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        actions.AddArrangedSubview(newButton);
+        actions.AddArrangedSubview(editButton);
+        actions.AddArrangedSubview(deleteButton);
 
         var scroll = new NSScrollView
         {
@@ -213,16 +245,18 @@ public sealed class DetailView : NSView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
-            Spacing = 4,
+            Spacing = 8,
             EdgeInsets = new NSEdgeInsets(32, 40, 10, 40),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
         header.AddArrangedSubview(Big("凭据", 24));
         header.AddArrangedSubview(Muted("密码 / 私钥由 macOS 钥匙串加密保存，连接库只存引用。", 12));
+        header.AddArrangedSubview(actions);
 
         var root = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
         root.AddSubview(header);
         root.AddSubview(scroll);
+        root.AddSubview(empty);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
             header.LeadingAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.LeadingAnchor),
@@ -232,6 +266,8 @@ public sealed class DetailView : NSView
             scroll.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor, -26),
             scroll.TopAnchor.ConstraintEqualTo(header.BottomAnchor, 8),
             scroll.BottomAnchor.ConstraintEqualTo(root.BottomAnchor, -20),
+            empty.TopAnchor.ConstraintEqualTo(scroll.TopAnchor, 24),
+            empty.LeadingAnchor.ConstraintEqualTo(scroll.LeadingAnchor, 16),
         });
         return root;
     }

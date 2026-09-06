@@ -9,16 +9,41 @@ public sealed class CredentialListSource : NSTableViewDelegate
 {
     private readonly NSTableView _table;
     private readonly ObservableCollection<CredentialItemViewModel> _items;
+    private readonly Action<CredentialItemViewModel?>? _onSelect;
+    private readonly Action<CredentialItemViewModel>? _onActivate;
 
-    public CredentialListSource(NSTableView table, ObservableCollection<CredentialItemViewModel> items)
+    public CredentialListSource(
+        NSTableView table,
+        ObservableCollection<CredentialItemViewModel> items,
+        Action<CredentialItemViewModel?>? onSelect = null,
+        Action<CredentialItemViewModel>? onActivate = null)
     {
         _table = table;
         _items = items;
+        _onSelect = onSelect;
+        _onActivate = onActivate;
         _table.DataSource = new RowCount(this);
         _table.Delegate = this;
         _items.CollectionChanged += (_, _) =>
             NSApplication.SharedApplication.BeginInvokeOnMainThread(_table.ReloadData);
+        if (_onActivate is not null)
+        {
+            _table.DoubleClick += (_, _) =>
+            {
+                var r = (int)_table.ClickedRow;
+                if (r >= 0 && r < _items.Count)
+                {
+                    _onActivate(_items[r]);
+                }
+            };
+        }
         _table.ReloadData();
+    }
+
+    public override void SelectionDidChange(Foundation.NSNotification notification)
+    {
+        var row = (int)_table.SelectedRow;
+        _onSelect?.Invoke(row >= 0 && row < _items.Count ? _items[row] : null);
     }
 
     public override NSView GetViewForItem(NSTableView tableView, NSTableColumn? tableColumn, nint row)

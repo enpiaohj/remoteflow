@@ -120,7 +120,24 @@ public sealed class AppKitDialogService : IDialogService
     // ── 逐步补齐 ─────────────────────────────────────────────────
 
     public Task<CredentialEditorResult?> EditCredentialAsync(Credential? existing)
-        => NotYet<CredentialEditorResult?>("EditCredentialAsync");
+    {
+        var tcs = new TaskCompletionSource<CredentialEditorResult?>();
+        NSApplication.SharedApplication.InvokeOnMainThread(() =>
+        {
+            try
+            {
+                var vm = new CredentialEditorViewModel(existing);
+                var sheet = new CredentialEditorSheet(vm);
+                tcs.SetResult(sheet.Run());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "凭据编辑器打开失败");
+                tcs.SetResult(null);
+            }
+        });
+        return tcs.Task;
+    }
 
     public Task<string?> EditGroupNameAsync(GroupNamePrompt prompt) => NotYet<string?>("EditGroupNameAsync");
 
