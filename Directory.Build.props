@@ -9,6 +9,13 @@
     <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <!--
+      允许在 macOS / Linux 上编译 net10.0-windows 目标（WPF / WinForms / Protocol.Rdp）。
+      仅影响编译期：拉取 Windows Targeting Pack，使 macOS 开发机能对 Windows 侧做
+      构建校验，避免共享层重构时把 Windows 版改坏却要等到换机器才发现。
+      产物仍只能在 Windows 上运行。在 Windows 上此属性无副作用。
+    -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 
   <!-- 产品与版本信息：正式发布时统一在此处递增 -->

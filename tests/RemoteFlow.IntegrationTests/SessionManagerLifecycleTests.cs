@@ -5,7 +5,6 @@ using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 using RemoteFlow.Infrastructure.Data;
-using RemoteFlow.Infrastructure.Security;
 using Xunit;
 
 namespace RemoteFlow.IntegrationTests;
@@ -31,7 +30,7 @@ public sealed class SessionManagerLifecycleTests : IDisposable
 
         var credentials = new CredentialService(
             new SqliteCredentialRepository(_database),
-            new DpapiCredentialVault(_workspace.VaultPath, NullLogger<DpapiCredentialVault>.Instance),
+            new InMemoryCredentialVault(),
             NullLogger<CredentialService>.Instance);
 
         _provider = new FakeProvider(ProtocolType.Vnc);

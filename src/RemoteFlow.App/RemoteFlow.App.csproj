@@ -52,6 +52,7 @@
     <ProjectReference Include="..\RemoteFlow.Core\RemoteFlow.Core.csproj" />
     <ProjectReference Include="..\RemoteFlow.Application\RemoteFlow.Application.csproj" />
     <ProjectReference Include="..\RemoteFlow.Infrastructure\RemoteFlow.Infrastructure.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Infrastructure.Windows\RemoteFlow.Infrastructure.Windows.csproj" />
     <ProjectReference Include="..\RemoteFlow.Protocol.Rdp\RemoteFlow.Protocol.Rdp.csproj" />
     <ProjectReference Include="..\RemoteFlow.Protocol.Ssh\RemoteFlow.Protocol.Ssh.csproj" />
     <ProjectReference Include="..\RemoteFlow.Protocol.Vnc\RemoteFlow.Protocol.Vnc.csproj" />
@@ -66,7 +67,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="RemoteFlow.IntegrationTests" />
+    <!--
+      引用本工程 internal 类型的测试都在 Windows 专属测试工程里
+      （跨平台测试工程已不再引用 WPF 工程，见技术方案 §6.1）。
+    -->
+    <InternalsVisibleTo Include="RemoteFlow.IntegrationTests.Windows" />
   </ItemGroup>
 
   <!--

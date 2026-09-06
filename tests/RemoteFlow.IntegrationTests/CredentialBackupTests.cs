@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Infrastructure.Data;
-using RemoteFlow.Infrastructure.Security;
 using Xunit;
 
 namespace RemoteFlow.IntegrationTests;
@@ -144,7 +143,7 @@ public sealed class CredentialBackupTests : IDisposable
         database.Initialize();
 
         var repo = new SqliteCredentialRepository(database);
-        var vault = new DpapiCredentialVault(_workspace.VaultPath, NullLogger<DpapiCredentialVault>.Instance);
+        var vault = new InMemoryCredentialVault();
         var credentialService = new CredentialService(repo, vault, NullLogger<CredentialService>.Instance);
         var backup = new CredentialBackupService(repo, vault, credentialService, NullLogger<CredentialBackupService>.Instance);
 
@@ -183,7 +182,7 @@ public sealed class CredentialBackupTests : IDisposable
         var database = new RemoteFlowDatabase(_workspace.DatabasePath, NullLogger<RemoteFlowDatabase>.Instance);
         database.Initialize();
         var repo = new SqliteCredentialRepository(database);
-        var vault = new DpapiCredentialVault(_workspace.VaultPath, NullLogger<DpapiCredentialVault>.Instance);
+        var vault = new InMemoryCredentialVault();
         var credentialService = new CredentialService(repo, vault, NullLogger<CredentialService>.Instance);
         var backup = new CredentialBackupService(repo, vault, credentialService, NullLogger<CredentialBackupService>.Instance);
 
