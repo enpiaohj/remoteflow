@@ -407,7 +407,8 @@ public sealed class SshSessionView : ContentControl, IDisposable
     /// <summary>
     /// 粘贴安全漏斗：多行 / 大文本按设置先确认，普通小段文本直接放行。
     /// 无论来自工具条按钮还是 WebView 内 Ctrl+V（页面已拦截转发），都收敛到这里再发往远端。
-    /// 换行统一转成 <c>\r</c>（终端回车），避免 <c>\r\n</c> / <c>\n</c> 混用产生空行。
+    /// 确认后交给 xterm 的 paste 管线发送（换行归一与 bracketed-paste 包裹由 xterm 处理）；
+    /// 仅终端未就绪时退回直发。
     /// </summary>
     private async Task ConfirmAndSendPasteAsync(string rawText)
     {
@@ -440,8 +441,18 @@ public sealed class SshSessionView : ContentControl, IDisposable
             }
         }
 
-        // 粘贴内容作为输入送往远端，绝不写入日志。
-        _session.SendInput(normalized.Replace('\n', '\r'));
+        if (_terminalReady)
+        {
+            // 终端已就绪：交给 xterm 的 paste 管线发送——它会做 \r\n→\r 归一，并且
+            // 远端启用 bracketed-paste 时自动加 ESC[200~ / ESC[201~ 包裹，随后经
+            // onData → 宿主 input 消息送往远端（与键入同一条通道，绝不打日志）。
+            await InvokeTerminalAsync("paste", normalized);
+        }
+        else
+        {
+            // 极端情况下终端尚未就绪（例如正在关闭）：退回直发，仅换行转回车。
+            _session.SendInput(normalized.Replace('\n', '\r'));
+        }
     }
 
     private static string BuildPasteConfirmMessage(bool multiline, bool large, int lineCount, int charCount)
