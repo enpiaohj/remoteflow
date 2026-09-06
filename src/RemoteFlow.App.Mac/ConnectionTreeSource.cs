@@ -7,11 +7,11 @@ namespace RemoteFlow.App.Mac;
 /// 源列表侧栏数据源：<see cref="ConnectionsPageViewModel.GroupNodes"/> 的分组树
 /// （分组 → 子分组 / 连接）。承担 DataSource（层级）与 Delegate（cell 视图）。
 /// </summary>
-public sealed class SidebarSource : NSOutlineViewDelegate, INSOutlineViewDataSource
+public sealed class ConnectionTreeSource : NSOutlineViewDelegate, INSOutlineViewDataSource
 {
     private readonly ConnectionsPageViewModel _vm;
 
-    public SidebarSource(ConnectionsPageViewModel vm) => _vm = vm;
+    public ConnectionTreeSource(ConnectionsPageViewModel vm) => _vm = vm;
 
     public ConnectionItemViewModel? SelectedConnection { get; private set; }
 

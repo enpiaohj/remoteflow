@@ -4,108 +4,264 @@ using RemoteFlow.Presentation.ViewModels;
 namespace RemoteFlow.App.Mac;
 
 /// <summary>
-/// 详情 / 会话区。当前三态：空态、连接信息卡、连接中占位。
-/// 会话画面（SSH 终端 / VNC）在 8.D 接入本区域。
+/// 第三列：详情 / 会话。多态：空态、连接信息卡、连接中、会话占位、错误、首页、凭据。
+/// 会话画面（SSH 终端 / VNC）在 8.D 替换 <see cref="ShowSessionPlaceholder"/>。
 /// </summary>
 public sealed class DetailView : NSView
 {
-    private readonly NSTextField _title = Label(22, NSFontWeight.Semibold);
-    private readonly NSTextField _subtitle = Label(13, NSFontWeight.Regular, secondary: true);
-    private readonly NSGridView _grid = new()
-    {
-        RowSpacing = 8,
-        ColumnSpacing = 16,
-        TranslatesAutoresizingMaskIntoConstraints = false,
-    };
-    private readonly NSButton _connectButton = NSButton.CreateButton("连接", () => { });
-    private readonly NSStackView _card;
-    private readonly NSView _empty;
+    private readonly NSView _container = new() { TranslatesAutoresizingMaskIntoConstraints = false };
+
+    public event EventHandler<ConnectionItemViewModel>? ConnectRequested;
 
     public DetailView()
     {
         TranslatesAutoresizingMaskIntoConstraints = false;
-
-        _connectButton.BezelStyle = NSBezelStyle.Rounded;
-        _connectButton.ControlSize = NSControlSize.Large;
-
-        _card = new NSStackView
-        {
-            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
-            Alignment = NSLayoutAttribute.Leading,
-            Spacing = 14,
-            EdgeInsets = new NSEdgeInsets(36, 40, 36, 40),
-            TranslatesAutoresizingMaskIntoConstraints = false,
-            Hidden = true,
-        };
-        _card.AddArrangedSubview(_title);
-        _card.AddArrangedSubview(_subtitle);
-        _card.AddArrangedSubview(Spacer(6));
-        _card.AddArrangedSubview(_grid);
-        _card.AddArrangedSubview(Spacer(10));
-        _card.AddArrangedSubview(_connectButton);
-        AddSubview(_card);
-
-        _empty = BuildEmpty();
-        AddSubview(_empty);
-
+        AddSubview(_container);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
-            _card.LeadingAnchor.ConstraintEqualTo(SafeAreaLayoutGuide.LeadingAnchor),
-            _card.TrailingAnchor.ConstraintEqualTo(SafeAreaLayoutGuide.TrailingAnchor),
-            _card.TopAnchor.ConstraintEqualTo(SafeAreaLayoutGuide.TopAnchor),
-            _empty.CenterXAnchor.ConstraintEqualTo(CenterXAnchor),
-            _empty.CenterYAnchor.ConstraintEqualTo(CenterYAnchor),
+            _container.LeadingAnchor.ConstraintEqualTo(SafeAreaLayoutGuide.LeadingAnchor),
+            _container.TrailingAnchor.ConstraintEqualTo(SafeAreaLayoutGuide.TrailingAnchor),
+            _container.TopAnchor.ConstraintEqualTo(SafeAreaLayoutGuide.TopAnchor),
+            _container.BottomAnchor.ConstraintEqualTo(BottomAnchor),
         });
+
+        ShowEmpty();
     }
 
     public override bool IsFlipped => true;
 
-    public void ShowConnection(ConnectionItemViewModel c)
-    {
-        _empty.Hidden = true;
-        _card.Hidden = false;
+    public void ShowEmpty()
+        => Swap(EmptyState("选择一个连接", "从左侧列表选择，或用工具栏「＋」新建连接。", "rectangle.connected.to.line.below"));
 
-        _title.StringValue = c.Name;
-        _subtitle.StringValue = $"{c.ProtocolName}  ·  {c.HostDisplay}";
-
-        while (_grid.RowCount > 0)
-        {
-            _grid.RemoveRow(0);
-        }
-
-        AddRow("主机", c.Host);
-        AddRow("端口", c.PortDisplay);
-        AddRow("协议", c.ProtocolName);
-        AddRow("最近连接", c.LastConnectedDisplay);
-        AddRow("创建于", c.CreatedAtDisplay);
-        if (!string.IsNullOrWhiteSpace(c.Notes))
-        {
-            AddRow("备注", c.Notes);
-        }
-
-        _connectButton.Title = $"连接到 {c.Name}";
-    }
+    public void ShowConnection(ConnectionItemViewModel c) => Swap(BuildInfoCard(c));
 
     public void ShowConnecting(ConnectionItemViewModel c)
+        => Swap(Centered(Spinner(), $"正在连接 {c.Name} …"));
+
+    public void ShowSessionPlaceholder(ConnectionItemViewModel c, Guid sessionId)
+        => Swap(Centered(
+            Icon("checkmark.circle", 40, NSColor.SystemGreen),
+            $"已连接 {c.Name}",
+            "会话画面（SSH 终端 / VNC）将在 Phase 8.D 接入本区域。"));
+
+    public void ShowError(string message)
+        => Swap(Centered(Icon("exclamationmark.triangle", 40, NSColor.SystemOrange), "连接失败", message));
+
+    public void ShowHome(HomePageViewModel vm)
     {
-        _empty.Hidden = true;
-        _card.Hidden = false;
-        _title.StringValue = c.Name;
-        _subtitle.StringValue = "正在连接…（会话画面将在 8.D 接入本区域）";
+        Swap(BuildHome(vm));
+        _ = ReloadHomeAsync(vm);
     }
 
-    private void AddRow(string label, string value)
+    private async Task ReloadHomeAsync(HomePageViewModel vm)
     {
-        var l = Label(12, NSFontWeight.Medium, secondary: true);
-        l.StringValue = label;
-        l.Alignment = NSTextAlignment.Right;
-        var v = Label(13, NSFontWeight.Regular);
-        v.StringValue = string.IsNullOrEmpty(value) ? "—" : value;
-        v.Selectable = true;
-        _grid.AddRow(new NSView[] { l, v });
+        try
+        {
+            await vm.LoadAsync();
+        }
+        catch
+        {
+            // 首页数据加载失败不阻塞界面。
+        }
+
+        NSApplication.SharedApplication.BeginInvokeOnMainThread(() => Swap(BuildHome(vm)));
     }
 
-    private static NSView BuildEmpty()
+    public void ShowCredentials(CredentialsPageViewModel vm) => Swap(BuildCredentials(vm));
+
+    // ── 连接信息卡 ──────────────────────────────────────────────
+
+    private NSView BuildInfoCard(ConnectionItemViewModel c)
+    {
+        var title = Big(c.Name, 24);
+        var subtitle = Muted($"{c.ProtocolName}   ·   {c.HostDisplay}", 13);
+
+        var connect = NSButton.CreateButton("连接", () => ConnectRequested?.Invoke(this, c));
+        connect.BezelStyle = NSBezelStyle.Rounded;
+        connect.ControlSize = NSControlSize.Large;
+        connect.KeyEquivalent = "\r";
+
+        var stack = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 14,
+            EdgeInsets = new NSEdgeInsets(32, 40, 32, 40),
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        stack.AddArrangedSubview(title);
+        stack.AddArrangedSubview(subtitle);
+        stack.AddArrangedSubview(Gap(8));
+        stack.AddArrangedSubview(connect);
+        stack.AddArrangedSubview(Gap(12));
+        stack.AddArrangedSubview(SectionLabel("连接信息"));
+        stack.AddArrangedSubview(InfoGrid(new (string, string)[]
+        {
+            ("主机", c.Host),
+            ("端口", c.PortDisplay),
+            ("协议", c.ProtocolName),
+        }));
+        stack.AddArrangedSubview(Gap(8));
+        stack.AddArrangedSubview(SectionLabel("使用信息"));
+        stack.AddArrangedSubview(InfoGrid(new (string, string)[]
+        {
+            ("创建时间", c.CreatedAtDisplay),
+            ("最近连接", c.LastConnectedDisplay),
+        }));
+
+        return TopAligned(stack);
+    }
+
+    // ── 首页 ────────────────────────────────────────────────────
+
+    private static NSView BuildHome(HomePageViewModel vm)
+    {
+        var stack = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 6,
+            EdgeInsets = new NSEdgeInsets(40, 44, 32, 44),
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        stack.AddArrangedSubview(Big(string.IsNullOrEmpty(vm.Greeting) ? "欢迎" : vm.Greeting, 28));
+        stack.AddArrangedSubview(Muted(vm.DateLine ?? "", 13));
+        stack.AddArrangedSubview(Muted($"{vm.TotalConnections} 个连接  ·  {vm.ConnectedSessions} 个会话已连接", 12));
+        stack.AddArrangedSubview(Gap(18));
+
+        stack.AddArrangedSubview(SectionLabel("收藏"));
+        foreach (var f in vm.FavoriteItems.Take(6))
+        {
+            stack.AddArrangedSubview(MiniRow(f));
+        }
+        if (vm.FavoriteItems.Count == 0)
+        {
+            stack.AddArrangedSubview(Muted("暂无收藏", 12));
+        }
+
+        stack.AddArrangedSubview(Gap(14));
+        stack.AddArrangedSubview(SectionLabel("最近连接"));
+        foreach (var r in vm.RecentItems.Take(6))
+        {
+            stack.AddArrangedSubview(MiniRow(r));
+        }
+        if (vm.RecentItems.Count == 0)
+        {
+            stack.AddArrangedSubview(Muted("暂无记录", 12));
+        }
+
+        return TopAligned(stack);
+    }
+
+    private static NSView MiniRow(ConnectionItemViewModel c)
+    {
+        var icon = new NSImageView
+        {
+            Image = ProtocolSymbol(c.Profile.Protocol),
+            TranslatesAutoresizingMaskIntoConstraints = false,
+            ContentTintColor = NSColor.SecondaryLabel,
+            SymbolConfiguration = NSImageSymbolConfiguration.Create(13, NSFontWeight.Regular),
+        };
+        var col = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 1,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        col.AddArrangedSubview(Plain(c.Name, 13));
+        col.AddArrangedSubview(Muted(c.HostDisplay, 11));
+
+        var row = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.CenterY,
+            Spacing = 8,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        row.AddArrangedSubview(icon);
+        row.AddArrangedSubview(col);
+        return row;
+    }
+
+    // ── 凭据 ────────────────────────────────────────────────────
+
+    private static NSView BuildCredentials(CredentialsPageViewModel vm)
+    {
+        _ = vm.LoadAsync();
+
+        var table = new NSTableView
+        {
+            HeaderView = null,
+            RowHeight = 44,
+            BackgroundColor = NSColor.Clear,
+            SelectionHighlightStyle = NSTableViewSelectionHighlightStyle.Regular,
+            Style = NSTableViewStyle.Inset,
+        };
+        table.AddColumn(new NSTableColumn("c") { ResizingMask = NSTableColumnResizing.Autoresizing });
+        _ = new CredentialListSource(table, vm.Items);
+
+        var scroll = new NSScrollView
+        {
+            DocumentView = table,
+            DrawsBackground = false,
+            HasVerticalScroller = true,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+
+        var header = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 4,
+            EdgeInsets = new NSEdgeInsets(32, 40, 10, 40),
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        header.AddArrangedSubview(Big("凭据", 24));
+        header.AddArrangedSubview(Muted("密码 / 私钥由 macOS 钥匙串加密保存，连接库只存引用。", 12));
+
+        var root = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        root.AddSubview(header);
+        root.AddSubview(scroll);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            header.LeadingAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.LeadingAnchor),
+            header.TrailingAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.TrailingAnchor),
+            header.TopAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.TopAnchor),
+            scroll.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor, 26),
+            scroll.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor, -26),
+            scroll.TopAnchor.ConstraintEqualTo(header.BottomAnchor, 8),
+            scroll.BottomAnchor.ConstraintEqualTo(root.BottomAnchor, -20),
+        });
+        return root;
+    }
+
+    // ── 容器切换 ────────────────────────────────────────────────
+
+    private void Swap(NSView content)
+    {
+        foreach (var v in _container.Subviews.ToArray())
+        {
+            v.RemoveFromSuperview();
+        }
+
+        content.TranslatesAutoresizingMaskIntoConstraints = false;
+        _container.AddSubview(content);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            content.LeadingAnchor.ConstraintEqualTo(_container.LeadingAnchor),
+            content.TrailingAnchor.ConstraintEqualTo(_container.TrailingAnchor),
+            content.TopAnchor.ConstraintEqualTo(_container.TopAnchor),
+            content.BottomAnchor.ConstraintEqualTo(_container.BottomAnchor),
+        });
+    }
+
+    // ── 组件 ────────────────────────────────────────────────────
+
+    private static NSView EmptyState(string title, string body, string symbol)
+        => Centered(Icon(symbol, 44, NSColor.TertiaryLabel), title, body);
+
+    private static NSView Centered(NSView top, string title, string? body = null)
     {
         var stack = new NSStackView
         {
@@ -114,40 +270,123 @@ public sealed class DetailView : NSView
             Spacing = 8,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
-
-        var icon = new NSImageView
-        {
-            Image = NSImage.GetSystemSymbol("rectangle.connected.to.line.below", null),
-            TranslatesAutoresizingMaskIntoConstraints = false,
-            ContentTintColor = NSColor.TertiaryLabel,
-            SymbolConfiguration = NSImageSymbolConfiguration.Create(44, NSFontWeight.Regular),
-        };
-        var t = Label(17, NSFontWeight.Medium);
-        t.StringValue = "选择一个连接";
+        stack.AddArrangedSubview(top);
+        var t = Plain(title, 17);
         t.Alignment = NSTextAlignment.Center;
-        var s = Label(13, NSFontWeight.Regular, secondary: true);
-        s.StringValue = "从左侧列表选择，或用工具栏「＋」新建连接。";
-        s.Alignment = NSTextAlignment.Center;
-
-        stack.AddArrangedSubview(icon);
         stack.AddArrangedSubview(t);
-        stack.AddArrangedSubview(s);
-        return stack;
+        if (!string.IsNullOrEmpty(body))
+        {
+            var b = Muted(body, 13);
+            b.Alignment = NSTextAlignment.Center;
+            stack.AddArrangedSubview(b);
+        }
+
+        var host = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        host.AddSubview(stack);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            stack.CenterXAnchor.ConstraintEqualTo(host.CenterXAnchor),
+            stack.CenterYAnchor.ConstraintEqualTo(host.CenterYAnchor),
+            stack.WidthAnchor.ConstraintLessThanOrEqualTo(360),
+        });
+        return host;
     }
 
-    private static NSTextField Label(nfloat size, nfloat weight, bool secondary = false) => new()
+    private static NSView TopAligned(NSView stack)
     {
+        var host = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        host.AddSubview(stack);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            stack.LeadingAnchor.ConstraintEqualTo(host.LeadingAnchor),
+            stack.TrailingAnchor.ConstraintLessThanOrEqualTo(host.TrailingAnchor),
+            stack.TopAnchor.ConstraintEqualTo(host.TopAnchor),
+        });
+        return host;
+    }
+
+    private static NSGridView InfoGrid((string Label, string Value)[] rows)
+    {
+        var grid = new NSGridView
+        {
+            RowSpacing = 7,
+            ColumnSpacing = 20,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        foreach (var (label, value) in rows)
+        {
+            var l = Muted(label, 12);
+            l.Alignment = NSTextAlignment.Right;
+            var v = Plain(string.IsNullOrEmpty(value) ? "—" : value, 13);
+            v.Selectable = true;
+            grid.AddRow(new NSView[] { l, v });
+        }
+
+        return grid;
+    }
+
+    private static NSProgressIndicator Spinner()
+    {
+        var p = new NSProgressIndicator
+        {
+            Style = NSProgressIndicatorStyle.Spinning,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        p.StartAnimation(null);
+        p.WidthAnchor.ConstraintEqualTo(32).Active = true;
+        p.HeightAnchor.ConstraintEqualTo(32).Active = true;
+        return p;
+    }
+
+    private static NSImageView Icon(string symbol, nfloat size, NSColor tint) => new()
+    {
+        Image = NSImage.GetSystemSymbol(symbol, null),
+        ContentTintColor = tint,
+        TranslatesAutoresizingMaskIntoConstraints = false,
+        SymbolConfiguration = NSImageSymbolConfiguration.Create(size, NSFontWeight.Regular),
+    };
+
+    private static NSImage? ProtocolSymbol(RemoteFlow.Core.Models.ProtocolType p) => p switch
+    {
+        RemoteFlow.Core.Models.ProtocolType.Ssh => NSImage.GetSystemSymbol("apple.terminal", null)
+            ?? NSImage.GetSystemSymbol("terminal", null),
+        RemoteFlow.Core.Models.ProtocolType.Rdp => NSImage.GetSystemSymbol("display", null),
+        _ => NSImage.GetSystemSymbol("rectangle.on.rectangle", null),
+    };
+
+    private static NSTextField SectionLabel(string text) => new()
+    {
+        StringValue = text,
+        Bordered = false,
+        Editable = false,
+        Selectable = false,
+        DrawsBackground = false,
+        Font = NSFont.SystemFontOfSize(11, NSFontWeight.Semibold),
+        TextColor = NSColor.SecondaryLabel,
+        TranslatesAutoresizingMaskIntoConstraints = false,
+    };
+
+    private static NSTextField Big(string text, nfloat size) => Styled(text, size, NSFontWeight.Bold, NSColor.Label);
+
+    private static NSTextField Plain(string text, nfloat size) => Styled(text, size, NSFontWeight.Regular, NSColor.Label);
+
+    private static NSTextField Muted(string text, nfloat size)
+        => Styled(text, size, NSFontWeight.Regular, NSColor.SecondaryLabel);
+
+    private static NSTextField Styled(string text, nfloat size, nfloat weight, NSColor color) => new()
+    {
+        StringValue = text,
         Bordered = false,
         Editable = false,
         Selectable = false,
         DrawsBackground = false,
         Font = NSFont.SystemFontOfSize(size, weight),
-        TextColor = secondary ? NSColor.SecondaryLabel : NSColor.Label,
-        TranslatesAutoresizingMaskIntoConstraints = false,
+        TextColor = color,
         LineBreakMode = NSLineBreakMode.TruncatingTail,
+        TranslatesAutoresizingMaskIntoConstraints = false,
     };
 
-    private static NSView Spacer(nfloat h)
+    private static NSView Gap(nfloat h)
     {
         var v = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
         v.HeightAnchor.ConstraintEqualTo(h).Active = true;

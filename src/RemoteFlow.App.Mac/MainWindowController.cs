@@ -1,6 +1,5 @@
 using AppKit;
 using CoreGraphics;
-using Foundation;
 using Microsoft.Extensions.DependencyInjection;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Models;
@@ -9,107 +8,88 @@ using RemoteFlow.Presentation.ViewModels;
 namespace RemoteFlow.App.Mac;
 
 /// <summary>
-/// 主窗口：统一工具栏 + 源列表侧栏（分组 / 连接）+ 详情区。
-/// 侧栏数据来自共享 <see cref="ConnectionsPageViewModel"/>。
+/// 主窗口 —— 原生三栏（导航 / 列表 / 详情，对齐邮件 / 备忘录）。
+/// 列表绑共享 <see cref="ConnectionsPageViewModel"/>；设置走独立偏好窗口（⌘,）。
 /// </summary>
 public sealed class MainWindowController : NSWindowController
 {
     private readonly IServiceProvider _services;
-    private readonly ConnectionsPageViewModel _connectionsVm;
     private readonly ConnectionService _connections;
+    private readonly SessionManager _sessions;
 
-    private readonly NSOutlineView _outline = new();
-    private SidebarSource? _sidebarSource;
+    private readonly NavSidebar _nav;
+    private readonly ConnectionListPane _listPane;
     private readonly DetailView _detail = new();
+    private readonly NSSplitViewController _split = new();
     private readonly NSSearchField _search = new() { PlaceholderString = "搜索连接" };
+    private NSSplitViewItem? _listItem;
+
+    private SettingsWindowController? _settingsWindow;
+    private NavSidebar.Item? _currentNav;
 
     public MainWindowController(IServiceProvider services)
         : base(NewWindow())
     {
         _services = services;
-        _connectionsVm = services.GetRequiredService<ConnectionsPageViewModel>();
         _connections = services.GetRequiredService<ConnectionService>();
+        _sessions = services.GetRequiredService<SessionManager>();
+
+        var connectionsVm = services.GetRequiredService<ConnectionsPageViewModel>();
+        _nav = new NavSidebar();
+        _listPane = new ConnectionListPane(connectionsVm);
 
         Window.Title = "RemoteFlow";
-        Window.ContentMinSize = new CGSize(920, 560);
-        Window.SetFrame(new CGRect(0, 0, 1180, 720), display: true);
+        Window.ContentMinSize = new CGSize(980, 560);
+        Window.SetContentSize(new CGSize(1160, 720));
         Window.Center();
+        Window.TitleVisibility = NSWindowTitleVisibility.Hidden;
 
         BuildSplit();
         BuildToolbar();
 
-        _ = LoadAsync();
+        _nav.Selected += OnNavSelected;
+        _listPane.ConnectionSelected += (_, c) => _detail.ShowConnection(c);
+        _listPane.ConnectionActivated += (_, c) => _ = OpenAsync(c);
+        _detail.ConnectRequested += (_, c) => _ = OpenAsync(c);
+
+        _ = StartAsync();
+    }
+
+    private async Task StartAsync()
+    {
+        await SeedSampleIfEmptyAsync();
+        _nav.SelectFirst();
     }
 
     private static NSWindow NewWindow() => new(
-        new CGRect(0, 0, 1180, 720),
-        NSWindowStyle.Titled | NSWindowStyle.Closable | NSWindowStyle.Resizable | NSWindowStyle.Miniaturizable
-            | NSWindowStyle.FullSizeContentView | NSWindowStyle.UnifiedTitleAndToolbar,
+        new CGRect(0, 0, 1160, 720),
+        NSWindowStyle.Titled | NSWindowStyle.Closable | NSWindowStyle.Resizable
+            | NSWindowStyle.Miniaturizable | NSWindowStyle.FullSizeContentView
+            | NSWindowStyle.UnifiedTitleAndToolbar,
         NSBackingStore.Buffered,
         deferCreation: false);
 
-    // ── 分栏 ─────────────────────────────────────────────────────
-
     private void BuildSplit()
     {
-        _outline.HeaderView = null;
-        _outline.FloatsGroupRows = false;
-        _outline.IndentationPerLevel = 14;
-        _outline.RowSizeStyle = NSTableViewRowSizeStyle.Custom;
-        _outline.RowHeight = 40;
-        _outline.SelectionHighlightStyle = NSTableViewSelectionHighlightStyle.SourceList;
-        _outline.BackgroundColor = NSColor.Clear;
-        _outline.AddColumn(new NSTableColumn("main") { ResizingMask = NSTableColumnResizing.Autoresizing });
-        _outline.OutlineTableColumn = _outline.TableColumns()[0];
-        _outline.DoubleClick += (_, _) => OpenSelected();
+        var navItem = NSSplitViewItem.CreateSidebar(_nav);
+        navItem.MinimumThickness = 176;
+        navItem.MaximumThickness = 220;
+        navItem.CanCollapse = true;
+        _split.AddSplitViewItem(navItem);
 
-        var sidebarScroll = new NSScrollView
-        {
-            DocumentView = _outline,
-            HasVerticalScroller = true,
-            DrawsBackground = false,
-            AutomaticallyAdjustsContentInsets = true,
-        };
+        _listItem = NSSplitViewItem.FromViewController(_listPane);
+        _listItem.MinimumThickness = 260;
+        _listItem.MaximumThickness = 420;
+        _listItem.CanCollapse = true;
+        _split.AddSplitViewItem(_listItem);
 
-        var sidebarVc = new NSViewController { View = WrapVibrant(sidebarScroll, NSVisualEffectMaterial.Sidebar) };
         var detailVc = new NSViewController { View = _detail };
-
-        var split = new NSSplitViewController();
-        var sidebarItem = NSSplitViewItem.CreateSidebar(sidebarVc);
-        sidebarItem.MinimumThickness = 220;
-        sidebarItem.MaximumThickness = 360;
-        sidebarItem.CanCollapse = true;
-        split.AddSplitViewItem(sidebarItem);
-
         var detailItem = NSSplitViewItem.FromViewController(detailVc);
-        detailItem.MinimumThickness = 480;
-        split.AddSplitViewItem(detailItem);
+        detailItem.MinimumThickness = 420;
+        _split.AddSplitViewItem(detailItem);
 
-        Window.ContentViewController = split;
+        Window.ContentViewController = _split;
     }
-
-    private static NSView WrapVibrant(NSView content, NSVisualEffectMaterial material)
-    {
-        var fx = new NSVisualEffectView
-        {
-            Material = material,
-            BlendingMode = NSVisualEffectBlendingMode.BehindWindow,
-            State = NSVisualEffectState.FollowsWindowActiveState,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        };
-        content.TranslatesAutoresizingMaskIntoConstraints = false;
-        fx.AddSubview(content);
-        NSLayoutConstraint.ActivateConstraints(new[]
-        {
-            content.LeadingAnchor.ConstraintEqualTo(fx.LeadingAnchor),
-            content.TrailingAnchor.ConstraintEqualTo(fx.TrailingAnchor),
-            content.TopAnchor.ConstraintEqualTo(fx.TopAnchor),
-            content.BottomAnchor.ConstraintEqualTo(fx.BottomAnchor),
-        });
-        return fx;
-    }
-
-    // ── 工具栏 ───────────────────────────────────────────────────
 
     private void BuildToolbar()
     {
@@ -118,22 +98,19 @@ public sealed class MainWindowController : NSWindowController
             Delegate = new ToolbarDelegate(this),
             DisplayMode = NSToolbarDisplayMode.Icon,
             AllowsUserCustomization = false,
-            ShowsBaselineSeparator = true,
         };
         Window.Toolbar = toolbar;
         Window.ToolbarStyle = NSWindowToolbarStyle.Unified;
-        Window.TitleVisibility = NSWindowTitleVisibility.Hidden;
     }
 
     private sealed class ToolbarDelegate : NSToolbarDelegate
     {
         private const string NewConn = "rf.new";
         private const string Search = "rf.search";
-        private readonly MainWindowController _owner;
+        private readonly MainWindowController _o;
+        public ToolbarDelegate(MainWindowController o) => _o = o;
 
-        public ToolbarDelegate(MainWindowController owner) => _owner = owner;
-
-        public override string[] DefaultItemIdentifiers(NSToolbar toolbar) => new[]
+        public override string[] DefaultItemIdentifiers(NSToolbar t) => new[]
         {
             NSToolbar.NSToolbarToggleSidebarItemIdentifier,
             NSToolbar.NSToolbarSidebarTrackingSeparatorItemIdentifier,
@@ -142,103 +119,85 @@ public sealed class MainWindowController : NSWindowController
             Search,
         };
 
-        public override string[] AllowedItemIdentifiers(NSToolbar toolbar) => DefaultItemIdentifiers(toolbar);
+        public override string[] AllowedItemIdentifiers(NSToolbar t) => DefaultItemIdentifiers(t);
 
-        public override NSToolbarItem? WillInsertItem(NSToolbar toolbar, string itemIdentifier, bool willBeInserted)
+        public override NSToolbarItem? WillInsertItem(NSToolbar toolbar, string id, bool willInsert)
         {
-            switch (itemIdentifier)
+            switch (id)
             {
                 case NewConn:
                     var item = new NSToolbarItem(NewConn)
                     {
                         Label = "新建连接",
-                        ToolTip = "新建连接（⌘N）",
+                        ToolTip = "新建连接（Cmd N）",
                         Image = NSImage.GetSystemSymbol("plus", null),
                         Bordered = true,
                     };
-                    item.Activated += (_, _) => _owner.BeginNewConnection();
+                    item.Activated += (_, _) => _o.BeginNewConnection();
                     return item;
-
                 case Search:
-                    return new NSSearchToolbarItem(Search)
-                    {
-                        SearchField = _owner._search,
-                        ResignsFirstResponderWithCancel = true,
-                    };
-
+                    return new NSSearchToolbarItem(Search) { SearchField = _o._search };
                 default:
                     return null;
             }
         }
     }
 
-    // ── 数据加载 ─────────────────────────────────────────────────
-
-    private async Task LoadAsync()
+    private void OnNavSelected(object? sender, NavSidebar.Item item)
     {
-        await SeedSampleIfEmptyAsync();
-
-        _connectionsVm.Filter = ConnectionFilter.All;
-        await _connectionsVm.LoadAsync();
-
-        _sidebarSource = new SidebarSource(_connectionsVm);
-        _outline.DataSource = _sidebarSource;
-        _outline.Delegate = _sidebarSource;
-        _outline.ReloadData();
-        _outline.ExpandItem(null, expandChildren: true);
-
-        _sidebarSource.SelectionChanged += (_, _) =>
-        {
-            if (_sidebarSource.SelectedConnection is { } c)
-            {
-                _detail.ShowConnection(c);
-            }
-        };
-    }
-
-    /// <summary>首启无连接时种入样例，让 UI 有内容可看（正式版移除）。</summary>
-    private async Task SeedSampleIfEmptyAsync()
-    {
-        if ((await _connections.GetAllAsync()).Count > 0)
+        if (_currentNav == item && item != NavSidebar.Item.Settings)
         {
             return;
         }
 
-        var groups = await _connections.GetGroupsAsync();
-        var prod = groups.FirstOrDefault(g => g.Name == "生产环境")
-                   ?? await CreateGroupAsync("生产环境");
-        var test = groups.FirstOrDefault(g => g.Name == "测试环境")
-                   ?? await CreateGroupAsync("测试环境");
+        _currentNav = item;
 
-        var samples = new (string Name, string Host, int Port, ProtocolType Proto, Guid? Group)[]
+        switch (item)
         {
-            ("Web 服务器 01", "192.0.2.20", 22, ProtocolType.Ssh, prod?.Id),
-            ("数据库主库", "10.0.1.15", 22, ProtocolType.Ssh, prod?.Id),
-            ("Windows 域控", "192.0.2.11", 3389, ProtocolType.Rdp, prod?.Id),
-            ("Mac 构建机", "192.0.2.30", 5900, ProtocolType.Vnc, test?.Id),
-            ("测试跳板机", "172.16.0.9", 22, ProtocolType.Ssh, test?.Id),
-        };
-
-        foreach (var s in samples)
-        {
-            await _connections.CreateAsync(new ConnectionProfile
-            {
-                Name = s.Name,
-                Host = s.Host,
-                Port = s.Port,
-                Protocol = s.Proto,
-                GroupId = s.Group,
-            });
+            case NavSidebar.Item.Connections:
+                SetListVisible(true);
+                _detail.ShowEmpty();
+                _ = _listPane.ShowConnectionsAsync();
+                break;
+            case NavSidebar.Item.Favorites:
+                SetListVisible(true);
+                _detail.ShowEmpty();
+                _ = _listPane.ShowFavoritesAsync();
+                break;
+            case NavSidebar.Item.Recent:
+                SetListVisible(true);
+                _detail.ShowEmpty();
+                _ = _listPane.ShowRecentAsync();
+                break;
+            case NavSidebar.Item.Home:
+                SetListVisible(false);
+                _detail.ShowHome(_services.GetRequiredService<HomePageViewModel>());
+                break;
+            case NavSidebar.Item.Credentials:
+                SetListVisible(false);
+                _detail.ShowCredentials(_services.GetRequiredService<CredentialsPageViewModel>());
+                break;
+            case NavSidebar.Item.Settings:
+                OpenSettings();
+                break;
         }
     }
 
-    private async Task<ConnectionGroup?> CreateGroupAsync(string name)
+    private void SetListVisible(bool visible)
     {
-        var groupService = _services.GetRequiredService<GroupService>();
-        return await groupService.CreateAsync(name, parentId: null);
+        if (_listItem is not null)
+        {
+            _listItem.Collapsed = !visible;
+        }
     }
 
-    // ── 动作 ─────────────────────────────────────────────────────
+    public void OpenSettings()
+    {
+        _settingsWindow ??= new SettingsWindowController(
+            _services.GetRequiredService<SettingsPageViewModel>());
+        _settingsWindow.ShowWindow(this);
+        _settingsWindow.Window.MakeKeyAndOrderFront(this);
+    }
 
     public void BeginNewConnection()
     {
@@ -261,14 +220,64 @@ public sealed class MainWindowController : NSWindowController
             Port = r.Port,
             Protocol = r.Protocol,
         });
-        await LoadAsync();
+        await _listPane.ShowConnectionsAsync();
     }
 
-    private void OpenSelected()
+    private async Task OpenAsync(ConnectionItemViewModel item)
     {
-        if (_sidebarSource?.SelectedConnection is { } c)
+        _detail.ShowConnecting(item);
+        try
         {
-            _detail.ShowConnecting(c);
+            var session = await _sessions.CreateSessionAsync(item.Profile);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            await session.ConnectAsync(cts.Token);
+
+            if (session.State != RemoteFlow.Core.Models.ConnectionState.Connected)
+            {
+                _detail.ShowError(session.ErrorMessage ?? session.ErrorCode.ToString());
+                return;
+            }
+
+            _detail.ShowSessionPlaceholder(item, session.SessionId);
+            Window.Title = $"{item.Name} — RemoteFlow";
+        }
+        catch (Exception ex)
+        {
+            _detail.ShowError(ex.Message);
+        }
+    }
+
+    private async Task SeedSampleIfEmptyAsync()
+    {
+        if ((await _connections.GetAllAsync()).Count > 0)
+        {
+            return;
+        }
+
+        var groupService = _services.GetRequiredService<GroupService>();
+        var prod = await groupService.CreateAsync("生产环境", null);
+        var test = await groupService.CreateAsync("测试环境", null);
+
+        var samples = new (string Name, string Host, int Port, ProtocolType Proto, Guid? Group, bool Fav)[]
+        {
+            ("Web 服务器 01", "192.0.2.20", 22, ProtocolType.Ssh, prod?.Id, true),
+            ("数据库主库", "10.0.1.15", 22, ProtocolType.Ssh, prod?.Id, false),
+            ("Windows 域控", "192.0.2.11", 3389, ProtocolType.Rdp, prod?.Id, true),
+            ("Mac 构建机", "192.0.2.30", 5900, ProtocolType.Vnc, test?.Id, false),
+            ("测试跳板机", "172.16.0.9", 22, ProtocolType.Ssh, test?.Id, false),
+        };
+
+        foreach (var s in samples)
+        {
+            await _connections.CreateAsync(new ConnectionProfile
+            {
+                Name = s.Name,
+                Host = s.Host,
+                Port = s.Port,
+                Protocol = s.Proto,
+                GroupId = s.Group,
+                Favorite = s.Fav,
+            });
         }
     }
 }

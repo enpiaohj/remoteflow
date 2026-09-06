@@ -91,6 +91,9 @@ public sealed class AppDelegate : NSApplicationDelegate
         appMenu.AddItem(new NSMenuItem("关于 RemoteFlow", (_, _) =>
             new NSAlert { MessageText = "RemoteFlow", InformativeText = "统一远程连接工作台 · macOS" }.RunModal()));
         appMenu.AddItem(NSMenuItem.SeparatorItem);
+        appMenu.AddItem(new NSMenuItem("设置…", ",", (_, _) =>
+            (NSApplication.SharedApplication.Delegate as AppDelegate)?._mainWindow?.OpenSettings()));
+        appMenu.AddItem(NSMenuItem.SeparatorItem);
         appMenu.AddItem(new NSMenuItem("退出 RemoteFlow", "q",
             (_, _) => NSApplication.SharedApplication.Terminate(null)));
 

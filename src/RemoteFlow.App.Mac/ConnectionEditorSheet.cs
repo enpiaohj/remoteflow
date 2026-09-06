@@ -40,12 +40,14 @@ public sealed class ConnectionEditorSheet : NSWindowController
         grid.AddRow(new NSView[] { Caption("端口"), _port });
         grid.AddRow(new NSView[] { Caption("账号"), _user });
         grid.AddRow(new NSView[] { Caption("口令"), _password });
+        grid.GetColumn(0).LeadingPadding = 0;
         grid.GetColumn(1).LeadingPadding = 0;
 
         var save = NSButton.CreateButton("创建", Save);
         save.KeyEquivalent = "\r";
         save.BezelStyle = NSBezelStyle.Rounded;
         var cancel = NSButton.CreateButton("取消", () => End(NSModalResponse.Cancel));
+        cancel.KeyEquivalent = "";
         cancel.BezelStyle = NSBezelStyle.Rounded;
 
         var buttons = new NSStackView
@@ -67,33 +69,34 @@ public sealed class ConnectionEditorSheet : NSWindowController
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
 
-        var root = new NSStackView
-        {
-            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
-            Alignment = NSLayoutAttribute.Trailing,
-            Spacing = 18,
-            EdgeInsets = new NSEdgeInsets(20, 20, 20, 20),
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        };
-        root.AddArrangedSubview(heading);
-        root.AddArrangedSubview(grid);
-        root.AddArrangedSubview(buttons);
+        var content = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        content.AddSubview(heading);
+        content.AddSubview(grid);
+        content.AddSubview(buttons);
 
-        Window.ContentView = root;
         NSLayoutConstraint.ActivateConstraints(new[]
         {
-            root.LeadingAnchor.ConstraintEqualTo(Window.ContentView!.LeadingAnchor),
-            root.TrailingAnchor.ConstraintEqualTo(Window.ContentView.TrailingAnchor),
-            root.TopAnchor.ConstraintEqualTo(Window.ContentView.TopAnchor),
-            root.BottomAnchor.ConstraintEqualTo(Window.ContentView.BottomAnchor),
+            heading.TopAnchor.ConstraintEqualTo(content.TopAnchor, 20),
+            heading.LeadingAnchor.ConstraintEqualTo(content.LeadingAnchor, 20),
+
+            grid.TopAnchor.ConstraintEqualTo(heading.BottomAnchor, 18),
+            grid.LeadingAnchor.ConstraintEqualTo(content.LeadingAnchor, 20),
+            grid.TrailingAnchor.ConstraintEqualTo(content.TrailingAnchor, -20),
+
+            buttons.TopAnchor.ConstraintEqualTo(grid.BottomAnchor, 22),
+            buttons.TrailingAnchor.ConstraintEqualTo(content.TrailingAnchor, -20),
+            buttons.BottomAnchor.ConstraintLessThanOrEqualTo(content.BottomAnchor, -20),
+
+            _name.WidthAnchor.ConstraintGreaterThanOrEqualTo(260),
         });
 
+        Window.ContentView = content;
         _port.StringValue = "22";
     }
 
     private static NSWindow NewPanel() => new NSPanel(
-        new CGRect(0, 0, 420, 340),
-        NSWindowStyle.Titled | NSWindowStyle.Resizable,
+        new CGRect(0, 0, 440, 342),
+        NSWindowStyle.Titled,
         NSBackingStore.Buffered,
         deferCreation: false);
 
@@ -136,17 +139,23 @@ public sealed class ConnectionEditorSheet : NSWindowController
         Font = NSFont.SystemFontOfSize(13),
     };
 
-    private static NSTextField Caption(string text) => new()
+    private static NSTextField Caption(string text)
     {
-        StringValue = text,
-        Bordered = false,
-        Editable = false,
-        Selectable = false,
-        DrawsBackground = false,
-        Font = NSFont.SystemFontOfSize(12),
-        TextColor = NSColor.SecondaryLabel,
-        TranslatesAutoresizingMaskIntoConstraints = false,
-    };
+        var f = new NSTextField
+        {
+            StringValue = text,
+            Bordered = false,
+            Editable = false,
+            Selectable = false,
+            DrawsBackground = false,
+            Alignment = NSTextAlignment.Right,
+            Font = NSFont.SystemFontOfSize(13),
+            TextColor = NSColor.SecondaryLabel,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        f.WidthAnchor.ConstraintEqualTo(52).Active = true;
+        return f;
+    }
 }
 
 /// <summary>连接编辑草稿（8.C 前的临时载体）。</summary>
