@@ -14,6 +14,7 @@
 | 版本 | 日期 | 主要变更 |
 |---|---|---|
 | V1.0 | 2026-09-06 | 初版（commit `3a3ff58`，原文可从 Git 历史检出） |
+| **V1.3.1** | **2026-09-07** | **8.B/8.C/8.D 实施进度回填（§8）。** 8.B 外壳、8.C 连接 / 凭据 / 分组 / 标签 / 设置管理 UI 及全套 `IDialogService` 已落地；8.D SSH 终端（含快速输入掉字修复）、VNC 画面（含 keysym 映射）实机连通；8.E RDP 首版走系统客户端交接（FreeRDP 内嵌仍待接）；多会话 Tab 按用户反馈暂做单会话。App 图标已接。移除开发期示例连接种子 |
 | **V1.3** | **2026-09-06** | **UI 技术调整：Avalonia → .NET for macOS（`net10.0-macos`，真 AppKit）。见 §3.4。** 起因：Avalonia 控件为 Skia 自绘、非 AppKit，无法达到「原生」观感（用户实机验收否决）。`.NET for macOS` 仍完整复用共享 .NET 栈（含 Presentation 14 个 VM 与 143 测试），一套工具链，WKWebView/FreeRDP/Keychain 直调更简单。原 §8「Phase 3 — Avalonia UI 层」整体重写为「原生 AppKit UI 层」（§8 新版，A–F 子阶段）。当前 Avalonia `RemoteFlow.App.Mac` 视为管路验证成果（证明共享栈→macOS→真机连接→渲染整链通），代码留 Git 历史，view 层重建 |
 | V1.2.1 | 2026-09-06 | Phase 1 实施中的实测更正：`LocalApplicationData` 在 macOS 上已正确解析到 `~/Library/Application Support`，原「需平台分支」判断错误，§6.3 相应收敛为加回归测试 |
 | V1.2 | 2026-09-06 | **Phase 0 门禁 POC 实测完成，G1 / G2 均通过**，据实测结果修订。① 目标架构改为 universal（开发机为 Intel，见 §2）；② G2 前提修正：Avalonia 有一方 MIT WebView，原「无一方 WebView」判断错误；③ airspace 结论细化：RDP / VNC 已消除，**SSH 终端仍存在**（WebView 为 NativeControlHost）；④ §5 改为实测结果记录；⑤ §7.1 补 FreeRDP 精确构建配置（不可用 brew formula）；⑥ §7.5 按实测更新音频 / 色深行；⑦ 新增 §5.5 已知问题（WKWebView 延迟挂载、`chrome.webview` shim）；⑧ §11 补 universal 双架构打包；⑨ 里程碑扣除已完成的 Phase 0 |
@@ -560,36 +561,46 @@ void             rf_rdp_destroy(rf_rdp_session*);
 - 单实例：`NSRunningApplication` 检测 + Apple Event 唤醒。
 - 数据库建表 / 种子：对齐 WPF `App.xaml.cs` 的 `InitializeDatabase`。
 
-### 8.C 连接管理 UI（~1.5 周）
+### 8.C 连接管理 UI（~1.5 周）——【已完成 2026-09-07】
 
-- 侧栏 `NSOutlineView` ← `ConnectionsPageViewModel`（分组 → 连接树、右键菜单、拖拽排序、
-  收藏 / 最近切换）。
-- 连接编辑器：原生 sheet（`NSWindow` 作 sheet）← `ConnectionEditorViewModel`。
-- 凭据库：`NSTableView` ← `CredentialsPageViewModel`；编辑 sheet ← `CredentialEditorViewModel`。
-- 设置：Preferences 窗口（`NSToolbar` 分页或 `NSTabView`）← `SettingsPageViewModel`。
-- 工具栏 `NSSearchField` → `ConnectionSearchService`（`Ctrl+K` / `Cmd+F` 聚焦）。
-- 标签管理 ← `TagManagerViewModel`。
-- **`IDialogService` 真实实现**：`NSAlert` / sheet / open-save panel，替掉当前 Avalonia stub。
-- 绑定基础设施：`Bind(control, getter, setter)` + PropertyChanged 订阅；
-  `TableSource<T>(ObservableCollection<T>)`（CollectionChanged → `reloadData` / 动画更新）。~200 行，一次性。
+- ✅ 侧栏 `NSOutlineView` ← `ConnectionsPageViewModel`（分组 → 连接树、右键菜单：
+  连接 / 编辑 / 复制 / 收藏 / 测试连接 / 删除；分组行：新建子分组 / 重命名 / 设为默认 / 删除）。
+  拖拽排序未做（列后续项）。
+- ✅ 连接编辑器：`ConnectionEditorSheet` ← `ConnectionEditorViewModel`（协议分段 + 必填字段 +
+  凭据 / 分组下拉 + 标签 chips + 备注 + 高级设置折叠，按内容 FittingSize 自适应）。
+- ✅ 凭据库：`CredentialListSource` ← `CredentialsPageViewModel`；`CredentialEditorSheet` ←
+  `CredentialEditorViewModel`（按类型动态显隐字段，明文口令不回填）。
+- ✅ 设置：`SettingsWindowController`（`NSWindowToolbarStyle.Preference` + 手动分页容器）——
+  常规（含分组保护开关）/ RDP / SSH / VNC / 安全（主机密钥表 + 清历史）/ 数据与备份（目录 + CSV 导入导出）。
+- ✅ 工具栏 `NSSearchField` → `ConnectionsPageViewModel.SearchText`（`ConnectionListPane.ApplySearch`）。
+- ✅ 标签管理：`TagManagerSheet` ← `TagManagerViewModel`；编辑器「管理…」按钮串接。
+- ✅ **`IDialogService` 真实实现**（`AppKitDialogService`）：`NSAlert` / App-Modal 窗口 /
+  `NSOpenPanel`·`NSSavePanel`；`EditConnection` / `EditCredential` / `EditGroupName` /
+  `PickDefaultGroup` / `EditTag` / `ManageTags` / `PromptPassword` / `ShowConnectionTest` 全部落地。
+- ✅ 默认分组规则：`ConnectionGroup.IsDefault` / `IsProtected` / `IsSystem` 三字段承载
+  （首启种「我的设备」，「未分组」为唯一系统兜底组），设置页开关驱动 `SetDefaultProtectionAsync`。
 
-### 8.D 会话画面（~1 周）
+### 8.D 会话画面（~1 周）——【SSH / VNC 已完成，多会话 Tab 暂缓】
 
-- **SSH**：`WKWebView` 子视图 + `WKScriptMessageHandler`（JS→宿主）+ `evaluateJavaScript`
-  （宿主→JS）。`terminal.html` 与桥接协议**原样复用**。**无 SIGILL 延迟挂载绕法**（直调）。
-- **VNC**：`NSView` + `CALayer`；`IFrameSource` → 每帧 BGRA 写进 `CGImage`（`CADisplayLink`
-  或计时器驱动）；`NSEvent` → keysym（移植现有 `AvaloniaVncKeyMapper` 键表逻辑）。
-- **多会话**：Tab（`NSTabView` 或自绘 Tab 条）或窗口-per-会话。
-- 会话生命周期：`SessionManager`（不变）。
-- 剪贴板：`NSPasteboard`（远端 → 本机接收，补上 Avalonia 版留的 TODO）。
-- **airspace 不再是问题**：AppKit 下浮层用 `NSPopover` / child window，直接盖住 `WKWebView` /
-  `CALayer`，无 Avalonia `NativeControlHost` 的遮挡限制。
+- ✅ **SSH**：`SshTerminalView` = `WKWebView` + `WKScriptMessageHandler`（JS→宿主，强引用桥防 GC）
+  + `evaluateJavaScript`（宿主→JS）。`terminal.html` 原样复用（字体栈补 `ui-monospace`/`SF Mono`/`Menlo`
+  修 macOS 缺字）。出向经 `Channel` 后台串行泵 `SendInput`、入向 ~60fps 合批 write ——
+  解决快速输入掉字 / 卡顿。实机连通 `192.0.2.20`。
+- ✅ **VNC**：`VncScreenView` = `NSView` + `CALayer`；`IFrameSource` → ~30fps `CGImage`（`GCHandle` 固定
+  BGRA 缓冲）；`NSEvent`（硬件虚拟键码 + `CharactersIgnoringModifiers`）→ X11 keysym（`AppKitVncKeyMapper`）。
+  实机连通 `192.0.2.173:5900`（VNC 口令认证，keysym SEND OK）。
+- ⏸ **多会话**：按用户反馈「详情页只留一个连接即可」暂做**单会话**（开新会话前收旧，文件菜单
+  「断开会话」⌘⇧W）。多 Tab 为后续项。
+- ✅ 会话生命周期：`SessionManager`（不变）。
+- ⏳ 剪贴板：`NSPasteboard`（远端 → 本机）—— 后续项。
 
-### 8.E Phase 2 — macOS RDP 适配层（原 §7，难度不变）
+### 8.E macOS RDP —— 【首版：系统客户端交接；FreeRDP 内嵌待接】
 
-- FreeRDP 3.31.0 dylib P/Invoke（构建配置见 §7.1，**完全不变**）。
-- 帧 → `CGImage`（与 VNC 同路径）；输入注入；证书信任（首次记录 / 变化强警告，见 §7.4）。
-- 原生外壳不增加 RDP 难度。
+- ✅ **首版（stopgap）**：`RdpLauncher` 把连接配置写成标准 `.rdp`（分辨率 / 剪贴板 / 音频 /
+  多显示器 / 域）交系统 RDP 客户端（Microsoft「Windows App」）打开；口令不落 `.rdp`。
+  `MainWindowController.OpenAsync` 对 RDP 走此路径。
+- ⏳ **内嵌式**（原 §7 计划，难度不变）：FreeRDP 3.31.0 dylib P/Invoke（§7.1）；帧 → `CGImage`
+  （与 VNC 同路径）；输入注入；证书信任（§7.4）。本机需先 `brew install freerdp` 或打包 dylib。
 
 ### 8.F 打包与分发（原 §11）
 
