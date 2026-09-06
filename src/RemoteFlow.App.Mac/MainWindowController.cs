@@ -14,7 +14,6 @@ namespace RemoteFlow.App.Mac;
 public sealed class MainWindowController : NSWindowController
 {
     private readonly IServiceProvider _services;
-    private readonly ConnectionService _connections;
     private readonly ConnectionsPageViewModel _connectionsVm;
     private readonly SessionManager _sessions;
 
@@ -32,7 +31,6 @@ public sealed class MainWindowController : NSWindowController
         : base(NewWindow())
     {
         _services = services;
-        _connections = services.GetRequiredService<ConnectionService>();
         _sessions = services.GetRequiredService<SessionManager>();
 
         _connectionsVm = services.GetRequiredService<ConnectionsPageViewModel>();
@@ -61,10 +59,10 @@ public sealed class MainWindowController : NSWindowController
         _ = StartAsync();
     }
 
-    private async Task StartAsync()
+    private Task StartAsync()
     {
-        await SeedSampleIfEmptyAsync();
         _nav.SelectFirst();
+        return Task.CompletedTask;
     }
 
     private static NSWindow NewWindow() => new(
@@ -284,37 +282,4 @@ public sealed class MainWindowController : NSWindowController
         }
     }
 
-    private async Task SeedSampleIfEmptyAsync()
-    {
-        if ((await _connections.GetAllAsync()).Count > 0)
-        {
-            return;
-        }
-
-        var groupService = _services.GetRequiredService<GroupService>();
-        var prod = await groupService.CreateAsync("生产环境", null);
-        var test = await groupService.CreateAsync("测试环境", null);
-
-        var samples = new (string Name, string Host, int Port, ProtocolType Proto, Guid? Group, bool Fav)[]
-        {
-            ("Web 服务器 01", "192.0.2.20", 22, ProtocolType.Ssh, prod?.Id, true),
-            ("数据库主库", "10.0.1.15", 22, ProtocolType.Ssh, prod?.Id, false),
-            ("Windows 域控", "192.0.2.11", 3389, ProtocolType.Rdp, prod?.Id, true),
-            ("Mac 构建机", "192.0.2.30", 5900, ProtocolType.Vnc, test?.Id, false),
-            ("测试跳板机", "172.16.0.9", 22, ProtocolType.Ssh, test?.Id, false),
-        };
-
-        foreach (var s in samples)
-        {
-            await _connections.CreateAsync(new ConnectionProfile
-            {
-                Name = s.Name,
-                Host = s.Host,
-                Port = s.Port,
-                Protocol = s.Proto,
-                GroupId = s.Group,
-                Favorite = s.Fav,
-            });
-        }
-    }
 }
