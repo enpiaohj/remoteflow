@@ -12,6 +12,7 @@ public sealed class TerminalAssetStoreTests
         "xterm.css",
         "addon-fit.js",
         "addon-webgl.js",
+        "addon-search.js",
     ];
 
     [Fact]

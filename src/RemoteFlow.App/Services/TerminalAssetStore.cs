@@ -17,6 +17,7 @@ internal static class TerminalAssetStore
         "xterm.css",
         "addon-fit.js",
         "addon-webgl.js",
+        "addon-search.js",
     ];
 
     private static readonly Lazy<string> DefaultDirectory = new(
