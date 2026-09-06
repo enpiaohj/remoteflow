@@ -70,10 +70,11 @@ public partial class App : Avalonia.Application
             _logger = _services.GetRequiredService<ILogger<App>>();
             _logger.LogInformation("RemoteFlow (macOS) 启动，数据目录 {DataDirectory}", paths.DataDirectory);
 
-            // 自检：DB + 种子 + 终端资产 + 协议可用性。
-            var checks = RunSelfChecks(_services);
+            var sshProvider = (RemoteFlow.Protocol.Ssh.SshConnectionProvider)_services
+                .GetServices<IConnectionProvider>()
+                .First(p => p.Protocol == RemoteFlow.Core.Models.ProtocolType.Ssh);
 
-            _mainWindow = new MainWindow(paths, _services.GetRequiredService<ICredentialVault>(), checks);
+            _mainWindow = new MainWindow(paths, sshProvider);
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
                 desktop.MainWindow = _mainWindow;
@@ -130,27 +131,4 @@ public partial class App : Avalonia.Application
 
         return services.BuildServiceProvider();
     }
-
-    private static (string Keychain, string Terminal, string Ssh, string Vnc) RunSelfChecks(
-        ServiceProvider services)
-    {
-        var vault = services.GetRequiredService<ICredentialVault>();
-        var terminalDir = TerminalAssetStore.EnsureAvailable();
-
-        var fileCount = Directory.Exists(terminalDir) ? Directory.GetFiles(terminalDir).Length : 0;
-
-        var sshProvider = new SshConnectionProvider(
-            Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
-        var ssh = sshProvider.IsAvailable(out var sshReason) ? "可用" : sshReason;
-        var vncProvider = new VncConnectionProvider(
-            Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
-        var vnc = vncProvider.IsAvailable(out var vncReason) ? "可用" : vncReason;
-
-        return (
-            $"KeychainVault 已装配（service=RemoteFlow）",
-            $"终端资产 {fileCount} 个 → {terminalDir}",
-            $"SSH：{ssh}",
-            $"VNC：{vnc}");
-    }
-
 }
