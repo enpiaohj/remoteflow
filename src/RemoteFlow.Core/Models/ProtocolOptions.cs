@@ -79,6 +79,12 @@ public sealed class VncOptions
     /// <summary>共享连接：允许其他客户端同时连接，不踢掉已有会话。</summary>
     public bool SharedConnection { get; set; } = true;
 
+    /// <summary>
+    /// 剪贴板同步（远端 → 本机）：接收远端复制的内容并写入本机剪贴板。
+    /// 仅覆盖协议官方承诺的 server → client 方向；本机 → 远端发送暂不支持。
+    /// </summary>
+    public bool ClipboardToLocal { get; set; } = true;
+
     /// <summary>连接超时（秒）。</summary>
     public int ConnectTimeoutSeconds { get; set; } = 15;
 

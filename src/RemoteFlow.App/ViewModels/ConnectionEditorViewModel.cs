@@ -55,6 +55,7 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
             _profile.Vnc.ScaleMode = defaults.VncDefaultScaleMode;
             _profile.Vnc.ViewOnly = defaults.VncDefaultViewOnly;
             _profile.Vnc.SharedConnection = defaults.VncDefaultSharedConnection;
+            _profile.Vnc.ClipboardToLocal = defaults.VncDefaultClipboardToLocal;
             // 新建连接默认进入默认分组「我的设备」（§9）。
             _profile.GroupId = defaultGroupId;
         }

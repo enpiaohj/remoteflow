@@ -1,5 +1,6 @@
 using System.Net.Sockets;
 using MarcusW.VncClient;
+using MarcusW.VncClient.Output;
 using MarcusW.VncClient.Protocol;
 using MarcusW.VncClient.Protocol.Implementation.MessageTypes.Outgoing;
 using MarcusW.VncClient.Protocol.Implementation.Services.Transports;
@@ -9,6 +10,9 @@ using Microsoft.Extensions.Logging;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 using VncConnectionState = MarcusW.VncClient.ConnectionState;
+using VncExtendedClipboardData = MarcusW.VncClient.Protocol.Implementation.ExtendedClipboardData;
+using VncExtendedClipboardFormat = MarcusW.VncClient.Protocol.Implementation.ExtendedClipboardFormat;
+using VncLedState = MarcusW.VncClient.Protocol.Implementation.EncodingTypes.Pseudo.LedState;
 using VncLibClient = MarcusW.VncClient.VncClient;
 
 // System.Net.Sockets 与 MarcusW.VncClient 都定义了同名类型，
@@ -123,6 +127,14 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
                 },
                 AuthenticationHandler = this,
                 InitialRenderTarget = RenderTarget,
+
+                // 剪贴板接收依赖 OutputHandler：库在无 OutputHandler 时会直接跳过
+                // ServerCutText（不读取正文），因此需要接收时挂上处理器。其余服务器
+                // 输出事件（铃响 / 桌面名 / LED 等）当前无 UI 消费，交 ServerOutputHandler 空实现。
+                InitialOutputHandler = Profile.Vnc.ClipboardToLocal
+                    ? new ServerOutputHandler(this, _logger)
+                    : null,
+
                 ConnectTimeout = TimeSpan.FromSeconds(Math.Max(Profile.Vnc.ConnectTimeoutSeconds, 5)),
                 AllowSharedConnection = Profile.Vnc.SharedConnection,
 
@@ -247,6 +259,111 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
         catch (ObjectDisposedException)
         {
             // CTS 已释放属预期，忽略。
+        }
+    }
+
+    // ── 剪贴板（远端 → 本机）────────────────────────────────────
+
+    /// <summary>
+    /// 收到服务器剪贴板更新（server → client CutText）。在协议库线程上被调用，
+    /// 不能直接操作 WPF 剪贴板，须调度到 UI 线程执行。
+    /// </summary>
+    private void HandleServerClipboard(string text)
+    {
+        // 连接级开关与连接状态双重把关：开关关闭或会话已不在连接态时直接丢弃。
+        if (!Profile.Vnc.ClipboardToLocal || State != ConnectionState.Connected)
+        {
+            return;
+        }
+
+        // 空白内容视为远端清空剪贴板，不回写本机——避免远端一次清空把本机正在用的内容覆盖掉。
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        // 不以日志形式记录剪贴板正文：远端复制内容可能含密码 / 敏感信息。
+        _logger.LogInformation("VNC 会话 {SessionId} 收到远端剪贴板更新（远端 → 本机）", SessionId);
+
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.HasShutdownStarted)
+        {
+            return;
+        }
+
+        try
+        {
+            dispatcher.InvokeAsync(() =>
+            {
+                try
+                {
+                    System.Windows.Clipboard.SetText(text);
+                }
+                catch (Exception ex)
+                {
+                    // 剪贴板被其它进程占用等场景：只记录，不让协议线程崩溃。
+                    _logger.LogWarning(ex, "VNC 会话 {SessionId} 写入本机剪贴板失败", SessionId);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "VNC 会话 {SessionId} 调度写本机剪贴板失败", SessionId);
+        }
+    }
+
+    /// <summary>
+    /// 服务器输出事件处理器。当前只消费剪贴板（远端 → 本机接收）；其余服务器输出事件
+    /// （铃响、桌面名、指针模式、LED、扩展剪贴板）应用层没有消费方，保持空实现。
+    /// <para>
+    /// 帧缓冲渲染不走本接口——它由 <see cref="ConnectParameters.InitialRenderTarget"/>
+    /// 交给 <see cref="VncRenderTarget"/>，因此这里空实现不会影响画面 / 输入 / 缩放。
+    /// </para>
+    /// </summary>
+    private sealed class ServerOutputHandler(VncSession session, ILogger logger) : IOutputHandler
+    {
+        public void RingBell()
+        {
+            // 暂无铃声提示 UI。
+        }
+
+        public void HandleServerClipboardUpdate(string text) => session.HandleServerClipboard(text);
+
+        public void HandleDesktopNameChange(string name)
+        {
+            // 桌面名暂无展示位置；仅 Debug 留痕便于排查。
+            logger.LogDebug("VNC 会话 {SessionId} 远端桌面名变更为 {Name}", session.SessionId, name);
+        }
+
+        public void HandleXvpOperationFailed()
+        {
+            // 本端不会发起 XVP 操作（关机 / 重启 / 复位），收到失败通知无消费方。
+        }
+
+        public void HandlePointerModeChange(bool relativeMode)
+        {
+            // 本端始终按远端桌面绝对坐标发送指针事件（SendPointerEvent），
+            // 与既有行为保持一致；相对模式切换不做处理。
+        }
+
+        public void HandleLedStateChange(VncLedState ledState)
+        {
+            // 远端键盘 LED 状态无本地展示。
+        }
+
+        public void HandleExtendedClipboardNotify(VncExtendedClipboardFormat availableFormats)
+        {
+            // 扩展剪贴板（富文本 / 图片 / 文件）需双向协商，本版不做假实现；空实现即不参与。
+        }
+
+        public void HandleExtendedClipboardData(VncExtendedClipboardData data)
+        {
+            // 见 HandleExtendedClipboardNotify。
+        }
+
+        public void HandleExtendedClipboardRequest(VncExtendedClipboardFormat requestedFormats)
+        {
+            // 服务器请求读取本机剪贴板：本版不实现本机 → 远端发送，直接忽略。
         }
     }
 

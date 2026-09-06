@@ -466,6 +466,14 @@
                                     </CheckBox>
                                     <CheckBox Style="{StaticResource Input.CheckBox}" Content="只读模式（不发送键盘鼠标）"
                                               IsChecked="{Binding Vnc.ViewOnly}" />
+                                    <CheckBox Style="{StaticResource Input.CheckBox}" Margin="0,10,0,0"
+                                              IsChecked="{Binding Vnc.ClipboardToLocal}">
+                                        <StackPanel>
+                                            <TextBlock Text="剪贴板同步（远端 → 本机）" Style="{StaticResource Text.Body}" />
+                                            <TextBlock Text="接收远端复制内容到本机剪贴板；发送暂不支持"
+                                                       Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                    </CheckBox>
 
                                     <Border Background="{DynamicResource Bg.Layer}" CornerRadius="6" Padding="12,10" Margin="0,10,0,0">
                                         <StackPanel Orientation="Horizontal">

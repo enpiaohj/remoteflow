@@ -126,6 +126,9 @@ public sealed class AppSettings
     public bool VncDefaultViewOnly { get; set; }
     public bool VncDefaultSharedConnection { get; set; } = true;
 
+    /// <summary>新建 VNC 连接默认开启「剪贴板同步（远端 → 本机）」。</summary>
+    public bool VncDefaultClipboardToLocal { get; set; } = true;
+
     // ── 安全 ──────────────────────────────────────────────
     /// <summary>连接历史保留天数。0 表示不自动清理。</summary>
     public int HistoryRetentionDays { get; set; }

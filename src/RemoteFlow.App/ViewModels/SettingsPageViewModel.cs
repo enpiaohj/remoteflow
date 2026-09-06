@@ -340,6 +340,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     [ObservableProperty]
     private bool _vncSharedConnection;
 
+    [ObservableProperty]
+    private bool _vncClipboardToLocal;
+
     // ── 会话 ──────────────────────────────────────────────────────
 
     [ObservableProperty]
@@ -401,6 +404,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         VncFitToWindow = _settings.VncDefaultScaleMode == VncScaleMode.FitToWindow;
         VncViewOnly = _settings.VncDefaultViewOnly;
         VncSharedConnection = _settings.VncDefaultSharedConnection;
+        VncClipboardToLocal = _settings.VncDefaultClipboardToLocal;
 
         MaxConcurrentSessions = _settings.MaxConcurrentSessions;
 
@@ -629,6 +633,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     partial void OnVncFitToWindowChanged(bool value) => Save();
     partial void OnVncViewOnlyChanged(bool value) => Save();
     partial void OnVncSharedConnectionChanged(bool value) => Save();
+    partial void OnVncClipboardToLocalChanged(bool value) => Save();
     partial void OnMaxConcurrentSessionsChanged(int value) => Save();
 
     private void Save()
@@ -661,6 +666,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         _settings.VncDefaultScaleMode = VncFitToWindow ? VncScaleMode.FitToWindow : VncScaleMode.Original;
         _settings.VncDefaultViewOnly = VncViewOnly;
         _settings.VncDefaultSharedConnection = VncSharedConnection;
+        _settings.VncDefaultClipboardToLocal = VncClipboardToLocal;
 
         _settings.MaxConcurrentSessions = Math.Clamp(MaxConcurrentSessions, 1, 100);
 
