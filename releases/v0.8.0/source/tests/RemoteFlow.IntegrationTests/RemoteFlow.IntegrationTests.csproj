@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 集成测试：SQLite 仓储、Credential Vault（DPAPI）等需要真实 Windows 环境的验证 -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>RemoteFlow.IntegrationTests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\RemoteFlow.Core\RemoteFlow.Core.csproj" />
+    <ProjectReference Include="..\..\src\RemoteFlow.Application\RemoteFlow.Application.csproj" />
+    <ProjectReference Include="..\..\src\RemoteFlow.Infrastructure\RemoteFlow.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\RemoteFlow.App\RemoteFlow.App.csproj" />
+    <ProjectReference Include="..\..\src\RemoteFlow.Protocol.Rdp\RemoteFlow.Protocol.Rdp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>
