@@ -207,8 +207,15 @@ public sealed class MainWindowController : NSWindowController
 
     public async void BeginNewConnection()
     {
-        await _connectionsVm.CreateConnectionAsync();
-        await _listPane.RefreshAsync();
+        try
+        {
+            await _connectionsVm.CreateConnectionAsync();
+            await _listPane.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _detail.ShowError(ex.Message);
+        }
     }
 
     private void NavigateTo(NavigationPage page)
@@ -240,7 +247,19 @@ public sealed class MainWindowController : NSWindowController
                 return;
             }
 
-            _detail.ShowSessionPlaceholder(name, session.SessionId);
+            switch (session)
+            {
+                case RemoteFlow.Protocol.Ssh.SshSession ssh:
+                    _detail.ShowSshTerminal(ssh);
+                    break;
+                case RemoteFlow.Protocol.Vnc.VncSession vnc:
+                    _detail.ShowVncScreen(vnc);
+                    break;
+                default:
+                    _detail.ShowSessionPlaceholder(name, session.SessionId);
+                    break;
+            }
+
             Window.Title = $"{name} — RemoteFlow";
         }
         catch (Exception ex)

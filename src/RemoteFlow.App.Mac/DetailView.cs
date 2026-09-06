@@ -1,11 +1,13 @@
 using AppKit;
+using RemoteFlow.Core.Sessions;
 using RemoteFlow.Presentation.ViewModels;
+using RemoteFlow.Protocol.Ssh;
+using RemoteFlow.Protocol.Vnc;
 
 namespace RemoteFlow.App.Mac;
 
 /// <summary>
-/// 第三列：详情 / 会话。多态：空态、连接信息卡、连接中、会话占位、错误、首页、凭据。
-/// 会话画面（SSH 终端 / VNC）在 8.D 替换 <see cref="ShowSessionPlaceholder"/>。
+/// 第三列：详情 / 会话。多态：空态、连接信息卡、连接中、SSH 终端 / VNC 画面、错误、首页、凭据。
 /// </summary>
 public sealed class DetailView : NSView
 {
@@ -42,7 +44,13 @@ public sealed class DetailView : NSView
         => Swap(Centered(
             Icon("checkmark.circle", 40, NSColor.SystemGreen),
             $"已连接 {name}",
-            "会话画面（SSH 终端 / VNC）将在 Phase 8.D 接入本区域。"));
+            "该协议的会话画面尚未接入本区域。"));
+
+    /// <summary>SSH 会话：xterm.js 终端。</summary>
+    public void ShowSshTerminal(SshSession session) => Swap(new SshTerminalView(session));
+
+    /// <summary>VNC 会话：远端画面。</summary>
+    public void ShowVncScreen(VncSession session) => Swap(new VncScreenView(session));
 
     public void ShowError(string message)
         => Swap(Centered(Icon("exclamationmark.triangle", 40, NSColor.SystemOrange), "连接失败", message));
@@ -278,6 +286,8 @@ public sealed class DetailView : NSView
     {
         foreach (var v in _container.Subviews.ToArray())
         {
+            (v as SshTerminalView)?.Detach();
+            (v as VncScreenView)?.Detach();
             v.RemoveFromSuperview();
         }
 

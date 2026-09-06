@@ -40,7 +40,7 @@
       border: 1px solid rgba(255, 255, 255, 0.18);
       border-radius: 6px;
       color: #eee;
-      font-family: "Cascadia Mono", Consolas, "微软雅黑", monospace;
+      font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "微软雅黑", monospace;
       font-size: 12px;
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
     }
@@ -184,7 +184,7 @@
     };
 
     const terminal = new Terminal({
-      fontFamily: '"Cascadia Mono", Consolas, "微软雅黑", monospace',
+      fontFamily: 'ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "微软雅黑", monospace',
       fontSize: 14,
       cursorBlink: true,
       // 终端自身保留滚动缓冲区，满足「回看历史输出」的基本运维需求
