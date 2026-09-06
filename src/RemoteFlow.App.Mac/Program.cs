@@ -1,16 +1,16 @@
 using System.Runtime.Versioning;
-using Avalonia;
+using AppKit;
+
+[assembly: SupportedOSPlatform("macos13.0")]
 
 namespace RemoteFlow.App.Mac;
 
-[SupportedOSPlatform("macos")]
 internal static class Program
 {
-    [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
-
-    public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>()
-        .UsePlatformDetect()
-        .LogToTrace();
+    private static void Main(string[] args)
+    {
+        NSApplication.Init();
+        NSApplication.SharedApplication.Delegate = new AppDelegate();
+        NSApplication.SharedApplication.Run();
+    }
 }
