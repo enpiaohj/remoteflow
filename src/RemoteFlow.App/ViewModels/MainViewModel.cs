@@ -597,6 +597,29 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// 关闭指定会话 Tab 右侧的全部会话（不含常驻页面 Tab）。
+    /// <para>
+    /// 以当前 Tab 为锚点，只关索引更大（更晚打开）的会话；左侧更早的会话保持不变，
+    /// 便于多会话场景下快速收拢到最关心的那批。语义与「关闭其他会话」相反。
+    /// </para>
+    /// </summary>
+    public async Task CloseRightSessionsAsync(SessionTabViewModel anchor)
+    {
+        var anchorIndex = Tabs.IndexOf(anchor);
+        if (anchorIndex < 0)
+        {
+            return;
+        }
+
+        // Skip(anchorIndex + 1) 已天然排除锚点本身；OfType 只收 SessionTab，
+        // 常驻页面 Tab（索引 0，PageTabViewModel）不可能出现在锚点右侧，此处兜底过滤。
+        foreach (var tab in Tabs.Skip(anchorIndex + 1).OfType<SessionTabViewModel>().ToList())
+        {
+            await CloseSessionAsync(tab.Session.SessionId);
+        }
+    }
+
     [RelayCommand]
     private async Task CloseAllSessionsAsync() => await _sessions.CloseAllAsync();
 

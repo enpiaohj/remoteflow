@@ -438,6 +438,7 @@
                                                     <Separator />
                                                     <MenuItem Header="关闭会话" InputGestureText="Ctrl+W" Click="OnTabCloseClick" />
                                                     <MenuItem Header="关闭其他会话" Click="OnTabCloseOthersClick" />
+                                                    <MenuItem Header="关闭右侧会话" Click="OnTabCloseRightClick" />
                                                     <MenuItem Header="关闭全部会话" Click="OnTabCloseAllClick" />
                                                 </ContextMenu>
                                             </RadioButton.ContextMenu>

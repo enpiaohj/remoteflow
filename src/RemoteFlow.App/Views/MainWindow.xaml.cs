@@ -455,6 +455,16 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnTabCloseRightClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveTab(sender) is { } tab)
+        {
+            // fire-and-forget：关闭流程异步执行，不阻塞 UI 线程。
+            // 页面 Tab 的右键菜单整体已被 OnTabContextMenuOpening 拦掉，到不了这里。
+            _ = _viewModel.CloseRightSessionsAsync(tab);
+        }
+    }
+
     private void OnTabCloseAllClick(object sender, RoutedEventArgs e)
         => _viewModel.CloseAllSessionsCommand.Execute(null);
 
