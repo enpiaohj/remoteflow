@@ -2,8 +2,10 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Forms.Integration;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Microsoft.Extensions.Logging;
 using RemoteFlow.App.ViewModels;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Protocol.Rdp;
@@ -22,8 +24,12 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
     /// <summary>窗口尺寸变化后延迟多久再通知远端调整分辨率，避免拖拽过程中频繁重协商。</summary>
     private static readonly TimeSpan ResizeDebounce = TimeSpan.FromMilliseconds(400);
 
+    /// <summary>聚焦 RDP 控件后、注入按键前的等待时间，让焦点真正落到控件再发键。</summary>
+    private static readonly TimeSpan FocusSettleDelay = TimeSpan.FromMilliseconds(40);
+
     private readonly RdpSession _session;
     private readonly SessionTabViewModel _viewModel;
+    private readonly ILogger<RdpSessionView> _logger;
     private readonly WindowsFormsHost _host;
     private readonly DispatcherTimer _resizeTimer;
 
@@ -31,10 +37,11 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
     private bool _connectStarted;
     private bool _disposed;
 
-    public RdpSessionView(RdpSession session, SessionTabViewModel viewModel)
+    public RdpSessionView(RdpSession session, SessionTabViewModel viewModel, ILogger<RdpSessionView> logger)
     {
         _session = session;
         _viewModel = viewModel;
+        _logger = logger;
 
         _host = new WindowsFormsHost
         {
@@ -104,7 +111,7 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         _session.UpdateDisplaySize(width, height);
     }
 
-    private void OnActionRequested(object? sender, SessionAction action)
+    private async void OnActionRequested(object? sender, SessionAction action)
     {
         switch (action)
         {
@@ -113,7 +120,15 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
                 break;
 
             case SessionAction.SendCtrlAltDelete:
-                SendCtrlAltDelete();
+                try
+                {
+                    await SendCtrlAltDeleteAsync();
+                }
+                catch (Exception ex)
+                {
+                    // async void 事件处理器：吞掉并记录异常，避免未观察异常击穿 UI。
+                    _logger.LogWarning(ex, "RDP 会话 {SessionId} 「发送 Ctrl+Alt+Del」失败", _session.SessionId);
+                }
                 break;
         }
     }
@@ -125,16 +140,63 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
     /// 远端的 Ctrl+Alt+Del（本机的真实 Ctrl+Alt+Del 会被 Windows 安全桌面拦截，
     /// 永远送不到远端）。因此这里合成一次 Ctrl+Alt+End 按键。
     /// </para>
+    /// <para>
+    /// SendInput 会把按键投递给<b>前台窗口</b>中持有键盘焦点的控件。全屏时工具条是
+    /// Popup（独立顶层窗口），点击其按钮后 Popup 持有前台与键盘焦点；若不先把承载
+    /// RDP ActiveX 的主窗口带回前台并让 RDP 控件取得焦点，Ctrl+Alt+End 会落到
+    /// Popup / 其它元素，远端收不到。因此本方法按「置前 → 聚焦 → 延时稳定 → 注入」
+    /// 的顺序执行。只能在 UI 线程调用（命令/事件触发）。
     /// </summary>
-    private void SendCtrlAltDelete()
+    private async Task SendCtrlAltDeleteAsync()
     {
-        if (_session.State != ConnectionState.Connected)
+        if (_disposed)
         {
             return;
         }
 
-        // 先把焦点交给 RDP 控件，否则合成的按键会落到别处。
-        _session.HostControl.Focus();
+        if (_session.State != ConnectionState.Connected)
+        {
+            _logger.LogInformation(
+                "RDP 会话 {SessionId} 忽略「发送 Ctrl+Alt+Del」：当前状态 {State}，非已连接",
+                _session.SessionId, _session.State);
+            return;
+        }
+
+        var control = _session.HostControl;
+        if (control is null || control.IsDisposed || !control.IsHandleCreated)
+        {
+            _logger.LogWarning(
+                "RDP 会话 {SessionId} 无法「发送 Ctrl+Alt+Del」：RDP 控件未就绪（IsDisposed={IsDisposed}, IsHandleCreated={IsHandleCreated}）",
+                _session.SessionId, control?.IsDisposed, control?.IsHandleCreated);
+            return;
+        }
+
+        // 1) 先把承载 RDP ActiveX 的主窗口带到前台，再聚焦控件，避免 Popup 抢走前台。
+        BringHostWindowToForeground();
+
+        // 2) 让 RDP 控件请求键盘焦点。Focus() 返回 false 不代表最终失败，
+        //    注入前还会用 SetFocus 强制把焦点钉到控件句柄上兜底。
+        control.Focus();
+
+        // 3) 焦点稳定后再注入。WPF/WinForms 焦点交接有异步时序，立即 SendInput
+        //    可能抢在焦点真正落到 RDP 控件之前。
+        await Task.Delay(FocusSettleDelay);
+
+        // 延迟期间会话可能被关闭 / 断开，注入前复检，避免把按键发到已释放的控件上。
+        if (_disposed || _session.State != ConnectionState.Connected)
+        {
+            _logger.LogDebug(
+                "RDP 会话 {SessionId} 取消「发送 Ctrl+Alt+Del」：视图已释放或连接状态已变化（{State}）",
+                _session.SessionId, _session.State);
+            return;
+        }
+
+        // 4) 注入前最后把键盘焦点钉在 RDP 控件句柄上（覆盖延迟期间 WPF 焦点管理器
+        //    把焦点移回工具条 / 其它元素的场景）。
+        if (GetFocus() != control.Handle)
+        {
+            SetFocus(control.Handle);
+        }
 
         const ushort VkControl = 0x11;
         const ushort VkMenu = 0x12;
@@ -151,6 +213,49 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         };
 
         SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>());
+
+        _logger.LogDebug("RDP 会话 {SessionId} 已发送 Ctrl+Alt+Del（Ctrl+Alt+End）", _session.SessionId);
+    }
+
+    /// <summary>
+    /// 把承载本视图的主窗口带到前台（还原最小化 → WPF Activate → SetForegroundWindow 兜底）。
+    /// <para>
+    /// 全屏药丸是 Popup 独立顶层窗口，点击其按钮后 Popup 持有前台；而 SendInput 把按键
+    /// 投递给前台窗口的焦点控件，因此必须先让主窗口抢回前台。置前失败不致命：下方
+    /// Focus / SetFocus 仍会尽力把焦点交给 RDP 控件，故失败仅记日志、不抛。
+    /// </para>
+    /// </summary>
+    private void BringHostWindowToForeground()
+    {
+        try
+        {
+            var window = System.Windows.Window.GetWindow(this);
+            if (window is null)
+            {
+                return;
+            }
+
+            // 最小化时先还原，否则激活不会落到可见窗口。
+            if (window.WindowState == WindowState.Minimized)
+            {
+                window.WindowState = WindowState.Normal;
+            }
+
+            // WPF 激活遵守前台切换规则；随后用 SetForegroundWindow 兜底，覆盖
+            // Popup 占用前台导致 Activate 被系统吞掉的情况。
+            window.Activate();
+
+            var hwnd = new WindowInteropHelper(window).Handle;
+            if (hwnd != nint.Zero)
+            {
+                SetForegroundWindow(hwnd);
+            }
+        }
+        catch (Exception ex)
+        {
+            // 置前失败不阻断后续 Focus + 注入流程；记录后由下方 Focus / SetFocus 兜底。
+            _logger.LogDebug(ex, "RDP 会话 {SessionId} 宿主窗口置前失败", _session.SessionId);
+        }
     }
 
     public void Dispose()
@@ -225,4 +330,14 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
 
     [LibraryImport("user32.dll", SetLastError = true)]
     private static partial uint SendInput(uint numberOfInputs, [In] Input[] inputs, int sizeOfInput);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetForegroundWindow(nint hWnd);
+
+    [LibraryImport("user32.dll")]
+    private static partial nint SetFocus(nint hWnd);
+
+    [LibraryImport("user32.dll")]
+    private static partial nint GetFocus();
 }

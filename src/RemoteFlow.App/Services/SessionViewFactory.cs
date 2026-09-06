@@ -30,7 +30,7 @@ public sealed class SessionViewFactory(
 {
     public FrameworkElement Create(SessionTabViewModel tab) => tab.Session switch
     {
-        RdpSession rdp => new RdpSessionView(rdp, tab),
+        RdpSession rdp => new RdpSessionView(rdp, tab, loggerFactory.CreateLogger<RdpSessionView>()),
 
         SshSession ssh => new SshSessionView(
             ssh, tab, settings, theme, dialogs, loggerFactory.CreateLogger<SshSessionView>()),
