@@ -1,18 +1,17 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
-using RemoteFlow.App.Services;
+using RemoteFlow.Presentation.Host;
+using RemoteFlow.Presentation.Services;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 using RemoteFlow.Infrastructure.Settings;
-using RemoteFlow.Presentation.Services;
 
-namespace RemoteFlow.App.ViewModels;
+namespace RemoteFlow.Presentation.ViewModels;
 
 /// <summary>连接列表的筛选视图。</summary>
 public enum ConnectionFilter
@@ -66,6 +65,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     private readonly AppSettings _settings;
     private readonly JsonSettingsStore _settingsStore;
     private readonly ILogger<ConnectionsPageViewModel> _logger;
+    private readonly IUiDispatcher _ui;
 
     /// <summary>只读会话管理：详情面板展示当前连接状态 / 刷新等用，不在此创建会话。
     /// 可空以允许单元测试以 null 构造（不测会话相关）。</summary>
@@ -108,9 +108,11 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         AppSettings settings,
         JsonSettingsStore settingsStore,
         ILogger<ConnectionsPageViewModel> logger,
+        IUiDispatcher uiDispatcher,
         SessionManager sessions)
     {
         _connections = connections;
+        _ui = uiDispatcher;
         _groupService = groupService;
         _defaultGroupResolver = defaultGroup;
         _search = search;
@@ -122,8 +124,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         _sessions = sessions;
 
         Items = [];
-        ItemsView = CollectionViewSource.GetDefaultView(Items);
-        ApplyGrouping();
 
         // 会话集合快照变化（创建 / 任意状态跳变 / 移除）会改变选中连接的实时状态与“最近连接”，
         // 统一订阅聚合 SessionsChanged 一次刷新详情，不再逐会话订阅 StateChanged。
@@ -267,10 +267,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     private void RefreshSessionDependentState()
     {
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is not null && !dispatcher.CheckAccess())
+        if (_ui.RequeueIfNeeded(RefreshSessionDependentState))
         {
-            dispatcher.BeginInvoke(RefreshSessionDependentState);
             return;
         }
 
@@ -334,11 +332,13 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedCreatedAtText));
     }
 
-    /// <summary>当前显示的连接（已应用搜索与筛选）。</summary>
+    /// <summary>
+    /// 当前显示的连接（已应用搜索与筛选）。
+    /// <para>「最近连接」筛选下按 <see cref="ConnectionItemViewModel.RecentBucket"/> 分组显示，
+    /// 分组由 UI 层承接（WPF 用 <c>CollectionViewSource</c>，Avalonia 用其自有分组），
+    /// VM 只维护扁平集合并通过 <see cref="IsRecentView"/> 告知是否应分组。</para>
+    /// </summary>
     public ObservableCollection<ConnectionItemViewModel> Items { get; }
-
-    /// <summary>带分组的视图。分组折叠是连接列表的默认组织方式。</summary>
-    public ICollectionView ItemsView { get; }
 
     /// <summary>请求打开一个连接（双击 / Enter / 右键连接）。由 MainViewModel 统一开会话。</summary>
     public event EventHandler<ConnectionProfile>? OpenConnectionRequested;
@@ -456,7 +456,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         OnPropertyChanged(nameof(IsRecentView));
         OnPropertyChanged(nameof(IsGroupedView));
         OnPropertyChanged(nameof(IsGroupedEmpty));
-        ApplyGrouping();
         ApplyFilter();
     }
 
@@ -705,18 +704,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             return "今天";
         }
         return day == today.AddDays(-1) ? "昨天" : "更早";
-    }
-
-    private void ApplyGrouping()
-    {
-        ItemsView.GroupDescriptions.Clear();
-
-        // 只有「最近连接」用 ICollectionView 分组（按日期桶）。
-        // 「我的连接」用 GroupNodes 树，「收藏」是扁平列表。
-        if (Filter == ConnectionFilter.Recent)
-        {
-            ItemsView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ConnectionItemViewModel.RecentBucket)));
-        }
     }
 
     // ── 分组树构建 ────────────────────────────────────────────────

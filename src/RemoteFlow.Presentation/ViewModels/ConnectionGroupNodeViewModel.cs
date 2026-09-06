@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
-namespace RemoteFlow.App.ViewModels;
+namespace RemoteFlow.Presentation.ViewModels;
 
 /// <summary>
 /// 「我的连接」分组树的一个节点。子分组和直属连接分开存放，

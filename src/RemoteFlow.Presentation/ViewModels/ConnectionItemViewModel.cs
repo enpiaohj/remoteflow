@@ -1,9 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using RemoteFlow.App.Services;
-using RemoteFlow.Core.Models;
 using RemoteFlow.Presentation.Services;
+using RemoteFlow.Core.Models;
 
-namespace RemoteFlow.App.ViewModels;
+namespace RemoteFlow.Presentation.ViewModels;
 
 /// <summary>
 /// 连接列表中的一行。把领域对象包装为界面直接可用的显示属性，

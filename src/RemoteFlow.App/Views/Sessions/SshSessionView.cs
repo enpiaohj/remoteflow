@@ -10,7 +10,7 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using RemoteFlow.App.Services;
 using RemoteFlow.Presentation.Terminal;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Protocol.Ssh;
 using RemoteFlow.Presentation.Services;

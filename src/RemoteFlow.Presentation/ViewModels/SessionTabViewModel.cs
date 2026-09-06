@@ -1,12 +1,11 @@
 using System.ComponentModel;
-using System.Windows;
-using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
+using RemoteFlow.Presentation.Host;
 
-namespace RemoteFlow.App.ViewModels;
+namespace RemoteFlow.Presentation.ViewModels;
 
 /// <summary>
 /// 单个远程会话 Tab。
@@ -22,7 +21,9 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     private readonly Func<ConnectionProfile, Task> _reconnectCallback;
 
     /// <summary>会话时长走秒刷新；仅在已连接（含自动重连期间）运行，空闲不打扰。</summary>
-    private readonly DispatcherTimer _durationTimer;
+    private readonly IUiTimer _durationTimer;
+
+    private readonly IUiDispatcher _ui;
 
     /// <summary>首次进入 Connected 的时刻（UTC）。自动重连不重置，UI 刷新不重置。</summary>
     private DateTime? _connectedAtUtc;
@@ -30,11 +31,14 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     public SessionTabViewModel(
         IRemoteSession session,
         Func<Guid, Task> closeCallback,
-        Func<ConnectionProfile, Task> reconnectCallback)
+        Func<ConnectionProfile, Task> reconnectCallback,
+        IUiDispatcher uiDispatcher,
+        IUiTimerFactory timerFactory)
     {
         Session = session;
         _closeCallback = closeCallback;
         _reconnectCallback = reconnectCallback;
+        _ui = uiDispatcher;
 
         Title = session.Profile.Name;
         Icon = session.Protocol switch
@@ -49,7 +53,7 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         Quality = new SessionQualityState(this, session.Profile.Host, session.Profile.Port);
         Quality.PropertyChanged += OnQualityPropertyChanged;
 
-        _durationTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _durationTimer = timerFactory.Create(TimeSpan.FromSeconds(1));
         _durationTimer.Tick += OnDurationTick;
 
         session.StateChanged += OnSessionStateChanged;
@@ -214,20 +218,13 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs e)
     {
         // 状态事件可能来自协议库的后台线程，切回 UI 线程再更新绑定属性。
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
+        if (_ui.RequeueIfNeeded(() => OnSessionStateChanged(sender, e)))
         {
-            UpdateStateDisplay(e.NewState, e.ErrorCode, e.ErrorMessage);
-            TrackSessionStats(e.NewState);
+            return;
         }
-        else
-        {
-            dispatcher.BeginInvoke(() =>
-            {
-                UpdateStateDisplay(e.NewState, e.ErrorCode, e.ErrorMessage);
-                TrackSessionStats(e.NewState);
-            });
-        }
+
+        UpdateStateDisplay(e.NewState, e.ErrorCode, e.ErrorMessage);
+        TrackSessionStats(e.NewState);
     }
 
     /// <summary>
@@ -405,8 +402,8 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         Session.StateChanged -= OnSessionStateChanged;
         Quality.PropertyChanged -= OnQualityPropertyChanged;
         Quality.Dispose();
-        _durationTimer.Stop();
         _durationTimer.Tick -= OnDurationTick;
+        _durationTimer.Dispose();
     }
 }
 

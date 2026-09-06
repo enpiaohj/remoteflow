@@ -1,7 +1,7 @@
 <Window x:Class="RemoteFlow.App.Views.Dialogs.TagManagerDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="clr-namespace:RemoteFlow.App.ViewModels"
+        xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
         xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
         WindowStyle="None"
         AllowsTransparency="True"

@@ -1,6 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.ViewModels;
 
 namespace RemoteFlow.App.Views.Dialogs;
 

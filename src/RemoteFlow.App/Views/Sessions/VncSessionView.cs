@@ -5,7 +5,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MarcusW.VncClient;
 using Microsoft.Extensions.Logging;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 using RemoteFlow.Protocol.Vnc;

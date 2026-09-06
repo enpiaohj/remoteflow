@@ -2,7 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RemoteFlow.Core.Models;
 
-namespace RemoteFlow.App.ViewModels;
+namespace RemoteFlow.Presentation.ViewModels;
 
 /// <summary>
 /// 新建 / 编辑凭据对话框。

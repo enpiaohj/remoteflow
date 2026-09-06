@@ -2,15 +2,15 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
-using RemoteFlow.App.Services;
+using RemoteFlow.Presentation.Host;
+using RemoteFlow.Presentation.Services;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 using RemoteFlow.Infrastructure.Settings;
-using RemoteFlow.Presentation.Services;
 
-namespace RemoteFlow.App.ViewModels;
+namespace RemoteFlow.Presentation.ViewModels;
 
 /// <summary>
 /// 首页。只解决一件事：让用户尽快回到工作状态。
@@ -27,6 +27,7 @@ public sealed partial class HomePageViewModel : ObservableObject
     private readonly AppSettings _settings;
     private readonly JsonSettingsStore _settingsStore;
     private readonly ILogger<HomePageViewModel> _logger;
+    private readonly IUiDispatcher _ui;
 
     /// <summary>会话状态去抖全量刷新的版本号：每次收到 <see cref="SessionManager.SessionsChanged"/> 自增，
     /// 延迟结束比对版本，期间再有新事件则放弃本次刷新，保证最终以最后一次状态为准。</summary>
@@ -41,9 +42,11 @@ public sealed partial class HomePageViewModel : ObservableObject
         SessionManager sessions,
         AppSettings settings,
         JsonSettingsStore settingsStore,
+        IUiDispatcher uiDispatcher,
         ILogger<HomePageViewModel> logger)
     {
         _connections = connections;
+        _ui = uiDispatcher;
         _history = history;
         _sessions = sessions;
         _settings = settings;
@@ -193,10 +196,8 @@ public sealed partial class HomePageViewModel : ObservableObject
     /// </summary>
     private void OnSessionsChanged(object? sender, EventArgs e)
     {
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is not null && !dispatcher.CheckAccess())
+        if (_ui.RequeueIfNeeded(() => OnSessionsChanged(sender, e)))
         {
-            dispatcher.BeginInvoke(() => OnSessionsChanged(sender, e));
             return;
         }
 

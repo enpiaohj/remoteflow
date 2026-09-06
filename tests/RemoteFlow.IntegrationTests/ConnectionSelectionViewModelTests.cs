@@ -1,5 +1,6 @@
-using RemoteFlow.App.ViewModels;
 using RemoteFlow.Core.Models;
+using RemoteFlow.Presentation.Host;
+using RemoteFlow.Presentation.ViewModels;
 using Xunit;
 
 namespace RemoteFlow.IntegrationTests;
@@ -11,7 +12,7 @@ namespace RemoteFlow.IntegrationTests;
 public sealed class ConnectionSelectionViewModelTests
 {
     private static ConnectionsPageViewModel CreateVm()
-        => new(null!, null!, null!, null!, null!, null!, null!, null!, null!, null!);
+        => new(null!, null!, null!, null!, null!, null!, null!, null!, null!, SynchronousUiDispatcher.Instance, null!);
 
     private static ConnectionItemViewModel Item(string name)
         => new(new ConnectionProfile { Name = name, Protocol = ProtocolType.Ssh });

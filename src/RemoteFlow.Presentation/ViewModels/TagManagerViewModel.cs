@@ -1,12 +1,11 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using RemoteFlow.App.Services;
+using RemoteFlow.Presentation.Services;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Models;
-using RemoteFlow.Presentation.Services;
 
-namespace RemoteFlow.App.ViewModels;
+namespace RemoteFlow.Presentation.ViewModels;
 
 /// <summary>标签管理对话框里的一行。纯展示，编辑通过 <see cref="TagManagerViewModel.EditTagCommand"/> 弹子对话框完成。</summary>
 public sealed partial class TagRowViewModel(Tag tag) : ObservableObject

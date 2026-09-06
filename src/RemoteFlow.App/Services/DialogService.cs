@@ -1,7 +1,7 @@
 using System.Windows;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.App.Views.Dialogs;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Abstractions;

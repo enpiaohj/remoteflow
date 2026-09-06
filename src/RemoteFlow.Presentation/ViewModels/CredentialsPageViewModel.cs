@@ -1,12 +1,11 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using RemoteFlow.App.Services;
+using RemoteFlow.Presentation.Services;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Models;
-using RemoteFlow.Presentation.Services;
 
-namespace RemoteFlow.App.ViewModels;
+namespace RemoteFlow.Presentation.ViewModels;
 
 /// <summary>凭据类型筛选。</summary>
 public enum CredentialTypeFilter

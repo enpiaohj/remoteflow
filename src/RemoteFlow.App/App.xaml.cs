@@ -5,7 +5,7 @@ using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RemoteFlow.App.Services;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.App.Views;
 using RemoteFlow.App.Views.Dialogs;
 using RemoteFlow.Core.Abstractions;
@@ -228,6 +228,11 @@ public partial class App : System.Windows.Application
 
         // ── UI 服务 ───────────────────────────────────────────────
         services.AddSingleton<ThemeService>();
+        services.AddSingleton<RemoteFlow.Presentation.Host.IThemeService>(
+            sp => sp.GetRequiredService<ThemeService>());
+        services.AddSingleton<RemoteFlow.Presentation.Host.IUiDispatcher, WpfUiDispatcher>();
+        services.AddSingleton<RemoteFlow.Presentation.Host.IUiTimerFactory, WpfUiTimerFactory>();
+        services.AddSingleton<RemoteFlow.Presentation.Host.ILaunchOnStartupService, WpfLaunchOnStartupService>();
         services.AddSingleton<DefaultGroupResolver>();
         services.AddSingleton<IDialogService, DialogService>();
         services.AddSingleton<ISshHostKeyPolicy, InteractiveSshHostKeyPolicy>();

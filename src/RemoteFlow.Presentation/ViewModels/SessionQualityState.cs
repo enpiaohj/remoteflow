@@ -1,10 +1,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using RemoteFlow.App.Services;
-using RemoteFlow.Core.Models;
 using RemoteFlow.Presentation.Services;
+using RemoteFlow.Core.Models;
 
-namespace RemoteFlow.App.ViewModels;
+namespace RemoteFlow.Presentation.ViewModels;
 
 /// <summary>
 /// 单个会话的连接质量详情（Flyout 的数据源）。

@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace RemoteFlow.App.ViewModels;
+namespace RemoteFlow.Presentation.ViewModels;
 
 /// <summary>
 /// 工作区固定 Tab，承载左侧导航选中的页面（首页 / 我的连接 / 凭据 / 设置等）。

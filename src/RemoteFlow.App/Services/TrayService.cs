@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Forms;
 using Microsoft.Extensions.Logging;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.App.Views;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Models;

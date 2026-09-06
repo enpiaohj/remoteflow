@@ -4,17 +4,16 @@ using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
-using Microsoft.Win32;
-using RemoteFlow.App.Services;
+using RemoteFlow.Presentation.Host;
+using RemoteFlow.Presentation.Services;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Infrastructure;
 using RemoteFlow.Infrastructure.Data;
 using RemoteFlow.Infrastructure.Settings;
-using RemoteFlow.Presentation.Services;
 
-namespace RemoteFlow.App.ViewModels;
+namespace RemoteFlow.Presentation.ViewModels;
 
 /// <summary>「设置」页面的标签页。</summary>
 public enum SettingsTab
@@ -48,8 +47,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     /// <summary>终端主题预览里的单个 ANSI 色块。</summary>
     public sealed record TerminalPreviewSwatch(string Hex);
 
-    private const string StartupRegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string StartupValueName = "RemoteFlow";
 
     private const string CsvFilter = "CSV 文件 (*.csv)|*.csv|所有文件 (*.*)|*.*";
     private const string BackupFilter = "RemoteFlow 加密备份 (*.rfbackup)|*.rfbackup|所有文件 (*.*)|*.*";
@@ -95,7 +92,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     private readonly AppSettings _settings;
     private readonly JsonSettingsStore _store;
-    private readonly ThemeService _themeService;
+    private readonly IThemeService _themeService;
+    private readonly ILaunchOnStartupService _launchOnStartupService;
     private readonly IHistoryRepository _history;
     private readonly IHostKeyRepository _hostKeys;
     private readonly AppPaths _paths;
@@ -115,7 +113,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     public SettingsPageViewModel(
         AppSettings settings,
         JsonSettingsStore store,
-        ThemeService theme,
+        IThemeService theme,
+        ILaunchOnStartupService launchOnStartup,
         IHistoryRepository history,
         IHostKeyRepository hostKeys,
         AppPaths paths,
@@ -129,6 +128,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         _settings = settings;
         _store = store;
         _themeService = theme;
+        _launchOnStartupService = launchOnStartup;
         _history = history;
         _hostKeys = hostKeys;
         _paths = paths;
@@ -688,7 +688,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         }
     }
 
-    /// <summary>写入/移除开机自启注册项。失败时回滚开关状态并提示。</summary>
+    /// <summary>应用「开机自启」设置。失败时提示（不回滚开关，保持与用户意图一致，下次启动重试）。</summary>
     private void ApplyStartupRegistration(bool enabled)
     {
         if (_isLoading)
@@ -698,26 +698,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
         try
         {
-            using var key = Registry.CurrentUser.OpenSubKey(StartupRegistryKey, writable: true);
-            if (key is null)
-            {
-                return;
-            }
-
-            if (enabled)
-            {
-                var executablePath = Environment.ProcessPath;
-                if (string.IsNullOrEmpty(executablePath))
-                {
-                    return;
-                }
-
-                key.SetValue(StartupValueName, $"\"{executablePath}\"");
-            }
-            else
-            {
-                key.DeleteValue(StartupValueName, throwOnMissingValue: false);
-            }
+            _launchOnStartupService.SetEnabled(enabled);
         }
         catch (Exception ex)
         {
@@ -728,7 +709,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     /// <summary>
     /// 由托盘等外部入口修改「开机启动」：写 / 删注册表并落盘设置，与设置页开关共享同一
-    /// <see cref="AppSettings"/> 单例与同一注册表键，因此两处始终一致。
+    /// <see cref="AppSettings"/> 单例与同一 <see cref="ILaunchOnStartupService"/>，因此两处始终一致。
     /// </summary>
     public void SetLaunchOnStartup(bool enabled)
     {

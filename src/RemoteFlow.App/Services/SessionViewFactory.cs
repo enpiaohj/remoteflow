@@ -1,6 +1,6 @@
 using System.Windows;
 using Microsoft.Extensions.Logging;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.App.Views.Sessions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Protocol.Rdp;

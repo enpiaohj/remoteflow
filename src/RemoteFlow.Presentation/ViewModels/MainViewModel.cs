@@ -2,13 +2,13 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
-using RemoteFlow.App.Services;
+using RemoteFlow.Presentation.Host;
+using RemoteFlow.Presentation.Services;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
-using RemoteFlow.Presentation.Services;
 
-namespace RemoteFlow.App.ViewModels;
+namespace RemoteFlow.Presentation.ViewModels;
 
 /// <summary>左侧导航的一级入口。</summary>
 public enum NavigationPage
@@ -36,6 +36,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly SettingsPageViewModel _settingsPage;
     private readonly IDialogService _dialogs;
     private readonly ILogger<MainViewModel> _logger;
+    private readonly IUiDispatcher _ui;
+    private readonly IUiTimerFactory _timerFactory;
 
     /// <summary>正在创建会话的连接 Profile.Id。用于连点去重：会话 Tab 建出前，第二次请求不重复建。</summary>
     private readonly HashSet<Guid> _openingProfileIds = [];
@@ -48,9 +50,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         SettingsPageViewModel settingsPage,
         IDialogService dialogs,
         AppSettings settings,
+        IUiDispatcher uiDispatcher,
+        IUiTimerFactory timerFactory,
         ILogger<MainViewModel> logger)
     {
         _sessions = sessions;
+        _ui = uiDispatcher;
+        _timerFactory = timerFactory;
         HomePage = homePage;
         ConnectionsPage = connectionsPage;
         _credentialsPage = credentialsPage;
@@ -414,14 +420,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnSessionCreated(object? sender, IRemoteSession session)
     {
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is not null && !dispatcher.CheckAccess())
+        if (_ui.RequeueIfNeeded(() => OnSessionCreated(sender, session)))
         {
-            dispatcher.BeginInvoke(() => OnSessionCreated(sender, session));
             return;
         }
 
-        var tab = new SessionTabViewModel(session, CloseSessionAsync, ReconnectAsync);
+        var tab = new SessionTabViewModel(session, CloseSessionAsync, ReconnectAsync, _ui, _timerFactory);
 
         // 会话工具条里的「全屏」由主窗口层处理（隐藏导航/详情、窗口去边框铺满）；
         // 协议专属动作（缩放、Ctrl+Alt+Del 等）由各协议视图自己订阅处理。
@@ -457,10 +461,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnSessionClosed(object? sender, Guid sessionId)
     {
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is not null && !dispatcher.CheckAccess())
+        if (_ui.RequeueIfNeeded(() => OnSessionClosed(sender, sessionId)))
         {
-            dispatcher.BeginInvoke(() => OnSessionClosed(sender, sessionId));
             return;
         }
 
@@ -506,10 +508,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private void RaiseSessionStatusChanged()
     {
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is not null && !dispatcher.CheckAccess())
+        if (_ui.RequeueIfNeeded(RaiseSessionStatusChanged))
         {
-            dispatcher.BeginInvoke(RaiseSessionStatusChanged);
             return;
         }
 
@@ -567,10 +567,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public void ActivateSession(Guid sessionId)
     {
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is not null && !dispatcher.CheckAccess())
+        if (_ui.RequeueIfNeeded(() => ActivateSession(sessionId)))
         {
-            dispatcher.BeginInvoke(() => ActivateSession(sessionId));
             return;
         }
 
