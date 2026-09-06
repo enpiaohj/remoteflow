@@ -235,6 +235,98 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         });
     }
 
+    /// <summary>通过 RDP 控件在远端会话中启动任务管理器。</summary>
+    public bool LaunchTaskManager()
+    {
+        if (_disposed || State != ConnectionState.Connected)
+        {
+            _logger.LogWarning(
+                "RDP 会话 {SessionId} 忽略「启动任务管理器」：当前状态 {State}",
+                SessionId,
+                State);
+            return false;
+        }
+
+        var ocx = _host.ActiveXInstance;
+        if (ocx is null)
+        {
+            _logger.LogWarning("RDP 会话 {SessionId} 无法启动远端任务管理器：控件未就绪", SessionId);
+            return false;
+        }
+
+        try
+        {
+            dynamic client = ocx;
+            client.SendRemoteAction((int)RdpRemoteSessionAction.TaskManager);
+
+            _logger.LogInformation(
+                "RDP 会话 {SessionId} 已发送远端任务管理器语义动作",
+                SessionId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "RDP 会话 {SessionId} 发送任务管理器语义动作失败，回退到协议按键",
+                SessionId);
+        }
+
+        try
+        {
+            if (ocx is not IMsRdpClientNonScriptable remoteInput)
+            {
+                _logger.LogWarning(
+                    "RDP 会话 {SessionId} 无法启动远端任务管理器：控件不支持协议级按键输入",
+                    SessionId);
+                return false;
+            }
+
+            var sequence = RdpKeyboardSequence.TaskManager;
+            var keyUpStates = new short[sequence.Count];
+            var keyData = new int[sequence.Count];
+
+            for (var index = 0; index < sequence.Count; index++)
+            {
+                var stroke = sequence[index];
+                // VARIANT_BOOL 的 true 是 16 位 -1，不能按 Win32 BOOL 或托管 bool 数组传递。
+                keyUpStates[index] = stroke.IsKeyUp ? (short)-1 : (short)0;
+                keyData[index] = stroke.KeyData;
+            }
+
+            var keyUpHandle = GCHandle.Alloc(keyUpStates, GCHandleType.Pinned);
+            try
+            {
+                var keyDataHandle = GCHandle.Alloc(keyData, GCHandleType.Pinned);
+                try
+                {
+                    remoteInput.SendKeys(
+                        sequence.Count,
+                        keyUpHandle.AddrOfPinnedObject(),
+                        keyDataHandle.AddrOfPinnedObject());
+                }
+                finally
+                {
+                    keyDataHandle.Free();
+                }
+            }
+            finally
+            {
+                keyUpHandle.Free();
+            }
+
+            _logger.LogInformation(
+                "RDP 会话 {SessionId} 已通过协议按键回退发送 Ctrl+Shift+Esc",
+                SessionId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "RDP 会话 {SessionId} 发送远端任务管理器快捷键失败", SessionId);
+            return false;
+        }
+    }
+
     /// <summary>
     /// 通知远程会话按新尺寸重绘。
     /// <para>

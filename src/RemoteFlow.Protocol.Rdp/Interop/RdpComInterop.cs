@@ -21,6 +21,88 @@ internal sealed class RdpAxHost(string clsid) : AxHost(clsid)
     public object? ActiveXInstance => IsHandleCreated ? GetOcx() : null;
 }
 
+public enum RdpRemoteSessionAction
+{
+    TaskManager = 6
+}
+
+public readonly record struct RdpKeyStroke(int KeyData, bool IsKeyUp);
+
+public static class RdpKeyboardSequence
+{
+    public static IReadOnlyList<RdpKeyStroke> TaskManager { get; } =
+    [
+        new(0x001D0001, IsKeyUp: false),
+        new(0x002A0001, IsKeyUp: false),
+        new(0x00010001, IsKeyUp: false),
+        new(unchecked((int)0xC0010001), IsKeyUp: true),
+        new(unchecked((int)0xC02A0001), IsKeyUp: true),
+        new(unchecked((int)0xC01D0001), IsKeyUp: true)
+    ];
+}
+
+/// <summary>mstscax 的 IMsTscNonScriptable 基础接口。</summary>
+[ComImport]
+[Guid("C1E6743A-41C1-4A74-832A-0DD06C1C7A0E")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IMsTscNonScriptable
+{
+    void put_ClearTextPassword([In, MarshalAs(UnmanagedType.BStr)] string value);
+    void put_PortablePassword([In, MarshalAs(UnmanagedType.BStr)] string value);
+
+    [return: MarshalAs(UnmanagedType.BStr)]
+    string get_PortablePassword();
+
+    void put_PortableSalt([In, MarshalAs(UnmanagedType.BStr)] string value);
+
+    [return: MarshalAs(UnmanagedType.BStr)]
+    string get_PortableSalt();
+
+    void put_BinaryPassword([In, MarshalAs(UnmanagedType.BStr)] string value);
+
+    [return: MarshalAs(UnmanagedType.BStr)]
+    string get_BinaryPassword();
+
+    void put_BinarySalt([In, MarshalAs(UnmanagedType.BStr)] string value);
+
+    [return: MarshalAs(UnmanagedType.BStr)]
+    string get_BinarySalt();
+
+    void ResetPassword();
+}
+
+/// <summary>mstscax 的协议级远端键盘输入接口。</summary>
+[ComImport]
+[Guid("2F079C4C-87B2-4AFD-97AB-20CDB43038AE")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IMsRdpClientNonScriptable : IMsTscNonScriptable
+{
+    new void put_ClearTextPassword([In, MarshalAs(UnmanagedType.BStr)] string value);
+    new void put_PortablePassword([In, MarshalAs(UnmanagedType.BStr)] string value);
+
+    [return: MarshalAs(UnmanagedType.BStr)]
+    new string get_PortablePassword();
+
+    new void put_PortableSalt([In, MarshalAs(UnmanagedType.BStr)] string value);
+
+    [return: MarshalAs(UnmanagedType.BStr)]
+    new string get_PortableSalt();
+
+    new void put_BinaryPassword([In, MarshalAs(UnmanagedType.BStr)] string value);
+
+    [return: MarshalAs(UnmanagedType.BStr)]
+    new string get_BinaryPassword();
+
+    new void put_BinarySalt([In, MarshalAs(UnmanagedType.BStr)] string value);
+
+    [return: MarshalAs(UnmanagedType.BStr)]
+    new string get_BinarySalt();
+
+    new void ResetPassword();
+    void NotifyRedirectDeviceChange(UIntPtr wParam, nint lParam);
+    void SendKeys(int numKeys, nint pbArrayKeyUp, nint plKeyData);
+}
+
 /// <summary>
 /// RDP 客户端控件的事件接收接口（dispinterface <c>IMsTscAxEvents</c>）。
 /// <para>

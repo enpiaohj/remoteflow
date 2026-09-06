@@ -25,7 +25,7 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
     /// <summary>窗口尺寸变化后延迟多久再通知远端调整分辨率，避免拖拽过程中频繁重协商。</summary>
     private static readonly TimeSpan ResizeDebounce = TimeSpan.FromMilliseconds(400);
 
-    /// <summary>聚焦 RDP 控件后、注入按键前的等待时间，让焦点真正落到控件再发键。</summary>
+    /// <summary>聚焦 RDP 控件后、触发远端输入动作前的等待时间，让焦点交接完成。</summary>
     private static readonly TimeSpan FocusSettleDelay = TimeSpan.FromMilliseconds(50);
 
     private readonly RdpSession _session;
@@ -139,7 +139,6 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    // async void 事件处理器：吞掉并记录异常，避免未观察异常击穿 UI。
                     _logger.LogWarning(ex, "RDP 会话 {SessionId} 「启动任务管理器」失败", _session.SessionId);
                 }
                 break;
@@ -176,6 +175,17 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         }
     }
 
+    private async Task LaunchTaskManagerAsync()
+    {
+        var control = await PrepareRdpControlForRemoteInputAsync("启动任务管理器");
+        if (control is null)
+        {
+            return;
+        }
+
+        _session.LaunchTaskManager();
+    }
+
     /// <summary>
     /// 向远程会话发送 Ctrl+Alt+Del。
     /// <para>
@@ -189,46 +199,16 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         SendKeyComboAsync("Ctrl+Alt+Del", "^%{END}");
 
     /// <summary>
-    /// 在远端启动任务管理器：把 Ctrl+Shift+Esc 当作普通按键流，用
-    /// <see cref="PostMessage"/> 直接投递给 RDP 宿主控件，而不是 SendKeys。
-    /// <para>
-    /// <b>为什么不用 SendKeys：</b>Ctrl+Shift+Esc 会被本机 shell / 已注册热键抢先拦截
-    /// （表现为打开<b>本机</b>任务管理器、远端无反应）。SendKeys 底层走 SendInput，
-    /// 属于真实输入管线，投递前仍会经过热键判定，绕不过本机拦截；而 PostMessage 直接把
-    /// WM_KEYDOWN / WM_KEYUP 塞进 RDP 控件所在窗口的消息队列，不经过输入 / 热键管线，
-    /// 让 mstsc 控件把它当作普通按键流转发给远端，由远端打开任务管理器。
-    /// </para>
-    /// <para>
-    /// <b>与「远端 Ctrl+Alt+Del」路径的区别：</b>CAD 走 mstsc 的内置翻译
-    /// （本机 Ctrl+Alt+End → 远端 Ctrl+Alt+Del），是控件明确支持的“安全通道”；
-    /// 本方法没有这样的魔法组合，只能把组合键当作普通按键流注入。若 RDP 控件在
-    /// 本地 / 远端配置下仍不转发该组合到远端任务管理器，实机验证会暴露出来：
-    /// 此时需按阶段日志核对焦点句柄与每次 PostMessage 结果，并考虑把消息改投给
-    /// 控件内部真正持有键盘焦点的子窗口。
-    /// </para>
-    /// </summary>
-    private async Task LaunchTaskManagerAsync()
-    {
-        var control = await PrepareRdpControlForKeyInjectionAsync("Ctrl+Shift+Esc");
-        if (control is null)
-        {
-            return;
-        }
-
-        PostCtrlShiftEsc(control.Handle);
-    }
-
-    /// <summary>
-    /// 向远程会话注入按键 / 组合键前的统一准备：
+    /// 触发远端输入动作前的统一准备：
     /// 置前主窗口 → 聚焦 RDP 控件 → 延时稳定 → SetFocus 钉住焦点。
     /// <para>
     /// 全屏时工具条是 Popup（独立顶层窗口），点击其按钮后 Popup 持有前台与键盘焦点；
-    /// 若不先把承载 RDP ActiveX 的主窗口带回前台并让 RDP 控件取得焦点，后续注入会落到
-    /// Popup / 其它元素，远端收不到。返回就绪的宿主控件；任一前置条件不满足时返回 null
+    /// 若不先把承载 RDP ActiveX 的主窗口带回前台并让 RDP 控件取得焦点，后续动作会被控件拒绝
+    /// 或落到其它元素。返回就绪的宿主控件；任一前置条件不满足时返回 null
     /// （已记录日志）。只能在 UI 线程调用（命令 / 事件触发）。
     /// </para>
     /// </summary>
-    private async Task<Forms.Control?> PrepareRdpControlForKeyInjectionAsync(string actionName)
+    private async Task<Forms.Control?> PrepareRdpControlForRemoteInputAsync(string actionName)
     {
         if (_disposed)
         {
@@ -306,18 +286,12 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
     }
 
     /// <summary>
-    /// 用 <see cref="System.Windows.Forms.SendKeys.SendWait"/> 在 UI 线程合成组合键，
-    /// 投递给当前持有键盘焦点的窗口（RDP 控件已在
-    /// <see cref="PrepareRdpControlForKeyInjectionAsync"/> 中取得焦点）。
-    /// <para>
-    /// 当前仅「发送 Ctrl+Alt+Del」使用。若目标组合会被本机热键拦截（如 Ctrl+Shift+Esc，
-    /// 打开本机任务管理器），SendKeys 走 SendInput 仍会被拦，请改用
-    /// <see cref="LaunchTaskManagerAsync"/> 的 PostMessage 路径。
-    /// </para>
+    /// 用 <see cref="System.Windows.Forms.SendKeys.SendWait"/> 在 UI 线程合成 Ctrl+Alt+End，
+    /// 由已聚焦的 RDP 控件翻译为远端 Ctrl+Alt+Del。
     /// </summary>
     private async Task SendKeyComboAsync(string actionName, string sendKeysExpression)
     {
-        var control = await PrepareRdpControlForKeyInjectionAsync(actionName);
+        var control = await PrepareRdpControlForRemoteInputAsync(actionName);
         if (control is null)
         {
             return;
@@ -339,65 +313,6 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
                 "RDP 会话 {SessionId} SendWait({SendKeysExpression}) 注入「{ActionName}」抛出异常",
                 _session.SessionId, sendKeysExpression, actionName);
         }
-    }
-
-    /// <summary>
-    /// 把 Ctrl+Shift+Esc 作为普通按键流，用 <see cref="PostMessage"/> 依次投递到 RDP
-    /// 宿主控件句柄，供 mstsc 转发给远端。
-    /// <para>
-    /// 投递顺序：Ctrl Down → Shift Down → Esc Down → Esc Up → Shift Up → Ctrl Up。
-    /// 修饰键 Ctrl / Shift 与目标 Esc 都成对发送 WM_KEYDOWN / WM_KEYUP。Esc 不是扩展键、
-    /// 这里也只合成左 Ctrl / 左 Shift（无扩展键标记），故 lParam 不置扩展键位。mstsc
-    /// 若按消息到达顺序跟踪修饰键状态，就能把该序列还原为 Ctrl+Shift+Esc 并转发远端。
-    /// </para>
-    /// </summary>
-    private void PostCtrlShiftEsc(nint hwnd)
-    {
-        var scanControl = MapVirtualKeyW(VkControl, MapVkVkToVsc);
-        var scanShift = MapVirtualKeyW(VkShift, MapVkVkToVsc);
-        var scanEscape = MapVirtualKeyW(VkEscape, MapVkVkToVsc);
-
-        _logger.LogInformation(
-            "RDP 会话 {SessionId} PostMessage 开始投递 Ctrl+Shift+Esc → 控件句柄 0x{Hwnd:X}（scan: Ctrl=0x{CtrlScan:X2}, Shift=0x{ShiftScan:X2}, Esc=0x{EscScan:X2}）",
-            _session.SessionId, hwnd, scanControl, scanShift, scanEscape);
-
-        var results = new[]
-        {
-            PostRdpKey(hwnd, "Ctrl", VkControl, scanControl, isUp: false),
-            PostRdpKey(hwnd, "Shift", VkShift, scanShift, isUp: false),
-            PostRdpKey(hwnd, "Esc", VkEscape, scanEscape, isUp: false),
-            PostRdpKey(hwnd, "Esc", VkEscape, scanEscape, isUp: true),
-            PostRdpKey(hwnd, "Shift", VkShift, scanShift, isUp: true),
-            PostRdpKey(hwnd, "Ctrl", VkControl, scanControl, isUp: true)
-        };
-
-        _logger.LogInformation(
-            "RDP 会话 {SessionId} PostMessage 投递 Ctrl+Shift+Esc 完成，逐键结果 [Ctrl↓={R0}, Shift↓={R1}, Esc↓={R2}, Esc↑={R3}, Shift↑={R4}, Ctrl↑={R5}]",
-            _session.SessionId, results[0], results[1], results[2], results[3], results[4], results[5]);
-    }
-
-    /// <summary>向目标句柄 PostMessage 一个按键消息（WM_KEYDOWN / WM_KEYUP），返回投递结果并记录日志。</summary>
-    private bool PostRdpKey(nint hwnd, string keyName, uint vk, uint scanCode, bool isUp)
-    {
-        var message = isUp ? WmKeyUp : WmKeyDown;
-
-        // WM_KEYDOWN / WM_KEYUP 的 lParam 位布局：
-        //   bit 0–15   重复计数（这里恒为 1）
-        //   bit 16–23  scan code（MapVirtualKey(MAPVK_VK_TO_VSC) 所得）
-        //   bit 24     扩展键标记（Ctrl/Shift/Esc 均非扩展键，置 0）
-        //   bit 30     先前按键状态（keyup 时恒为 1，表示此前已按下）
-        //   bit 31     transition（1 = 释放）
-        var lParam = 1u | (scanCode << 16);
-        if (isUp)
-        {
-            lParam |= 0xC0000000u;
-        }
-
-        var ok = PostMessage(hwnd, message, (nint)vk, (nint)lParam);
-        _logger.LogInformation(
-            "RDP 会话 {SessionId} PostMessage {Key} {Direction} → Hwnd=0x{Hwnd:X}, Msg=0x{Message:X4}, WParam=0x{Vk:X2}, LParam=0x{LParam:X8}, 结果={Result}",
-            _session.SessionId, keyName, isUp ? "Up" : "Down", hwnd, message, vk, lParam, ok);
-        return ok;
     }
 
     /// <summary>
@@ -481,21 +396,4 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
 
     [LibraryImport("user32.dll")]
     private static partial nint GetFocus();
-
-    // ── 按键直达互操作（PostMessage 合成按键，绕过本机热键拦截）──────
-
-    private const uint WmKeyDown = 0x0100;
-    private const uint WmKeyUp = 0x0101;
-    private const uint VkControl = 0x11;
-    private const uint VkShift = 0x10;
-    private const uint VkEscape = 0x1B;
-    private const uint MapVkVkToVsc = 0;
-
-    // user32 只导出 PostMessageW/PostMessageA（无裸 PostMessage），这里显式指定 W 入口。
-    [LibraryImport("user32.dll", EntryPoint = "PostMessageW")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool PostMessage(nint hWnd, uint msg, nint wParam, nint lParam);
-
-    [LibraryImport("user32.dll")]
-    private static partial uint MapVirtualKeyW(uint uCode, uint uMapType);
 }

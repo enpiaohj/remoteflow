@@ -13,6 +13,7 @@
     <ProjectReference Include="..\..\src\RemoteFlow.Application\RemoteFlow.Application.csproj" />
     <ProjectReference Include="..\..\src\RemoteFlow.Infrastructure\RemoteFlow.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\RemoteFlow.App\RemoteFlow.App.csproj" />
+    <ProjectReference Include="..\..\src\RemoteFlow.Protocol.Rdp\RemoteFlow.Protocol.Rdp.csproj" />
   </ItemGroup>
 
   <ItemGroup>
