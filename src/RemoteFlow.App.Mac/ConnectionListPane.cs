@@ -17,6 +17,7 @@ public sealed class ConnectionListPane : NSViewController
     private readonly NSScrollView _treeScroll;
     private readonly NSScrollView _flatScroll;
     private readonly NSSegmentedControl _recentRange;
+    private NSButton _addGroup = null!;
     private readonly NSTextField _title = Heading();
     private readonly NSTextField _count = Sub();
 
@@ -73,6 +74,25 @@ public sealed class ConnectionListPane : NSViewController
             RefreshCount();
         };
 
+        _addGroup = new NSButton
+        {
+            Image = NSImage.GetSystemSymbol("folder.badge.plus", null),
+            BezelStyle = NSBezelStyle.TexturedRounded,
+            ToolTip = "新建分组",
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        _addGroup.Activated += (_, _) => _ = RunGroupCreateAsync(null);
+
+        var titleRow = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.CenterY,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        titleRow.AddArrangedSubview(_title);
+        titleRow.AddArrangedSubview(new NSView());
+        titleRow.AddArrangedSubview(_addGroup);
+
         var header = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
@@ -81,7 +101,8 @@ public sealed class ConnectionListPane : NSViewController
             EdgeInsets = new NSEdgeInsets(10, 14, 8, 14),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
-        header.AddArrangedSubview(_title);
+        header.AddArrangedSubview(titleRow);
+        titleRow.WidthAnchor.ConstraintEqualTo(header.WidthAnchor, 1, -28).Active = true;
         header.AddArrangedSubview(_count);
         header.AddArrangedSubview(_recentRange);
 
@@ -132,6 +153,7 @@ public sealed class ConnectionListPane : NSViewController
         _reload = ShowConnectionsAsync;
         _title.StringValue = "我的连接";
         _recentRange.Hidden = true;
+        _addGroup.Hidden = false;
         _vm.Filter = ConnectionFilter.All;
         await _vm.LoadAsync();
 
@@ -155,6 +177,7 @@ public sealed class ConnectionListPane : NSViewController
         _reload = ShowFavoritesAsync;
         _title.StringValue = "收藏";
         _recentRange.Hidden = true;
+        _addGroup.Hidden = true;
         _vm.Filter = ConnectionFilter.Favorites;
         await _vm.LoadAsync();
         MountFlat();
@@ -165,6 +188,7 @@ public sealed class ConnectionListPane : NSViewController
         _reload = ShowRecentAsync;
         _title.StringValue = "最近连接";
         _recentRange.Hidden = false;
+        _addGroup.Hidden = true;
         _vm.Filter = ConnectionFilter.Recent;
         await _vm.LoadAsync();
         MountFlat();
@@ -295,6 +319,20 @@ public sealed class ConnectionListPane : NSViewController
         try
         {
             await command.ExecuteAsync(group);
+        }
+        catch
+        {
+            // 命令内部已负责用户提示。
+        }
+
+        await RefreshAsync();
+    }
+
+    private async Task RunGroupCreateAsync(ConnectionGroupNodeViewModel? parent)
+    {
+        try
+        {
+            await _vm.CreateGroupCommand.ExecuteAsync(null);
         }
         catch
         {

@@ -105,7 +105,11 @@ public sealed class AppKitDialogService : IDialogService
             {
                 var vm = new ConnectionEditorViewModel(
                     existing, credentialList, groups, tags, _settings, defaultGroupId, preselectedProtocol);
-                var sheet = new ConnectionEditorSheet(vm);
+                var sheet = new ConnectionEditorSheet(vm, async () =>
+                {
+                    var latest = await ManageTagsAsync();
+                    vm.RefreshAvailableTags(latest);
+                });
                 tcs.SetResult(sheet.Run());
             }
             catch (Exception ex)

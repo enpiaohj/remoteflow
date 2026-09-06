@@ -88,7 +88,7 @@ public sealed class DetailView : NSView
         connect.BezelStyle = NSBezelStyle.Rounded;
         connect.ControlSize = NSControlSize.Large;
         connect.KeyEquivalent = "\r";
-        connect.WidthAnchor.ConstraintGreaterThanOrEqualTo(180).Active = true;
+        connect.WidthAnchor.ConstraintEqualTo(108).Active = true;
 
         var stack = new NSStackView
         {
