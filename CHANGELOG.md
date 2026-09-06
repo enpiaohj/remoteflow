@@ -7,6 +7,17 @@
 
 ---
 
+## [0.8.0] — 2026-09-06
+
+### 新增 / 变更
+- 会话常驻条与全屏药丸新增统一的连接状态入口和连接质量详情；RDP、SSH、VNC 均可查看连接状态、会话时长、重连次数与质量指标，并可重新检测。
+- RDP 工具条新增“启动任务管理器”，通过 mstsc ActiveX 官方远端语义动作执行，并保留协议级 `Ctrl+Shift+Esc` 回退。
+
+### 修复
+- 发送 RDP 安全组合键或启动远端任务管理器前，自动恢复宿主窗口与 ActiveX 输入焦点，避免工具条夺焦后动作无响应、误作用于本机或退出应用全屏。
+
+详见 [`releases/v0.8.0/CHANGELOG.md`](releases/v0.8.0/CHANGELOG.md)。
+
 ## [0.7.0] — 2026-09-06
 
 ### 新增 / 变更
@@ -99,6 +110,7 @@
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
+[0.8.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.8.0
 [0.3.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.3.1
 [0.3.2]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.3.2
 [0.3.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.3.1
