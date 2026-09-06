@@ -2,9 +2,8 @@ using Microsoft.Extensions.Logging;
 using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
-using RemoteFlow.Presentation.Services;
 
-namespace RemoteFlow.App.Services;
+namespace RemoteFlow.Presentation.Services;
 
 /// <summary>
 /// 交互式 SSH 主机密钥校验策略。

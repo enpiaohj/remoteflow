@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
+using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 
@@ -9,7 +10,7 @@ namespace RemoteFlow.Protocol.Rdp.Mac;
 /// macOS RDP 协议 Provider —— 应用内嵌入式 FreeRDP。
 /// 仅在 macOS 且 libremoteflow_rdp.dylib 可加载时可用；否则 UI 回落 <c>RdpLauncher</c>（外部客户端）。
 /// </summary>
-public sealed class RdpConnectionProvider(ILoggerFactory loggerFactory) : IConnectionProvider
+public sealed class RdpConnectionProvider(ILoggerFactory loggerFactory, IHostKeyRepository hostKeys) : IConnectionProvider
 {
     public ProtocolType Protocol => ProtocolType.Rdp;
 
@@ -36,5 +37,5 @@ public sealed class RdpConnectionProvider(ILoggerFactory loggerFactory) : IConne
         return false;
     }
 
-    public IRemoteSession CreateSession(SessionRequest request) => new RdpSession(request, loggerFactory);
+    public IRemoteSession CreateSession(SessionRequest request) => new RdpSession(request, loggerFactory, hostKeys);
 }

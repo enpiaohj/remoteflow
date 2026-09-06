@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
+using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 
@@ -14,13 +15,16 @@ public sealed class RdpSession : RemoteSessionBase
 {
     private readonly SessionRequest _request;
     private readonly ILogger _logger;
+    private readonly IHostKeyRepository _hostKeys;
     private readonly RdpFrameBuffer _frames = new();
 
     // 委托实例必须存字段（防 GC；C 侧长期持有函数指针）。
     private readonly NativeRdp.FrameCallback _frameCb;
     private readonly NativeRdp.StateCallback _stateCb;
+    private readonly NativeRdp.CertCallback _certCb;
     private readonly nint _frameCbPtr;
     private readonly nint _stateCbPtr;
+    private readonly nint _certCbPtr;
 
     private nint _handle;
     private ResolvedCredential? _credential;
@@ -29,16 +33,19 @@ public sealed class RdpSession : RemoteSessionBase
     private int _buttons;
     private TaskCompletionSource<bool>? _connectGate;
 
-    public RdpSession(SessionRequest request, ILoggerFactory loggerFactory)
+    public RdpSession(SessionRequest request, ILoggerFactory loggerFactory, IHostKeyRepository hostKeys)
     {
         _request = request;
         _logger = loggerFactory.CreateLogger<RdpSession>();
+        _hostKeys = hostKeys;
         _credential = request.Credential;
 
         _frameCb = OnFrame;
         _stateCb = OnState;
+        _certCb = OnCert;
         _frameCbPtr = Marshal.GetFunctionPointerForDelegate(_frameCb);
         _stateCbPtr = Marshal.GetFunctionPointerForDelegate(_stateCb);
+        _certCbPtr = Marshal.GetFunctionPointerForDelegate(_certCb);
     }
 
     public override ProtocolType Protocol => ProtocolType.Rdp;
@@ -55,7 +62,7 @@ public sealed class RdpSession : RemoteSessionBase
 
         try
         {
-            _handle = NativeRdp.rf_rdp_create(nint.Zero, _frameCbPtr, _stateCbPtr);
+            _handle = NativeRdp.rf_rdp_create(nint.Zero, _frameCbPtr, _stateCbPtr, _certCbPtr);
             if (_handle == nint.Zero)
             {
                 Fail(ConnectionErrorCode.ComponentUnavailable, "RDP 组件初始化失败（libremoteflow_rdp / FreeRDP 缺失？）");
@@ -82,9 +89,14 @@ public sealed class RdpSession : RemoteSessionBase
                 return;
             }
 
-            // 等 native 状态回调把结果送来（连上 / 失败），或调用方取消 / 超时。
+            // 等 native 状态回调把结果送来（连上 / 失败），或调用方取消，或兜底超时
+            // （FreeRDP 自带 TCP/NLA 超时，正常都会先回调；此处仅防线程卡死）。
             using var reg = cancellationToken.Register(() => _connectGate?.TrySetResult(false));
-            await _connectGate.Task.ConfigureAwait(false);
+            var completed = await Task.WhenAny(_connectGate.Task, Task.Delay(TimeSpan.FromSeconds(45))).ConfigureAwait(false);
+            if (completed != _connectGate.Task)
+            {
+                _connectGate.TrySetResult(false);
+            }
 
             if (State != ConnectionState.Connected && ErrorCode == ConnectionErrorCode.None)
             {
@@ -207,10 +219,65 @@ public sealed class RdpSession : RemoteSessionBase
                 _connectGate?.TrySetResult(false);
                 break;
             case 3:
-                var msg = message == nint.Zero ? "RDP 连接失败" : Marshal.PtrToStringUTF8(message) ?? "RDP 连接失败";
-                Fail(ConnectionErrorCode.Unknown, msg);
+                // 证书校验已把 ErrorCode 设为 HostKeyMismatch 时不覆盖（否则会丢失中间人警告语义）。
+                if (ErrorCode == ConnectionErrorCode.None)
+                {
+                    var msg = message == nint.Zero ? "RDP 连接失败" : Marshal.PtrToStringUTF8(message) ?? "RDP 连接失败";
+                    Fail(ConnectionErrorCode.Unknown, msg);
+                }
                 _connectGate?.TrySetResult(false);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// FreeRDP 证书校验回调（协议线程同步调用）。规则同 SSH Host Key（§7.4）：
+    /// 首次见到 → TOFU 记录并放行；指纹一致 → 静默放行；<b>指纹变化 → 强拒绝，绝不静默接受</b>。
+    /// SSH 走两步式弹窗；RDP 首版 TOFU（贴近 mstsc 默认信任并缓存的行为），变化仍硬失败。
+    /// </summary>
+    private int OnCert(nint user, nint hostPtr, int port, nint cnPtr, nint fpPtr, int changed)
+    {
+        var host = Marshal.PtrToStringUTF8(hostPtr);
+        if (string.IsNullOrEmpty(host))
+        {
+            host = _request.Profile.Host;
+        }
+
+        var fingerprint = Marshal.PtrToStringUTF8(fpPtr) ?? string.Empty;
+
+        try
+        {
+            var known = Task.Run(() => _hostKeys.GetAsync(host, port)).GetAwaiter().GetResult();
+
+            if (known is null && changed == 0)
+            {
+                Task.Run(() => _hostKeys.SaveAsync(new SshHostKeyRecord
+                {
+                    HostKey = SshHostKeyRecord.BuildHostKey(host, port),
+                    KeyAlgorithm = "RDP-TLS",
+                    Fingerprint = fingerprint,
+                    TrustedAt = DateTimeOffset.Now,
+                })).GetAwaiter().GetResult();
+                _logger.LogInformation("RDP 证书首次信任 {Host}:{Port}", host, port);
+                return 1;
+            }
+
+            if (known is not null &&
+                string.Equals(known.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase))
+            {
+                return 1; // 一致 —— 静默放行
+            }
+
+            _logger.LogWarning(
+                "RDP 服务器证书指纹与记录不一致 {Host}:{Port}（changed={Changed}）", host, port, changed);
+            Fail(ConnectionErrorCode.HostKeyMismatch,
+                $"{host}:{port} 的 RDP 服务器证书指纹与此前记录不一致，可能存在中间人攻击，连接已中止。");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "RDP 证书校验异常 {Host}:{Port}", host, port);
+            return 0;
         }
     }
 

@@ -184,7 +184,7 @@ public sealed class AppDelegate : NSApplicationDelegate
         services.AddSingleton<AppServices.ImportExportService>();
         services.AddSingleton<AppServices.CredentialBackupService>();
         services.AddSingleton<LocalBackupService>();
-        services.AddSingleton<ISshHostKeyPolicy>(_ => new DevTrustHostKeyPolicy());
+        services.AddSingleton<ISshHostKeyPolicy, RemoteFlow.Presentation.Services.InteractiveSshHostKeyPolicy>();
         services.AddSingleton<AppServices.SessionManager>();
 
         services.AddSingleton<IConnectionProvider, RemoteFlow.Protocol.Ssh.SshConnectionProvider>();

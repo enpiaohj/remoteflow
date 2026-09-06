@@ -374,8 +374,9 @@ public sealed class MainWindowController : NSWindowController
         try
         {
             var session = await _sessions.CreateSessionAsync(profile);
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-            await session.ConnectAsync(cts.Token);
+            // 不套人为总超时：各协议自带连接超时（SSH ConnectionInfo.Timeout / RDP 线程），
+            // 且首次连接的主机密钥确认框会停在中途，硬 cap 会把用户读指纹的时间也算进去。
+            await session.ConnectAsync(CancellationToken.None);
 
             if (session.State != RemoteFlow.Core.Models.ConnectionState.Connected)
             {

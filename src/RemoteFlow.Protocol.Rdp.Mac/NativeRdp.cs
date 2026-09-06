@@ -14,8 +14,12 @@ internal static partial class NativeRdp
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     internal delegate void StateCallback(nint user, int state, nint message);
 
+    /// <summary>证书校验。返回 0=拒绝 1=接受并记录 2=仅本次接受。</summary>
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    internal delegate int CertCallback(nint user, nint host, int port, nint commonName, nint fingerprint, int changed);
+
     [LibraryImport(Lib)]
-    internal static partial nint rf_rdp_create(nint user, nint frameCb, nint stateCb);
+    internal static partial nint rf_rdp_create(nint user, nint frameCb, nint stateCb, nint certCb);
 
     [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
     internal static partial int rf_rdp_connect(

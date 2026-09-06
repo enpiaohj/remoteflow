@@ -21,12 +21,16 @@
 /* state: 0=connecting 1=connected 2=disconnected 3=failed */
 typedef void (*rf_frame_cb)(void* user, const uint8_t* bgrx, int w, int h, int stride);
 typedef void (*rf_state_cb)(void* user, int state, const char* message);
+/* 证书校验：返回 0=拒绝 1=接受并记录 2=仅本次接受。托管侧据「首次记录 / 变化强警告」决策。 */
+typedef int (*rf_cert_cb)(void* user, const char* host, int port, const char* common_name,
+                          const char* fingerprint, int changed);
 
 typedef struct
 {
 	rdpContext context; /* 必须第一个 */
 	rf_frame_cb frame_cb;
 	rf_state_cb state_cb;
+	rf_cert_cb cert_cb;
 	void* user;
 	volatile int running;
 	HANDLE thread;
@@ -83,9 +87,30 @@ static DWORD rf_verify_cert_ex(freerdp* instance, const char* host, UINT16 port,
                                const char* common_name, const char* subject, const char* issuer,
                                const char* fingerprint, DWORD flags)
 {
-	(void)instance; (void)host; (void)port; (void)common_name; (void)subject;
-	(void)issuer; (void)fingerprint; (void)flags;
-	return 1; /* 接受本次（首版不做「首次记录 / 变化强警告」，见 §7.4 待办） */
+	(void)subject; (void)issuer;
+	rfContext* rf = (rfContext*)instance->context;
+	if (!rf->cert_cb)
+		return 2; /* 无回调则仅本次接受，绝不落库 */
+	int changed = (flags & VERIFY_CERT_FLAG_CHANGED) ? 1 : 0;
+	int r = rf->cert_cb(rf->user, host, (int)port, common_name ? common_name : "",
+	                    fingerprint ? fingerprint : "", changed);
+	return (r == 1) ? 1 : (r == 2) ? 2 : 0; /* 0=拒绝 → freerdp_connect 失败 */
+}
+
+static DWORD rf_verify_changed_cert_ex(freerdp* instance, const char* host, UINT16 port,
+                                       const char* common_name, const char* subject,
+                                       const char* issuer, const char* new_fingerprint,
+                                       const char* old_subject, const char* old_issuer,
+                                       const char* old_fingerprint, DWORD flags)
+{
+	(void)subject; (void)issuer; (void)old_subject; (void)old_issuer;
+	(void)old_fingerprint; (void)flags;
+	rfContext* rf = (rfContext*)instance->context;
+	if (!rf->cert_cb)
+		return 0; /* 证书已变化且无回调 —— 一律拒绝 */
+	int r = rf->cert_cb(rf->user, host, (int)port, common_name ? common_name : "",
+	                    new_fingerprint ? new_fingerprint : "", 1 /* changed */);
+	return (r == 1) ? 1 : (r == 2) ? 2 : 0;
 }
 
 static DWORD WINAPI rf_thread(LPVOID arg)
@@ -119,7 +144,7 @@ static DWORD WINAPI rf_thread(LPVOID arg)
 
 /* ── C ABI ──────────────────────────────────────────────────── */
 
-void* rf_rdp_create(void* user, rf_frame_cb fcb, rf_state_cb scb)
+void* rf_rdp_create(void* user, rf_frame_cb fcb, rf_state_cb scb, rf_cert_cb ccb)
 {
 	/* 尽早清代理 env —— FreeRDP 在 context_new / connect 各处都可能读 */
 	unsetenv("HTTP_PROXY");  unsetenv("http_proxy");
@@ -135,6 +160,7 @@ void* rf_rdp_create(void* user, rf_frame_cb fcb, rf_state_cb scb)
 	instance->PostConnect = rf_post_connect;
 	instance->PostDisconnect = rf_post_disconnect;
 	instance->VerifyCertificateEx = rf_verify_cert_ex;
+	instance->VerifyChangedCertificateEx = rf_verify_changed_cert_ex;
 	if (!freerdp_context_new(instance))
 	{
 		freerdp_free(instance);
@@ -144,6 +170,7 @@ void* rf_rdp_create(void* user, rf_frame_cb fcb, rf_state_cb scb)
 	rf->user = user;
 	rf->frame_cb = fcb;
 	rf->state_cb = scb;
+	rf->cert_cb = ccb;
 	rf->running = 1;
 	return instance;
 }
@@ -173,7 +200,8 @@ int rf_rdp_connect(void* h, const char* host, int port, const char* username, co
 	freerdp_settings_set_uint32(s, FreeRDP_ProxyType, PROXY_TYPE_NONE);
 	freerdp_settings_set_string(s, FreeRDP_ProxyHostname, NULL);
 	freerdp_settings_set_bool(s, FreeRDP_SoftwareGdi, TRUE);
-	freerdp_settings_set_bool(s, FreeRDP_IgnoreCertificate, TRUE);
+	/* 不设 IgnoreCertificate —— 让 VerifyCertificateEx 回调跑，托管侧做 TOFU / 变化拒绝（§7.4）。 */
+	freerdp_settings_set_bool(s, FreeRDP_AutoAcceptCertificate, FALSE);
 	freerdp_settings_set_bool(s, FreeRDP_DynamicResolutionUpdate, TRUE);
 	freerdp_settings_set_bool(s, FreeRDP_RemoteFxCodec, TRUE);
 	freerdp_settings_set_bool(s, FreeRDP_FastPathOutput, TRUE);

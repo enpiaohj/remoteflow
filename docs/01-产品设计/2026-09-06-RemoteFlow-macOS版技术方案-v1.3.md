@@ -14,6 +14,7 @@
 | 版本 | 日期 | 主要变更 |
 |---|---|---|
 | V1.0 | 2026-09-06 | 初版（commit `3a3ff58`，原文可从 Git 历史检出） |
+| **V1.3.5** | **2026-09-07** | **§7.4 证书 / 主机密钥信任落地**：RDP 服务器证书 TOFU 首次记录 + 变化硬拒绝（C shim 双回调 → `RdpSession.OnCert` → `IHostKeyRepository`）；macOS SSH 弃用 `DevTrustHostKeyPolicy` 开发桩，`InteractiveSshHostKeyPolicy` 上移到 `RemoteFlow.Presentation` 供两端共用（首次弹窗确认 + 落库，重连静默）；连接流去掉人为 20s 总超时（会把用户读指纹时间算进去）。实测 SSH-VM / DC01 全绿 |
 | **V1.3.4** | **2026-09-07** | **8.E 应用内嵌入式 FreeRDP 打通**：`native/rdp` C ABI 封装 + `RemoteFlow.Protocol.Rdp.Mac`（`RdpSession`/`RdpFrameBuffer`/`RdpConnectionProvider`）+ `RdpScreenView`/`AppKitRdpKeyMapper`；`TaskCompletionSource` 连接门闩修 teardown 打断连接的竞态；代理旁路；实测 `192.0.2.11` Windows Server 桌面应用内渲染。8.F `scripts/bundle-freerdp.sh` 收 FreeRDP 全依赖进 `Contents/Frameworks` + `@rpath`，接进发布脚本 |
 | **V1.3.3** | **2026-09-07** | 8.D 多会话 Tab 落地（`SessionTabBar`，撤回单会话折中）；钥匙串授权框修复（`SecAccessCreate` 开放 ACL）；VNC 剪贴板 + 断开重连按钮实测通过 |
 | **V1.3.2** | **2026-09-07** | 8.C 补右键菜单（连接 / 分组 / 移动到分组）+ 详情卡编辑删除入口；8.D 补 VNC 剪贴板同步 + 断开重连按钮 + 列表默认选中；8.E RDP 改为 FreeRDP CLI 带凭据直连（`CredentialService.ResolveAsync`）/ 系统客户端回落；8.F 打包脚本 + Release 绕法（`LinkMode=None` + `Registrar=dynamic`）+ Entitlements 模板，产出 x64 `.app` + `.dmg`；图标改版 |
@@ -502,7 +503,15 @@ void             rf_rdp_destroy(rf_rdp_session*);
 ### 7.4 服务器证书信任
 
 - RDP 服务器证书：首次记录指纹、变化强警告、**绝不静默接受**（比照 SSH Host Key 的既有交互与落库思路）。
-- 可复用 `IHostKeyRepository` 的模式新建 cert store 表，或扩展现有结构；由 UI 层实现确认策略（比照 `ISshHostKeyPolicy` 的「同步查询 + 异步确认」两步拆分）。
+- ✅ 已接（V1.3.5）：C shim 挂 `VerifyCertificateEx` + `VerifyChangedCertificateEx`，回调进 `RdpSession.OnCert`（协议线程同步）：
+  首次见到 → TOFU 记录进 `IHostKeyRepository`（`KeyAlgorithm="RDP-TLS"`）并放行；指纹一致 → 静默；
+  **指纹变化 → `Fail(HostKeyMismatch)` 硬拒绝**（`OnState` case 3 不覆盖该错误码）。首版 RDP 用 TOFU 而非弹窗
+  （贴近 mstsc 默认信任并缓存的行为，SSH 仍是两步式弹窗）。注意 FreeRDP 自身也在 `~/.config/freerdp/server/*.pem`
+  钉扎证书，其命中时不触发本回调 —— 变化检测仍经 `VerifyChangedCertificateEx` 回到本逻辑。
+- ✅ SSH Host Key：macOS 之前用 `DevTrustHostKeyPolicy`（开发桩，接受一切）。已删除，改用
+  `RemoteFlow.Presentation.Services.InteractiveSshHostKeyPolicy`（从 `RemoteFlow.App` 上移到 Presentation，
+  Windows / macOS 共用一份）。实测：首次连 `192.0.2.20` 弹「确认主机密钥」→ 信任 → 落库 → 连上；
+  重连静默直通；指纹变化会走 `IsMismatch` 强警告分支。
 
 ### 7.5 RdpOptions 选项映射表
 
@@ -620,7 +629,8 @@ void             rf_rdp_destroy(rf_rdp_session*);
 - ✅ `RdpLauncher`（回落）：FreeRDP CLI（`sdl-freerdp` / `xfreerdp`）
   → `/v /u /d /p /cert:ignore +clipboard /dynamic-resolution` 带凭据直连（口令不进日志）；
   再无则生成 `.rdp`（预填 username/domain）。
-- ⏳ 证书信任仍是「本次接受」（`rf_verify_cert_ex` 返回 1），未接「首次记录 / 变化强警告」（§7.4）。
+- ✅ 证书信任（§7.4）：TOFU 首次记录 + 变化硬拒绝，落 `IHostKeyRepository`（`RDP-TLS`）。同轮把 macOS 的
+  SSH `DevTrustHostKeyPolicy` 开发桩换成共用的 `InteractiveSshHostKeyPolicy`（弹窗确认 + 落库）。
 - ⏳ arm64 `libremoteflow_rdp.dylib`：开发机为 Intel、brew FreeRDP 仅 x86_64，无法交叉编译；
   待 arm64 Mac 或 arm64 FreeRDP 依赖（CI）。
 
