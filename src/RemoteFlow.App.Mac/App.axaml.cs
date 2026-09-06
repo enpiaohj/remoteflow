@@ -73,8 +73,11 @@ public partial class App : Avalonia.Application
             var sshProvider = (RemoteFlow.Protocol.Ssh.SshConnectionProvider)_services
                 .GetServices<IConnectionProvider>()
                 .First(p => p.Protocol == RemoteFlow.Core.Models.ProtocolType.Ssh);
+            var vncProvider = (RemoteFlow.Protocol.Vnc.VncConnectionProvider)_services
+                .GetServices<IConnectionProvider>()
+                .First(p => p.Protocol == RemoteFlow.Core.Models.ProtocolType.Vnc);
 
-            _mainWindow = new MainWindow(paths, sshProvider);
+            _mainWindow = new MainWindow(paths, sshProvider, vncProvider);
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
                 desktop.MainWindow = _mainWindow;
