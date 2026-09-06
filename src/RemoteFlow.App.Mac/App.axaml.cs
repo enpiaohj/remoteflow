@@ -79,7 +79,13 @@ public partial class App : Avalonia.Application
                 .GetServices<IConnectionProvider>()
                 .First(p => p.Protocol == RemoteFlow.Core.Models.ProtocolType.Vnc);
 
-            _mainWindow = new MainWindow(paths, sshProvider, vncProvider);
+            _mainWindow = new MainWindow(
+                paths, sshProvider, vncProvider,
+                _services.GetRequiredService<RemoteFlow.Application.Services.ConnectionService>(),
+                _services.GetRequiredService<RemoteFlow.Application.Services.CredentialService>(),
+                _services.GetRequiredService<ICredentialVault>(),
+                _services.GetRequiredService<RemoteFlow.Application.Services.SessionManager>(),
+                _services.GetRequiredService<RemoteFlow.Presentation.ViewModels.ConnectionsPageViewModel>());
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
                 desktop.MainWindow = _mainWindow;
@@ -127,6 +133,7 @@ public partial class App : Avalonia.Application
         services.AddSingleton<AppServices.ImportExportService>();
         services.AddSingleton<AppServices.CredentialBackupService>();
         services.AddSingleton<LocalBackupService>();
+        services.AddSingleton<RemoteFlow.Core.Sessions.ISshHostKeyPolicy>(_ => new DevTrustHostKeyPolicy());
         services.AddSingleton<AppServices.SessionManager>();
 
         // 会话 Provider：SSH / VNC 现即可用，RDP 随 Phase 2 (MacRdpSession) 追加。

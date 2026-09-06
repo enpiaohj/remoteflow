@@ -1,34 +1,40 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using RemoteFlow.Application.Services;
+using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 using RemoteFlow.Infrastructure;
+using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Protocol.Ssh;
 using RemoteFlow.Protocol.Vnc;
+using AppServices = RemoteFlow.Application.Services;
 
 namespace RemoteFlow.App.Mac;
 
 /// <summary>
-/// 主窗口（可运行骨架）：顶部连接栏（协议 + 主机 / 账号 / 口令 / 端口）+ 中部会话区。
+/// 主窗口（工作台形态）：左侧「连接资产」列表 + 右侧会话区。
 /// <para>
-/// 纵向切片：输入目标 → 连接 → 在 WebView + xterm.js（SSH）或位图渲染（VNC）里交互。
-/// 资产 / 凭据库 / 分组等完整工作台 UI 与统一会话管理属后续里程碑；
-/// 此处经各 Provider 直连（ResolvedCredential 由连接栏临时输入，不落盘）。
+/// 资产列表复用共享 <see cref="ConnectionsPageViewModel"/>（Filter=All，GroupedRows 扁平行）；
+/// 「新建连接」经共享 ConnectionService / CredentialService + Keychain 落库；
+/// 双击或选中点「打开」经 SessionManager 开会话（内部解析 Keychain 凭据）。
+/// 顶部仍保留协议直连条（开发验证用，对应 SSH/VNC 会话视图）。
 /// </para>
 /// </summary>
 public sealed class MainWindow : Window
 {
-    private readonly ComboBox _protoBox = new() { Width = 90 };
-    private readonly TextBox _hostBox = new() { Watermark = "主机或 IP", Width = 200 };
-    private readonly TextBox _userBox = new() { Watermark = "账号", Width = 110 };
-    private readonly TextBox _passBox = new() { Watermark = "口令 / VNC 密码", Width = 130, PasswordChar = '●' };
-    private readonly TextBox _portBox = new() { Text = "22", Width = 60 };
-    private readonly Button _connectButton = new() { Content = "连接" };
-    private readonly Button _disconnectButton = new() { Content = "断开", IsVisible = false };
-    private readonly TextBlock _statusText = new() { Foreground = Brushes.Gray, VerticalAlignment = VerticalAlignment.Center };
+    private readonly SshConnectionProvider _sshProvider;
+    private readonly VncConnectionProvider _vncProvider;
+    private readonly AppServices.ConnectionService _connections;
+    private readonly AppServices.CredentialService _credentials;
+    private readonly ICredentialVault _vault;
+    private readonly AppServices.SessionManager _sessions;
+    private readonly ConnectionsPageViewModel _connectionsVm;
 
     private readonly Border _sessionArea = new()
     {
@@ -37,8 +43,16 @@ public sealed class MainWindow : Window
         ClipToBounds = true,
     };
 
-    private readonly SshConnectionProvider _sshProvider;
-    private readonly VncConnectionProvider _vncProvider;
+    private readonly ListBox _assetList = new();
+    private readonly TextBlock _listStatus = new() { Foreground = Brushes.Gray, FontSize = 12 };
+    private readonly ComboBox _protoBox = new() { Width = 88 };
+    private readonly TextBox _hostBox = new() { Watermark = "主机", Width = 160 };
+    private readonly TextBox _userBox = new() { Watermark = "账号", Width = 100 };
+    private readonly TextBox _passBox = new() { Watermark = "口令", Width = 120, PasswordChar = '●' };
+    private readonly TextBox _portBox = new() { Text = "22", Width = 56 };
+    private readonly Button _connectButton = new() { Content = "直连" };
+    private readonly Button _disconnectButton = new() { Content = "断开", IsVisible = false };
+    private readonly TextBlock _statusText = new() { Foreground = Brushes.Gray, VerticalAlignment = VerticalAlignment.Center };
 
     private SshSessionView? _sshView;
     private VncSessionView? _vncView;
@@ -48,40 +62,91 @@ public sealed class MainWindow : Window
     public MainWindow(
         AppPaths paths,
         SshConnectionProvider sshProvider,
-        VncConnectionProvider vncProvider)
+        VncConnectionProvider vncProvider,
+        AppServices.ConnectionService connections,
+        AppServices.CredentialService credentials,
+        ICredentialVault vault,
+        AppServices.SessionManager sessions,
+        ConnectionsPageViewModel connectionsVm)
     {
         _sshProvider = sshProvider;
         _vncProvider = vncProvider;
+        _connections = connections;
+        _credentials = credentials;
+        _vault = vault;
+        _sessions = sessions;
+        _connectionsVm = connectionsVm;
 
         Title = "RemoteFlow";
-        Width = 1020;
-        Height = 660;
-        MinWidth = 760;
-        MinHeight = 480;
+        Width = 1180;
+        Height = 720;
+        MinWidth = 860;
+        MinHeight = 520;
 
-        // 协议选择（SSH / VNC）。RDP 随 Phase 2 (MacRdpSession) 追加。
+        // ── 左：连接资产 ──────────────────────────────────────────
+        _connectionsVm.Filter = ConnectionFilter.All;
+
+        _assetList.ItemsSource = _connectionsVm.GroupedRows;
+        _assetList.ItemTemplate = new FuncDataTemplate<object>((item, _) => item switch
+        {
+            ConnectionItemViewModel c => MakeConnectionRow(c),
+            ConnectionGroupNodeViewModel g => MakeGroupRow(g),
+            _ => null,
+        });
+        _assetList.DoubleTapped += async (_, _) => await OpenSelectedAsync();
+
+        var openButton = new Button { Content = "打开选中", HorizontalAlignment = HorizontalAlignment.Left };
+        openButton.Click += async (_, _) => await OpenSelectedAsync();
+
+        var newButton = new Button { Content = "＋ 新建连接", HorizontalAlignment = HorizontalAlignment.Left };
+        newButton.Click += async (_, _) => await ShowNewConnectionDialogAsync();
+
+        var refreshButton = new Button { Content = "刷新", HorizontalAlignment = HorizontalAlignment.Left };
+        refreshButton.Click += async (_, _) => await ReloadAssetsAsync();
+
+        var left = new DockPanel
+        {
+            Width = 330,
+            Margin = new Thickness(0, 0, 12, 0),
+            Children =
+            {
+                DockTop(new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 8,
+                    Margin = new Thickness(0, 0, 0, 8),
+                    Children = { newButton, openButton, refreshButton },
+                }),
+                DockTop(_listStatus),
+                _assetList,
+            },
+        };
+
+        // ── 右：会话区 ────────────────────────────────────────────
+        _sessionArea.Child = new TextBlock
+        {
+            Text = "选择左侧连接资产，双击或点「打开选中」建立会话。",
+            Foreground = Brushes.Gray,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        // ── 顶：直连条（开发验证用）──────────────────────────────
         _protoBox.ItemsSource = new[] { "SSH", "VNC" };
         _protoBox.SelectedIndex = 0;
-        _protoBox.SelectionChanged += (_, _) =>
-            _portBox.Text = _protoBox.SelectedIndex == 0 ? "22" : "5900";
+        _protoBox.SelectionChanged += (_, _) => _portBox.Text = _protoBox.SelectedIndex == 0 ? "22" : "5900";
+        _connectButton.Click += async (_, _) => await DirectConnectAsync();
+        _disconnectButton.Click += async (_, _) => await DisconnectAsync();
 
-        // 预填测试主机（便于快速连真机验证；正式凭据管理后续接入）。
-        // RF_PROTO=vnc 时切到 VNC；host/user/pass 分别可被 RF_HOST/USER/PASS 覆盖。
-        if (Environment.GetEnvironmentVariable("RF_PROTO") == "vnc")
-        {
-            _protoBox.SelectedIndex = 1;
-        }
-
-        _hostBox.Text = Environment.GetEnvironmentVariable("RF_HOST") ?? Environment.GetEnvironmentVariable("RF_SSH_HOST");
-        _userBox.Text = Environment.GetEnvironmentVariable("RF_USER") ?? Environment.GetEnvironmentVariable("RF_SSH_USER");
-        _passBox.Text = Environment.GetEnvironmentVariable("RF_PASS") ?? Environment.GetEnvironmentVariable("RF_SSH_PASS");
-
-        var connectBar = new StackPanel
+        var quick = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 8,
-            Margin = new Thickness(0, 0, 0, 10),
-            Children = { _protoBox, _hostBox, _userBox, _passBox, _portBox, _connectButton, _disconnectButton, _statusText },
+            Children =
+            {
+                new TextBlock { Text = "直连：", VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.Gray },
+                _protoBox, _hostBox, _userBox, _passBox, _portBox, _connectButton, _disconnectButton,
+            },
         };
 
         var hint = new TextBlock
@@ -92,160 +157,283 @@ public sealed class MainWindow : Window
             Margin = new Thickness(0, 0, 0, 6),
         };
 
-        _connectButton.Click += async (_, _) => await ConnectAsync();
-        _disconnectButton.Click += async (_, _) => await DisconnectAsync();
-        Closing += (_, _) => _ = DisconnectAsync();
-
         Content = new DockPanel
         {
             Margin = new Thickness(16),
             Children =
             {
                 DockTop(hint),
-                DockTop(connectBar),
-                _sessionArea,
+                DockTop(new StackPanel { Margin = new Thickness(0, 0, 0, 12), Children = { quick } }),
+                new Grid { ColumnDefinitions = new("330, *"), Children = { left, _sessionArea } },
             },
         };
 
-        // 运行验证钩子：RF_AUTOCONNECT=1 时启动即自动连接（凭据来自 RF_* 环境变量）。
+        Closing += (_, _) => _ = DisconnectAsync();
+
+        // 预填直连（运行验证钩子）
+        _hostBox.Text = Environment.GetEnvironmentVariable("RF_HOST") ?? Environment.GetEnvironmentVariable("RF_SSH_HOST");
+        _userBox.Text = Environment.GetEnvironmentVariable("RF_USER") ?? Environment.GetEnvironmentVariable("RF_SSH_USER");
+        _passBox.Text = Environment.GetEnvironmentVariable("RF_PASS") ?? Environment.GetEnvironmentVariable("RF_SSH_PASS");
+
+        Opened += async (_, _) => await ReloadAssetsAsync();
+
         if (Environment.GetEnvironmentVariable("RF_AUTOCONNECT") == "1")
         {
-            Dispatcher.UIThread.Post(async () => await ConnectAsync(), DispatcherPriority.Background);
+            Dispatcher.UIThread.Post(async () =>
+            {
+                if (Environment.GetEnvironmentVariable("RF_PROTO") == "vnc")
+                {
+                    _protoBox.SelectedIndex = 1;
+                }
+
+                await DirectConnectAsync();
+            }, DispatcherPriority.Background);
         }
     }
 
-    private static Control DockTop(Control control)
+    private static Control DockTop(Control c)
     {
-        DockPanel.SetDock(control, Dock.Top);
-        return control;
+        DockPanel.SetDock(c, Dock.Top);
+        return c;
     }
 
-    private bool IsSsh => _protoBox.SelectedIndex != 1;
+    // ── 资产列表行模板 ───────────────────────────────────────────
 
-    private async Task ConnectAsync()
+    private static Control MakeConnectionRow(ConnectionItemViewModel c)
+    {
+        var host = new TextBlock { Text = c.HostDisplay, Foreground = Brushes.Gray, FontSize = 11 };
+        var name = new TextBlock { Text = c.Name, FontWeight = FontWeight.Medium, TextTrimming = TextTrimming.CharacterEllipsis };
+        var stack = new StackPanel { Spacing = 1 };
+        stack.Children.Add(name);
+        stack.Children.Add(host);
+        return new Border { Padding = new Thickness(4, 3), Child = stack };
+    }
+
+    private static Control MakeGroupRow(ConnectionGroupNodeViewModel g)
+    {
+        var text = new TextBlock
+        {
+            Text = g.IsUngrouped ? "（未分组）" : g.Name,
+            Foreground = Brushes.DimGray,
+            FontStyle = FontStyle.Italic,
+            FontSize = 12,
+        };
+        return new Border { Padding = new Thickness(4, 3), Child = text };
+    }
+
+    // ── 资产加载 / 新建 / 打开 ───────────────────────────────────
+
+    private async Task ReloadAssetsAsync()
+    {
+        try
+        {
+            _listStatus.Text = "加载连接…";
+            await _connectionsVm.LoadAsync();
+            var n = _connectionsVm.GroupedRows.Count(o => o is ConnectionItemViewModel);
+            _listStatus.Text = $"{n} 条连接";
+        }
+        catch (Exception ex)
+        {
+            _listStatus.Text = $"加载失败：{ex.Message}";
+        }
+    }
+
+    private async Task ShowNewConnectionDialogAsync()
+    {
+        var dlg = new ConnectionDialog();
+        var result = await dlg.ShowDialog<ConnectionDialogResult?>(this);
+        if (result is null)
+        {
+            return;
+        }
+
+        try
+        {
+            // 先把口令存进 Keychain，再建凭据元数据，最后建连接。
+            var credential = new Credential
+            {
+                Name = $"{result.Name} 凭据",
+                Type = result.Protocol == ProtocolType.Ssh
+                    ? CredentialType.SshPassword
+                    : CredentialType.VncPassword,
+                Username = result.Username,
+            };
+
+            var created = await _credentials.CreateAsync(credential, result.Password, null);
+
+            var profile = new ConnectionProfile
+            {
+                Name = result.Name,
+                Host = result.Host,
+                Port = result.Port,
+                Protocol = result.Protocol,
+                CredentialId = created.Id,
+            };
+
+            await _connections.CreateAsync(profile);
+            await ReloadAssetsAsync();
+            _listStatus.Text = $"已创建 {result.Name}";
+        }
+        catch (Exception ex)
+        {
+            _listStatus.Text = $"创建失败：{ex.Message}";
+        }
+    }
+
+    private async Task OpenSelectedAsync()
+    {
+        if (_assetList.SelectedItem is not ConnectionItemViewModel item)
+        {
+            return;
+        }
+
+        await OpenProfileAsync(item.Profile);
+    }
+
+    private async Task OpenProfileAsync(ConnectionProfile profile)
+    {
+        try
+        {
+            SetBusy(true);
+            _statusText.Text = $"正在连接 {profile.Name} …";
+
+            var session = await _sessions.CreateSessionAsync(profile);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            await session.ConnectAsync(cts.Token);
+
+            if (session.State != ConnectionState.Connected)
+            {
+                SetBusy(false);
+                _statusText.Text = $"连接失败：{session.ErrorMessage ?? session.ErrorCode.ToString()}";
+                _statusText.Foreground = Brushes.OrangeRed;
+                return;
+            }
+
+            switch (session)
+            {
+                case SshSession ssh:
+                    _sshSession = ssh;
+                    _sshView = new SshSessionView(ssh);
+                    _sessionArea.Child = _sshView;
+                    break;
+                case VncSession vnc:
+                    _vncSession = vnc;
+                    _vncView = new VncSessionView(vnc);
+                    _sessionArea.Child = _vncView;
+                    break;
+                default:
+                    throw new NotSupportedException($"协议 {profile.Protocol} 尚无 macOS 会话视图。");
+            }
+
+            Title = $"{profile.Name} · RemoteFlow";
+            _statusText.Text = $"已连接 {profile.Name}";
+            _statusText.Foreground = new SolidColorBrush(Color.Parse("#2E8B57"));
+            SetBusy(false);
+            await ReloadAssetsAsync();
+        }
+        catch (Exception ex)
+        {
+            SetBusy(false);
+            _statusText.Text = $"连接异常：{ex.Message}";
+            _statusText.Foreground = Brushes.OrangeRed;
+        }
+    }
+
+    private async Task DirectConnectAsync()
     {
         var host = _hostBox.Text?.Trim();
         var user = _userBox.Text?.Trim();
         var pass = _passBox.Text;
-        if (string.IsNullOrEmpty(host) || (IsSsh && string.IsNullOrEmpty(pass)))
+        var isSsh = _protoBox.SelectedIndex != 1;
+
+        if (string.IsNullOrEmpty(host) || (isSsh && string.IsNullOrEmpty(pass)))
         {
-            _statusText.Text = IsSsh ? "SSH 需填写主机与口令。" : "VNC 需填写主机。";
+            _statusText.Text = isSsh ? "SSH 需填主机与口令。" : "VNC 需填主机。";
             _statusText.Foreground = Brushes.Orange;
             return;
         }
 
         if (!int.TryParse(_portBox.Text?.Trim(), out var port) || port <= 0)
         {
-            port = IsSsh ? 22 : 5900;
+            port = isSsh ? 22 : 5900;
         }
 
-        try
+        var profile = new ConnectionProfile
         {
-            _connectButton.IsEnabled = false;
-            _statusText.Text = $"正在连接 {host}:{port} …";
-            _statusText.Foreground = Brushes.Gray;
+            Name = host,
+            Host = host,
+            Port = port,
+            Protocol = isSsh ? ProtocolType.Ssh : ProtocolType.Vnc,
+        };
 
-            var protocol = IsSsh ? ProtocolType.Ssh : ProtocolType.Vnc;
-            var profile = new ConnectionProfile
+        // 直连不入库：临时构造 ResolvedCredential 直接开会话。
+        if (isSsh)
+        {
+            profile.Ssh.ConnectTimeoutSeconds = 15;
+            var session = (SshSession)_sshProvider.CreateSession(new SessionRequest
             {
-                Name = host,
-                Host = host,
-                Port = port,
-                Protocol = protocol,
-            };
-
-            if (IsSsh)
-            {
-                profile.Ssh.ConnectTimeoutSeconds = 15;
-                var credential = new ResolvedCredential
+                Profile = profile,
+                Credential = new ResolvedCredential
                 {
                     Type = CredentialType.SshPassword,
                     Username = user ?? string.Empty,
                     Password = pass,
-                };
+                },
+                HostKeyPolicy = new DevTrustHostKeyPolicy(),
+            });
+            await session.ConnectAsync();
 
-                var session = (SshSession)_sshProvider.CreateSession(new SessionRequest
-                {
-                    Profile = profile,
-                    Credential = credential,
-                    HostKeyPolicy = new DevTrustHostKeyPolicy(),
-                });
-                await session.ConnectAsync();
-
-                if (session.State != ConnectionState.Connected)
-                {
-                    FailConnect(session.ErrorMessage ?? session.ErrorCode.ToString());
-                    return;
-                }
-
-                _sshSession = session;
-                _sshView = new SshSessionView(session);
-                _sessionArea.Child = _sshView;
-                Connected($"已连接 {host} (SSH)");
-
-                if (Environment.GetEnvironmentVariable("RF_VERIFY") == "1")
-                {
-                    _ = VerifySshTerminalAsync();
-                }
-            }
-            else
+            if (session.State != ConnectionState.Connected)
             {
-                profile.Vnc.ConnectTimeoutSeconds = 15;
-                profile.Vnc.SharedConnection = true;
+                _statusText.Text = $"连接失败：{session.ErrorMessage ?? session.ErrorCode.ToString()}";
+                _statusText.Foreground = Brushes.OrangeRed;
+                return;
+            }
 
-                var credential = new ResolvedCredential
+            _sshSession = session;
+            _sshView = new SshSessionView(session);
+            _sessionArea.Child = _sshView;
+            Title = $"{host} · RemoteFlow";
+            _statusText.Text = $"已连接 {host} (SSH)";
+            _statusText.Foreground = new SolidColorBrush(Color.Parse("#2E8B57"));
+            _connectButton.IsVisible = false;
+            _disconnectButton.IsVisible = true;
+        }
+        else
+        {
+            profile.Vnc.ConnectTimeoutSeconds = 15;
+            profile.Vnc.SharedConnection = true;
+            var session = (VncSession)_vncProvider.CreateSession(new SessionRequest
+            {
+                Profile = profile,
+                Credential = new ResolvedCredential
                 {
                     Type = CredentialType.VncPassword,
                     Username = user ?? string.Empty,
                     Password = pass,
-                };
+                },
+            });
+            await session.ConnectAsync();
 
-                var session = (VncSession)_vncProvider.CreateSession(new SessionRequest
-                {
-                    Profile = profile,
-                    Credential = credential,
-                });
-                await session.ConnectAsync();
-
-                if (session.State != ConnectionState.Connected)
-                {
-                    FailConnect(session.ErrorMessage ?? session.ErrorCode.ToString());
-                    return;
-                }
-
-                _vncSession = session;
-                _vncView = new VncSessionView(session);
-                _sessionArea.Child = _vncView;
-                Connected($"已连接 {host} (VNC)");
-
-                if (Environment.GetEnvironmentVariable("RF_VERIFY") == "1")
-                {
-                    _ = VerifyVncConnectedAsync();
-                }
+            if (session.State != ConnectionState.Connected)
+            {
+                _statusText.Text = $"连接失败：{session.ErrorMessage ?? session.ErrorCode.ToString()}";
+                _statusText.Foreground = Brushes.OrangeRed;
+                return;
             }
-        }
-        catch (Exception ex)
-        {
-            FailConnect(ex.Message);
+
+            _vncSession = session;
+            _vncView = new VncSessionView(session);
+            _sessionArea.Child = _vncView;
+            Title = $"{host} · RemoteFlow";
+            _statusText.Text = $"已连接 {host} (VNC)";
+            _statusText.Foreground = new SolidColorBrush(Color.Parse("#2E8B57"));
+            _connectButton.IsVisible = false;
+            _disconnectButton.IsVisible = true;
         }
     }
 
-    private void Connected(string text)
-    {
-        Console.WriteLine($"[RF] CONNECTED {text}");
-        _statusText.Text = text;
-        _statusText.Foreground = new SolidColorBrush(Color.Parse("#2E8B57"));
-        _connectButton.IsVisible = false;
-        _disconnectButton.IsVisible = true;
-    }
-
-    private void FailConnect(string reason)
-    {
-        Console.WriteLine($"[RF] CONNECT_FAIL {reason}");
-        _statusText.Text = $"连接失败：{reason}";
-        _statusText.Foreground = Brushes.OrangeRed;
-        _connectButton.IsEnabled = true;
-    }
+    private void SetBusy(bool busy) => _connectButton.IsEnabled = !busy;
 
     private async Task DisconnectAsync()
     {
@@ -267,66 +455,9 @@ public sealed class MainWindow : Window
         _connectButton.IsVisible = true;
         _disconnectButton.IsVisible = false;
         _statusText.Text = "";
-        _sessionArea.Child = null;
-    }
-
-    private async Task VerifySshTerminalAsync()
-    {
-        try
-        {
-            await Task.Delay(6000);
-            var text = _sshView is null ? "(no view)" : await _sshView.ReadTerminalTextAsync();
-            Console.WriteLine($"[RF] TERMINAL_TEXT_BEGIN\n{text}\n[RF] TERMINAL_TEXT_END");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[RF] VERIFY_FAIL {ex.GetType().Name}: {ex.Message}");
-        }
-    }
-
-    private async Task VerifyVncConnectedAsync()
-    {
-        try
-        {
-            await Task.Delay(5000);
-            var v = _vncSession;
-            if (v is null)
-            {
-                Console.WriteLine("[RF] VNC_NO_SESSION");
-                return;
-            }
-
-            var size = v.RemoteSize;
-            Console.WriteLine($"[RF] VNC_CONNECTED remote={size.Width}x{size.Height} state={v.State}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[RF] VNC_VERIFY_FAIL {ex.GetType().Name}: {ex.Message}");
-        }
     }
 }
 
-/// <summary>
-/// 开发用 Host Key 策略：首次连接接受并记录、变化时放行。
-/// <b>仅用于可运行骨架</b>——正式确认对话框（首次提示 / 变化强警告）属后续里程碑，
-/// 见技术方案 §7.4。这里记录指纹但不阻断连接。
-/// </summary>
-internal sealed class DevTrustHostKeyPolicy : ISshHostKeyPolicy
-{
-    private string? _remembered;
-
-    public SshHostKeyVerificationContext Lookup(SshHostKeyVerificationContext context) => new()
-    {
-        Host = context.Host,
-        Port = context.Port,
-        KeyAlgorithm = context.KeyAlgorithm,
-        Fingerprint = context.Fingerprint,
-        KnownFingerprint = _remembered,
-    };
-
-    public Task<bool> ConfirmAndRememberAsync(SshHostKeyVerificationContext context, CancellationToken ct)
-    {
-        _remembered = context.Fingerprint;
-        return Task.FromResult(true);
-    }
-}
+/// <summary>新建连接对话框的结果。</summary>
+public sealed record ConnectionDialogResult(
+    string Name, string Host, int Port, ProtocolType Protocol, string Username, string Password);
