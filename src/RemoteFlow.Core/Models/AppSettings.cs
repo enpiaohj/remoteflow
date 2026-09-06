@@ -112,6 +112,15 @@ public sealed class AppSettings
     public int SshDefaultKeepAliveSeconds { get; set; } = 30;
     public string SshDefaultTerminalType { get; set; } = "xterm-256color";
 
+    /// <summary>SSH 终端配色主题。默认 Dark Gray（深灰）。</summary>
+    public SshTerminalTheme SshTerminalTheme { get; set; } = SshTerminalTheme.DarkGray;
+
+    /// <summary>多行粘贴时先确认，避免误把多行命令直接执行。</summary>
+    public bool SshConfirmMultilinePaste { get; set; } = true;
+
+    /// <summary>大文本粘贴时先警告。</summary>
+    public bool SshWarnLargePaste { get; set; } = true;
+
     // ── VNC 默认值 ────────────────────────────────────────
     public VncScaleMode VncDefaultScaleMode { get; set; } = VncScaleMode.FitToWindow;
     public bool VncDefaultViewOnly { get; set; }

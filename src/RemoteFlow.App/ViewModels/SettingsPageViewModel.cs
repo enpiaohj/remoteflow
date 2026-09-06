@@ -42,6 +42,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     public sealed record HomeTimeOrderOption(HomeTimeOrder Value, string Name, string Sample);
 
+    public sealed record SshTerminalThemeOption(SshTerminalTheme Value, string Label);
+
     private const string StartupRegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string StartupValueName = "RemoteFlow";
 
@@ -235,7 +237,31 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     [ObservableProperty]
     private string _sshTerminalType = string.Empty;
 
+    [ObservableProperty]
+    private string _sshEncoding = string.Empty;
+
+    [ObservableProperty]
+    private SshTerminalThemeOption _selectedSshTerminalTheme = null!;
+
+    [ObservableProperty]
+    private bool _sshConfirmMultilinePaste;
+
+    [ObservableProperty]
+    private bool _sshWarnLargePaste;
+
     public IReadOnlyList<string> TerminalTypeOptions { get; } = ["xterm-256color", "xterm", "vt100", "linux"];
+
+    public IReadOnlyList<string> SshEncodingOptions { get; } = ["UTF-8", "GBK", "GB18030", "Big5", "ISO-8859-1"];
+
+    public IReadOnlyList<SshTerminalThemeOption> SshTerminalThemeOptions { get; } =
+    [
+        new(SshTerminalTheme.FollowApp, "跟随应用"),
+        new(SshTerminalTheme.DarkGray, "Dark Gray"),
+        new(SshTerminalTheme.Black, "Black"),
+        new(SshTerminalTheme.Navy, "Navy"),
+        new(SshTerminalTheme.SolarizedDark, "Solarized Dark"),
+        new(SshTerminalTheme.Light, "Light"),
+    ];
 
     public IReadOnlyList<int> FontSizeOptions { get; } = [11, 12, 13, 14, 15, 16, 18, 20];
 
@@ -303,6 +329,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         SshFontSize = _settings.SshFontSize;
         SshKeepAliveSeconds = _settings.SshDefaultKeepAliveSeconds;
         SshTerminalType = _settings.SshDefaultTerminalType;
+        SshEncoding = string.IsNullOrWhiteSpace(_settings.SshDefaultEncoding) ? "UTF-8" : _settings.SshDefaultEncoding;
+        SelectedSshTerminalTheme = SshTerminalThemeOptions.First(o => o.Value == _settings.SshTerminalTheme);
+        SshConfirmMultilinePaste = _settings.SshConfirmMultilinePaste;
+        SshWarnLargePaste = _settings.SshWarnLargePaste;
 
         VncFitToWindow = _settings.VncDefaultScaleMode == VncScaleMode.FitToWindow;
         VncViewOnly = _settings.VncDefaultViewOnly;
@@ -495,6 +525,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     partial void OnSshFontSizeChanged(int value) => Save();
     partial void OnSshKeepAliveSecondsChanged(int value) => Save();
     partial void OnSshTerminalTypeChanged(string value) => Save();
+    partial void OnSshEncodingChanged(string value) => Save();
+    partial void OnSelectedSshTerminalThemeChanged(SshTerminalThemeOption value) => Save();
+    partial void OnSshConfirmMultilinePasteChanged(bool value) => Save();
+    partial void OnSshWarnLargePasteChanged(bool value) => Save();
     partial void OnVncFitToWindowChanged(bool value) => Save();
     partial void OnVncViewOnlyChanged(bool value) => Save();
     partial void OnVncSharedConnectionChanged(bool value) => Save();
@@ -522,6 +556,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         _settings.SshFontSize = SshFontSize;
         _settings.SshDefaultKeepAliveSeconds = SshKeepAliveSeconds;
         _settings.SshDefaultTerminalType = SshTerminalType;
+        _settings.SshDefaultEncoding = SshEncoding;
+        _settings.SshTerminalTheme = SelectedSshTerminalTheme.Value;
+        _settings.SshConfirmMultilinePaste = SshConfirmMultilinePaste;
+        _settings.SshWarnLargePaste = SshWarnLargePaste;
 
         _settings.VncDefaultScaleMode = VncFitToWindow ? VncScaleMode.FitToWindow : VncScaleMode.Original;
         _settings.VncDefaultViewOnly = VncViewOnly;

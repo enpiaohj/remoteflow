@@ -87,6 +87,14 @@
             <Setter Property="Orientation" Value="Horizontal" />
             <Setter Property="Margin" Value="0,0,0,12" />
         </Style>
+
+        <!-- 卡片内分区小标题：RDP/SSH 设置按 Section 归组用 -->
+        <Style x:Key="Settings.SectionHeader" TargetType="TextBlock" BasedOn="{StaticResource Text.Label}">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,4,0,8" />
+        </Style>
     </UserControl.Resources>
 
     <!-- 概念图中设置卡片铺满内容区（实测占内容宽 92%），标题靠左、控件靠右，
@@ -471,22 +479,29 @@
                     <TextBlock Text="新建 RDP 连接时的默认值" Style="{StaticResource Text.BodySecondary}" Margin="0,0,0,12" />
                     <Border Style="{StaticResource Surface.Card}" Padding="24,20">
                         <StackPanel>
+                            <!-- 显示 -->
+                            <TextBlock Text="显示" Style="{StaticResource Settings.SectionHeader}" />
                             <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding RdpFitToWindow}">
                                 <StackPanel>
                                     <TextBlock Text="画面适应窗口" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="窗口尺寸变化时动态调整远程分辨率" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
                             </CheckBox>
-                            <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding RdpRedirectClipboard}" Margin="0,10,0,0"
-                                      Content="启用剪贴板重定向" />
-                            <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding RdpRedirectAudio}" Margin="0,10,0,0"
-                                      Content="将远程音频播放到本机" />
                             <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding RdpUseMultimon}" Margin="0,10,0,0">
                                 <StackPanel>
                                     <TextBlock Text="使用全部显示器" Style="{StaticResource Text.Body}" />
                                     <TextBlock Text="增强项：部分服务器或控件版本可能不支持" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
                             </CheckBox>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <!-- 本地资源 -->
+                            <TextBlock Text="本地资源" Style="{StaticResource Settings.SectionHeader}" />
+                            <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding RdpRedirectClipboard}"
+                                      Content="启用剪贴板重定向" />
+                            <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding RdpRedirectAudio}" Margin="0,10,0,0"
+                                      Content="将远程音频播放到本机" />
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -496,6 +511,8 @@
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Ssh}">
                     <Border Style="{StaticResource Surface.Card}" Padding="24,20">
                         <StackPanel>
+                            <!-- 终端外观 -->
+                            <TextBlock Text="终端外观" Style="{StaticResource Settings.SectionHeader}" />
                             <Grid Style="{StaticResource SettingRow}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -515,7 +532,31 @@
                                           ItemsSource="{Binding FontSizeOptions}" SelectedItem="{Binding SshFontSize}" />
                             </Grid>
 
-                            <Grid Style="{StaticResource SettingRow}" Margin="0,12,0,4">
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="终端主题" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="配色跟随选择的终端主题。" Style="{StaticResource Text.Caption}"
+                                               TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding SshTerminalThemeOptions}" SelectedItem="{Binding SelectedSshTerminalTheme}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <!-- 终端默认值 -->
+                            <TextBlock Text="终端默认值" Style="{StaticResource Settings.SectionHeader}" />
+                            <Grid Style="{StaticResource SettingRow}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="200" />
@@ -523,6 +564,16 @@
                                 <TextBlock Grid.Column="0" Text="终端类型" Style="{StaticResource Text.Body}" VerticalAlignment="Center" />
                                 <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}"
                                           ItemsSource="{Binding TerminalTypeOptions}" SelectedItem="{Binding SshTerminalType}" />
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,12,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="字符编码" Style="{StaticResource Text.Body}" VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}"
+                                          ItemsSource="{Binding SshEncodingOptions}" SelectedItem="{Binding SshEncoding}" />
                             </Grid>
 
                             <Grid Style="{StaticResource SettingRow}" Margin="0,12,0,0">
@@ -537,6 +588,40 @@
                                 </StackPanel>
                                 <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
                                          Text="{Binding SshKeepAliveSeconds, UpdateSourceTrigger=LostFocus}" />
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <!-- 交互安全 -->
+                            <TextBlock Text="交互安全" Style="{StaticResource Settings.SectionHeader}" />
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="多行粘贴时确认" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="粘贴多行命令前先弹窗确认，避免误把多行命令直接执行。" Style="{StaticResource Text.Caption}"
+                                               TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
+                                          IsChecked="{Binding SshConfirmMultilinePaste}" />
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="大文本粘贴时警告" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="粘贴大量文本前先警告，防止误把超长内容刷进终端。" Style="{StaticResource Text.Caption}"
+                                               TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
+                                          IsChecked="{Binding SshWarnLargePaste}" />
                             </Grid>
                         </StackPanel>
                     </Border>

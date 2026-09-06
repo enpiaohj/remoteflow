@@ -167,3 +167,27 @@ public enum LandingPage
     Recent = 3,
     Credentials = 4
 }
+
+/// <summary>
+/// SSH 终端配色主题。作为「设置 → SSH」的全局默认，新建会话时套用。
+/// </summary>
+public enum SshTerminalTheme
+{
+    /// <summary>跟随应用主题（System / Light / Dark 的当前实际生效主题）。</summary>
+    FollowApp = 0,
+
+    /// <summary>Dark Gray（深灰，默认）：Background #1E1E1E，Foreground #D4D4D4。</summary>
+    DarkGray = 1,
+
+    /// <summary>纯黑背景。</summary>
+    Black = 2,
+
+    /// <summary>Navy（深蓝）。</summary>
+    Navy = 3,
+
+    /// <summary>Solarized Dark。</summary>
+    SolarizedDark = 4,
+
+    /// <summary>浅色。</summary>
+    Light = 5
+}
