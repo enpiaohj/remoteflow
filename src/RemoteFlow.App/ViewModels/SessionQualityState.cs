@@ -241,9 +241,19 @@ public sealed partial class SessionQualityState : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>取消进行中的探测并释放订阅。幂等。</summary>
+    private bool _disposed;
+
+    /// <summary>取消进行中的探测并释放订阅。幂等——退出清理时本对象会被 dispose 两次
+    /// （App.OnExit 显式 dispose MainViewModel + 容器兜底 dispose），无守卫会在
+    /// 已释放的 <see cref="_lifetimeCts"/> 上再次 Cancel 抛 ObjectDisposedException。</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _tab.PropertyChanged -= OnTabPropertyChanged;
         _lifetimeCts.Cancel();
         _lifetimeCts.Dispose();

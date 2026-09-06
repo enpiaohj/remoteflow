@@ -391,8 +391,17 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         ActionRequested?.Invoke(this, SessionAction.EnterFullScreen);
     }
 
+    private bool _disposed;
+
+    /// <summary>幂等：退出清理路径会对本对象 dispose 两次（见 <see cref="SessionQualityState.Dispose"/>）。</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         Session.StateChanged -= OnSessionStateChanged;
         Quality.PropertyChanged -= OnQualityPropertyChanged;
         Quality.Dispose();

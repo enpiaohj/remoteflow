@@ -642,8 +642,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task CloseAllSessionsAsync() => await _sessions.CloseAllAsync();
 
+    private bool _disposed;
+
+    /// <summary>幂等：App.OnExit 先显式 dispose 本对象，容器 DisposeAsync 兜底时又会 dispose 一次（单例）。</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _sessions.SessionCreated -= OnSessionCreated;
         _sessions.SessionClosed -= OnSessionClosed;
         _sessions.SessionsChanged -= OnSessionsChanged;
