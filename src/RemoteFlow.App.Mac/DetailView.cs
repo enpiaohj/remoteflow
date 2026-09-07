@@ -593,52 +593,89 @@ public sealed class DetailView : NSView
 
     // ── 首页 ────────────────────────────────────────────────────
 
+    private const int HomeWidth = 900;
+    private const int HomeColWidth = 438; // (HomeWidth - 24 间距) / 2
+
     private NSView BuildHome(HomePageViewModel vm)
     {
-        var stack = new NSStackView
+        var col = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
-            Spacing = 6,
-            EdgeInsets = new NSEdgeInsets(40, 44, 32, 44),
+            Spacing = 0,
+            EdgeInsets = new NSEdgeInsets(34, 40, 32, 40),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
-        stack.AddArrangedSubview(Big(string.IsNullOrEmpty(vm.Greeting) ? "欢迎" : vm.Greeting, 28));
-        stack.AddArrangedSubview(Muted(vm.DateLine ?? "", 13));
-        stack.AddArrangedSubview(Muted($"{vm.TotalConnections} 个连接  ·  {vm.ConnectedSessions} 个会话已连接", 12));
-        stack.AddArrangedSubview(Gap(20));
 
-        if (!vm.HasFavorites && !vm.HasRecent)
+        // 问候 + 日期 + 时钟 + 统计
+        col.AddArrangedSubview(Big(string.IsNullOrEmpty(vm.Greeting) ? "欢迎" : vm.Greeting, 28));
+        col.AddArrangedSubview(Gap(3));
+        col.AddArrangedSubview(Styled(vm.DateLine ?? "", 13, NSFontWeight.Regular, NSColor.TertiaryLabel));
+        if (vm.HasClockLine)
         {
-            var newBtn = NSButton.CreateButton("新建连接", () => NewConnectionRequested?.Invoke(this, EventArgs.Empty));
-            newBtn.BezelStyle = NSBezelStyle.Rounded;
-            newBtn.ControlSize = NSControlSize.Large;
-            newBtn.KeyEquivalent = "\r";
-            stack.AddArrangedSubview(Muted(vm.IsFirstRun ? "还没有连接。新建一个开始。" : "收藏或连接过的设备会出现在这里。", 13));
-            stack.AddArrangedSubview(Gap(6));
-            stack.AddArrangedSubview(newBtn);
-            return TopAligned(stack);
+            col.AddArrangedSubview(Gap(2));
+            var clock = Styled(vm.ClockLine ?? "", 12, NSFontWeight.Regular, NSColor.SecondaryLabel);
+            clock.Font = NSFont.MonospacedSystemFont(12, NSFontWeight.Regular);
+            col.AddArrangedSubview(clock);
+        }
+        col.AddArrangedSubview(Gap(7));
+        col.AddArrangedSubview(Muted($"{vm.TotalConnections} 个连接  ·  {vm.ConnectedSessions} 个会话已连接", 12));
+        col.AddArrangedSubview(Gap(22));
+
+        if (vm.IsFirstRun)
+        {
+            col.AddArrangedSubview(HomeFirstRunCard());
+            col.AddArrangedSubview(Gap(20));
         }
 
-        if (vm.HasFavorites)
-        {
-            stack.AddArrangedSubview(HomeSectionHeader("收藏",
-                vm.FavoriteItems.Count > 6 ? () => vm.ViewAllFavoritesCommand.Execute(null) : null));
-            stack.AddArrangedSubview(HomeListPanel(vm.FavoriteItems.Take(6)));
-            stack.AddArrangedSubview(Gap(18));
-        }
-
+        // 最近连接：一排大卡片
         if (vm.HasRecent)
         {
-            stack.AddArrangedSubview(HomeSectionHeader("最近连接",
-                vm.RecentItems.Count > 6 ? () => vm.ViewAllRecentCommand.Execute(null) : null));
-            stack.AddArrangedSubview(HomeListPanel(vm.RecentItems.Take(6)));
+            col.AddArrangedSubview(HomeSectionHeader("最近连接", () => vm.ViewAllRecentCommand.Execute(null)));
+            col.AddArrangedSubview(Gap(10));
+            var cardsRow = new NSStackView
+            {
+                Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+                Alignment = NSLayoutAttribute.Top,
+                Spacing = 12,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
+            foreach (var r in vm.RecentItems.Take(3))
+            {
+                cardsRow.AddArrangedSubview(HomeRecentCard(r));
+            }
+            col.AddArrangedSubview(cardsRow);
+            col.AddArrangedSubview(Gap(24));
         }
 
-        return TopAligned(stack);
-    }
+        // 收藏 / 最近活动 两列
+        var twoCol = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.Top,
+            Spacing = 24,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        twoCol.AddArrangedSubview(HomeColumnCard("收藏", "star",
+            vm.HasFavorites ? vm.FavoriteItems.Select(HomeFavRow) : null,
+            "还没有收藏的连接。在「我的连接」里点星标即可加入。",
+            () => vm.ViewAllFavoritesCommand.Execute(null), "管理收藏"));
+        twoCol.AddArrangedSubview(HomeColumnCard("最近活动", "clock.arrow.circlepath",
+            vm.HasActivity ? vm.RecentHistory.Select(HomeActivityRow) : null,
+            "还没有连接记录。",
+            () => vm.ViewAllActivityCommand.Execute(null), "查看所有活动"));
+        twoCol.WidthAnchor.ConstraintEqualTo(HomeWidth).Active = true;
+        col.AddArrangedSubview(twoCol);
 
-    private const int PanelWidth = 380;
+        if (vm.ShowSecurityTip)
+        {
+            col.AddArrangedSubview(Gap(20));
+            col.AddArrangedSubview(HomeSecurityCard(() => vm.DismissSecurityTipCommand.Execute(null)));
+        }
+
+        col.AddArrangedSubview(Gap(24));
+        return ScrollHost(col);
+    }
 
     private static NSView HomeSectionHeader(string title, Action? viewAll)
     {
@@ -652,102 +689,346 @@ public sealed class DetailView : NSView
         row.AddArrangedSubview(SectionLabel(title));
         if (viewAll is not null)
         {
+            var spacer = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+            spacer.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
             var link = NSButton.CreateButton("查看全部", () => viewAll());
             link.Bordered = false;
             link.ContentTintColor = NSColor.ControlAccent;
             link.Font = NSFont.SystemFontOfSize(11);
-            row.AddArrangedSubview(new NSView());
+            row.AddArrangedSubview(spacer);
             row.AddArrangedSubview(link);
         }
-        row.WidthAnchor.ConstraintEqualTo(PanelWidth).Active = true;
+        row.WidthAnchor.ConstraintEqualTo(HomeWidth).Active = true;
         return row;
     }
 
-    /// <summary>首页分组卡：圆角浅底 + 细分隔线，每行整行可点打开、悬停浅底。</summary>
-    private NSView HomeListPanel(IEnumerable<ConnectionItemViewModel> items)
+    /// <summary>最近连接的大卡片：协议色左条 + 图标块 + 名称 / 主机 / 协议徽章。整卡可点。</summary>
+    private NSView HomeRecentCard(ConnectionItemViewModel c)
     {
-        const int rowH = 46;
-        var list = items.ToArray();
-
-        var panel = Card();
-        panel.WidthAnchor.ConstraintEqualTo(PanelWidth).Active = true;
-        panel.HeightAnchor.ConstraintEqualTo(rowH * list.Length).Active = true;
-
-        for (var i = 0; i < list.Length; i++)
+        var card = new TapRow(() => ConnectRequested?.Invoke(this, c));
+        var border = new CardView(() => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.06f),
+            () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f), 10);
+        card.AddSubview(border);
+        var w = (HomeWidth - 24) / 3;
+        NSLayoutConstraint.ActivateConstraints(new[]
         {
-            var c = list[i];
-            var row = BuildHomeRow(c);
-            panel.AddSubview(row);
-            var top = i * rowH;
-            NSLayoutConstraint.ActivateConstraints(new[]
-            {
-                row.LeadingAnchor.ConstraintEqualTo(panel.LeadingAnchor, 4),
-                row.TrailingAnchor.ConstraintEqualTo(panel.TrailingAnchor, -4),
-                row.TopAnchor.ConstraintEqualTo(panel.TopAnchor, top + 3),
-                row.HeightAnchor.ConstraintEqualTo(rowH - 6),
-            });
+            card.WidthAnchor.ConstraintEqualTo(w),
+            card.HeightAnchor.ConstraintEqualTo(104),
+            border.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor),
+            border.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor),
+            border.TopAnchor.ConstraintEqualTo(card.TopAnchor),
+            border.BottomAnchor.ConstraintEqualTo(card.BottomAnchor),
+        });
 
-            if (i > 0)
-            {
-                var sep = Hairline();
-                panel.AddSubview(sep);
-                NSLayoutConstraint.ActivateConstraints(new[]
-                {
-                    sep.LeadingAnchor.ConstraintEqualTo(panel.LeadingAnchor, 42),
-                    sep.TrailingAnchor.ConstraintEqualTo(panel.TrailingAnchor),
-                    sep.TopAnchor.ConstraintEqualTo(panel.TopAnchor, top),
-                    sep.HeightAnchor.ConstraintEqualTo(1),
-                });
-            }
-        }
+        var tint = ProtocolStyle.Tint(c.Profile.Protocol);
+        var bar = new CardView(() => tint, cornerRadius: 1.5f);
+        var tile = IconTile(c.Profile.Protocol);
+        var name = Plain(c.Name, 14);
+        name.Font = NSFont.SystemFontOfSize(14, NSFontWeight.Semibold);
+        name.LineBreakMode = NSLineBreakMode.TruncatingTail;
+        var host = Muted(c.HostDisplay, 11);
+        host.Font = NSFont.MonospacedSystemFont(11, NSFontWeight.Regular);
+        var badge = ProtocolStyle.Badge(c.Profile.Protocol, c.ProtocolName);
 
-        return panel;
+        var txt = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 3,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        txt.AddArrangedSubview(name);
+        txt.AddArrangedSubview(host);
+        txt.AddArrangedSubview(badge);
+
+        card.AddSubview(bar);
+        card.AddSubview(tile);
+        card.AddSubview(txt);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            bar.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor),
+            bar.TopAnchor.ConstraintEqualTo(card.TopAnchor, 16),
+            bar.BottomAnchor.ConstraintEqualTo(card.BottomAnchor, -16),
+            bar.WidthAnchor.ConstraintEqualTo(3),
+            tile.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor, 16),
+            tile.CenterYAnchor.ConstraintEqualTo(card.CenterYAnchor),
+            txt.LeadingAnchor.ConstraintEqualTo(tile.TrailingAnchor, 12),
+            txt.TrailingAnchor.ConstraintLessThanOrEqualTo(card.TrailingAnchor, -12),
+            txt.CenterYAnchor.ConstraintEqualTo(card.CenterYAnchor),
+        });
+        return card;
     }
 
-    private NSView BuildHomeRow(ConnectionItemViewModel c)
+    /// <summary>收藏 / 最近活动列卡：标题行 + 「查看全部」 + 滚动列表 / 空态。</summary>
+    private NSView HomeColumnCard(string title, string symbol, IEnumerable<NSView>? rows, string emptyText,
+        Action viewAll, string footerText)
     {
-        var icon = new NSImageView
+        var card = Card();
+        card.WidthAnchor.ConstraintEqualTo(HomeColWidth).Active = true;
+        card.HeightAnchor.ConstraintEqualTo(440).Active = true;
+
+        var head = new NSStackView
         {
-            Image = ProtocolStyle.Symbol(c.Profile.Protocol),
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.CenterY,
+            Spacing = 7,
             TranslatesAutoresizingMaskIntoConstraints = false,
-            ContentTintColor = ProtocolStyle.Tint(c.Profile.Protocol),
-            SymbolConfiguration = NSImageSymbolConfiguration.Create(15, NSFontWeight.Regular),
         };
-        var col = new NSStackView
+        head.AddArrangedSubview(new NSImageView
+        {
+            Image = NSImage.GetSystemSymbol(symbol, null),
+            ContentTintColor = NSColor.SecondaryLabel,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+            SymbolConfiguration = NSImageSymbolConfiguration.Create(12, NSFontWeight.Regular),
+        });
+        head.AddArrangedSubview(SectionLabel(title));
+        var hspacer = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        hspacer.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
+        head.AddArrangedSubview(hspacer);
+        var link = NSButton.CreateButton("查看全部", () => viewAll());
+        link.Bordered = false;
+        link.ContentTintColor = NSColor.ControlAccent;
+        link.Font = NSFont.SystemFontOfSize(11);
+        head.AddArrangedSubview(link);
+
+        NSView body;
+        var rowList = rows?.ToArray();
+        if (rowList is { Length: > 0 })
+        {
+            var listStack = new NSStackView
+            {
+                Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+                Alignment = NSLayoutAttribute.Leading,
+                Spacing = 2,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
+            foreach (var r in rowList)
+            {
+                listStack.AddArrangedSubview(r);
+                r.WidthAnchor.ConstraintEqualTo(listStack.WidthAnchor).Active = true;
+            }
+
+            var doc = new FlippedHost { TranslatesAutoresizingMaskIntoConstraints = false };
+            doc.AddSubview(listStack);
+            NSLayoutConstraint.ActivateConstraints(new[]
+            {
+                listStack.LeadingAnchor.ConstraintEqualTo(doc.LeadingAnchor),
+                listStack.TrailingAnchor.ConstraintEqualTo(doc.TrailingAnchor),
+                listStack.TopAnchor.ConstraintEqualTo(doc.TopAnchor),
+                listStack.BottomAnchor.ConstraintEqualTo(doc.BottomAnchor),
+            });
+            var scroll = new NSScrollView
+            {
+                DocumentView = doc,
+                DrawsBackground = false,
+                HasVerticalScroller = true,
+                AutohidesScrollers = true,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
+            doc.WidthAnchor.ConstraintEqualTo(scroll.ContentView.WidthAnchor).Active = true;
+            body = scroll;
+        }
+        else
+        {
+            var e = Muted(emptyText, 12);
+            e.LineBreakMode = NSLineBreakMode.ByWordWrapping;
+            e.PreferredMaxLayoutWidth = HomeColWidth - 32;
+            body = e;
+        }
+
+        var footSep = Hairline();
+        var foot = NSButton.CreateButton(footerText, () => viewAll());
+        foot.Bordered = false;
+        foot.ContentTintColor = NSColor.SecondaryLabel;
+        foot.Font = NSFont.SystemFontOfSize(12);
+
+        card.AddSubview(head);
+        card.AddSubview(body);
+        card.AddSubview(footSep);
+        card.AddSubview(foot);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            head.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor, 16),
+            head.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor, -14),
+            head.TopAnchor.ConstraintEqualTo(card.TopAnchor, 14),
+            body.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor, 10),
+            body.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor, -8),
+            body.TopAnchor.ConstraintEqualTo(head.BottomAnchor, 10),
+            body.BottomAnchor.ConstraintEqualTo(footSep.TopAnchor, -6),
+            footSep.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor, 12),
+            footSep.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor, -12),
+            footSep.HeightAnchor.ConstraintEqualTo(1),
+            footSep.BottomAnchor.ConstraintEqualTo(foot.TopAnchor, -6),
+            foot.CenterXAnchor.ConstraintEqualTo(card.CenterXAnchor),
+            foot.BottomAnchor.ConstraintEqualTo(card.BottomAnchor, -8),
+        });
+        return card;
+    }
+
+    private NSView HomeFavRow(ConnectionItemViewModel c)
+    {
+        var tile = IconTile(c.Profile.Protocol);
+        tile.WidthAnchor.ConstraintEqualTo(30).Active = true;
+        tile.HeightAnchor.ConstraintEqualTo(30).Active = true;
+
+        var name = Plain(c.Name, 12);
+        name.LineBreakMode = NSLineBreakMode.TruncatingTail;
+        var host = Muted(c.HostDisplay, 10);
+        var stack = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
             Spacing = 1,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
-        col.AddArrangedSubview(Plain(c.Name, 13));
-        col.AddArrangedSubview(Muted(c.HostDisplay, 11));
-
-        var chevron = new NSImageView
-        {
-            Image = NSImage.GetSystemSymbol("chevron.right", null),
-            ContentTintColor = NSColor.TertiaryLabel,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-            SymbolConfiguration = NSImageSymbolConfiguration.Create(11, NSFontWeight.Semibold),
-        };
+        stack.AddArrangedSubview(name);
+        stack.AddArrangedSubview(host);
 
         var row = new TapRow(() => ConnectRequested?.Invoke(this, c)) { TranslatesAutoresizingMaskIntoConstraints = false };
-        row.AddSubview(icon);
-        row.AddSubview(col);
-        row.AddSubview(chevron);
+        row.AddSubview(tile);
+        row.AddSubview(stack);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
-            icon.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor, 10),
-            icon.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
-            icon.WidthAnchor.ConstraintEqualTo(20),
-            col.LeadingAnchor.ConstraintEqualTo(icon.TrailingAnchor, 9),
-            col.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
-            chevron.LeadingAnchor.ConstraintGreaterThanOrEqualTo(col.TrailingAnchor, 8),
-            chevron.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor, -12),
-            chevron.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
+            row.HeightAnchor.ConstraintEqualTo(46),
+            tile.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor, 8),
+            tile.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
+            stack.LeadingAnchor.ConstraintEqualTo(tile.TrailingAnchor, 10),
+            stack.TrailingAnchor.ConstraintLessThanOrEqualTo(row.TrailingAnchor, -8),
+            stack.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
         });
         return row;
     }
+
+    private static NSView HomeActivityRow(HistoryItemViewModel h)
+    {
+        var tile = IconTile(h.Protocol);
+        tile.WidthAnchor.ConstraintEqualTo(30).Active = true;
+        tile.HeightAnchor.ConstraintEqualTo(30).Active = true;
+
+        var title = Plain(h.ActivityText, 12);
+        title.LineBreakMode = NSLineBreakMode.TruncatingTail;
+        var sub = Muted(h.HostProtocolLine, 10);
+        var stack = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 1,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        stack.AddArrangedSubview(title);
+        stack.AddArrangedSubview(sub);
+
+        var when = Styled(h.StartedAtDisplay, 10, NSFontWeight.Regular, NSColor.TertiaryLabel);
+
+        var row = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        row.AddSubview(tile);
+        row.AddSubview(stack);
+        row.AddSubview(when);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            row.HeightAnchor.ConstraintEqualTo(46),
+            tile.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor, 8),
+            tile.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
+            stack.LeadingAnchor.ConstraintEqualTo(tile.TrailingAnchor, 10),
+            stack.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
+            when.LeadingAnchor.ConstraintGreaterThanOrEqualTo(stack.TrailingAnchor, 6),
+            when.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor, -8),
+            when.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
+        });
+        return row;
+    }
+
+    private NSView HomeFirstRunCard()
+    {
+        var card = Card();
+        card.WidthAnchor.ConstraintEqualTo(HomeWidth).Active = true;
+
+        var t = Big("欢迎使用 RemoteFlow", 15);
+        t.Font = NSFont.SystemFontOfSize(15, NSFontWeight.Semibold);
+        var b = Muted("把 RDP、SSH、VNC 连接统一到一个工作台。先新建一个连接，或从设置的「数据与备份」导入既有清单。", 12);
+        b.LineBreakMode = NSLineBreakMode.ByWordWrapping;
+        b.PreferredMaxLayoutWidth = HomeWidth - 48;
+        var s = Styled("密码与私钥由 macOS 钥匙串加密保存，不写入连接库，也不随导出文件带走。", 11, NSFontWeight.Regular, NSColor.TertiaryLabel);
+        s.LineBreakMode = NSLineBreakMode.ByWordWrapping;
+        s.PreferredMaxLayoutWidth = HomeWidth - 48;
+        var newBtn = NSButton.CreateButton("新建连接", () => NewConnectionRequested?.Invoke(this, EventArgs.Empty));
+        newBtn.BezelStyle = NSBezelStyle.Rounded;
+        newBtn.KeyEquivalent = "\r";
+
+        var stack = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 8,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        stack.AddArrangedSubview(t);
+        stack.AddArrangedSubview(b);
+        stack.AddArrangedSubview(s);
+        stack.AddArrangedSubview(Gap(4));
+        stack.AddArrangedSubview(newBtn);
+
+        card.AddSubview(stack);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            stack.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor, 22),
+            stack.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor, -22),
+            stack.TopAnchor.ConstraintEqualTo(card.TopAnchor, 20),
+            stack.BottomAnchor.ConstraintEqualTo(card.BottomAnchor, -20),
+        });
+        return card;
+    }
+
+    private static NSView HomeSecurityCard(Action dismiss)
+    {
+        var card = new CardView(() => NSColor.SystemBlue.ColorWithAlphaComponent(0.09f),
+            () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f), 10);
+        card.WidthAnchor.ConstraintEqualTo(HomeWidth).Active = true;
+
+        var icon = new NSImageView
+        {
+            Image = NSImage.GetSystemSymbol("shield.lefthalf.filled", null),
+            ContentTintColor = NSColor.SystemBlue,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+            SymbolConfiguration = NSImageSymbolConfiguration.Create(15, NSFontWeight.Regular),
+        };
+        var t = Plain("安全提示", 12);
+        t.Font = NSFont.SystemFontOfSize(12, NSFontWeight.Semibold);
+        var b = Muted("定期更新密码，并为关键账号启用双因素认证。", 11);
+        b.LineBreakMode = NSLineBreakMode.ByWordWrapping;
+        b.PreferredMaxLayoutWidth = HomeWidth - 100;
+        var txt = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 2,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        txt.AddArrangedSubview(t);
+        txt.AddArrangedSubview(b);
+
+        var close = NSButton.CreateButton(string.Empty, () => dismiss());
+        close.Bordered = false;
+        close.Image = NSImage.GetSystemSymbol("xmark", null);
+        close.ContentTintColor = NSColor.SecondaryLabel;
+        close.SymbolConfiguration = NSImageSymbolConfiguration.Create(10, NSFontWeight.Bold);
+
+        card.AddSubview(icon);
+        card.AddSubview(txt);
+        card.AddSubview(close);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            icon.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor, 16),
+            icon.CenterYAnchor.ConstraintEqualTo(card.CenterYAnchor),
+            txt.LeadingAnchor.ConstraintEqualTo(icon.TrailingAnchor, 12),
+            txt.TopAnchor.ConstraintEqualTo(card.TopAnchor, 13),
+            txt.BottomAnchor.ConstraintEqualTo(card.BottomAnchor, -13),
+            close.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor, -12),
+            close.CenterYAnchor.ConstraintEqualTo(card.CenterYAnchor),
+        });
+        return card;
+    }
+
 
     /// <summary>整行可点（打开连接）+ 悬停浅底。</summary>
     private sealed class TapRow : NSView
@@ -930,18 +1211,6 @@ public sealed class DetailView : NSView
         return host;
     }
 
-    private static NSView TopAligned(NSView stack)
-    {
-        var host = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
-        host.AddSubview(stack);
-        NSLayoutConstraint.ActivateConstraints(new[]
-        {
-            stack.LeadingAnchor.ConstraintEqualTo(host.LeadingAnchor),
-            stack.TrailingAnchor.ConstraintLessThanOrEqualTo(host.TrailingAnchor),
-            stack.TopAnchor.ConstraintEqualTo(host.TopAnchor),
-        });
-        return host;
-    }
 
     /// <summary>
     /// 圆角分组卡 / 分隔线容器。裸 CALayer 的 CGColor 在构造时就冻结，明暗切换不跟随

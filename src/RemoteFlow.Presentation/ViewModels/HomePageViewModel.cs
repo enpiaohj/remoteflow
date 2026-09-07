@@ -470,6 +470,11 @@ public sealed class HistoryItemViewModel(ConnectionHistoryEntry entry)
 
     /// <summary>失败 / 取消才需要在图标块上打状态点，成功是常态不必强调。</summary>
     public bool ShowResultBadge => entry.Result != ConnectionResult.Success;
+
+    /// <summary>原始协议 / 结果，供非 WPF 前端（macOS）取色 / 取符号用。</summary>
+    public ProtocolType Protocol => entry.Protocol;
+
+    public bool Succeeded => entry.Result == ConnectionResult.Success;
 }
 
 /// <summary>首页行右键动作取值。<see cref="HomePageViewModel.ConnectionActionRequested"/> 分发的动作名。</summary>
