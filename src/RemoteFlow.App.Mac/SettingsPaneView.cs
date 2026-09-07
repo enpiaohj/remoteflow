@@ -197,7 +197,6 @@ public sealed class SettingsPaneView : NSView
             col.TrailingAnchor.ConstraintEqualTo(box.TrailingAnchor),
             col.TopAnchor.ConstraintEqualTo(box.TopAnchor),
             col.BottomAnchor.ConstraintEqualTo(box.BottomAnchor),
-            box.WidthAnchor.ConstraintGreaterThanOrEqualTo(600),
         });
         return box;
     }
@@ -352,14 +351,16 @@ public sealed class SettingsPaneView : NSView
         };
 
         return Page(
-            Row("主题", theme),
-            Row("默认页面", landing),
-            Check("登录时自动启动 RemoteFlow", _vm.LaunchOnStartup, v => _vm.LaunchOnStartup = v),
-            Check("关闭窗口时最小化到菜单栏而非退出", _vm.MinimizeToTrayOnClose, v => _vm.MinimizeToTrayOnClose = v),
-            Gap(8),
-            SectionLabel("分组"),
-            protect,
-            protectHint);
+            Card("外观与行为", "paintbrush",
+                "主题会应用到所有页面；默认页面决定每次启动后先落在哪儿。",
+                Row("主题", theme),
+                Row("默认页面", landing),
+                Check("登录时自动启动 RemoteFlow", _vm.LaunchOnStartup, v => _vm.LaunchOnStartup = v),
+                Check("关闭窗口时最小化到菜单栏而非退出", _vm.MinimizeToTrayOnClose, v => _vm.MinimizeToTrayOnClose = v)),
+            Card("分组", "folder",
+                "默认分组是新建连接的落点。开启保护可以防止它被误删或误改，日常整理时更安心。",
+                protect,
+                protectHint));
     }
 
     // ── RDP ─────────────────────────────────────────────────────
@@ -531,7 +532,10 @@ public sealed class SettingsPaneView : NSView
         };
         foreach (var r in rows)
         {
+            // 先加入再约束，否则两者无共同祖先。顶层行（分组卡片）通栏铺满，
+            // 与 Windows 版一致；靠 Leading 对齐会让卡片缩成窄条。
             stack.AddArrangedSubview(r);
+            r.WidthAnchor.ConstraintEqualTo(stack.WidthAnchor).Active = true;
         }
 
         var scroll = new NSScrollView

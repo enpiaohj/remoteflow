@@ -1220,90 +1220,200 @@ public sealed class DetailView : NSView
 
     // ── 凭据 ────────────────────────────────────────────────────
 
+    /// <summary>
+    /// 凭据页（对齐 Windows 版）：标题 + 数量徽章 + 新建；搜索框 + 类型筛选；
+    /// 一行加密说明；带列头的表格（名称 / 类型 / 用户名 / 保险库 / 引用 / 操作）。
+    /// </summary>
     private static NSView BuildCredentials(CredentialsPageViewModel vm)
     {
         _ = vm.LoadAsync();
 
+        // ── 标题行：凭据 (N)  ……  ＋新建凭据 ──
+        var title = Big("凭据", 24);
+        var count = CountBadge();
+        var titleSpacer = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        titleSpacer.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
+
+        var newButton = NSButton.CreateButton("＋ 新建凭据", () => _ = vm.CreateCommand.ExecuteAsync(null));
+        newButton.BezelStyle = NSBezelStyle.Rounded;
+        newButton.ControlSize = NSControlSize.Large;
+        newButton.KeyEquivalent = "n";
+        newButton.KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask;
+
+        var titleRow = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.CenterY,
+            Spacing = 10,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        titleRow.AddArrangedSubview(title);
+        titleRow.AddArrangedSubview(count);
+        titleRow.AddArrangedSubview(titleSpacer);
+        titleRow.AddArrangedSubview(newButton);
+
+        // ── 搜索 + 类型筛选 ──
+        var search = new NSSearchField
+        {
+            PlaceholderString = "搜索凭据名称、用户名或类型…",
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        search.Changed += (_, _) => vm.SearchText = search.StringValue;
+
+        var filter = new NSPopUpButton { TranslatesAutoresizingMaskIntoConstraints = false };
+        var menu = new NSMenu();
+        foreach (var o in vm.TypeOptions)
+        {
+            var opt = o;
+            menu.AddItem(new NSMenuItem(opt.Label, (_, _) => vm.TypeOption = opt));
+        }
+
+        filter.Menu = menu;
+        filter.WidthAnchor.ConstraintEqualTo(150).Active = true;
+
+        var filterRow = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.CenterY,
+            Spacing = 10,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        filterRow.AddArrangedSubview(search);
+        filterRow.AddArrangedSubview(filter);
+        search.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
+
+        // ── 加密说明 ──
+        var shield = new NSImageView
+        {
+            Image = NSImage.GetSystemSymbol("lock.shield", null),
+            ContentTintColor = NSColor.SystemGreen,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+            SymbolConfiguration = NSImageSymbolConfiguration.Create(12, NSFontWeight.Regular),
+        };
+        var noteRow = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.CenterY,
+            Spacing = 6,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        noteRow.AddArrangedSubview(shield);
+        noteRow.AddArrangedSubview(Muted("密码 / 私钥由 macOS 钥匙串加密保存，连接库只存引用，导出文件不带 Secret。", 11));
+
+        // ── 表格 ──
         var table = new NSTableView
         {
-            HeaderView = null,
-            RowHeight = 44,
+            HeaderView = new NSTableHeaderView(),
+            RowHeight = 48,
             BackgroundColor = NSColor.Clear,
             SelectionHighlightStyle = NSTableViewSelectionHighlightStyle.Regular,
             Style = NSTableViewStyle.Inset,
+            UsesAlternatingRowBackgroundColors = false,
         };
-        table.AddColumn(new NSTableColumn("c") { ResizingMask = NSTableColumnResizing.Autoresizing });
+        foreach (var (id, header, width) in new[]
+                 {
+                     ("name", "名称", 220f), ("type", "类型", 130f), ("user", "用户名", 190f),
+                     ("vault", "保险库状态", 130f), ("usage", "引用", 110f), ("ops", "操作", 80f),
+                 })
+        {
+            table.AddColumn(new NSTableColumn(id)
+            {
+                Title = header,
+                Width = width,
+                MinWidth = width * 0.6f,
+                ResizingMask = NSTableColumnResizing.Autoresizing,
+            });
+        }
 
-        var editButton = new NSButton { Title = "编辑", Enabled = false, BezelStyle = NSBezelStyle.Rounded };
-        var deleteButton = new NSButton { Title = "删除", Enabled = false, BezelStyle = NSBezelStyle.Rounded };
-        var empty = Muted("还没有凭据。点「新建凭据」把常用账号 / 私钥交给钥匙串保管。", 12);
+        var empty = Centered(Icon("key", 34, NSColor.TertiaryLabel), "还没有凭据",
+            "点「新建凭据」把常用账号 / 私钥交给钥匙串保管，连接时按需引用。");
 
-        _ = new CredentialListSource(table, vm.Items,
-            onSelect: item =>
+        var src = new CredentialListSource(table, vm.Items,
+            onSelect: item => vm.SelectedItem = item,
+            onActivate: item => _ = vm.EditCommand.ExecuteAsync(item),
+            onDelete: item =>
             {
                 vm.SelectedItem = item;
-                editButton.Enabled = item is not null;
-                deleteButton.Enabled = item is not null;
-            },
-            onActivate: item => _ = vm.EditCommand.ExecuteAsync(item));
+                _ = vm.DeleteCommand.ExecuteAsync(item);
+            });
+        _ = src;
 
-        void SyncEmpty() => empty.Hidden = vm.Items.Count > 0;
-        vm.Items.CollectionChanged += (_, _) =>
-            NSApplication.SharedApplication.BeginInvokeOnMainThread(SyncEmpty);
-        SyncEmpty();
-
-        var newButton = NSButton.CreateButton("新建凭据", () => _ = vm.CreateCommand.ExecuteAsync(null));
-        newButton.BezelStyle = NSBezelStyle.Rounded;
-        editButton.Activated += (_, _) => _ = vm.EditCommand.ExecuteAsync(null);
-        deleteButton.Activated += (_, _) => _ = vm.DeleteCommand.ExecuteAsync(null);
-
-        var actions = new NSStackView
+        void SyncCount()
         {
-            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
-            Spacing = 8,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        };
-        actions.AddArrangedSubview(newButton);
-        actions.AddArrangedSubview(editButton);
-        actions.AddArrangedSubview(deleteButton);
+            ((NSTextField)count.Subviews[0]).StringValue = vm.Items.Count.ToString();
+            empty.Hidden = vm.Items.Count > 0;
+        }
+
+        vm.Items.CollectionChanged += (_, _) =>
+            NSApplication.SharedApplication.BeginInvokeOnMainThread(SyncCount);
+        SyncCount();
 
         var scroll = new NSScrollView
         {
             DocumentView = table,
             DrawsBackground = false,
+            BorderType = NSBorderType.NoBorder,
             HasVerticalScroller = true,
+            AutohidesScrollers = true,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
 
-        var header = new NSStackView
+        var listCard = Card();
+        listCard.AddSubview(scroll);
+        NSLayoutConstraint.ActivateConstraints(new[]
         {
-            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
-            Alignment = NSLayoutAttribute.Leading,
-            Spacing = 8,
-            EdgeInsets = new NSEdgeInsets(32, 40, 10, 40),
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        };
-        header.AddArrangedSubview(Big("凭据", 24));
-        header.AddArrangedSubview(Muted("密码 / 私钥由 macOS 钥匙串加密保存，连接库只存引用。", 12));
-        header.AddArrangedSubview(actions);
+            scroll.LeadingAnchor.ConstraintEqualTo(listCard.LeadingAnchor, 1),
+            scroll.TrailingAnchor.ConstraintEqualTo(listCard.TrailingAnchor, -1),
+            scroll.TopAnchor.ConstraintEqualTo(listCard.TopAnchor, 1),
+            scroll.BottomAnchor.ConstraintEqualTo(listCard.BottomAnchor, -1),
+        });
 
         var root = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
-        root.AddSubview(header);
-        root.AddSubview(scroll);
+        root.AddSubview(titleRow);
+        root.AddSubview(filterRow);
+        root.AddSubview(noteRow);
+        root.AddSubview(listCard);
         root.AddSubview(empty);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
-            header.LeadingAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.LeadingAnchor),
-            header.TrailingAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.TrailingAnchor),
-            header.TopAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.TopAnchor),
-            scroll.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor, 26),
-            scroll.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor, -26),
-            scroll.TopAnchor.ConstraintEqualTo(header.BottomAnchor, 8),
-            scroll.BottomAnchor.ConstraintEqualTo(root.BottomAnchor, -20),
-            empty.TopAnchor.ConstraintEqualTo(scroll.TopAnchor, 24),
-            empty.LeadingAnchor.ConstraintEqualTo(scroll.LeadingAnchor, 16),
+            titleRow.LeadingAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.LeadingAnchor, 30),
+            titleRow.TrailingAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.TrailingAnchor, -30),
+            titleRow.TopAnchor.ConstraintEqualTo(root.SafeAreaLayoutGuide.TopAnchor, 24),
+
+            filterRow.LeadingAnchor.ConstraintEqualTo(titleRow.LeadingAnchor),
+            filterRow.TrailingAnchor.ConstraintEqualTo(titleRow.TrailingAnchor),
+            filterRow.TopAnchor.ConstraintEqualTo(titleRow.BottomAnchor, 16),
+
+            noteRow.LeadingAnchor.ConstraintEqualTo(titleRow.LeadingAnchor),
+            noteRow.TopAnchor.ConstraintEqualTo(filterRow.BottomAnchor, 10),
+
+            listCard.LeadingAnchor.ConstraintEqualTo(titleRow.LeadingAnchor),
+            listCard.TrailingAnchor.ConstraintEqualTo(titleRow.TrailingAnchor),
+            listCard.TopAnchor.ConstraintEqualTo(noteRow.BottomAnchor, 12),
+            listCard.BottomAnchor.ConstraintEqualTo(root.BottomAnchor, -24),
+
+            empty.CenterXAnchor.ConstraintEqualTo(listCard.CenterXAnchor),
+            empty.CenterYAnchor.ConstraintEqualTo(listCard.CenterYAnchor),
         });
         return root;
+    }
+
+    /// <summary>标题旁的数量胶囊（对齐 Windows 版「凭据 (5)」）。</summary>
+    private static NSView CountBadge()
+    {
+        var pill = new CardView(() => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f), cornerRadius: 9);
+        var n = Styled("0", 11, NSFontWeight.Semibold, NSColor.SecondaryLabel);
+        pill.AddSubview(n);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            n.CenterXAnchor.ConstraintEqualTo(pill.CenterXAnchor),
+            n.CenterYAnchor.ConstraintEqualTo(pill.CenterYAnchor),
+            pill.WidthAnchor.ConstraintGreaterThanOrEqualTo(22),
+            pill.HeightAnchor.ConstraintEqualTo(18),
+            pill.LeadingAnchor.ConstraintEqualTo(n.LeadingAnchor, -7),
+            pill.TrailingAnchor.ConstraintEqualTo(n.TrailingAnchor, 7),
+        });
+        return pill;
     }
 
     // ── 容器切换 ────────────────────────────────────────────────
