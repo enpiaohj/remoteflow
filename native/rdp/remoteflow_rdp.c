@@ -20,6 +20,7 @@
 #include <freerdp/client/disp.h>
 #include <freerdp/channels/disp.h>
 #include <freerdp/channels/channels.h>
+#include <freerdp/addin.h>
 #include <winpr/synch.h>
 #include <winpr/thread.h>
 
@@ -98,9 +99,25 @@ static BOOL rf_pre_connect(freerdp* instance)
 	   但连接本身必须照常建立。 */
 	freerdp_settings_set_bool(s, FreeRDP_SupportDynamicChannels, TRUE);
 
-	/* 关掉一切设备重定向：本产品用不到，而 brew 的 freerdp3 没带 rdpdr 插件，
-	   load_addins 加载它失败会**整体返回 FALSE**，连带 drdynvc / disp 一起不加载 ——
-	   这正是动态分辨率一直没生效的直接原因。 */
+	/* 注册静态通道表的查表函数 —— 这是通道能不能加载的**总开关**。
+	   freerdp_load_channel_addin_entry 靠一个全局函数指针去查
+	   CLIENT_STATIC_ADDIN_TABLE；这个指针必须由客户端自己注册。不注册的话它一律
+	   走 dlopen 分支，而通道是编进 libfreerdp-client3 的、磁盘上根本没有对应
+	   模块文件，于是 rdpdr / drdynvc / disp 全部 "Failed to load channel"，
+	   load_addins 整体失败，动态分辨率无从谈起。
+	   （此前误判为"brew 的 FreeRDP 不带通道插件"——实际带，只是没人注册查表函数。） */
+	freerdp_register_addin_provider(freerdp_channels_load_static_addin_entry, 0);
+
+	/* 让 load_addins 别去碰 rdpdr —— 这是动态分辨率一直没生效的真正原因：
+	   FreeRDP 的 freerdp_client_load_addins 会先加载静态通道，rdpdr 加载失败就
+	   **整体返回 FALSE**，drdynvc / disp 根本轮不到，于是 SendMonitorLayout 无从发出。
+	   关键在于：光把 DeviceRedirection 置 FALSE 没用 —— NetworkAutoDetect /
+	   SupportHeartbeatPdu / SupportMultitransport 这几个 RDP8 特性默认开着，
+	   FreeRDP 会在后面又把 DeviceRedirection 强行打开（"these RDP8 features
+	   require rdpdr to be registered"）。这三个我们用不到，一并关掉。 */
+	freerdp_settings_set_bool(s, FreeRDP_NetworkAutoDetect, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_SupportHeartbeatPdu, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_SupportMultitransport, FALSE);
 	freerdp_settings_set_bool(s, FreeRDP_DeviceRedirection, FALSE);
 	freerdp_settings_set_bool(s, FreeRDP_RedirectDrives, FALSE);
 	freerdp_settings_set_bool(s, FreeRDP_RedirectHomeDrive, FALSE);

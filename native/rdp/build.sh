@@ -5,8 +5,18 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-FP="$(brew --prefix freerdp 2>/dev/null || echo /usr/local/opt/freerdp)"
-[ -d "$FP/include/freerdp3" ] || { echo "找不到 FreeRDP，请先 brew install freerdp" >&2; exit 1; }
+# 优先用自建的带通道 FreeRDP（native/rdp/build-freerdp.sh 产出）。
+# brew 的 freerdp3 不带通道插件 → 没有 disp 通道 → 动态分辨率发不出去 → RDP 黑边。
+DIST="$PWD/freerdp-dist"
+if [ -d "$DIST/include/freerdp3" ]; then
+  FP="$DIST"
+  echo "==> 使用自建 FreeRDP：$FP"
+else
+  FP="$(brew --prefix freerdp 2>/dev/null || echo /usr/local/opt/freerdp)"
+  echo "==> 使用 brew FreeRDP：$FP（注意：不带通道插件，动态分辨率不可用；"
+  echo "    跑 native/rdp/build-freerdp.sh 自建一份即可启用）"
+fi
+[ -d "$FP/include/freerdp3" ] || { echo "找不到 FreeRDP，请先跑 build-freerdp.sh 或 brew install freerdp" >&2; exit 1; }
 
 ARCH="${1:-$(uname -m)}"   # x86_64 | arm64
 case "$ARCH" in
