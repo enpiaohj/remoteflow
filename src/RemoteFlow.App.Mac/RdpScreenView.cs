@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using AppKit;
 using CoreAnimation;
+using Foundation;
 using CoreGraphics;
 using RemoteFlow.Core.Sessions;
 using RemoteFlow.Protocol.Rdp.Mac;
@@ -36,6 +37,7 @@ public sealed class RdpScreenView : NSView
 
     // 动态分辨率：视图尺寸变了就把远程桌面改成同样的长宽比，避免画面被 letterbox 出黑边。
     private NSTimer? _resizeTimer;
+    private readonly List<NSObject> _winObservers = new();
     private int _lastReqW;
     private int _lastReqH;
 
@@ -87,6 +89,12 @@ public sealed class RdpScreenView : NSView
         _detached = true;
         _resizeTimer?.Invalidate();
         _resizeTimer = null;
+        foreach (var t in _winObservers)
+        {
+            NSNotificationCenter.DefaultCenter.RemoveObserver(t);
+        }
+
+        _winObservers.Clear();
         StopLoop();
         _frames.FrameSizeChanged -= OnFrameSizeChanged;
         _session.StateChanged -= OnStateChanged;
@@ -111,6 +119,35 @@ public sealed class RdpScreenView : NSView
     {
         base.ViewDidMoveToWindow();
         Window?.MakeFirstResponder(this);
+        HookWindowNotifications();
+    }
+
+    /// <summary>
+    /// 窗口最大化 / 进出全屏时**直接**重协商，不走去抖定时器。
+    /// 这些切换期间 runloop 处于事件跟踪模式，定时器不可靠；而它们恰恰是
+    /// 尺寸跳变最大的时刻，漏掉一次就是满屏黑边。
+    /// </summary>
+    private void HookWindowNotifications()
+    {
+        foreach (var t in _winObservers)
+        {
+            NSNotificationCenter.DefaultCenter.RemoveObserver(t);
+        }
+
+        _winObservers.Clear();
+        if (Window is not { } win)
+        {
+            return;
+        }
+
+        void Watch(NSString name) => _winObservers.Add(
+            NSNotificationCenter.DefaultCenter.AddObserver(name, _ =>
+                NSApplication.SharedApplication.BeginInvokeOnMainThread(ApplyResize), win));
+
+        Watch(NSWindow.DidResizeNotification);
+        Watch(NSWindow.DidEnterFullScreenNotification);
+        Watch(NSWindow.DidExitFullScreenNotification);
+        Watch(NSWindow.DidEndLiveResizeNotification);
     }
 
     public override void Layout()

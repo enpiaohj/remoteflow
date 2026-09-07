@@ -161,8 +161,8 @@ public sealed class ConnectionTreeSource : NSOutlineViewDelegate, INSOutlineView
 
             NSLayoutConstraint.ActivateConstraints(new[]
             {
-                badge.TrailingAnchor.ConstraintEqualTo(icon.TrailingAnchor, 1),
-                badge.BottomAnchor.ConstraintEqualTo(icon.BottomAnchor, 1),
+                badge.TrailingAnchor.ConstraintEqualTo(icon.TrailingAnchor),
+                badge.BottomAnchor.ConstraintEqualTo(icon.BottomAnchor),
                 icon.LeadingAnchor.ConstraintEqualTo(cell.LeadingAnchor, 2),
                 icon.CenterYAnchor.ConstraintEqualTo(cell.CenterYAnchor),
                 icon.WidthAnchor.ConstraintEqualTo(20),

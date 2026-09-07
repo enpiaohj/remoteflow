@@ -107,8 +107,8 @@ public sealed class FlatListSource : NSTableViewDelegate
                 star.CenterYAnchor.ConstraintEqualTo(cell.CenterYAnchor),
                 star.WidthAnchor.ConstraintEqualTo(14),
                 // 在线徽标压在协议图标右下角
-                badge.TrailingAnchor.ConstraintEqualTo(icon.TrailingAnchor, 1),
-                badge.BottomAnchor.ConstraintEqualTo(icon.BottomAnchor, 1),
+                badge.TrailingAnchor.ConstraintEqualTo(icon.TrailingAnchor),
+                badge.BottomAnchor.ConstraintEqualTo(icon.BottomAnchor),
             });
         }
 

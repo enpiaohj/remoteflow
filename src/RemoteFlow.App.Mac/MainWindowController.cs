@@ -42,6 +42,7 @@ public sealed class MainWindowController : NSWindowController
     private NSToolbarItem? _sessionsItem;
     private HotZone _pillHotZone = null!;
     private readonly NSView _stage = new() { TranslatesAutoresizingMaskIntoConstraints = false };
+    private NSView _detailRoot = null!;
     private readonly NSSplitViewController _split = new();
     private readonly NSSearchField _search = new() { PlaceholderString = "搜索连接" };
     private NSSplitViewItem? _listItem;
@@ -160,7 +161,7 @@ public sealed class MainWindowController : NSWindowController
         _split.AddSplitViewItem(_listItem);
 
         // 详情区 = [会话 Tab 条（空时隐藏）] + [舞台：详情卡 / 会话画面]。
-        var detailRoot = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        var detailRoot = _detailRoot = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
         detailRoot.AddSubview(_tabBar);
         detailRoot.AddSubview(_stage);
         _tabBar.Hidden = true;
@@ -371,8 +372,21 @@ public sealed class MainWindowController : NSWindowController
         // 挂一条会话标签既突兀也没用。全屏下也不显示（改用悬浮药丸）。
         var show = _tabBar.Count > 0 && _stageIsSession && _mode == ViewMode.Normal;
         _tabBar.Hidden = !show;
-        _stageTop.Active = !show;
-        _stageTopWithTabs.Active = show;
+        // 顺序要紧：先停用旧的再启用新的，两条同时生效会互相冲突。
+        if (show)
+        {
+            _stageTop.Active = false;
+            _stageTopWithTabs.Active = true;
+        }
+        else
+        {
+            _stageTopWithTabs.Active = false;
+            _stageTop.Active = true;
+        }
+
+        // 立刻走一次布局：约束换完不强制排版的话，全屏下切会话时舞台会停在
+        // 「给 Tab 条让出 38pt」的旧位置，顶上留一条白边，直到别的什么触发了重排。
+        _detailRoot?.LayoutSubtreeIfNeeded();
     }
 
     /// <summary>
