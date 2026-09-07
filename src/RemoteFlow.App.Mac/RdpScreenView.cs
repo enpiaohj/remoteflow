@@ -50,7 +50,7 @@ public sealed class RdpScreenView : NSView
 
         TranslatesAutoresizingMaskIntoConstraints = false;
         WantsLayer = true;
-        Layer!.BackgroundColor = NSColor.Black.CGColor;
+        RefreshMatte();
         Layer.AddSublayer(_screen);
 
         _overlay = new NSTextField
@@ -84,6 +84,29 @@ public sealed class RdpScreenView : NSView
         _session.StateChanged += OnStateChanged;
         _pendingSize = _frames.FrameSize;
         StartLoop();
+    }
+
+    /// <summary>
+    /// 画面四周的衬底。远程桌面分辨率与视图比例对不上时必然留边，
+    /// 关键是这条边要看着像「有意的留白」而不是「渲染坏了」：
+    ///   窗口 / 三栏模式 → 用页面底衬色，画面像一张嵌在页面里的图；
+    ///   全屏（窗口内全屏 / 完全全屏）→ 纯黑，避免亮边干扰，也是通行做法。
+    /// </summary>
+    public void SetCinematicMatte(bool cinematic)
+    {
+        _cinematicMatte = cinematic;
+        RefreshMatte();
+    }
+
+    private bool _cinematicMatte;
+
+    private void RefreshMatte() => Palette.With(this, () =>
+        Layer!.BackgroundColor = (_cinematicMatte ? NSColor.Black : Palette.PageGround(this)).CGColor);
+
+    public override void ViewDidChangeEffectiveAppearance()
+    {
+        base.ViewDidChangeEffectiveAppearance();
+        RefreshMatte();
     }
 
     public void Detach()

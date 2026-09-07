@@ -825,6 +825,13 @@ public sealed class DetailView : NSView
         var card = new TapRow(() => ConnectRequested?.Invoke(this, c)) { Menu = ConnMenu(c) };
         var border = CardView.Surface(10);
         card.AddSubview(border);
+
+        // 悬停层压在卡片之上、内容之下：卡片是不透明的，TapRow 自己的底会被它盖住。
+        var hover = new NSView { WantsLayer = true, TranslatesAutoresizingMaskIntoConstraints = false };
+        hover.Layer!.CornerRadius = 10;
+        card.AddSubview(hover);
+        card.HoverLayerHost = hover;
+
         NSLayoutConstraint.ActivateConstraints(new[]
         {
             card.HeightAnchor.ConstraintEqualTo(92),
@@ -832,6 +839,10 @@ public sealed class DetailView : NSView
             border.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor),
             border.TopAnchor.ConstraintEqualTo(card.TopAnchor),
             border.BottomAnchor.ConstraintEqualTo(card.BottomAnchor),
+            hover.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor),
+            hover.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor),
+            hover.TopAnchor.ConstraintEqualTo(card.TopAnchor),
+            hover.BottomAnchor.ConstraintEqualTo(card.BottomAnchor),
         });
 
         var tint = ProtocolStyle.Tint(c.Profile.Protocol);
@@ -1199,11 +1210,27 @@ public sealed class DetailView : NSView
         private readonly Action _onTap;
         private NSTrackingArea? _tracking;
 
+        /// <summary>
+        /// 悬停底色画在哪一层。默认画自己；但若行内压了一张不透明卡片（首页「最近连接」
+        /// 大卡就是），自己的底会被卡片盖住、悬停完全看不见 —— 这时要指到卡片上面的那层。
+        /// </summary>
+        public NSView? HoverLayerHost { get; set; }
+
         public TapRow(Action onTap)
         {
             _onTap = onTap;
             WantsLayer = true;
             Layer!.CornerRadius = 6;
+        }
+
+        public override void ResetCursorRects() => AddCursorRect(Bounds, NSCursor.PointingHandCursor);
+
+        private void Paint(bool on)
+        {
+            var host = HoverLayerHost ?? this;
+            host.WantsLayer = true;
+            Palette.With(host, () =>
+                host.Layer!.BackgroundColor = on ? Palette.RowHover(host).CGColor : null);
         }
 
         public override void UpdateTrackingAreas()
@@ -1220,12 +1247,10 @@ public sealed class DetailView : NSView
             AddTrackingArea(_tracking);
         }
 
-        public override void MouseEntered(NSEvent theEvent)
-            // 中性灰悬停显脏，改用强调色的极淡染色。
-            => Palette.With(this, () => Layer!.BackgroundColor = Palette.RowHover(this).CGColor);
+        // 中性灰悬停显脏，改用强调色的极淡染色。
+        public override void MouseEntered(NSEvent theEvent) => Paint(true);
 
-        public override void MouseExited(NSEvent theEvent)
-            => Layer!.BackgroundColor = null;
+        public override void MouseExited(NSEvent theEvent) => Paint(false);
 
         public override void MouseDown(NSEvent theEvent) => _onTap();
     }

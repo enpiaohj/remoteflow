@@ -269,12 +269,28 @@ public sealed class MainWindowController : NSWindowController
 
         SyncTabBarVisibility();
         SyncPill();
+        SyncSessionMatte();
 
         // 原生全屏只在 ScreenFull 这一档开启。
         var wantNative = mode == ViewMode.ScreenFull;
         if (wantNative != IsNativeFullScreen)
         {
             Window.ToggleFullScreen(null);
+        }
+    }
+
+    /// <summary>
+    /// 会话画面四周的衬底：常规三栏用页面底衬（画面像嵌在页面里的一张图），
+    /// 两档全屏用纯黑。VNC 的桌面分辨率由服务端定死、比例对不上必然留边，
+    /// 纯黑衬底压在窗口模式下看着像渲染坏了。
+    /// </summary>
+    private void SyncSessionMatte()
+    {
+        var cinematic = _mode != ViewMode.Normal;
+        foreach (var v in _sessionViews.Values)
+        {
+            (v as VncScreenView)?.SetCinematicMatte(cinematic);
+            (v as RdpScreenView)?.SetCinematicMatte(cinematic);
         }
     }
 
@@ -873,6 +889,8 @@ public sealed class MainWindowController : NSWindowController
                     break;
             }
 
+            (view as VncScreenView)?.SetCinematicMatte(_mode != ViewMode.Normal);
+            (view as RdpScreenView)?.SetCinematicMatte(_mode != ViewMode.Normal);
             _sessionViews[session.SessionId] = view;
             _sessionNames[session.SessionId] = name;
             _sessionProfileIds[session.SessionId] = profile.Id;
