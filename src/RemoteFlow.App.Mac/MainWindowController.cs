@@ -23,15 +23,9 @@ public sealed class MainWindowController : NSWindowController
     private readonly DetailView _detail = new();
     private readonly SessionTabBar _tabBar = new();
     private readonly NSView _stage = new() { TranslatesAutoresizingMaskIntoConstraints = false };
-    // 外层 NSSplitViewController：[导航栏 | 右侧]，是窗口 contentViewController。
-    // 右侧内部用**普通 NSSplitView**（非 Controller）分「列表 | 详情」—— 关键：只有作为窗口
-    // contentViewController 的 NSSplitViewController 才会改窗口 min/max；普通 NSSplitView 折叠
-    // 列表不动窗口，首页因此能真·全宽而窗口既不缩也拉得宽。
     private readonly NSSplitViewController _split = new();
-    private readonly NSSplitView _innerSplit = new() { IsVertical = true, DividerStyle = NSSplitViewDividerStyle.Thin };
     private readonly NSSearchField _search = new() { PlaceholderString = "搜索连接" };
-    private NSView _listPaneView = null!;
-    private bool _listCollapsed;
+    private NSSplitViewItem? _listItem;
 
     // 会话 Id → 其画面视图（SshTerminalView / VncScreenView）。多 Tab 并存。
     private readonly Dictionary<Guid, NSView> _sessionViews = new();
@@ -51,7 +45,7 @@ public sealed class MainWindowController : NSWindowController
         _listPane = new ConnectionListPane(_connectionsVm, HydrateConnectionMetaAsync);
 
         Window.Title = "RemoteFlow";
-        Window.ContentMinSize = new CGSize(720, 480);
+        Window.ContentMinSize = new CGSize(980, 560);
         Window.SetContentSize(new CGSize(1160, 720));
         Window.Center();
         Window.TitleVisibility = NSWindowTitleVisibility.Hidden;
@@ -99,7 +93,21 @@ public sealed class MainWindowController : NSWindowController
 
     private void BuildSplit()
     {
-        // ── 详情区 = [会话 Tab 条（空时隐藏）] + [舞台] ──
+        var navItem = NSSplitViewItem.CreateSidebar(_nav);
+        navItem.MinimumThickness = 176;
+        navItem.MaximumThickness = 260;
+        navItem.CanCollapse = true;
+        navItem.HoldingPriority = 260; // 固定宽度
+        _split.AddSplitViewItem(navItem);
+
+        _listItem = NSSplitViewItem.FromViewController(_listPane);
+        _listItem.MinimumThickness = 240;
+        _listItem.MaximumThickness = 460;
+        _listItem.CanCollapse = true;
+        _listItem.HoldingPriority = 260; // 固定宽度 —— 折叠时让详情列吃掉空出的宽度，而不是缩窗口
+        _split.AddSplitViewItem(_listItem);
+
+        // 详情区 = [会话 Tab 条（空时隐藏）] + [舞台：详情卡 / 会话画面]。
         var detailRoot = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
         detailRoot.AddSubview(_tabBar);
         detailRoot.AddSubview(_stage);
@@ -117,57 +125,18 @@ public sealed class MainWindowController : NSWindowController
         _stageTop = _stage.TopAnchor.ConstraintEqualTo(detailRoot.SafeAreaLayoutGuide.TopAnchor);
         _stageTopWithTabs = _stage.TopAnchor.ConstraintEqualTo(_tabBar.BottomAnchor);
         _stageTop.Active = true;
+
         ShowStage(_detail);
 
-        // ── 内层：普通 NSSplitView [列表 | 详情]（不影响窗口尺寸）──
-        _listPaneView = _listPane.View;
-        _innerSplit.TranslatesAutoresizingMaskIntoConstraints = false;
-        _innerSplit.Delegate = new InnerSplitDelegate();
-        _innerSplit.AddSubview(_listPaneView);
-        _innerSplit.AddSubview(detailRoot);
-        _innerSplit.AdjustSubviews();
-
-        var rightVc = new NSViewController { View = new NSView { TranslatesAutoresizingMaskIntoConstraints = false } };
-        rightVc.View.AddSubview(_innerSplit);
-        NSLayoutConstraint.ActivateConstraints(new[]
-        {
-            _innerSplit.LeadingAnchor.ConstraintEqualTo(rightVc.View.LeadingAnchor),
-            _innerSplit.TrailingAnchor.ConstraintEqualTo(rightVc.View.TrailingAnchor),
-            _innerSplit.TopAnchor.ConstraintEqualTo(rightVc.View.TopAnchor),
-            _innerSplit.BottomAnchor.ConstraintEqualTo(rightVc.View.BottomAnchor),
-        });
-
-        // ── 外层 NSSplitViewController（窗口内容）：[导航栏 | 右侧] ──
-        var navItem = NSSplitViewItem.CreateSidebar(_nav);
-        navItem.MinimumThickness = 176;
-        navItem.MaximumThickness = 260;
-        navItem.CanCollapse = true;
-        _split.AddSplitViewItem(navItem);
-
-        var rightItem = NSSplitViewItem.FromViewController(rightVc);
-        rightItem.MinimumThickness = 520;
-        _split.AddSplitViewItem(rightItem);
+        var detailVc = new NSViewController { View = detailRoot };
+        var detailItem = NSSplitViewItem.FromViewController(detailVc);
+        detailItem.MinimumThickness = 420;
+        detailItem.MaximumThickness = 100_000; // 明确无上限：否则 NSSplitViewController 会按内容
+                                               // fittingSize 推断详情列最大宽 → 首页折叠列表后窗口拉不宽 / 缩窗
+        detailItem.HoldingPriority = 250;      // 最低 —— 窗口 / 折叠变化时优先由详情列伸缩
+        _split.AddSplitViewItem(detailItem);
 
         Window.ContentViewController = _split;
-
-        // 初始给列表列一个宽度（若启动页已折叠列表则不动）
-        NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
-        {
-            if (!_listCollapsed)
-            {
-                _innerSplit.SetPositionOfDivider(300, 0);
-            }
-        });
-    }
-
-    /// <summary>内层 split：列表列可拖 240–460；折叠时归 0。</summary>
-    private sealed class InnerSplitDelegate : NSSplitViewDelegate
-    {
-        public override nfloat SetMinCoordinateOfSubview(NSSplitView splitView, nfloat proposedMinimumPosition, nint dividerIndex)
-            => 240;
-
-        public override nfloat SetMaxCoordinateOfSubview(NSSplitView splitView, nfloat proposedMaximumPosition, nint dividerIndex)
-            => 460;
     }
 
     private NSLayoutConstraint _stageTop = null!;
@@ -282,7 +251,13 @@ public sealed class MainWindowController : NSWindowController
     }
 
     /// <summary>中间列表列折叠 / 展开（⌘⌥L / 工具栏按钮）。左侧导航列走系统 toggleSidebar。</summary>
-    public void ToggleListPane() => SetListVisible(_listCollapsed);
+    public void ToggleListPane()
+    {
+        if (_listItem is not null)
+        {
+            _listItem.Collapsed = !_listItem.Collapsed;
+        }
+    }
 
     private sealed class ToolbarDelegate : NSToolbarDelegate
     {
@@ -370,11 +345,13 @@ public sealed class MainWindowController : NSWindowController
                 _ = _listPane.ShowRecentAsync();
                 break;
             case NavSidebar.Item.Home:
-                SetListVisible(false); // 内层列表折叠 → 首页真·全宽；外层 split 不受影响，窗口尺寸不变
+                // 首页 / 凭据不折叠列表：NSSplitViewController 折叠中间窗格会把窗口宽度锁死在
+                // ContentMinSize（≈980）—— 窗口既缩窄又拉不宽。宁可留着列表列。
+                SetListVisible(true);
                 _detail.ShowHome(_services.GetRequiredService<HomePageViewModel>());
                 break;
             case NavSidebar.Item.Credentials:
-                SetListVisible(false);
+                SetListVisible(true);
                 _detail.ShowCredentials(_services.GetRequiredService<CredentialsPageViewModel>());
                 break;
             case NavSidebar.Item.Settings:
@@ -385,24 +362,19 @@ public sealed class MainWindowController : NSWindowController
 
     private void SetListVisible(bool visible)
     {
-        if (_innerSplit.Subviews.Length < 2)
+        if (_listItem is null || _listItem.Collapsed == !visible)
         {
             return;
         }
 
-        _listCollapsed = !visible;
-        // 普通 NSSplitView，不经窗口 contentViewController，折叠不改窗口尺寸。
-        // 只设 Hidden + SetPositionOfDivider 不够：普通 NSSplitView 要等下一次 resize 事件
-        // 才 re-tile，中间会留一段空白，非得手动拉一下窗口才正常。这里显式 AdjustSubviews
-        // + 强制布局，让详情列立刻吃满空出来的宽度。
-        _listPaneView.Hidden = !visible;
-        _innerSplit.AdjustSubviews();
-        if (visible)
+        // NSSplitViewController 折叠窗格会顺带缩窗口 / 锁窗口宽度。折叠前记窗口 frame、之后还回去
+        // （首页 / 凭据已改为不折叠，这里主要给 ⌘⌥L 手动折叠兜底）。
+        var frame = Window.Frame;
+        _listItem.Collapsed = !visible;
+        if (!visible && Window.Frame.Width < frame.Width - 1)
         {
-            _innerSplit.SetPositionOfDivider(300, 0);
+            Window.SetFrame(frame, display: true, animate: false);
         }
-        _innerSplit.LayoutSubtreeIfNeeded();
-        _innerSplit.DisplayIfNeeded();
     }
 
     public void OpenSettings()
