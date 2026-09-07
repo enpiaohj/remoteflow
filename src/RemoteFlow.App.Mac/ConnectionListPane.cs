@@ -28,9 +28,13 @@ public sealed class ConnectionListPane : NSViewController
     public event EventHandler<ConnectionItemViewModel>? ConnectionSelected;
     public event EventHandler<ConnectionItemViewModel>? ConnectionActivated;
 
-    public ConnectionListPane(ConnectionsPageViewModel vm)
+    /// <summary>每次 LoadAsync 后回填连接的凭据名 / 分组名等外部元数据（VM 不直接依赖凭据服务）。</summary>
+    private readonly Func<Task>? _hydrate;
+
+    public ConnectionListPane(ConnectionsPageViewModel vm, Func<Task>? hydrate = null)
     {
         _vm = vm;
+        _hydrate = hydrate;
         _reload = ShowConnectionsAsync;
 
         _tree.HeaderView = null;
@@ -155,6 +159,7 @@ public sealed class ConnectionListPane : NSViewController
         _addGroup.Hidden = false;
         _vm.Filter = ConnectionFilter.All;
         await _vm.LoadAsync();
+        if (_hydrate is not null) await _hydrate();
 
         _treeSource = new ConnectionTreeSource(_vm);
         _tree.DataSource = _treeSource;
@@ -198,6 +203,7 @@ public sealed class ConnectionListPane : NSViewController
         _addGroup.Hidden = true;
         _vm.Filter = ConnectionFilter.Favorites;
         await _vm.LoadAsync();
+        if (_hydrate is not null) await _hydrate();
         MountFlat();
     }
 
@@ -209,6 +215,7 @@ public sealed class ConnectionListPane : NSViewController
         _addGroup.Hidden = true;
         _vm.Filter = ConnectionFilter.Recent;
         await _vm.LoadAsync();
+        if (_hydrate is not null) await _hydrate();
         MountFlat();
     }
 

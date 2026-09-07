@@ -2,6 +2,7 @@ using AppKit;
 using CoreGraphics;
 using Microsoft.Extensions.DependencyInjection;
 using RemoteFlow.Application.Services;
+using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Presentation.ViewModels;
 
@@ -41,7 +42,7 @@ public sealed class MainWindowController : NSWindowController
 
         _connectionsVm = services.GetRequiredService<ConnectionsPageViewModel>();
         _nav = new NavSidebar();
-        _listPane = new ConnectionListPane(_connectionsVm);
+        _listPane = new ConnectionListPane(_connectionsVm, HydrateConnectionMetaAsync);
 
         Window.Title = "RemoteFlow";
         Window.ContentMinSize = new CGSize(980, 560);
@@ -157,6 +158,20 @@ public sealed class MainWindowController : NSWindowController
             view.TrailingAnchor.ConstraintEqualTo(_stage.TrailingAnchor),
             view.BottomAnchor.ConstraintEqualTo(_stage.BottomAnchor),
         });
+    }
+
+    /// <summary>连接加载后回填凭据名（VM 不直接依赖凭据服务，见 ApplyCredentialNames）。</summary>
+    private async Task HydrateConnectionMetaAsync()
+    {
+        try
+        {
+            var creds = await _services.GetRequiredService<ICredentialRepository>().GetAllAsync();
+            _connectionsVm.ApplyCredentialNames(creds.ToDictionary(x => x.Id, x => x.Name));
+        }
+        catch
+        {
+            // 凭据名回填失败不阻塞列表；详情页会显示「未指定」。
+        }
     }
 
     private void ShowInfoCard(ConnectionItemViewModel c)
