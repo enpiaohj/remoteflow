@@ -104,6 +104,8 @@ public sealed class RdpScreenView : NSView
     {
         base.Layout();
         _screen.Frame = Bounds;
+        // 图层按背板缩放渲染，否则 Retina 上 2x 的远程画面会被降采样成一层糊。
+        _screen.ContentsScale = Window?.BackingScaleFactor ?? 1;
         ScheduleResize();
     }
 
@@ -153,6 +155,8 @@ public sealed class RdpScreenView : NSView
 
         _lastReqW = w;
         _lastReqH = h;
+        System.Console.Error.WriteLine(
+            $"[RDP] 请求远程桌面 {w}×{h}（视图 {Bounds.Width:0}×{Bounds.Height:0}pt @{scale}x，当前帧 {_fw}×{_fh}）");
         try
         {
             _session.Resize(w, h);

@@ -111,6 +111,13 @@ public sealed class MainWindowController : NSWindowController
             NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
             {
                 _listPane.RefreshRowStatus();
+                // 首页的「最近连接 / 收藏」卡片也要跟着亮灭 —— 它们是一次性构建的快照，
+                // 只能整页重建（首页很短，重建代价可以接受）。
+                if (_currentNav == NavSidebar.Item.Home)
+                {
+                    _detail.ShowHome(_services.GetRequiredService<HomePageViewModel>());
+                }
+
                 SyncPill();
             });
 
@@ -369,10 +376,10 @@ public sealed class MainWindowController : NSWindowController
     }
 
     /// <summary>
-    /// 把页面内容放进舞台。刻意用 **autoresizing（frame 布局）** 而不是 Auto Layout 约束：
-    /// 页面内部照常用约束自适应，但它的尺寸诉求不会沿 详情列 → NSSplitViewController → 窗口
-    /// 反向传播。用约束固定时，NSScrollView 这类内容会把详情列的最大厚度压成它的最小厚度，
-    /// 窗口就出现"宽度锁定"（拉不宽）。
+    /// 把页面内容放进舞台，用 Auto Layout 四边贴死 —— 会话画面必须**精确**填满舞台，
+    /// 否则 RDP/VNC 画面四周会露出底色（表现为黑边）。
+    /// （曾一度改用 autoresizing 来躲"窗口宽度锁定"，但那个问题的真因是
+    /// NSButton.CreateButton 默认 TAMIC=true 与显式约束打架，已在别处修掉。）
     /// </summary>
     private void ShowStage(NSView view)
     {
@@ -384,10 +391,15 @@ public sealed class MainWindowController : NSWindowController
         // 舞台上只有「会话画面」和「详情视图」两类，据此决定是否显示 Tab 条。
         _stageIsSession = !ReferenceEquals(view, _detail);
 
-        view.TranslatesAutoresizingMaskIntoConstraints = true;
-        view.Frame = _stage.Bounds;
-        view.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
+        view.TranslatesAutoresizingMaskIntoConstraints = false;
         _stage.AddSubview(view);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            view.TopAnchor.ConstraintEqualTo(_stage.TopAnchor),
+            view.LeadingAnchor.ConstraintEqualTo(_stage.LeadingAnchor),
+            view.TrailingAnchor.ConstraintEqualTo(_stage.TrailingAnchor),
+            view.BottomAnchor.ConstraintEqualTo(_stage.BottomAnchor),
+        });
     }
 
     /// <summary>首页卡片右键动作 → 桥接到「我的连接」既有命令（对齐 Windows MainViewModel）。</summary>

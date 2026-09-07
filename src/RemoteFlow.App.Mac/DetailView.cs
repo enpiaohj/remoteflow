@@ -159,7 +159,7 @@ public sealed class DetailView : NSView
         };
 
         // ── 头部：图标 + 名称 + 收藏；状态点；连接 / 编辑 ──
-        var tile = IconTile(c.Profile.Protocol);
+        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.HasActiveSession);
         var name = Big(c.Name, 22);
         name.LineBreakMode = NSLineBreakMode.TruncatingTail;
 
@@ -333,7 +333,11 @@ public sealed class DetailView : NSView
 
     // ── 详情组件 ────────────────────────────────────────────────
 
-    private static NSView IconTile(ProtocolType p)
+    /// <summary>
+    /// 协议图标块。<paramref name="connected"/> / <paramref name="active"/> 有值时，
+    /// 右下角挂一枚在线状态徽标（绿=已连接、橙=会话活动中），与列表行保持一致。
+    /// </summary>
+    private static NSView IconTile(ProtocolType p, bool connected = false, bool active = false)
     {
         var tint = ProtocolStyle.Tint(p);
         var tile = new CardView(() => tint.ColorWithAlphaComponent(0.16f), cornerRadius: 9);
@@ -353,6 +357,19 @@ public sealed class DetailView : NSView
             glyph.CenterXAnchor.ConstraintEqualTo(tile.CenterXAnchor),
             glyph.CenterYAnchor.ConstraintEqualTo(tile.CenterYAnchor),
         });
+
+        if (connected || active)
+        {
+            var badge = ProtocolStyle.StatusBadge();
+            tile.AddSubview(badge);
+            NSLayoutConstraint.ActivateConstraints(new[]
+            {
+                badge.TrailingAnchor.ConstraintEqualTo(tile.TrailingAnchor, 2),
+                badge.BottomAnchor.ConstraintEqualTo(tile.BottomAnchor, 2),
+            });
+            ProtocolStyle.ApplyStatus(badge, connected, active);
+        }
+
         return tile;
     }
 
@@ -792,7 +809,7 @@ public sealed class DetailView : NSView
 
         var tint = ProtocolStyle.Tint(c.Profile.Protocol);
         var bar = new CardView(() => tint, cornerRadius: 1.5f);
-        var tile = IconTile(c.Profile.Protocol);
+        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.HasActiveSession);
         var name = Plain(c.Name, 14);
         name.Font = NSFont.SystemFontOfSize(14, NSFontWeight.Semibold);
         name.LineBreakMode = NSLineBreakMode.TruncatingTail;
@@ -946,7 +963,7 @@ public sealed class DetailView : NSView
 
     private NSView HomeFavRow(ConnectionItemViewModel c)
     {
-        var tile = IconTile(c.Profile.Protocol);
+        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.HasActiveSession);
         tile.WidthAnchor.ConstraintEqualTo(30).Active = true;
         tile.HeightAnchor.ConstraintEqualTo(30).Active = true;
 
