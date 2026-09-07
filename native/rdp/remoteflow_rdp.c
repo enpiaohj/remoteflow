@@ -15,6 +15,10 @@
 #include <freerdp/input.h>
 #include <freerdp/settings.h>
 #include <freerdp/codec/color.h>
+#include <freerdp/client/channels.h>
+#include <freerdp/client/disp.h>
+#include <freerdp/channels/disp.h>
+#include <freerdp/channels/channels.h>
 #include <winpr/synch.h>
 #include <winpr/thread.h>
 
@@ -34,13 +38,65 @@ typedef struct
 	void* user;
 	volatile int running;
 	HANDLE thread;
+	/* Display Control 动态通道：真正把新分辨率发给服务端的唯一通路。
+	   只改 settings 里的 DesktopWidth/Height 服务端根本收不到。 */
+	DispClientContext* disp;
+	int pending_w;
+	int pending_h;
 } rfContext;
+
+static void rf_send_monitor_layout(rfContext* rf, int width, int height)
+{
+	if (!rf->disp || !rf->disp->SendMonitorLayout || width <= 0 || height <= 0)
+		return;
+
+	DISPLAY_CONTROL_MONITOR_LAYOUT layout = { 0 };
+	layout.Flags = DISPLAY_CONTROL_MONITOR_PRIMARY;
+	layout.Left = 0;
+	layout.Top = 0;
+	layout.Width = (UINT32)width;
+	layout.Height = (UINT32)height;
+	layout.Orientation = ORIENTATION_LANDSCAPE;
+	layout.PhysicalWidth = 0;
+	layout.PhysicalHeight = 0;
+	layout.DesktopScaleFactor = 100;
+	layout.DeviceScaleFactor = 100;
+	rf->disp->SendMonitorLayout(rf->disp, 1, &layout);
+}
+
+static void rf_on_channel_connected(void* ctx, const ChannelConnectedEventArgs* e)
+{
+	rfContext* rf = (rfContext*)ctx;
+	if (strcmp(e->name, DISP_DVC_CHANNEL_NAME) == 0)
+	{
+		rf->disp = (DispClientContext*)e->pInterface;
+		/* 通道就绪时若已有待发的尺寸（连上后视图先变过），立刻补发一次。 */
+		if (rf->pending_w > 0 && rf->pending_h > 0)
+			rf_send_monitor_layout(rf, rf->pending_w, rf->pending_h);
+	}
+}
+
+static void rf_on_channel_disconnected(void* ctx, const ChannelDisconnectedEventArgs* e)
+{
+	rfContext* rf = (rfContext*)ctx;
+	if (strcmp(e->name, DISP_DVC_CHANNEL_NAME) == 0)
+		rf->disp = NULL;
+}
 
 static BOOL rf_pre_connect(freerdp* instance)
 {
 	rdpSettings* s = instance->context->settings;
 	freerdp_settings_set_bool(s, FreeRDP_SoftwareGdi, TRUE);
 	freerdp_settings_set_bool(s, FreeRDP_SupportGraphicsPipeline, FALSE);
+
+	/* 挂上 Display Control 动态通道（"disp"）—— 动态改分辨率全靠它。
+	   不显式加的话通道不会建立，rf_rdp_resize 就只是改了本地一个数字。 */
+	const char* disp_args[] = { "disp" };
+	freerdp_client_add_dynamic_channel(s, 1, disp_args);
+
+	if (!freerdp_client_load_addins(instance->context->channels, s))
+		return FALSE;
+
 	return TRUE;
 }
 
@@ -203,6 +259,7 @@ int rf_rdp_connect(void* h, const char* host, int port, const char* username, co
 	/* 不设 IgnoreCertificate —— 让 VerifyCertificateEx 回调跑，托管侧做 TOFU / 变化拒绝（§7.4）。 */
 	freerdp_settings_set_bool(s, FreeRDP_AutoAcceptCertificate, FALSE);
 	freerdp_settings_set_bool(s, FreeRDP_DynamicResolutionUpdate, TRUE);
+	freerdp_settings_set_bool(s, FreeRDP_SupportDisplayControl, TRUE);
 	freerdp_settings_set_bool(s, FreeRDP_RemoteFxCodec, TRUE);
 	freerdp_settings_set_bool(s, FreeRDP_FastPathOutput, TRUE);
 	freerdp_settings_set_bool(s, FreeRDP_FastPathInput, TRUE);
@@ -211,6 +268,8 @@ int rf_rdp_connect(void* h, const char* host, int port, const char* username, co
 	freerdp_settings_set_bool(s, FreeRDP_RdpSecurity, TRUE);
 
 	rfContext* rf = (rfContext*)instance->context;
+	PubSub_SubscribeChannelConnected(instance->context->pubSub, rf_on_channel_connected);
+	PubSub_SubscribeChannelDisconnected(instance->context->pubSub, rf_on_channel_disconnected);
 	rf->state_cb(rf->user, 0, NULL);
 	rf->thread = CreateThread(NULL, 0, rf_thread, instance, 0, NULL);
 	return rf->thread ? 0 : -1;
@@ -255,9 +314,15 @@ void rf_rdp_send_unicode(void* h, uint16_t code, int down)
 void rf_rdp_resize(void* h, int width, int height)
 {
 	freerdp* instance = (freerdp*)h;
-	rdpSettings* s = instance->context->settings;
-	freerdp_settings_set_uint32(s, FreeRDP_DesktopWidth, (UINT32)width);
-	freerdp_settings_set_uint32(s, FreeRDP_DesktopHeight, (UINT32)height);
+	rfContext* rf = (rfContext*)instance->context;
+	if (width <= 0 || height <= 0)
+		return;
+
+	/* 记下最新意图：Display Control 通道可能还没就绪（连接早期），
+	   就绪时 rf_on_channel_connected 会补发。 */
+	rf->pending_w = width;
+	rf->pending_h = height;
+	rf_send_monitor_layout(rf, width, height);
 }
 
 void rf_rdp_disconnect(void* h)
