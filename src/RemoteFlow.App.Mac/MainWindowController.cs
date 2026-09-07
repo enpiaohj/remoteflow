@@ -48,6 +48,7 @@ public sealed class MainWindowController : NSWindowController
         Window.SetContentSize(new CGSize(1160, 720));
         Window.Center();
         Window.TitleVisibility = NSWindowTitleVisibility.Hidden;
+        Window.CollectionBehavior |= NSWindowCollectionBehavior.FullScreenPrimary;
 
         BuildSplit();
         BuildToolbar();
@@ -198,9 +199,19 @@ public sealed class MainWindowController : NSWindowController
         Window.ToolbarStyle = NSWindowToolbarStyle.Unified;
     }
 
+    /// <summary>中间列表列折叠 / 展开（⌘⌥L / 工具栏按钮）。左侧导航列走系统 toggleSidebar。</summary>
+    public void ToggleListPane()
+    {
+        if (_listItem is not null)
+        {
+            _listItem.Collapsed = !_listItem.Collapsed;
+        }
+    }
+
     private sealed class ToolbarDelegate : NSToolbarDelegate
     {
         private const string NewConn = "rf.new";
+        private const string ToggleList = "rf.togglelist";
         private const string Search = "rf.search";
         private readonly MainWindowController _o;
         public ToolbarDelegate(MainWindowController o) => _o = o;
@@ -209,6 +220,7 @@ public sealed class MainWindowController : NSWindowController
         {
             NSToolbar.NSToolbarToggleSidebarItemIdentifier,
             NSToolbar.NSToolbarSidebarTrackingSeparatorItemIdentifier,
+            ToggleList,
             NewConn,
             NSToolbar.NSToolbarFlexibleSpaceItemIdentifier,
             Search,
@@ -230,6 +242,17 @@ public sealed class MainWindowController : NSWindowController
                     };
                     item.Activated += (_, _) => _o.BeginNewConnection();
                     return item;
+                case ToggleList:
+                    var toggle = new NSToolbarItem(ToggleList)
+                    {
+                        Label = "列表",
+                        ToolTip = "显示 / 隐藏连接列表（⌘⌥L）",
+                        Image = NSImage.GetSystemSymbol("sidebar.squares.left", null)
+                                ?? NSImage.GetSystemSymbol("sidebar.left", null),
+                        Bordered = true,
+                    };
+                    toggle.Activated += (_, _) => _o.ToggleListPane();
+                    return toggle;
                 case Search:
                     return new NSSearchToolbarItem(Search) { SearchField = _o._search };
                 default:
@@ -377,6 +400,18 @@ public sealed class MainWindowController : NSWindowController
         try
         {
             var session = await _sessions.CreateSessionAsync(profile);
+
+            // RDP「适应窗口」：按主屏比例请求桌面尺寸，避免默认 1920×1080 在 16:10 屏幕上出现上下黑边。
+            if (session is RemoteFlow.Protocol.Rdp.Mac.RdpSession rdpSession
+                && profile.Rdp is { DisplayMode: not RemoteFlow.Core.Models.RdpDisplayMode.FixedResolution })
+            {
+                var s = (Window.Screen ?? NSScreen.MainScreen)?.Frame.Size ?? new CGSize(1680, 1050);
+                var w = (double)s.Width;
+                var h = (double)s.Height;
+                if (w > 1920) { h = h * 1920 / w; w = 1920; }
+                rdpSession.PreferredSize = ((int)Math.Round(w / 2) * 2, (int)Math.Round(h / 2) * 2);
+            }
+
             // 不套人为总超时：各协议自带连接超时（SSH ConnectionInfo.Timeout / RDP 线程），
             // 且首次连接的主机密钥确认框会停在中途，硬 cap 会把用户读指纹的时间也算进去。
             await session.ConnectAsync(CancellationToken.None);

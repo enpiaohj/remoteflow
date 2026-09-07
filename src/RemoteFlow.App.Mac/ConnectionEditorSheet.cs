@@ -42,24 +42,26 @@ public sealed class ConnectionEditorSheet : NSWindowController
         Window.Title = vm.Title;
 
         // ── 协议分段 ────────────────────────────────────────────
-        var protocol = NSSegmentedControl.FromLabels(
-            new[] { "RDP", "SSH", "VNC" }, NSSegmentSwitchTracking.SelectOne, () => { });
+        // 逻辑直接传进 FromLabels 的 action：叠加 .Activated += 在部分 macOS 版本上
+        // 与工厂设置的 target/action 冲突，事件不触发（表现为切协议无反应）。
+        NSSegmentedControl protocol = null!;
+        protocol = NSSegmentedControl.FromLabels(
+            new[] { "RDP", "SSH", "VNC" }, NSSegmentSwitchTracking.SelectOne, () =>
+            {
+                _vm.Protocol = protocol.SelectedSegment switch
+                {
+                    1 => ProtocolType.Ssh,
+                    2 => ProtocolType.Vnc,
+                    _ => ProtocolType.Rdp,
+                };
+                SyncPortField();
+                RebuildAdvanced();
+                if (_vm.IsAdvancedExpanded)
+                {
+                    FitWindow();
+                }
+            });
         protocol.SelectedSegment = ProtocolIndex(vm.Protocol);
-        protocol.Activated += (_, _) =>
-        {
-            _vm.Protocol = protocol.SelectedSegment switch
-            {
-                1 => ProtocolType.Ssh,
-                2 => ProtocolType.Vnc,
-                _ => ProtocolType.Rdp,
-            };
-            SyncPortField();
-            RebuildAdvanced();
-            if (_vm.IsAdvancedExpanded)
-            {
-                FitWindow();
-            }
-        };
 
         // ── 必填字段 ────────────────────────────────────────────
         _name = Field(vm.Name);
@@ -374,10 +376,6 @@ public sealed class ConnectionEditorSheet : NSWindowController
 
     private void BuildRdpAdvanced(NSStackView stack)
     {
-        var display = NSSegmentedControl.FromLabels(
-            new[] { "适应窗口", "固定分辨率" }, NSSegmentSwitchTracking.SelectOne, () => { });
-        display.SelectedSegment = _vm.RdpDisplayMode == RdpDisplayMode.FixedResolution ? 1 : 0;
-
         var resolutions = _vm.AvailableResolutions.ToList();
         var resolution = Popup(resolutions.Select(r => r.Label),
             Math.Max(0, resolutions.FindIndex(r => r == _vm.SelectedResolution)));
@@ -385,13 +383,16 @@ public sealed class ConnectionEditorSheet : NSWindowController
         resolution.Activated += (_, _) =>
             _vm.SelectedResolution = resolutions[(int)resolution.IndexOfSelectedItem];
 
-        display.Activated += (_, _) =>
-        {
-            _vm.RdpDisplayMode = display.SelectedSegment == 1
-                ? RdpDisplayMode.FixedResolution
-                : RdpDisplayMode.FitToWindow;
-            resolution.Hidden = display.SelectedSegment != 1;
-        };
+        NSSegmentedControl display = null!;
+        display = NSSegmentedControl.FromLabels(
+            new[] { "适应窗口", "固定分辨率" }, NSSegmentSwitchTracking.SelectOne, () =>
+            {
+                _vm.RdpDisplayMode = display.SelectedSegment == 1
+                    ? RdpDisplayMode.FixedResolution
+                    : RdpDisplayMode.FitToWindow;
+                resolution.Hidden = display.SelectedSegment != 1;
+            });
+        display.SelectedSegment = _vm.RdpDisplayMode == RdpDisplayMode.FixedResolution ? 1 : 0;
 
         var qualities = _vm.ConnectionQualityOptions.ToList();
         var quality = Popup(qualities.Select(q => q.Label),

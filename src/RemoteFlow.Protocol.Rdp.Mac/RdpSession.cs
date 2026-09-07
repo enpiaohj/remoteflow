@@ -33,6 +33,18 @@ public sealed class RdpSession : RemoteSessionBase
     private int _buttons;
     private TaskCompletionSource<bool>? _connectGate;
 
+    /// <summary>「适应窗口」模式下请求的桌面像素尺寸。UI 层在 <see cref="ConnectAsync"/> 前按显示区设。</summary>
+    public (int Width, int Height)? PreferredSize { get; set; }
+
+    /// <summary>连接后视图尺寸变化时调用（FreeRDP DynamicResolutionUpdate）。</summary>
+    public void Resize(int width, int height)
+    {
+        if (_handle != nint.Zero && width > 0 && height > 0)
+        {
+            NativeRdp.rf_rdp_resize(_handle, width, height);
+        }
+    }
+
     public RdpSession(SessionRequest request, ILoggerFactory loggerFactory, IHostKeyRepository hostKeys)
     {
         _request = request;
@@ -70,8 +82,23 @@ public sealed class RdpSession : RemoteSessionBase
             }
 
             var p = _request.Profile;
-            var width = p.Rdp.DisplayMode == RdpDisplayMode.FixedResolution ? p.Rdp.DesktopWidth : 1920;
-            var height = p.Rdp.DisplayMode == RdpDisplayMode.FixedResolution ? p.Rdp.DesktopHeight : 1080;
+            int width, height;
+            if (p.Rdp.DisplayMode == RdpDisplayMode.FixedResolution)
+            {
+                width = p.Rdp.DesktopWidth;
+                height = p.Rdp.DesktopHeight;
+            }
+            else if (PreferredSize is { } pref)
+            {
+                // 适应窗口：按显示区实际像素请求桌面尺寸，消除上下黑边。
+                width = pref.Width;
+                height = pref.Height;
+            }
+            else
+            {
+                width = 1920;
+                height = 1080;
+            }
 
             var domain = string.IsNullOrEmpty(_credential?.Domain) ? p.Rdp.Domain : _credential!.Domain;
             var rc = NativeRdp.rf_rdp_connect(

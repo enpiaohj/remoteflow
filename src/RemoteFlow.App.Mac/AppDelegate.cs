@@ -119,6 +119,28 @@ public sealed class AppDelegate : NSApplicationDelegate
         editMenu.AddItem(new NSMenuItem("粘贴", "v") { Action = new ObjCRuntime.Selector("paste:") });
         editMenu.AddItem(new NSMenuItem("全选", "a") { Action = new ObjCRuntime.Selector("selectAll:") });
 
+        var viewItem = new NSMenuItem();
+        menubar.AddItem(viewItem);
+        var viewMenu = new NSMenu("显示");
+        viewItem.Submenu = viewMenu;
+        viewMenu.AddItem(new NSMenuItem("显示 / 隐藏边栏", "s", (_, _) =>
+            NSApplication.SharedApplication.SendAction(
+                new ObjCRuntime.Selector("toggleSidebar:"), null, NSApplication.SharedApplication))
+        {
+            KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.AlternateKeyMask,
+        });
+        viewMenu.AddItem(new NSMenuItem("显示 / 隐藏连接列表", "l", (_, _) =>
+            (NSApplication.SharedApplication.Delegate as AppDelegate)?._mainWindow?.ToggleListPane())
+        {
+            KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.AlternateKeyMask,
+        });
+        viewMenu.AddItem(NSMenuItem.SeparatorItem);
+        viewMenu.AddItem(new NSMenuItem("进入 / 退出全屏", "f", (_, _) =>
+            (NSApplication.SharedApplication.Delegate as AppDelegate)?._mainWindow?.Window?.ToggleFullScreen(null))
+        {
+            KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.ControlKeyMask,
+        });
+
         var windowItem = new NSMenuItem();
         menubar.AddItem(windowItem);
         var windowMenu = new NSMenu("窗口");

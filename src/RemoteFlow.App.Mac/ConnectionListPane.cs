@@ -59,20 +59,19 @@ public sealed class ConnectionListPane : NSViewController
 
         _recentRange = NSSegmentedControl.FromLabels(
             new[] { "今天", "7 天", "全部" }, NSSegmentSwitchTracking.SelectOne,
-            () => { });
+            () =>
+            {
+                _vm.RecentRange = _recentRange.SelectedSegment switch
+                {
+                    1 => RecentRange.Week,
+                    2 => RecentRange.All,
+                    _ => RecentRange.Today,
+                };
+                _flatSource?.Reload();
+                RefreshCount();
+            });
         _recentRange.SelectedSegment = 0;
         _recentRange.Hidden = true;
-        _recentRange.Activated += (_, _) =>
-        {
-            _vm.RecentRange = _recentRange.SelectedSegment switch
-            {
-                1 => RecentRange.Week,
-                2 => RecentRange.All,
-                _ => RecentRange.Today,
-            };
-            _flatSource?.Reload();
-            RefreshCount();
-        };
 
         _addGroup = new NSButton
         {
