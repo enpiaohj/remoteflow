@@ -1,6 +1,6 @@
 using AppKit;
 using CoreGraphics;
-using Microsoft.Extensions.DependencyInjection;
+using Foundation;using Microsoft.Extensions.DependencyInjection;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
@@ -22,6 +22,11 @@ public sealed class MainWindowController : NSWindowController
     private readonly ConnectionListPane _listPane;
     private readonly DetailView _detail = new();
     private readonly SessionTabBar _tabBar = new();
+    private readonly SessionPillBar _pill = new();
+    private bool _stageIsSession;
+    private NSToolbarItem? _sessionsItem;
+    private HotZone _pillHotZone = null!;
+    private bool _isFullScreen;
     private readonly NSView _stage = new() { TranslatesAutoresizingMaskIntoConstraints = false };
     private readonly NSSplitViewController _split = new();
     private readonly NSSearchField _search = new() { PlaceholderString = "搜索连接" };
@@ -69,6 +74,12 @@ public sealed class MainWindowController : NSWindowController
 
         _tabBar.TabSelected += (_, id) => ShowSessionStage(id);
         _tabBar.TabClosed += (_, id) => _ = CloseSessionAsync(id);
+        _tabBar.FullScreenRequested += (_, _) => Window.ToggleFullScreen(null);
+
+        _pill.SessionsProvider = () => _tabBar.Sessions;
+        _pill.SessionPicked += (_, id) => _tabBar.RequestSelect(id);
+        _pill.ExitFullScreenRequested += (_, _) => Window.ToggleFullScreen(null);
+        WireFullScreenNotifications();
         _sessions.SessionClosed += (_, id) =>
             NSApplication.SharedApplication.BeginInvokeOnMainThread(() => DropSession(id));
 
@@ -128,6 +139,24 @@ public sealed class MainWindowController : NSWindowController
         _stageTop = _stage.TopAnchor.ConstraintEqualTo(detailRoot.SafeAreaLayoutGuide.TopAnchor);
         _stageTopWithTabs = _stage.TopAnchor.ConstraintEqualTo(_tabBar.BottomAnchor);
         _stageTop.Active = true;
+
+        // 全屏悬浮药丸 + 顶沿唤出热区（都盖在舞台之上，热区不吃点击）。
+        _pillHotZone = new HotZone(
+            onEnter: () => { if (_isFullScreen && _tabBar.Count > 0) _pill.Reveal(); },
+            onExit: () => _pill.MaybeHide());
+        detailRoot.AddSubview(_pillHotZone);
+        detailRoot.AddSubview(_pill);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            _pillHotZone.LeadingAnchor.ConstraintEqualTo(_stage.LeadingAnchor),
+            _pillHotZone.TrailingAnchor.ConstraintEqualTo(_stage.TrailingAnchor),
+            _pillHotZone.TopAnchor.ConstraintEqualTo(_stage.TopAnchor),
+            _pillHotZone.HeightAnchor.ConstraintEqualTo(6),
+
+            _pill.CenterXAnchor.ConstraintEqualTo(_stage.CenterXAnchor),
+            _pill.TopAnchor.ConstraintEqualTo(_stage.TopAnchor),
+        });
+
         // 详情列必须"乐意被拉宽"，否则 NSSplitViewController 会按它的 fittingSize
         // 当最大厚度，窗口就出现宽度锁定。
         detailRoot.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
@@ -146,13 +175,87 @@ public sealed class MainWindowController : NSWindowController
         Window.ContentViewController = _split;
     }
 
+    /// <summary>
+    /// 全屏时隐藏 Tab 条（垂直空间全给画面），改用顶沿悬浮药丸；退出全屏还原。
+    /// </summary>
+    private void WireFullScreenNotifications()
+    {
+        var nc = NSNotificationCenter.DefaultCenter;
+        nc.AddObserver(NSWindow.DidEnterFullScreenNotification, _ =>
+        {
+            _isFullScreen = true;
+            SyncTabBarVisibility();
+            SyncPill();
+        }, Window);
+        nc.AddObserver(NSWindow.DidExitFullScreenNotification, _ =>
+        {
+            _isFullScreen = false;
+            _pill.ForceHide();
+            SyncTabBarVisibility();
+        }, Window);
+    }
+
+    private void SyncPill()
+    {
+        if (!_isFullScreen || _tabBar.Count == 0)
+        {
+            _pill.ForceHide();
+            return;
+        }
+
+        var active = _tabBar.Sessions.FirstOrDefault(x => x.Id == _tabBar.ActiveId);
+        if (active.Id != Guid.Empty)
+        {
+            _pill.SetSession(active.Title, active.Protocol);
+        }
+
+        _pill.Reveal(); // 刚进全屏先露一下，告诉用户工具条在哪；未固定则移开鼠标后收起
+    }
+
+    /// <summary>顶沿唤出热区：只感知鼠标进出，不拦截点击（HitTest 返回 null）。</summary>
+    private sealed class HotZone : NSView
+    {
+        private readonly Action _onEnter;
+        private readonly Action _onExit;
+        private NSTrackingArea? _tracking;
+
+        public HotZone(Action onEnter, Action onExit)
+        {
+            _onEnter = onEnter;
+            _onExit = onExit;
+            TranslatesAutoresizingMaskIntoConstraints = false;
+        }
+
+        public override NSView? HitTest(CGPoint aPoint) => null;
+
+        public override void UpdateTrackingAreas()
+        {
+            base.UpdateTrackingAreas();
+            if (_tracking is not null)
+            {
+                RemoveTrackingArea(_tracking);
+            }
+
+            _tracking = new NSTrackingArea(Bounds,
+                NSTrackingAreaOptions.MouseEnteredAndExited | NSTrackingAreaOptions.ActiveInKeyWindow,
+                this, null);
+            AddTrackingArea(_tracking);
+        }
+
+        public override void MouseEntered(NSEvent theEvent) => _onEnter();
+
+        public override void MouseExited(NSEvent theEvent) => _onExit();
+    }
+
     private NSLayoutConstraint _stageTop = null!;
     private NSLayoutConstraint _stageTopWithTabs = null!;
 
 
     private void SyncTabBarVisibility()
     {
-        var show = _tabBar.Count > 0;
+        // 只有「舞台正在显示会话画面」时才出现 Tab 条 —— 首页 / 凭据 / 连接详情上
+        // 挂一条会话标签既突兀也没用。全屏下也不显示（改用悬浮药丸）。
+        var show = _tabBar.Count > 0 && _stageIsSession && !_isFullScreen;
         _tabBar.Hidden = !show;
         _stageTop.Active = !show;
         _stageTopWithTabs.Active = show;
@@ -170,6 +273,9 @@ public sealed class MainWindowController : NSWindowController
         {
             v.RemoveFromSuperview();
         }
+
+        // 舞台上只有「会话画面」和「详情视图」两类，据此决定是否显示 Tab 条。
+        _stageIsSession = !ReferenceEquals(view, _detail);
 
         view.TranslatesAutoresizingMaskIntoConstraints = true;
         view.Frame = _stage.Bounds;
@@ -231,6 +337,33 @@ public sealed class MainWindowController : NSWindowController
     {
         _tabBar.ClearHighlight();
         ShowStage(_detail);
+        SyncTabBarVisibility();
+    }
+
+    /// <summary>工具栏「会话」按钮：有会话才可用，点一下从任意页面回到当前会话。</summary>
+    private void SyncSessionsItem()
+    {
+        if (_sessionsItem is null)
+        {
+            return;
+        }
+
+        var n = _tabBar.Count;
+        _sessionsItem.Enabled = n > 0;
+        _sessionsItem.Label = n > 0 ? $"会话 {n}" : "会话";
+        _sessionsItem.ToolTip = n > 0 ? $"回到会话（共 {n} 个）" : "当前没有会话";
+    }
+
+    /// <summary>从任意页面回到会话画面。</summary>
+    public void ReturnToSessions()
+    {
+        if (_tabBar.Count == 0)
+        {
+            return;
+        }
+
+        var id = _tabBar.ActiveId != Guid.Empty ? _tabBar.ActiveId : _tabBar.Sessions[^1].Id;
+        ShowSessionStage(id);
     }
 
     private void ShowSessionStage(Guid id)
@@ -240,6 +373,9 @@ public sealed class MainWindowController : NSWindowController
             _activeSessionId = id;
             _tabBar.HighlightOnly(id);
             ShowStage(view);
+            SyncTabBarVisibility();
+            SyncSessionsItem();
+            SyncPill();
             if (_sessionNames.TryGetValue(id, out var n))
             {
                 Window.Title = $"{n} — RemoteFlow";
@@ -271,6 +407,7 @@ public sealed class MainWindowController : NSWindowController
     private sealed class ToolbarDelegate : NSToolbarDelegate
     {
         private const string NewConn = "rf.new";
+        private const string Sessions = "rf.sessions";
         private const string ToggleList = "rf.togglelist";
         private const string Search = "rf.search";
         private readonly MainWindowController _o;
@@ -282,6 +419,7 @@ public sealed class MainWindowController : NSWindowController
             NSToolbar.NSToolbarSidebarTrackingSeparatorItemIdentifier,
             ToggleList,
             NewConn,
+            Sessions,
             NSToolbar.NSToolbarFlexibleSpaceItemIdentifier,
             Search,
         };
@@ -317,6 +455,20 @@ public sealed class MainWindowController : NSWindowController
                     toggle.Enabled = _o._listApplicable;
                     _o._toggleListItem = toggle;
                     return toggle;
+                case Sessions:
+                    var ses = new NSToolbarItem(Sessions)
+                    {
+                        Label = "会话",
+                        ToolTip = "当前没有会话",
+                        Image = NSImage.GetSystemSymbol("macwindow.on.rectangle", null)
+                                ?? NSImage.GetSystemSymbol("rectangle.stack", null),
+                        Bordered = true,
+                    };
+                    ses.Activated += (_, _) => _o.ReturnToSessions();
+                    ses.Autovalidates = false;
+                    ses.Enabled = false;
+                    _o._sessionsItem = ses;
+                    return ses;
                 case Search:
                     return new NSSearchToolbarItem(Search) { SearchField = _o._search };
                 default:
@@ -338,6 +490,7 @@ public sealed class MainWindowController : NSWindowController
         {
             _tabBar.ClearHighlight();
             ShowStage(_detail);
+            SyncTabBarVisibility();
         }
 
         switch (item)
@@ -533,6 +686,7 @@ public sealed class MainWindowController : NSWindowController
             _sessionNames[session.SessionId] = name;
             _tabBar.AddTab(session.SessionId, name, profile.Protocol);
             SyncTabBarVisibility();
+            SyncSessionsItem();
             ShowSessionStage(session.SessionId);
             Window.Title = $"{name} — RemoteFlow";
         }
@@ -570,6 +724,8 @@ public sealed class MainWindowController : NSWindowController
         _sessionNames.Remove(id);
         _tabBar.RemoveTab(id); // 若还有 Tab，内部会重选最后一个并触发 ShowSessionStage
         SyncTabBarVisibility();
+        SyncSessionsItem();
+        SyncPill();
 
         if (_tabBar.Count == 0)
         {

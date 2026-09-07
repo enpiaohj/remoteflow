@@ -5,15 +5,17 @@ using RemoteFlow.Core.Models;
 namespace RemoteFlow.App.Mac;
 
 /// <summary>
-/// 详情区顶部的会话 Tab 条。每个活动会话一个 Tab（协议图标 + 名称 + 关闭）。
-/// 无会话时由宿主隐藏。
+/// 详情区顶部的会话 Tab 条：左侧可横向滚动的会话胶囊，右侧常驻动作区（全屏）。
+/// 对齐 Windows 版 SessionHostView 的常驻工具条。无会话时由宿主隐藏。
 /// </summary>
 public sealed class SessionTabBar : NSView
 {
+    private const int BarHeight = 38;
+
     private readonly NSStackView _row = new()
     {
         Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
-        Spacing = 0,
+        Spacing = 2,
         Alignment = NSLayoutAttribute.CenterY,
         TranslatesAutoresizingMaskIntoConstraints = false,
     };
@@ -24,13 +26,16 @@ public sealed class SessionTabBar : NSView
     public event EventHandler<Guid>? TabSelected;
     public event EventHandler<Guid>? TabClosed;
 
+    /// <summary>右侧「全屏」按钮（⌃⌘F）。</summary>
+    public event EventHandler? FullScreenRequested;
+
     public int Count => _tabs.Count;
 
     public SessionTabBar()
     {
         TranslatesAutoresizingMaskIntoConstraints = false;
         WantsLayer = true;
-        Layer!.BackgroundColor = NSColor.WindowBackground.CGColor;
+        RefreshChrome();
 
         var scroll = new NSScrollView
         {
@@ -40,24 +45,84 @@ public sealed class SessionTabBar : NSView
             HasVerticalScroller = false,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
+
+        var full = IconButton("arrow.up.left.and.arrow.down.right", "进入全屏（⌃⌘F）");
+        full.Activated += (_, _) => FullScreenRequested?.Invoke(this, EventArgs.Empty);
+
+        var actions = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.CenterY,
+            Spacing = 2,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        actions.AddArrangedSubview(full);
+
+        var vsep = new NSBox { BoxType = NSBoxType.NSBoxSeparator, TranslatesAutoresizingMaskIntoConstraints = false };
         var sep = new NSBox { BoxType = NSBoxType.NSBoxSeparator, TranslatesAutoresizingMaskIntoConstraints = false };
 
         AddSubview(scroll);
+        AddSubview(vsep);
+        AddSubview(actions);
         AddSubview(sep);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
             scroll.LeadingAnchor.ConstraintEqualTo(LeadingAnchor),
-            scroll.TrailingAnchor.ConstraintEqualTo(TrailingAnchor),
+            scroll.TrailingAnchor.ConstraintEqualTo(vsep.LeadingAnchor, -6),
             scroll.TopAnchor.ConstraintEqualTo(TopAnchor),
             scroll.BottomAnchor.ConstraintEqualTo(sep.TopAnchor),
-            _row.LeadingAnchor.ConstraintEqualTo(scroll.ContentView.LeadingAnchor, 6),
+            _row.LeadingAnchor.ConstraintEqualTo(scroll.ContentView.LeadingAnchor, 8),
             _row.TopAnchor.ConstraintEqualTo(scroll.ContentView.TopAnchor),
             _row.BottomAnchor.ConstraintEqualTo(scroll.ContentView.BottomAnchor),
+
+            vsep.WidthAnchor.ConstraintEqualTo(1),
+            vsep.HeightAnchor.ConstraintEqualTo(16),
+            vsep.CenterYAnchor.ConstraintEqualTo(CenterYAnchor, -1),
+            vsep.TrailingAnchor.ConstraintEqualTo(actions.LeadingAnchor, -6),
+
+            actions.TrailingAnchor.ConstraintEqualTo(TrailingAnchor, -8),
+            actions.CenterYAnchor.ConstraintEqualTo(CenterYAnchor, -1),
+
             sep.LeadingAnchor.ConstraintEqualTo(LeadingAnchor),
             sep.TrailingAnchor.ConstraintEqualTo(TrailingAnchor),
             sep.BottomAnchor.ConstraintEqualTo(BottomAnchor),
-            HeightAnchor.ConstraintEqualTo(34),
+            HeightAnchor.ConstraintEqualTo(BarHeight),
         });
+    }
+
+    /// <summary>条上通用的 28×28 无边框图标按钮。</summary>
+    internal static NSButton IconButton(string symbol, string tip)
+    {
+        var b = new NSButton
+        {
+            Image = NSImage.GetSystemSymbol(symbol, null),
+            Bordered = false,
+            ToolTip = tip,
+            ContentTintColor = NSColor.SecondaryLabel,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+            SymbolConfiguration = NSImageSymbolConfiguration.Create(13, NSFontWeight.Regular),
+        };
+        b.WidthAnchor.ConstraintEqualTo(28).Active = true;
+        b.HeightAnchor.ConstraintEqualTo(26).Active = true;
+        return b;
+    }
+
+    public override void ViewDidChangeEffectiveAppearance()
+    {
+        base.ViewDidChangeEffectiveAppearance();
+        RefreshChrome();
+        foreach (var t in _tabs)
+        {
+            t.RefreshChrome();
+        }
+    }
+
+    private void RefreshChrome()
+    {
+        var prev = NSAppearance.CurrentAppearance;
+        NSAppearance.CurrentAppearance = EffectiveAppearance;
+        Layer!.BackgroundColor = NSColor.WindowBackground.CGColor;
+        NSAppearance.CurrentAppearance = prev;
     }
 
     public void AddTab(Guid id, string name, ProtocolType protocol)
@@ -93,6 +158,14 @@ public sealed class SessionTabBar : NSView
     public void RenameTab(Guid id, string name)
         => _tabs.FirstOrDefault(t => t.Id == id)?.SetTitle(name);
 
+    /// <summary>会话列表（供全屏药丸的「切换会话」菜单用）。</summary>
+    public IReadOnlyList<(Guid Id, string Title, ProtocolType Protocol)> Sessions
+        => _tabs.Select(t => (t.Id, t.Title, t.Protocol)).ToList();
+
+    public Guid ActiveId => _active;
+
+    public void RequestSelect(Guid id) => Select(id);
+
     /// <summary>仅更新高亮，不触发 <see cref="TabSelected"/>（宿主自身切换时用）。</summary>
     public void HighlightOnly(Guid id)
     {
@@ -120,24 +193,31 @@ public sealed class SessionTabBar : NSView
 
     private void Close(Guid id) => TabClosed?.Invoke(this, id);
 
+    /// <summary>单个会话胶囊：协议色圆点 + 名称 + 关闭（悬停 / 选中才显示）。</summary>
     private sealed class Tab
     {
         public Guid Id { get; }
+        public string Title { get; private set; }
+        public ProtocolType Protocol { get; }
         public NSView View { get; }
+
         private readonly NSTextField _label;
-        private readonly NSView _bg;
+        private readonly HoverPill _pill;
+        private readonly NSButton _close;
+        private readonly NSView _dot;
+        private bool _active;
 
         public Tab(Guid id, string name, ProtocolType protocol, SessionTabBar owner)
         {
             Id = id;
+            Title = name;
+            Protocol = protocol;
 
-            var icon = new NSImageView
-            {
-                Image = ProtocolStyle.Symbol(protocol),
-                ContentTintColor = ProtocolStyle.Tint(protocol),
-                TranslatesAutoresizingMaskIntoConstraints = false,
-                SymbolConfiguration = NSImageSymbolConfiguration.Create(12, NSFontWeight.Regular),
-            };
+            var tint = ProtocolStyle.Tint(protocol);
+            _dot = new NSView { WantsLayer = true, TranslatesAutoresizingMaskIntoConstraints = false };
+            _dot.Layer!.CornerRadius = 3;
+            _dot.Layer.BackgroundColor = tint.CGColor;
+
             _label = new NSTextField
             {
                 StringValue = name,
@@ -146,60 +226,146 @@ public sealed class SessionTabBar : NSView
                 Selectable = false,
                 DrawsBackground = false,
                 Font = NSFont.SystemFontOfSize(12),
+                TextColor = NSColor.SecondaryLabel,
                 LineBreakMode = NSLineBreakMode.TruncatingTail,
                 TranslatesAutoresizingMaskIntoConstraints = false,
+                ToolTip = name,
             };
-            var close = new NSButton
+
+            _close = new NSButton
             {
                 Image = NSImage.GetSystemSymbol("xmark", null),
                 Bordered = false,
+                ToolTip = "关闭会话",
+                ContentTintColor = NSColor.SecondaryLabel,
                 TranslatesAutoresizingMaskIntoConstraints = false,
-                SymbolConfiguration = NSImageSymbolConfiguration.Create(9, NSFontWeight.Bold),
+                SymbolConfiguration = NSImageSymbolConfiguration.Create(9, NSFontWeight.Semibold),
+                Hidden = true,
             };
-            close.Activated += (_, _) => owner.Close(id);
+            _close.Activated += (_, _) => owner.Close(id);
 
-            _bg = new ClickView(() => owner.Select(id)) { WantsLayer = true, TranslatesAutoresizingMaskIntoConstraints = false };
-            _bg.Layer!.CornerRadius = 6;
+            _pill = new HoverPill(() => owner.Select(id));
+            _pill.HoverChanged = _ => Restyle();
 
-            _bg.AddSubview(icon);
-            _bg.AddSubview(_label);
-            _bg.AddSubview(close);
+            _pill.AddSubview(_dot);
+            _pill.AddSubview(_label);
+            _pill.AddSubview(_close);
             NSLayoutConstraint.ActivateConstraints(new[]
             {
-                icon.LeadingAnchor.ConstraintEqualTo(_bg.LeadingAnchor, 9),
-                icon.CenterYAnchor.ConstraintEqualTo(_bg.CenterYAnchor),
-                _label.LeadingAnchor.ConstraintEqualTo(icon.TrailingAnchor, 6),
-                _label.CenterYAnchor.ConstraintEqualTo(_bg.CenterYAnchor),
-                _label.WidthAnchor.ConstraintLessThanOrEqualTo(140),
-                close.LeadingAnchor.ConstraintEqualTo(_label.TrailingAnchor, 6),
-                close.TrailingAnchor.ConstraintEqualTo(_bg.TrailingAnchor, -8),
-                close.CenterYAnchor.ConstraintEqualTo(_bg.CenterYAnchor),
-                close.WidthAnchor.ConstraintEqualTo(14),
-                _bg.HeightAnchor.ConstraintEqualTo(26),
+                _dot.LeadingAnchor.ConstraintEqualTo(_pill.LeadingAnchor, 10),
+                _dot.CenterYAnchor.ConstraintEqualTo(_pill.CenterYAnchor),
+                _dot.WidthAnchor.ConstraintEqualTo(6),
+                _dot.HeightAnchor.ConstraintEqualTo(6),
+
+                _label.LeadingAnchor.ConstraintEqualTo(_dot.TrailingAnchor, 8),
+                _label.CenterYAnchor.ConstraintEqualTo(_pill.CenterYAnchor),
+                _label.WidthAnchor.ConstraintLessThanOrEqualTo(150),
+
+                _close.LeadingAnchor.ConstraintEqualTo(_label.TrailingAnchor, 6),
+                _close.TrailingAnchor.ConstraintEqualTo(_pill.TrailingAnchor, -7),
+                _close.CenterYAnchor.ConstraintEqualTo(_pill.CenterYAnchor),
+                _close.WidthAnchor.ConstraintEqualTo(15),
+                _close.HeightAnchor.ConstraintEqualTo(15),
+
+                _pill.HeightAnchor.ConstraintEqualTo(28),
             });
 
-            var pad = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
-            pad.AddSubview(_bg);
-            NSLayoutConstraint.ActivateConstraints(new[]
-            {
-                _bg.LeadingAnchor.ConstraintEqualTo(pad.LeadingAnchor, 3),
-                _bg.TrailingAnchor.ConstraintEqualTo(pad.TrailingAnchor, -3),
-                _bg.CenterYAnchor.ConstraintEqualTo(pad.CenterYAnchor),
-            });
-            View = pad;
-            SetActive(false);
+            View = _pill;
+            Restyle();
         }
 
-        public void SetTitle(string name) => _label.StringValue = name;
+        public void SetTitle(string name)
+        {
+            Title = name;
+            _label.StringValue = name;
+            _label.ToolTip = name;
+        }
 
         public void SetActive(bool active)
-            => _bg.Layer!.BackgroundColor = (active ? NSColor.SelectedContentBackground : NSColor.Clear).CGColor;
+        {
+            _active = active;
+            Restyle();
+        }
 
-        private sealed class ClickView : NSView
+        public void RefreshChrome() => Restyle();
+
+        private void Restyle()
+        {
+            var prev = NSAppearance.CurrentAppearance;
+            NSAppearance.CurrentAppearance = _pill.EffectiveAppearance;
+
+            // 选中：控件强调色淡填充 + 同色描边；悬停：极淡中性底；其余：透明。
+            NSColor fill = _active
+                ? NSColor.ControlAccent.ColorWithAlphaComponent(0.16f)
+                : _pill.Hovering
+                    ? NSColor.SecondaryLabel.ColorWithAlphaComponent(0.10f)
+                    : NSColor.Clear;
+            _pill.Layer!.BackgroundColor = fill.CGColor;
+            _pill.Layer.BorderWidth = _active ? 1 : 0;
+            _pill.Layer.BorderColor = NSColor.ControlAccent.ColorWithAlphaComponent(0.35f).CGColor;
+
+            _label.TextColor = _active ? NSColor.Label : NSColor.SecondaryLabel;
+            _label.Font = NSFont.SystemFontOfSize(12, _active ? NSFontWeight.Medium : NSFontWeight.Regular);
+            _dot.Layer!.BackgroundColor = _active
+                ? ProtocolStyle.Tint(Protocol).CGColor
+                : ProtocolStyle.Tint(Protocol).ColorWithAlphaComponent(0.55f).CGColor;
+
+            // 关闭按钮只在选中或悬停时出现，避免一排叉号。
+            _close.Hidden = !(_active || _pill.Hovering);
+
+            NSAppearance.CurrentAppearance = prev;
+        }
+
+        /// <summary>可点击 + 悬停感知的圆角容器。</summary>
+        private sealed class HoverPill : NSView
         {
             private readonly Action _onClick;
-            public ClickView(Action onClick) => _onClick = onClick;
+            private NSTrackingArea? _tracking;
+
+            public bool Hovering { get; private set; }
+            public Action<bool>? HoverChanged;
+
+            public HoverPill(Action onClick)
+            {
+                _onClick = onClick;
+                WantsLayer = true;
+                TranslatesAutoresizingMaskIntoConstraints = false;
+                Layer!.CornerRadius = 7;
+            }
+
+            public override void UpdateTrackingAreas()
+            {
+                base.UpdateTrackingAreas();
+                if (_tracking is not null)
+                {
+                    RemoveTrackingArea(_tracking);
+                }
+
+                _tracking = new NSTrackingArea(Bounds,
+                    NSTrackingAreaOptions.MouseEnteredAndExited | NSTrackingAreaOptions.ActiveInKeyWindow,
+                    this, null);
+                AddTrackingArea(_tracking);
+            }
+
+            public override void MouseEntered(NSEvent theEvent)
+            {
+                Hovering = true;
+                HoverChanged?.Invoke(true);
+            }
+
+            public override void MouseExited(NSEvent theEvent)
+            {
+                Hovering = false;
+                HoverChanged?.Invoke(false);
+            }
+
             public override void MouseDown(NSEvent theEvent) => _onClick();
+
+            public override void ViewDidChangeEffectiveAppearance()
+            {
+                base.ViewDidChangeEffectiveAppearance();
+                HoverChanged?.Invoke(Hovering);
+            }
         }
     }
 }
