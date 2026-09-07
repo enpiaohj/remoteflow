@@ -150,9 +150,14 @@ public sealed class MainWindowController : NSWindowController
 
         Window.ContentViewController = _split;
 
-        // 初始给列表列一个宽度
+        // 初始给列表列一个宽度（若启动页已折叠列表则不动）
         NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
-            _innerSplit.SetPositionOfDivider(300, 0));
+        {
+            if (!_listCollapsed)
+            {
+                _innerSplit.SetPositionOfDivider(300, 0);
+            }
+        });
     }
 
     /// <summary>内层 split：列表列可拖 240–460；折叠时归 0。</summary>
@@ -380,15 +385,24 @@ public sealed class MainWindowController : NSWindowController
 
     private void SetListVisible(bool visible)
     {
-        if (_listCollapsed == !visible || _innerSplit.Subviews.Length < 2)
+        if (_innerSplit.Subviews.Length < 2)
         {
             return;
         }
 
         _listCollapsed = !visible;
         // 普通 NSSplitView，不经窗口 contentViewController，折叠不改窗口尺寸。
-        _innerSplit.SetPositionOfDivider(visible ? 300 : 0, 0);
+        // 只设 Hidden + SetPositionOfDivider 不够：普通 NSSplitView 要等下一次 resize 事件
+        // 才 re-tile，中间会留一段空白，非得手动拉一下窗口才正常。这里显式 AdjustSubviews
+        // + 强制布局，让详情列立刻吃满空出来的宽度。
         _listPaneView.Hidden = !visible;
+        _innerSplit.AdjustSubviews();
+        if (visible)
+        {
+            _innerSplit.SetPositionOfDivider(300, 0);
+        }
+        _innerSplit.LayoutSubtreeIfNeeded();
+        _innerSplit.DisplayIfNeeded();
     }
 
     public void OpenSettings()
