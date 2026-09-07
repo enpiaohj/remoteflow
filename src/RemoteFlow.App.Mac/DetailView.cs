@@ -83,7 +83,7 @@ public sealed class DetailView : NSView
     {
         if (_detailVm?.SelectedItem is { } c)
         {
-            Swap(BuildDetail(_detailVm, c));
+            SafeSwap(() => BuildDetail(_detailVm, c), "连接详情");
             _showingDetail = true;
         }
     }
@@ -110,7 +110,7 @@ public sealed class DetailView : NSView
 
     public void ShowHome(HomePageViewModel vm)
     {
-        Swap(BuildHome(vm));
+        SafeSwap(() => BuildHome(vm), "首页");
         _ = ReloadHomeAsync(vm);
     }
 
@@ -125,7 +125,22 @@ public sealed class DetailView : NSView
             // 首页数据加载失败不阻塞界面。
         }
 
-        NSApplication.SharedApplication.BeginInvokeOnMainThread(() => Swap(BuildHome(vm)));
+        NSApplication.SharedApplication.BeginInvokeOnMainThread(() => SafeSwap(() => BuildHome(vm), "首页"));
+    }
+
+    /// <summary>构造视图时若抛异常，退化为错误占位并把异常写日志，而不是让 ObjC 回调静默吞掉、页面空白。</summary>
+    private void SafeSwap(Func<NSView> build, string what)
+    {
+        try
+        {
+            Swap(build());
+        }
+        catch (Exception ex)
+        {
+            System.Console.Error.WriteLine($"[DetailView] 构造「{what}」失败: {ex}");
+            Swap(Centered(Icon("exclamationmark.triangle", 40, NSColor.SystemOrange),
+                $"「{what}」渲染失败", ex.Message));
+        }
     }
 
     public void ShowCredentials(CredentialsPageViewModel vm) => Swap(BuildCredentials(vm));
