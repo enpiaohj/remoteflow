@@ -188,13 +188,28 @@ public partial class MainWindow : Window
     /// <summary>进入全屏前的窗口位置与尺寸，退出时精确还原。</summary>
     private (double Left, double Top, double Width, double Height)? _preFullScreenBounds;
 
+    /// <summary>正在以代码把全屏窗口按回显示器边界，抑制 <see cref="Window.LocationChanged"/> 递归。</summary>
+    private bool _snappingFullScreen;
+
     /// <summary>
     /// 进入 / 退出无边框全屏。
     /// <para>
     /// <b>不用 <see cref="WindowState.Maximized"/></b>：无边框窗口最大化时 WPF 会
     /// 向四周各溢出约 8px，导致远端画面底部（含目标系统任务栏）和右侧被裁掉。
-    /// 改为按当前所在显示器的<b>完整物理边界</b>显式设置窗口位置与尺寸，
-    /// WindowState 保持 Normal，做到严格边到边、无溢出、覆盖本机任务栏。
+    /// </para>
+    /// <para>
+    /// <b>也不走 <see cref="Window.Left"/> / <see cref="Window.Top"/> 等 DIU 属性定位</b>：
+    /// PerMonitorV2 下这些属性的 DIU 空间随所在显示器缩放而变；而且在 WindowState /
+    /// WindowStyle 刚切换、HWND 尚未稳定关联到目标显示器时，
+    /// <see cref="PresentationSource"/> 的 <c>TransformFromDevice</c> 是旧值——
+    /// 换算出的边界会差几像素，后果是：
+    /// <list type="number">
+    ///   <item>窗口与显示器矩形没有<b>严格重合</b> → 系统不认作全屏 →
+    ///     本机任务栏仍压在远端画面（含目标系统任务栏）之上；</item>
+    ///   <item>上沿落到屏幕可视区之外 → 会话工具条的顶沿唤出带永远碰不到。</item>
+    /// </list>
+    /// 改为按<b>物理像素</b>用原始 <c>SetWindowPos</c> 铺到 <c>rcMonitor</c>，
+    /// 严格边到边、无溢出、覆盖本机任务栏；WindowState 保持 Normal。
     /// </para>
     /// <para>左侧导航、右侧详情、应用标题栏由 XAML 绑定 IsSessionFullScreen 收起；
     /// 会话工具条（含「退出全屏」按钮）始终保留，是全屏下退出的可靠入口。</para>
@@ -211,27 +226,24 @@ public partial class MainWindow : Window
             _preFullScreen = (WindowStyle, WindowState, ResizeMode);
             _preFullScreenBounds = (Left, Top, Width, Height);
 
-            // 取窗口当前所在显示器的完整边界（设备像素），换算为 WPF 设备无关单位。
-            var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-            var device = System.Windows.Forms.Screen.FromHandle(handle).Bounds;
-
-            var source = PresentationSource.FromVisual(this);
-            var toDiu = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
-            var topLeft = toDiu.Transform(new Point(device.Left, device.Top));
-            var size = toDiu.Transform(new Vector(device.Width, device.Height));
-
-            // 复位后再设边界，避免从最大化状态进入时尺寸不重算。
+            // 复位后再去边框：从最大化进入时先回到 Normal，避免 WPF 沿用旧的最大化尺寸。
             WindowState = WindowState.Normal;
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
 
-            Left = topLeft.X;
-            Top = topLeft.Y;
-            Width = size.X;
-            Height = size.Y;
+            SnapToMonitorBounds();
+
+            // WindowStyle=None 会触发 WPF 重建窗口框架、可能回写位置，
+            // 布局稳定后再断言一次，抢在其之后。
+            Dispatcher.BeginInvoke(SnapToMonitorBounds, System.Windows.Threading.DispatcherPriority.Loaded);
+
+            LocationChanged -= OnFullScreenWindowMoved;
+            LocationChanged += OnFullScreenWindowMoved;
         }
         else
         {
+            LocationChanged -= OnFullScreenWindowMoved;
+
             if (_preFullScreen is not { } previous)
             {
                 return;
@@ -254,6 +266,53 @@ public partial class MainWindow : Window
         }
 
         UpdateRootPadding();
+    }
+
+    /// <summary>全屏期间窗口被 WPF 重排 / 显示器切换挪离边界时，snap 回当前显示器完整边界。</summary>
+    private void OnFullScreenWindowMoved(object? sender, EventArgs e)
+    {
+        if (_preFullScreen is not null && !_snappingFullScreen)
+        {
+            SnapToMonitorBounds();
+        }
+    }
+
+    /// <summary>把窗口按当前所在显示器的完整物理边界（rcMonitor）严格铺满。已重合则不动。</summary>
+    private void SnapToMonitorBounds()
+    {
+        if (_preFullScreen is null)
+        {
+            return;
+        }
+
+        var handle = _hwnd != IntPtr.Zero ? _hwnd : new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var bounds = System.Windows.Forms.Screen.FromHandle(handle).Bounds;
+
+        // 已严格重合就别再 SetWindowPos，否则 WM_WINDOWPOSCHANGED → LocationChanged 会自激。
+        if (NativeMethods.GetWindowRect(handle, out var current)
+            && current.Left == bounds.Left && current.Top == bounds.Top
+            && current.Right == bounds.Right && current.Bottom == bounds.Bottom)
+        {
+            return;
+        }
+
+        _snappingFullScreen = true;
+        try
+        {
+            NativeMethods.SetWindowPos(
+                handle, IntPtr.Zero,
+                bounds.Left, bounds.Top, bounds.Width, bounds.Height,
+                NativeMethods.SwpNoZOrder | NativeMethods.SwpNoActivate | NativeMethods.SwpFrameChanged);
+        }
+        finally
+        {
+            _snappingFullScreen = false;
+        }
     }
 
     /// <summary>
@@ -404,6 +463,13 @@ public partial class MainWindow : Window
 
     private void OnWindowSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        // 全屏期间尺寸被 WPF 的窗口态迁移逻辑改动（如从最大化进入时残留的 -8px 溢出
+        // 尺寸），snap 回显示器完整边界。SnapToMonitorBounds 已重合则不动，不会自激。
+        if (_preFullScreen is not null && !_snappingFullScreen)
+        {
+            SnapToMonitorBounds();
+        }
+
         if (!e.WidthChanged)
         {
             return;
@@ -553,5 +619,29 @@ public partial class MainWindow : Window
 
         [DllImport("user32.dll")]
         public static extern nint GetForegroundWindow();
+
+        // ── 无边框全屏定位（物理像素，绕过 WPF 的 DIU 往返）──────────
+
+        public const uint SwpNoZOrder = 0x0004;
+        public const uint SwpNoActivate = 0x0010;
+        public const uint SwpFrameChanged = 0x0020;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SetWindowPos(
+            nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetWindowRect(nint hWnd, out RECT rect);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
     }
 }

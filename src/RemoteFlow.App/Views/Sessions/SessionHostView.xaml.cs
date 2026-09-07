@@ -47,8 +47,13 @@ public partial class SessionHostView : UserControl
     /// <summary>刚唤出后的最短驻留时间，避免鼠标掠过顶沿时一闪而过。</summary>
     private static readonly TimeSpan MinVisibleTime = TimeSpan.FromMilliseconds(450);
 
-    /// <summary>未展开时，认定“鼠标贴到顶沿”的判定高度（DIU）。</summary>
-    private const double EdgeRevealBand = 4;
+    /// <summary>
+    /// 未展开时，认定“鼠标贴到顶沿”的判定高度（DIU）。
+    /// 取值刻意放宽：无边框全屏若定位有几像素误差（窗口上沿略高 / 略低于显示器上沿），
+    /// 光标贴到屏幕最顶端时相对 <see cref="RootGrid"/> 的 Y 会偏离 0 十几像素；
+    /// 严格的边到边定位由 <c>MainWindow.SnapToMonitorBounds</c> 保证，这里只是兜底。
+    /// </summary>
+    private const double EdgeRevealBand = 20;
 
     /// <summary>展开时，药丸左右各留多少 DIU 作为“停留”感应区。</summary>
     private const double KeepZonePadX = 52;
@@ -352,7 +357,9 @@ public partial class SessionHostView : UserControl
         else
         {
             var withinX = rel.X >= 0 && rel.X <= ActualWidth;
-            if (withinX && rel.Y >= -2 && rel.Y <= EdgeRevealBand)
+            // 两侧都用 EdgeRevealBand 容差：窗口上沿被顶出可视区时 rel.Y 落在带的上方，
+            // 窗口上沿略低于显示器上沿时落在带的下方，两种都要能唤出。
+            if (withinX && rel.Y >= -EdgeRevealBand && rel.Y <= EdgeRevealBand)
             {
                 ShowToolbar();
             }
@@ -367,7 +374,7 @@ public partial class SessionHostView : UserControl
         var right = pillLeft + PillBar.ActualWidth + KeepZonePadX;
         var bottom = ToolbarPopup.VerticalOffset + PillBar.Margin.Top + PillBar.ActualHeight + KeepZonePadY;
 
-        return rel.X >= left && rel.X <= right && rel.Y >= -4 && rel.Y <= bottom;
+        return rel.X >= left && rel.X <= right && rel.Y >= -EdgeRevealBand && rel.Y <= bottom;
     }
 
     private void OnAutoHideTick(object? sender, EventArgs e)
