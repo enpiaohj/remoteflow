@@ -26,6 +26,9 @@ public sealed class MainWindowController : NSWindowController
     private readonly NSSplitViewController _split = new();
     private readonly NSSearchField _search = new() { PlaceholderString = "搜索连接" };
     private NSSplitViewItem? _listItem;
+    private NSToolbarItem? _toggleListItem;
+    /// <summary>当前页是否有可折叠的列表列（首页 / 凭据没有）。</summary>
+    private bool _listApplicable = true;
 
     // 会话 Id → 其画面视图（SshTerminalView / VncScreenView）。多 Tab 并存。
     private readonly Dictionary<Guid, NSView> _sessionViews = new();
@@ -125,14 +128,18 @@ public sealed class MainWindowController : NSWindowController
         _stageTop = _stage.TopAnchor.ConstraintEqualTo(detailRoot.SafeAreaLayoutGuide.TopAnchor);
         _stageTopWithTabs = _stage.TopAnchor.ConstraintEqualTo(_tabBar.BottomAnchor);
         _stageTop.Active = true;
+        // 详情列必须"乐意被拉宽"，否则 NSSplitViewController 会按它的 fittingSize
+        // 当最大厚度，窗口就出现宽度锁定。
+        detailRoot.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
+        _stage.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
 
         ShowStage(_detail);
 
         var detailVc = new NSViewController { View = detailRoot };
         var detailItem = NSSplitViewItem.FromViewController(detailVc);
         detailItem.MinimumThickness = 420;
-        detailItem.MaximumThickness = 100_000; // 明确无上限：否则 NSSplitViewController 会按内容
-                                               // fittingSize 推断详情列最大宽 → 首页折叠列表后窗口拉不宽 / 缩窗
+        detailItem.MaximumThickness = 100_000; // 显式无上限：不设的话 NSSplitViewController 只让
+                                               // 详情列长到 max(min, fittingSize)，窗口就拉不宽
         detailItem.HoldingPriority = 250;      // 最低 —— 窗口 / 折叠变化时优先由详情列伸缩
         _split.AddSplitViewItem(detailItem);
 
@@ -142,6 +149,7 @@ public sealed class MainWindowController : NSWindowController
     private NSLayoutConstraint _stageTop = null!;
     private NSLayoutConstraint _stageTopWithTabs = null!;
 
+
     private void SyncTabBarVisibility()
     {
         var show = _tabBar.Count > 0;
@@ -150,6 +158,12 @@ public sealed class MainWindowController : NSWindowController
         _stageTopWithTabs.Active = show;
     }
 
+    /// <summary>
+    /// 把页面内容放进舞台。刻意用 **autoresizing（frame 布局）** 而不是 Auto Layout 约束：
+    /// 页面内部照常用约束自适应，但它的尺寸诉求不会沿 详情列 → NSSplitViewController → 窗口
+    /// 反向传播。用约束固定时，NSScrollView 这类内容会把详情列的最大厚度压成它的最小厚度，
+    /// 窗口就出现"宽度锁定"（拉不宽）。
+    /// </summary>
     private void ShowStage(NSView view)
     {
         foreach (var v in _stage.Subviews.ToArray())
@@ -157,15 +171,10 @@ public sealed class MainWindowController : NSWindowController
             v.RemoveFromSuperview();
         }
 
-        view.TranslatesAutoresizingMaskIntoConstraints = false;
+        view.TranslatesAutoresizingMaskIntoConstraints = true;
+        view.Frame = _stage.Bounds;
+        view.AutoresizingMask = NSViewResizingMask.WidthSizable | NSViewResizingMask.HeightSizable;
         _stage.AddSubview(view);
-        NSLayoutConstraint.ActivateConstraints(new[]
-        {
-            view.TopAnchor.ConstraintEqualTo(_stage.TopAnchor),
-            view.LeadingAnchor.ConstraintEqualTo(_stage.LeadingAnchor),
-            view.TrailingAnchor.ConstraintEqualTo(_stage.TrailingAnchor),
-            view.BottomAnchor.ConstraintEqualTo(_stage.BottomAnchor),
-        });
     }
 
     /// <summary>首页卡片右键动作 → 桥接到「我的连接」既有命令（对齐 Windows MainViewModel）。</summary>
@@ -253,9 +262,9 @@ public sealed class MainWindowController : NSWindowController
     /// <summary>中间列表列折叠 / 展开（⌘⌥L / 工具栏按钮）。左侧导航列走系统 toggleSidebar。</summary>
     public void ToggleListPane()
     {
-        if (_listItem is not null)
+        if (_listApplicable && _listItem is not null)
         {
-            _listItem.Collapsed = !_listItem.Collapsed;
+            SetListVisible(_listItem.Collapsed);
         }
     }
 
@@ -303,6 +312,10 @@ public sealed class MainWindowController : NSWindowController
                         Bordered = true,
                     };
                     toggle.Activated += (_, _) => _o.ToggleListPane();
+                    // 关掉自动校验：否则系统每轮事件按「target 是否响应 action」把它重新启用。
+                    toggle.Autovalidates = false;
+                    toggle.Enabled = _o._listApplicable;
+                    _o._toggleListItem = toggle;
                     return toggle;
                 case Search:
                     return new NSSearchToolbarItem(Search) { SearchField = _o._search };
@@ -330,33 +343,51 @@ public sealed class MainWindowController : NSWindowController
         switch (item)
         {
             case NavSidebar.Item.Connections:
+                SetListApplicable(true);
                 SetListVisible(true);
                 _detail.ShowEmpty();
                 _ = _listPane.ShowConnectionsAsync();
                 break;
             case NavSidebar.Item.Favorites:
+                SetListApplicable(true);
                 SetListVisible(true);
                 _detail.ShowEmpty();
                 _ = _listPane.ShowFavoritesAsync();
                 break;
             case NavSidebar.Item.Recent:
+                SetListApplicable(true);
                 SetListVisible(true);
                 _detail.ShowEmpty();
                 _ = _listPane.ShowRecentAsync();
                 break;
             case NavSidebar.Item.Home:
-                // 首页 / 凭据不折叠列表：NSSplitViewController 折叠中间窗格会把窗口宽度锁死在
-                // ContentMinSize（≈980）—— 窗口既缩窄又拉不宽。宁可留着列表列。
-                SetListVisible(true);
+                SetListApplicable(false);
+                SetListVisible(false); // 首页不显示「我的连接」列
                 _detail.ShowHome(_services.GetRequiredService<HomePageViewModel>());
                 break;
             case NavSidebar.Item.Credentials:
-                SetListVisible(true);
+                SetListApplicable(false);
+                SetListVisible(false);
                 _detail.ShowCredentials(_services.GetRequiredService<CredentialsPageViewModel>());
                 break;
             case NavSidebar.Item.Settings:
                 OpenSettings();
                 break;
+        }
+    }
+
+    /// <summary>切页时更新「列表折叠按钮 / ⌘⌥L」是否可用：首页 / 凭据没有列表列，禁用。</summary>
+    private void SetListApplicable(bool applicable)
+    {
+        _listApplicable = applicable;
+        if (_toggleListItem is not null)
+        {
+            _toggleListItem.Enabled = applicable;
+        }
+
+        if (NSApplication.SharedApplication.Delegate is AppDelegate app && app.ToggleListMenuItem is { } mi)
+        {
+            mi.Enabled = applicable;
         }
     }
 
@@ -367,14 +398,7 @@ public sealed class MainWindowController : NSWindowController
             return;
         }
 
-        // NSSplitViewController 折叠窗格会顺带缩窗口 / 锁窗口宽度。折叠前记窗口 frame、之后还回去
-        // （首页 / 凭据已改为不折叠，这里主要给 ⌘⌥L 手动折叠兜底）。
-        var frame = Window.Frame;
         _listItem.Collapsed = !visible;
-        if (!visible && Window.Frame.Width < frame.Width - 1)
-        {
-            Window.SetFrame(frame, display: true, animate: false);
-        }
     }
 
     public void OpenSettings()

@@ -30,6 +30,9 @@ public sealed class AppDelegate : NSApplicationDelegate
     private ILogger<AppDelegate>? _logger;
     private MainWindowController? _mainWindow;
 
+    /// <summary>「显示 / 隐藏连接列表」菜单项 —— 首页 / 凭据页无列表列时由主窗口禁用。</summary>
+    internal NSMenuItem? ToggleListMenuItem { get; private set; }
+
     public override void DidFinishLaunching(NSNotification notification)
     {
         BuildMainMenu();
@@ -80,7 +83,7 @@ public sealed class AppDelegate : NSApplicationDelegate
 
     // ── 原生菜单栏 ───────────────────────────────────────────────
 
-    private static void BuildMainMenu()
+    private void BuildMainMenu()
     {
         var menubar = new NSMenu();
 
@@ -129,11 +132,13 @@ public sealed class AppDelegate : NSApplicationDelegate
         {
             KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.AlternateKeyMask,
         });
-        viewMenu.AddItem(new NSMenuItem("显示 / 隐藏连接列表", "l", (_, _) =>
+        viewMenu.AutoEnablesItems = false;
+        ToggleListMenuItem = new NSMenuItem("显示 / 隐藏连接列表", "l", (_, _) =>
             (NSApplication.SharedApplication.Delegate as AppDelegate)?._mainWindow?.ToggleListPane())
         {
             KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.AlternateKeyMask,
-        });
+        };
+        viewMenu.AddItem(ToggleListMenuItem);
         viewMenu.AddItem(NSMenuItem.SeparatorItem);
         viewMenu.AddItem(new NSMenuItem("进入 / 退出全屏", "f", (_, _) =>
             (NSApplication.SharedApplication.Delegate as AppDelegate)?._mainWindow?.Window?.ToggleFullScreen(null))
