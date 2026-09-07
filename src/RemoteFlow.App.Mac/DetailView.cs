@@ -15,6 +15,9 @@ public sealed class DetailView : NSView
 
     public event EventHandler<ConnectionItemViewModel>? ConnectRequested;
 
+    /// <summary>首页空态的「新建连接」。</summary>
+    public event EventHandler? NewConnectionRequested;
+
     public DetailView()
     {
         TranslatesAutoresizingMaskIntoConstraints = false;
@@ -111,32 +114,24 @@ public sealed class DetailView : NSView
         };
         stack.AddArrangedSubview(title);
         stack.AddArrangedSubview(subtitle);
-        stack.AddArrangedSubview(Gap(8));
+        stack.AddArrangedSubview(Gap(10));
         stack.AddArrangedSubview(connect);
-        stack.AddArrangedSubview(Gap(2));
-        stack.AddArrangedSubview(Muted("右键连接可编辑 / 复制 / 删除", 11));
-        stack.AddArrangedSubview(Gap(12));
-        stack.AddArrangedSubview(SectionLabel("连接信息"));
-        stack.AddArrangedSubview(InfoGrid(new (string, string)[]
-        {
+        stack.AddArrangedSubview(Gap(20));
+        stack.AddArrangedSubview(InfoPanel(
             ("主机", c.Host),
             ("端口", c.PortDisplay),
             ("协议", c.ProtocolName),
-        }));
-        stack.AddArrangedSubview(Gap(8));
-        stack.AddArrangedSubview(SectionLabel("使用信息"));
-        stack.AddArrangedSubview(InfoGrid(new (string, string)[]
-        {
             ("创建时间", c.CreatedAtDisplay),
-            ("最近连接", c.LastConnectedDisplay),
-        }));
+            ("最近连接", c.LastConnectedDisplay)));
+        stack.AddArrangedSubview(Gap(12));
+        stack.AddArrangedSubview(Styled("右键连接可编辑、复制或删除", 11, NSFontWeight.Regular, NSColor.TertiaryLabel));
 
         return TopAligned(stack);
     }
 
     // ── 首页 ────────────────────────────────────────────────────
 
-    private static NSView BuildHome(HomePageViewModel vm)
+    private NSView BuildHome(HomePageViewModel vm)
     {
         var stack = new NSStackView
         {
@@ -149,40 +144,112 @@ public sealed class DetailView : NSView
         stack.AddArrangedSubview(Big(string.IsNullOrEmpty(vm.Greeting) ? "欢迎" : vm.Greeting, 28));
         stack.AddArrangedSubview(Muted(vm.DateLine ?? "", 13));
         stack.AddArrangedSubview(Muted($"{vm.TotalConnections} 个连接  ·  {vm.ConnectedSessions} 个会话已连接", 12));
-        stack.AddArrangedSubview(Gap(18));
+        stack.AddArrangedSubview(Gap(20));
 
-        stack.AddArrangedSubview(SectionLabel("收藏"));
-        foreach (var f in vm.FavoriteItems.Take(6))
+        if (!vm.HasFavorites && !vm.HasRecent)
         {
-            stack.AddArrangedSubview(MiniRow(f));
-        }
-        if (vm.FavoriteItems.Count == 0)
-        {
-            stack.AddArrangedSubview(Muted("暂无收藏", 12));
+            var newBtn = NSButton.CreateButton("新建连接", () => NewConnectionRequested?.Invoke(this, EventArgs.Empty));
+            newBtn.BezelStyle = NSBezelStyle.Rounded;
+            newBtn.ControlSize = NSControlSize.Large;
+            newBtn.KeyEquivalent = "\r";
+            stack.AddArrangedSubview(Muted(vm.IsFirstRun ? "还没有连接。新建一个开始。" : "收藏或连接过的设备会出现在这里。", 13));
+            stack.AddArrangedSubview(Gap(6));
+            stack.AddArrangedSubview(newBtn);
+            return TopAligned(stack);
         }
 
-        stack.AddArrangedSubview(Gap(14));
-        stack.AddArrangedSubview(SectionLabel("最近连接"));
-        foreach (var r in vm.RecentItems.Take(6))
+        if (vm.HasFavorites)
         {
-            stack.AddArrangedSubview(MiniRow(r));
+            stack.AddArrangedSubview(HomeSectionHeader("收藏",
+                vm.FavoriteItems.Count > 6 ? () => vm.ViewAllFavoritesCommand.Execute(null) : null));
+            stack.AddArrangedSubview(HomeListPanel(vm.FavoriteItems.Take(6)));
+            stack.AddArrangedSubview(Gap(18));
         }
-        if (vm.RecentItems.Count == 0)
+
+        if (vm.HasRecent)
         {
-            stack.AddArrangedSubview(Muted("暂无记录", 12));
+            stack.AddArrangedSubview(HomeSectionHeader("最近连接",
+                vm.RecentItems.Count > 6 ? () => vm.ViewAllRecentCommand.Execute(null) : null));
+            stack.AddArrangedSubview(HomeListPanel(vm.RecentItems.Take(6)));
         }
 
         return TopAligned(stack);
     }
 
-    private static NSView MiniRow(ConnectionItemViewModel c)
+    private const int PanelWidth = 380;
+
+    private static NSView HomeSectionHeader(string title, Action? viewAll)
+    {
+        var row = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.CenterY,
+            Spacing = 8,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        row.AddArrangedSubview(SectionLabel(title));
+        if (viewAll is not null)
+        {
+            var link = NSButton.CreateButton("查看全部", () => viewAll());
+            link.Bordered = false;
+            link.ContentTintColor = NSColor.ControlAccent;
+            link.Font = NSFont.SystemFontOfSize(11);
+            row.AddArrangedSubview(new NSView());
+            row.AddArrangedSubview(link);
+        }
+        row.WidthAnchor.ConstraintEqualTo(PanelWidth).Active = true;
+        return row;
+    }
+
+    /// <summary>首页分组卡：圆角浅底 + 细分隔线，每行整行可点打开、悬停浅底。</summary>
+    private NSView HomeListPanel(IEnumerable<ConnectionItemViewModel> items)
+    {
+        const int rowH = 46;
+        var list = items.ToArray();
+
+        var panel = Card();
+        panel.WidthAnchor.ConstraintEqualTo(PanelWidth).Active = true;
+        panel.HeightAnchor.ConstraintEqualTo(rowH * list.Length).Active = true;
+
+        for (var i = 0; i < list.Length; i++)
+        {
+            var c = list[i];
+            var row = BuildHomeRow(c);
+            panel.AddSubview(row);
+            var top = i * rowH;
+            NSLayoutConstraint.ActivateConstraints(new[]
+            {
+                row.LeadingAnchor.ConstraintEqualTo(panel.LeadingAnchor, 4),
+                row.TrailingAnchor.ConstraintEqualTo(panel.TrailingAnchor, -4),
+                row.TopAnchor.ConstraintEqualTo(panel.TopAnchor, top + 3),
+                row.HeightAnchor.ConstraintEqualTo(rowH - 6),
+            });
+
+            if (i > 0)
+            {
+                var sep = Hairline();
+                panel.AddSubview(sep);
+                NSLayoutConstraint.ActivateConstraints(new[]
+                {
+                    sep.LeadingAnchor.ConstraintEqualTo(panel.LeadingAnchor, 42),
+                    sep.TrailingAnchor.ConstraintEqualTo(panel.TrailingAnchor),
+                    sep.TopAnchor.ConstraintEqualTo(panel.TopAnchor, top),
+                    sep.HeightAnchor.ConstraintEqualTo(1),
+                });
+            }
+        }
+
+        return panel;
+    }
+
+    private NSView BuildHomeRow(ConnectionItemViewModel c)
     {
         var icon = new NSImageView
         {
             Image = ProtocolStyle.Symbol(c.Profile.Protocol),
             TranslatesAutoresizingMaskIntoConstraints = false,
             ContentTintColor = ProtocolStyle.Tint(c.Profile.Protocol),
-            SymbolConfiguration = NSImageSymbolConfiguration.Create(13, NSFontWeight.Regular),
+            SymbolConfiguration = NSImageSymbolConfiguration.Create(15, NSFontWeight.Regular),
         };
         var col = new NSStackView
         {
@@ -194,16 +261,66 @@ public sealed class DetailView : NSView
         col.AddArrangedSubview(Plain(c.Name, 13));
         col.AddArrangedSubview(Muted(c.HostDisplay, 11));
 
-        var row = new NSStackView
+        var chevron = new NSImageView
         {
-            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
-            Alignment = NSLayoutAttribute.CenterY,
-            Spacing = 8,
+            Image = NSImage.GetSystemSymbol("chevron.right", null),
+            ContentTintColor = NSColor.TertiaryLabel,
             TranslatesAutoresizingMaskIntoConstraints = false,
+            SymbolConfiguration = NSImageSymbolConfiguration.Create(11, NSFontWeight.Semibold),
         };
-        row.AddArrangedSubview(icon);
-        row.AddArrangedSubview(col);
+
+        var row = new TapRow(() => ConnectRequested?.Invoke(this, c)) { TranslatesAutoresizingMaskIntoConstraints = false };
+        row.AddSubview(icon);
+        row.AddSubview(col);
+        row.AddSubview(chevron);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            icon.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor, 10),
+            icon.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
+            icon.WidthAnchor.ConstraintEqualTo(20),
+            col.LeadingAnchor.ConstraintEqualTo(icon.TrailingAnchor, 9),
+            col.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
+            chevron.LeadingAnchor.ConstraintGreaterThanOrEqualTo(col.TrailingAnchor, 8),
+            chevron.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor, -12),
+            chevron.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
+        });
         return row;
+    }
+
+    /// <summary>整行可点（打开连接）+ 悬停浅底。</summary>
+    private sealed class TapRow : NSView
+    {
+        private readonly Action _onTap;
+        private NSTrackingArea? _tracking;
+
+        public TapRow(Action onTap)
+        {
+            _onTap = onTap;
+            WantsLayer = true;
+            Layer!.CornerRadius = 6;
+        }
+
+        public override void UpdateTrackingAreas()
+        {
+            base.UpdateTrackingAreas();
+            if (_tracking is not null)
+            {
+                RemoveTrackingArea(_tracking);
+            }
+
+            _tracking = new NSTrackingArea(Bounds,
+                NSTrackingAreaOptions.MouseEnteredAndExited | NSTrackingAreaOptions.ActiveInKeyWindow,
+                this, null);
+            AddTrackingArea(_tracking);
+        }
+
+        public override void MouseEntered(NSEvent theEvent)
+            => Layer!.BackgroundColor = NSColor.QuaternaryLabel.ColorWithAlphaComponent(0.5f).CGColor;
+
+        public override void MouseExited(NSEvent theEvent)
+            => Layer!.BackgroundColor = null;
+
+        public override void MouseDown(NSEvent theEvent) => _onTap();
     }
 
     // ── 凭据 ────────────────────────────────────────────────────
@@ -363,24 +480,110 @@ public sealed class DetailView : NSView
         return host;
     }
 
-    private static NSGridView InfoGrid((string Label, string Value)[] rows)
+    /// <summary>
+    /// 圆角分组卡 / 分隔线容器。裸 CALayer 的 CGColor 在构造时就冻结，明暗切换不跟随
+    /// （深色模式下会白底黑字看不见）—— 本类在 <c>ViewDidChangeEffectiveAppearance</c> 时
+    /// 按当前外观重刷 layer 颜色。<paramref name="fill"/> 为 null 时只作分隔线（描边色填充）。
+    /// </summary>
+    private sealed class CardView : NSView
     {
-        var grid = new NSGridView
+        private readonly Func<NSColor>? _fill;
+        private readonly Func<NSColor>? _border;
+
+        public CardView(Func<NSColor>? fill, Func<NSColor>? border = null, nfloat cornerRadius = default)
         {
-            RowSpacing = 7,
-            ColumnSpacing = 20,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        };
-        foreach (var (label, value) in rows)
-        {
-            var l = Muted(label, 12);
-            l.Alignment = NSTextAlignment.Right;
-            var v = Plain(string.IsNullOrEmpty(value) ? "—" : value, 13);
-            v.Selectable = true;
-            grid.AddRow(new NSView[] { l, v });
+            _fill = fill;
+            _border = border;
+            WantsLayer = true;
+            TranslatesAutoresizingMaskIntoConstraints = false;
+            Layer!.CornerRadius = cornerRadius;
+            if (border is not null)
+            {
+                Layer.BorderWidth = 1;
+            }
         }
 
-        return grid;
+        public override void ViewDidChangeEffectiveAppearance()
+        {
+            base.ViewDidChangeEffectiveAppearance();
+            Refresh();
+        }
+
+        public override void ViewDidMoveToWindow()
+        {
+            base.ViewDidMoveToWindow();
+            Refresh();
+        }
+
+        private void Refresh()
+        {
+            var prev = NSAppearance.CurrentAppearance;
+            NSAppearance.CurrentAppearance = EffectiveAppearance;
+            if (_fill is not null)
+            {
+                Layer!.BackgroundColor = _fill().CGColor;
+            }
+            if (_border is not null)
+            {
+                Layer!.BorderColor = _border().CGColor;
+            }
+            NSAppearance.CurrentAppearance = prev;
+        }
+    }
+
+    private static CardView Card() =>
+        new(() => NSColor.ControlBackground, () => NSColor.Separator, 8);
+
+    private static CardView Hairline() => new(() => NSColor.Separator);
+
+    /// <summary>System Settings 风格的分组信息卡：圆角浅底 + 细分隔线，标签左 / 值右。</summary>
+    private static NSView InfoPanel(params (string Label, string Value)[] rows)
+    {
+        const int width = 380;
+        const int rowH = 34;
+
+        var panel = Card();
+        panel.WidthAnchor.ConstraintEqualTo(width).Active = true;
+        panel.HeightAnchor.ConstraintEqualTo(rowH * rows.Length).Active = true;
+
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var (label, value) = rows[i];
+            var l = Muted(label, 12);
+            var v = Plain(string.IsNullOrEmpty(value) ? "—" : value, 12);
+            v.Alignment = NSTextAlignment.Right;
+            v.Selectable = true;
+            v.TextColor = NSColor.SecondaryLabel;
+
+            panel.AddSubview(l);
+            panel.AddSubview(v);
+            var top = i * rowH;
+            NSLayoutConstraint.ActivateConstraints(new[]
+            {
+                l.LeadingAnchor.ConstraintEqualTo(panel.LeadingAnchor, 12),
+                l.TopAnchor.ConstraintEqualTo(panel.TopAnchor, top),
+                l.HeightAnchor.ConstraintEqualTo(rowH),
+                v.TrailingAnchor.ConstraintEqualTo(panel.TrailingAnchor, -12),
+                v.LeadingAnchor.ConstraintGreaterThanOrEqualTo(l.TrailingAnchor, 12),
+                v.TopAnchor.ConstraintEqualTo(panel.TopAnchor, top),
+                v.HeightAnchor.ConstraintEqualTo(rowH),
+            });
+
+            if (i > 0)
+            {
+                var sep = Hairline();
+                panel.AddSubview(sep);
+                NSLayoutConstraint.ActivateConstraints(new[]
+                {
+                    sep.LeadingAnchor.ConstraintEqualTo(panel.LeadingAnchor, 12),
+                    sep.TrailingAnchor.ConstraintEqualTo(panel.TrailingAnchor),
+                    sep.TopAnchor.ConstraintEqualTo(panel.TopAnchor, top),
+                    sep.HeightAnchor.ConstraintEqualTo(1),
+                });
+            }
+        }
+
+        return panel;
     }
 
     private static NSProgressIndicator Spinner()

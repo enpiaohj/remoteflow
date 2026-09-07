@@ -56,6 +56,8 @@ public sealed class MainWindowController : NSWindowController
         _listPane.ConnectionSelected += (_, c) => ShowInfoCard(c);
         _listPane.ConnectionActivated += (_, c) => _ = OpenAsync(c.Profile, c.Name);
         _detail.ConnectRequested += (_, c) => _ = OpenAsync(c.Profile, c.Name);
+        _detail.NewConnectionRequested += (_, _) => BeginNewConnection();
+        _services.GetRequiredService<HomePageViewModel>().NavigationRequested += (_, page) => NavigateTo(page);
 
         _tabBar.TabSelected += (_, id) => ShowSessionStage(id);
         _tabBar.TabClosed += (_, id) => _ = CloseSessionAsync(id);
