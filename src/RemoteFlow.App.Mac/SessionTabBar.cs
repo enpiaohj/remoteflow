@@ -12,6 +12,9 @@ public sealed class SessionTabBar : NSView
 {
     private const int BarHeight = 38;
 
+    /// <summary>条高（点）。会话建立前要据此预留高度，否则 RDP 桌面会比视图高出这一截。</summary>
+    public const int BarHeightPoints = BarHeight;
+
     private readonly NSStackView _row = new()
     {
         Orientation = NSUserInterfaceLayoutOrientation.Horizontal,

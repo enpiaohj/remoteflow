@@ -775,12 +775,19 @@ public sealed class MainWindowController : NSWindowController
                 && profile.Rdp is { DisplayMode: not RemoteFlow.Core.Models.RdpDisplayMode.FixedResolution })
             {
                 var stage = _stage.Bounds.Size;
+
+                // 关键：这条会话建立后，若会话标签条从无到有，舞台会**变矮** 38pt。
+                // 按当前（标签条还没出现的）高度去要桌面尺寸，连上后画面就比视图高一截，
+                // 等比缩放后左右各留一道黑边 —— 实测正是 748 vs 710 差的这 38。
+                var tabBarWillAppear = _tabBar.Count == 0;
+                var usableHeight = stage.Height - (tabBarWillAppear ? SessionTabBar.BarHeightPoints : 0);
+
                 var scale = Window.BackingScaleFactor;
                 double w, h;
-                if (stage.Width >= 320 && stage.Height >= 240)
+                if (stage.Width >= 320 && usableHeight >= 240)
                 {
                     w = (double)stage.Width * scale;
-                    h = (double)stage.Height * scale;
+                    h = (double)usableHeight * scale;
                 }
                 else
                 {
