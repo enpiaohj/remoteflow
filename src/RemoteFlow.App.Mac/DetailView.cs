@@ -302,7 +302,23 @@ public sealed class DetailView : NSView
 
         col.AddArrangedSubview(Gap(24));
 
+        col.Menu = DetailMenu(vm, c);
         return ScrollHost(col);
+    }
+
+    /// <summary>详情页右键菜单 —— 走「我的连接」既有命令。</summary>
+    private NSMenu DetailMenu(ConnectionsPageViewModel vm, ConnectionItemViewModel c)
+    {
+        var m = new NSMenu();
+        m.AddItem(new NSMenuItem("连接", (_, _) => ConnectRequested?.Invoke(this, c)));
+        m.AddItem(NSMenuItem.SeparatorItem);
+        m.AddItem(new NSMenuItem("编辑…", (_, _) => vm.EditCommand.Execute(c)));
+        m.AddItem(new NSMenuItem("复制", (_, _) => vm.DuplicateCommand.Execute(c)));
+        m.AddItem(new NSMenuItem("测试连接…", (_, _) => vm.TestConnectionCommand.Execute(c)));
+        m.AddItem(new NSMenuItem(c.IsFavorite ? "取消收藏" : "收藏", (_, _) => vm.ToggleFavoriteCommand.Execute(c)));
+        m.AddItem(NSMenuItem.SeparatorItem);
+        m.AddItem(new NSMenuItem("删除…", (_, _) => vm.DeleteCommand.Execute(c)));
+        return m;
     }
 
     // ── 详情组件 ────────────────────────────────────────────────
@@ -596,8 +612,33 @@ public sealed class DetailView : NSView
     private const int HomeWidth = 900;
     private const int HomeColWidth = 438; // (HomeWidth - 24 间距) / 2
 
+    private HomePageViewModel? _homeVm;
+
+    /// <summary>连接项的右键菜单（首页卡片 / 行共用）。经 <see cref="HomePageViewModel.RequestConnectionAction"/>
+    /// 桥接到「我的连接」既有命令。</summary>
+    private NSMenu ConnMenu(ConnectionItemViewModel c)
+    {
+        var m = new NSMenu();
+        void Add(string title, string action) =>
+            m.AddItem(new NSMenuItem(title, (_, _) => _homeVm?.RequestConnectionAction(c, action)));
+
+        Add(c.IsConnected || c.HasActiveSession ? "切换到会话" : "连接", HomeRowActions.Connect);
+        if (c.HasActiveSession)
+        {
+            Add("断开连接", HomeRowActions.Disconnect);
+        }
+        m.AddItem(NSMenuItem.SeparatorItem);
+        Add("编辑…", HomeRowActions.Edit);
+        Add("测试连接…", HomeRowActions.Test);
+        Add(c.IsFavorite ? "取消收藏" : "收藏", HomeRowActions.Favorite);
+        m.AddItem(NSMenuItem.SeparatorItem);
+        Add("在「我的连接」中显示", HomeRowActions.Manage);
+        return m;
+    }
+
     private NSView BuildHome(HomePageViewModel vm)
     {
+        _homeVm = vm;
         var col = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
@@ -705,7 +746,7 @@ public sealed class DetailView : NSView
     /// <summary>最近连接的大卡片：协议色左条 + 图标块 + 名称 / 主机 / 协议徽章。整卡可点。</summary>
     private NSView HomeRecentCard(ConnectionItemViewModel c)
     {
-        var card = new TapRow(() => ConnectRequested?.Invoke(this, c));
+        var card = new TapRow(() => ConnectRequested?.Invoke(this, c)) { Menu = ConnMenu(c) };
         var border = new CardView(() => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.06f),
             () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f), 10);
         card.AddSubview(border);
@@ -873,7 +914,7 @@ public sealed class DetailView : NSView
 
         var name = Plain(c.Name, 12);
         name.LineBreakMode = NSLineBreakMode.TruncatingTail;
-        var host = Muted(c.HostDisplay, 10);
+        var host = Muted(c.HostDisplay, 11);
         var stack = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
@@ -884,7 +925,11 @@ public sealed class DetailView : NSView
         stack.AddArrangedSubview(name);
         stack.AddArrangedSubview(host);
 
-        var row = new TapRow(() => ConnectRequested?.Invoke(this, c)) { TranslatesAutoresizingMaskIntoConstraints = false };
+        var row = new TapRow(() => ConnectRequested?.Invoke(this, c))
+        {
+            TranslatesAutoresizingMaskIntoConstraints = false,
+            Menu = ConnMenu(c),
+        };
         row.AddSubview(tile);
         row.AddSubview(stack);
         NSLayoutConstraint.ActivateConstraints(new[]
@@ -907,7 +952,7 @@ public sealed class DetailView : NSView
 
         var title = Plain(h.ActivityText, 12);
         title.LineBreakMode = NSLineBreakMode.TruncatingTail;
-        var sub = Muted(h.HostProtocolLine, 10);
+        var sub = Muted(h.HostProtocolLine, 11);
         var stack = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
@@ -918,7 +963,7 @@ public sealed class DetailView : NSView
         stack.AddArrangedSubview(title);
         stack.AddArrangedSubview(sub);
 
-        var when = Styled(h.StartedAtDisplay, 10, NSFontWeight.Regular, NSColor.TertiaryLabel);
+        var when = Styled(h.StartedAtDisplay, 11, NSFontWeight.Regular, NSColor.TertiaryLabel);
 
         var row = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
         row.AddSubview(tile);
@@ -992,9 +1037,10 @@ public sealed class DetailView : NSView
             TranslatesAutoresizingMaskIntoConstraints = false,
             SymbolConfiguration = NSImageSymbolConfiguration.Create(15, NSFontWeight.Regular),
         };
-        var t = Plain("安全提示", 12);
-        t.Font = NSFont.SystemFontOfSize(12, NSFontWeight.Semibold);
-        var b = Muted("定期更新密码，并为关键账号启用双因素认证。", 11);
+        var t = Plain("安全提示", 13);
+        t.Font = NSFont.SystemFontOfSize(13, NSFontWeight.Semibold);
+        var b = Styled("为保障连接安全，请定期更新密码，并为关键账号启用双因素认证。", 12,
+            NSFontWeight.Regular, NSColor.SecondaryLabel);
         b.LineBreakMode = NSLineBreakMode.ByWordWrapping;
         b.PreferredMaxLayoutWidth = HomeWidth - 100;
         var txt = new NSStackView

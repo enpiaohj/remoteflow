@@ -59,7 +59,10 @@ public sealed class MainWindowController : NSWindowController
         _listPane.ConnectionActivated += (_, c) => _ = OpenAsync(c.Profile, c.Name);
         _detail.ConnectRequested += (_, c) => _ = OpenAsync(c.Profile, c.Name);
         _detail.NewConnectionRequested += (_, _) => BeginNewConnection();
-        _services.GetRequiredService<HomePageViewModel>().NavigationRequested += (_, page) => NavigateTo(page);
+
+        var homeVm = _services.GetRequiredService<HomePageViewModel>();
+        homeVm.NavigationRequested += (_, page) => NavigateTo(page);
+        homeVm.ConnectionActionRequested += (_, args) => HandleHomeAction(args.Item, args.Action);
 
         _tabBar.TabSelected += (_, id) => ShowSessionStage(id);
         _tabBar.TabClosed += (_, id) => _ = CloseSessionAsync(id);
@@ -158,6 +161,34 @@ public sealed class MainWindowController : NSWindowController
             view.TrailingAnchor.ConstraintEqualTo(_stage.TrailingAnchor),
             view.BottomAnchor.ConstraintEqualTo(_stage.BottomAnchor),
         });
+    }
+
+    /// <summary>首页卡片右键动作 → 桥接到「我的连接」既有命令（对齐 Windows MainViewModel）。</summary>
+    private void HandleHomeAction(ConnectionItemViewModel item, string action)
+    {
+        // 尽量用「我的连接」里同一 Profile 的实例（命令内部可能按引用回选）。
+        var target = _connectionsVm.Items.FirstOrDefault(x => x.Id == item.Id) ?? item;
+        switch (action)
+        {
+            case HomeRowActions.Connect:
+                _ = OpenAsync(item.Profile, item.Name);
+                break;
+            case HomeRowActions.Disconnect:
+                _ = _connectionsVm.DisconnectItemCommand.ExecuteAsync(target);
+                break;
+            case HomeRowActions.Edit:
+                _ = _connectionsVm.EditCommand.ExecuteAsync(target);
+                break;
+            case HomeRowActions.Test:
+                _ = _connectionsVm.TestConnectionCommand.ExecuteAsync(target);
+                break;
+            case HomeRowActions.Favorite:
+                _ = _connectionsVm.ToggleFavoriteCommand.ExecuteAsync(target);
+                break;
+            case HomeRowActions.Manage:
+                NavigateTo(NavigationPage.Connections);
+                break;
+        }
     }
 
     /// <summary>连接加载后回填凭据名（VM 不直接依赖凭据服务，见 ApplyCredentialNames）。</summary>
