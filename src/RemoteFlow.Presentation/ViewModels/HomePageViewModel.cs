@@ -156,6 +156,8 @@ public sealed partial class HomePageViewModel : ObservableObject
             var item = BuildItem(profile, groups);
             item.HasActiveSession = _sessions.HasActiveSession(profile.Id);
             item.IsConnected = connectedProfileIds.Contains(profile.Id);
+            item.IsConnecting = _sessions.ActiveSessions.Any(
+                x => x.Profile.Id == profile.Id && x.State == ConnectionState.Connecting);
             RecentItems.Add(item);
         }
 
@@ -168,6 +170,8 @@ public sealed partial class HomePageViewModel : ObservableObject
             var item = BuildItem(profile, groups);
             item.HasActiveSession = _sessions.HasActiveSession(profile.Id);
             item.IsConnected = connectedProfileIds.Contains(profile.Id);
+            item.IsConnecting = _sessions.ActiveSessions.Any(
+                x => x.Profile.Id == profile.Id && x.State == ConnectionState.Connecting);
             FavoriteItems.Add(item);
         }
 

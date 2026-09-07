@@ -37,9 +37,11 @@ public sealed class RdpScreenView : NSView
 
     // 动态分辨率：视图尺寸变了就把远程桌面改成同样的长宽比，避免画面被 letterbox 出黑边。
     private NSTimer? _resizeTimer;
+    private NSTimer? _verifyTimer;
     private readonly List<NSObject> _winObservers = new();
     private int _lastReqW;
     private int _lastReqH;
+    private int _verifyAttempts;
 
     public RdpScreenView(RdpSession session)
     {
@@ -89,6 +91,8 @@ public sealed class RdpScreenView : NSView
         _detached = true;
         _resizeTimer?.Invalidate();
         _resizeTimer = null;
+        _verifyTimer?.Invalidate();
+        _verifyTimer = null;
         foreach (var t in _winObservers)
         {
             NSNotificationCenter.DefaultCenter.RemoveObserver(t);
@@ -181,6 +185,41 @@ public sealed class RdpScreenView : NSView
         NSRunLoop.Main.AddTimer(_resizeTimer, NSRunLoopMode.Common);
     }
 
+    /// <summary>
+    /// 重协商核对：native 侧对 monitor layout 做了限频（每秒 ≤5 次，社区经验：
+    /// 发太快会把 Windows Server 2012 R2 发僵），被限掉的那一次不能让最终尺寸落空。
+    /// 这里过一会儿比对「服务端实际帧尺寸」与最近请求值，不一致就补发，最多三次。
+    /// </summary>
+    private void ScheduleVerify()
+    {
+        _verifyTimer?.Invalidate();
+        _verifyTimer = NSTimer.CreateTimer(TimeSpan.FromSeconds(1.2), _ =>
+        {
+            if (_detached || _session.State != ConnectionState.Connected)
+            {
+                return;
+            }
+
+            if ((_fw == _lastReqW && _fh == _lastReqH) || _verifyAttempts >= 3)
+            {
+                return;
+            }
+
+            _verifyAttempts++;
+            try
+            {
+                _session.Resize(_lastReqW, _lastReqH);
+            }
+            catch
+            {
+                // 补发失败就算了，下次尺寸变化再试。
+            }
+
+            ScheduleVerify();
+        });
+        NSRunLoop.Main.AddTimer(_verifyTimer, NSRunLoopMode.Common);
+    }
+
     private void ApplyResize()
     {
         if (_detached || _session.State != ConnectionState.Connected)
@@ -207,8 +246,14 @@ public sealed class RdpScreenView : NSView
             return;
         }
 
+        // 与 native 侧的 4 对齐保持一致，避免"请求 782、实到 780"被误判成没生效而反复重试。
+        w -= w % 4;
+        h -= h % 4;
+
         _lastReqW = w;
         _lastReqH = h;
+        _verifyAttempts = 0;
+        ScheduleVerify();
         System.Console.Error.WriteLine(
             $"[RDP] 请求远程桌面 {w}×{h}（视图 {Bounds.Width:0}×{Bounds.Height:0}pt @{scale}x，当前帧 {_fw}×{_fh}）");
         try

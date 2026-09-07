@@ -86,6 +86,14 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
     [ObservableProperty]
     private bool _isConnected;
 
+    /// <summary>
+    /// 该连接是否有会话正处于 <c>Connecting</c>。
+    /// 与 <see cref="HasActiveSession"/> 区分：后者把断开中 / 失败未清理也算「活动」，
+    /// 拿它当「正在连接」会出现「已经关掉了却还显示连接中」的错误状态。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isConnecting;
+
     /// <summary>多选模式下是否被勾选。</summary>
     [ObservableProperty]
     private bool _isSelected;

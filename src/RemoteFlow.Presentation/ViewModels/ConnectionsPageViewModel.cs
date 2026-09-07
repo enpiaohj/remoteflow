@@ -292,6 +292,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         {
             item.IsConnected = _sessions.HasConnectedSession(item.Id);
             item.HasActiveSession = _sessions.HasActiveSession(item.Id);
+            item.IsConnecting = _sessions.ActiveSessions.Any(
+                x => x.Profile.Id == item.Id && x.State == ConnectionState.Connecting);
         }
     }
 

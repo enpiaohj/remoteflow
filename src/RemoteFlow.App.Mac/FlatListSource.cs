@@ -119,7 +119,7 @@ public sealed class FlatListSource : NSTableViewDelegate
         icon.ContentTintColor = ProtocolStyle.Tint(item.Profile.Protocol);
         star.Image = item.IsFavorite ? NSImage.GetSystemSymbol("star.fill", null) : null;
         star.Hidden = !item.IsFavorite;
-        ProtocolStyle.ApplyStatus(badge, item.IsConnected, item.HasActiveSession);
+        ProtocolStyle.ApplyStatus(badge, item.IsConnected, item.IsConnecting);
         return cell;
     }
 

@@ -22,6 +22,7 @@
 #include <freerdp/channels/channels.h>
 #include <freerdp/addin.h>
 #include <winpr/synch.h>
+#include <winpr/sysinfo.h>
 #include <winpr/thread.h>
 
 /* state: 0=connecting 1=connected 2=disconnected 3=failed */
@@ -45,12 +46,52 @@ typedef struct
 	DispClientContext* disp;
 	int pending_w;
 	int pending_h;
+	int disp_ready;        /* 收到服务端 DISPLAY_CONTROL_CAPS 才算真正可发 */
+	UINT32 disp_max_mon;
+	UINT64 last_layout_ms; /* 上次发 monitor layout 的时刻，用于限频 */
 } rfContext;
+
+/* MS-RDPEDISP 的硬约束与实践经验：
+   - 宽高必须是 4 的倍数（不是 2）；社区里踩过不少「只对齐到 2 导致服务端忽略」的坑。
+   - 取值范围 200..8192。
+   - 不能刷得太快：有人在 Windows Server 2012 R2 上因为连发布局把会话发僵，
+     公认做法是限到每秒 5 次以内。 */
+#define RF_DISP_MIN_DIM 200
+#define RF_DISP_MAX_DIM 8192
+#define RF_DISP_MIN_INTERVAL_MS 200
+
+static UINT64 rf_now_ms(void)
+{
+	return GetTickCount64();
+}
+
+static int rf_align4(int v)
+{
+	v -= (v % 4);
+	if (v < RF_DISP_MIN_DIM)
+		v = RF_DISP_MIN_DIM;
+	if (v > RF_DISP_MAX_DIM)
+		v = RF_DISP_MAX_DIM;
+	return v;
+}
 
 static void rf_send_monitor_layout(rfContext* rf, int width, int height)
 {
-	if (!rf->disp || !rf->disp->SendMonitorLayout || width <= 0 || height <= 0)
+	if (!rf->disp || !rf->disp->SendMonitorLayout || !rf->disp_ready)
 		return;
+
+	width = rf_align4(width);
+	height = rf_align4(height);
+	if (width <= 0 || height <= 0)
+		return;
+
+	/* 限频：距上次不足 RF_DISP_MIN_INTERVAL_MS 就先不发。
+	   最新意图已经存在 pending_w/h 里，托管侧的去抖与重试会把最终尺寸补上。 */
+	const UINT64 now = rf_now_ms();
+	if (rf->last_layout_ms != 0 && (now - rf->last_layout_ms) < RF_DISP_MIN_INTERVAL_MS)
+		return;
+
+	rf->last_layout_ms = now;
 
 	DISPLAY_CONTROL_MONITOR_LAYOUT layout = { 0 };
 	layout.Flags = DISPLAY_CONTROL_MONITOR_PRIMARY;
@@ -63,7 +104,26 @@ static void rf_send_monitor_layout(rfContext* rf, int width, int height)
 	layout.PhysicalHeight = 0;
 	layout.DesktopScaleFactor = 100;
 	layout.DeviceScaleFactor = 100;
-	rf->disp->SendMonitorLayout(rf->disp, 1, &layout);
+	const UINT rc = rf->disp->SendMonitorLayout(rf->disp, 1, &layout);
+	fprintf(stderr, "[RDP/native] 发送 monitor layout %dx%d → rc=%u\n", width, height, (unsigned)rc);
+}
+
+/* 服务端 DISPLAY_CONTROL_CAPS：收到才说明通道真正可用，此时把待发尺寸补上。 */
+static UINT rf_disp_caps(DispClientContext* ctx, UINT32 maxNumMonitors, UINT32 maxAreaA,
+                         UINT32 maxAreaB)
+{
+	rfContext* rf = (rfContext*)ctx->custom;
+	if (!rf)
+		return CHANNEL_RC_OK;
+
+	rf->disp_ready = 1;
+	rf->disp_max_mon = maxNumMonitors;
+	fprintf(stderr, "[RDP/native] DisplayControl 就绪：最多 %u 个显示器（area %ux%u）\n",
+	        (unsigned)maxNumMonitors, (unsigned)maxAreaA, (unsigned)maxAreaB);
+
+	if (rf->pending_w > 0 && rf->pending_h > 0)
+		rf_send_monitor_layout(rf, rf->pending_w, rf->pending_h);
+	return CHANNEL_RC_OK;
 }
 
 static void rf_on_channel_connected(void* ctx, const ChannelConnectedEventArgs* e)
@@ -73,9 +133,9 @@ static void rf_on_channel_connected(void* ctx, const ChannelConnectedEventArgs* 
 	if (strcmp(e->name, DISP_DVC_CHANNEL_NAME) == 0)
 	{
 		rf->disp = (DispClientContext*)e->pInterface;
-		/* 通道就绪时若已有待发的尺寸（连上后视图先变过），立刻补发一次。 */
-		if (rf->pending_w > 0 && rf->pending_h > 0)
-			rf_send_monitor_layout(rf, rf->pending_w, rf->pending_h);
+		rf->disp->custom = rf;
+		rf->disp->DisplayControlCaps = rf_disp_caps;
+		/* 真正可发要等服务端回 CAPS（见 rf_disp_caps），这里只挂钩子。 */
 	}
 }
 
@@ -83,38 +143,37 @@ static void rf_on_channel_disconnected(void* ctx, const ChannelDisconnectedEvent
 {
 	rfContext* rf = (rfContext*)ctx;
 	if (strcmp(e->name, DISP_DVC_CHANNEL_NAME) == 0)
+	{
 		rf->disp = NULL;
+		rf->disp_ready = 0;
+	}
 }
 
-static BOOL rf_pre_connect(freerdp* instance)
+/*
+ * FreeRDP 3 新增的 LoadChannels 回调 —— 通道**必须**在这里加载。
+ * 关键在于 core/utils.c 里的顺序：
+ *     context->channels = freerdp_channels_new(instance);   <- 通道对象在这里才创建
+ *     IFCALLRET(instance->LoadChannels, rc, instance);       <- 然后才回调我们
+ *     freerdp_channels_pre_connect(context->channels, ...);
+ * 之前我们在 PreConnect 里调 freerdp_client_load_addins(instance->context->channels, ...)，
+ * 那时拿到的根本不是最终那个 channels 对象，于是 addin 灌进了错的地方 ——
+ * 表面上 load_addins 返回成功，实际一个通道都没连上，disp 自然发不出 monitor layout。
+ * 走标准 freerdp_client_context_new 的客户端由 client common 自动挂好这个回调，
+ * 我们是裸 rdpContext，得自己挂。
+ */
+static BOOL rf_load_channels(freerdp* instance)
 {
 	rdpSettings* s = instance->context->settings;
-	freerdp_settings_set_bool(s, FreeRDP_SoftwareGdi, TRUE);
-	freerdp_settings_set_bool(s, FreeRDP_SupportGraphicsPipeline, FALSE);
 
-	/* 挂上 Display Control 动态通道（"disp"）—— 动态改分辨率全靠它。
-	   不显式加的话通道不会建立，rf_rdp_resize 只是改了本地一个数字。
-	   注意：这里**绝不能**因为加载失败就 return FALSE —— PreConnect 返回假会直接
-	   中止整条连接。动态分辨率是锦上添花，失败就退化成固定分辨率（有黑边），
-	   但连接本身必须照常建立。 */
-	freerdp_settings_set_bool(s, FreeRDP_SupportDynamicChannels, TRUE);
-
-	/* 注册静态通道表的查表函数 —— 这是通道能不能加载的**总开关**。
-	   freerdp_load_channel_addin_entry 靠一个全局函数指针去查
-	   CLIENT_STATIC_ADDIN_TABLE；这个指针必须由客户端自己注册。不注册的话它一律
-	   走 dlopen 分支，而通道是编进 libfreerdp-client3 的、磁盘上根本没有对应
-	   模块文件，于是 rdpdr / drdynvc / disp 全部 "Failed to load channel"，
-	   load_addins 整体失败，动态分辨率无从谈起。
-	   （此前误判为"brew 的 FreeRDP 不带通道插件"——实际带，只是没人注册查表函数。） */
+	/* 注册静态通道表的查表函数：freerdp_load_channel_addin_entry 靠这个全局函数指针
+	   去查 CLIENT_STATIC_ADDIN_TABLE。不注册就只会走 dlopen，而通道是编进
+	   libfreerdp-client3 的，磁盘上没有模块文件 —— 一律 "Failed to load channel"。 */
 	freerdp_register_addin_provider(freerdp_channels_load_static_addin_entry, 0);
 
-	/* 让 load_addins 别去碰 rdpdr —— 这是动态分辨率一直没生效的真正原因：
-	   FreeRDP 的 freerdp_client_load_addins 会先加载静态通道，rdpdr 加载失败就
-	   **整体返回 FALSE**，drdynvc / disp 根本轮不到，于是 SendMonitorLayout 无从发出。
-	   关键在于：光把 DeviceRedirection 置 FALSE 没用 —— NetworkAutoDetect /
-	   SupportHeartbeatPdu / SupportMultitransport 这几个 RDP8 特性默认开着，
-	   FreeRDP 会在后面又把 DeviceRedirection 强行打开（"these RDP8 features
-	   require rdpdr to be registered"）。这三个我们用不到，一并关掉。 */
+	/* 别去碰 rdpdr：NetworkAutoDetect / SupportHeartbeatPdu / SupportMultitransport
+	   默认开着会让 FreeRDP 强制打开 DeviceRedirection（RDP8 特性依赖 rdpdr），
+	   而 rdpdr 加载失败会让 load_addins 整体返回 FALSE，drdynvc / disp 跟着遭殃。
+	   这些我们都用不到。 */
 	freerdp_settings_set_bool(s, FreeRDP_NetworkAutoDetect, FALSE);
 	freerdp_settings_set_bool(s, FreeRDP_SupportHeartbeatPdu, FALSE);
 	freerdp_settings_set_bool(s, FreeRDP_SupportMultitransport, FALSE);
@@ -127,13 +186,26 @@ static BOOL rf_pre_connect(freerdp* instance)
 	freerdp_settings_set_bool(s, FreeRDP_RedirectParallelPorts, FALSE);
 	freerdp_settings_set_bool(s, FreeRDP_RedirectClipboard, FALSE);
 
+	/* 动态分辨率走 Display Control 动态通道（disp），它跑在 drdynvc 之上；
+	   load_addins 见到有动态通道就会自动把 drdynvc 这个静态通道挂上。 */
+	freerdp_settings_set_bool(s, FreeRDP_SupportDynamicChannels, TRUE);
 	const char* disp_args[] = { "disp" };
 	BOOL added = freerdp_client_add_dynamic_channel(s, 1, disp_args);
 	BOOL loaded = added ? freerdp_client_load_addins(instance->context->channels, s) : FALSE;
-	fprintf(stderr, "[RDP/native] disp 通道: add=%d load=%d dynRes=%d supportDC=%d\n",
+	fprintf(stderr, "[RDP/native] LoadChannels: add=%d load=%d dynRes=%d supportDC=%d\n",
 	        (int)added, (int)loaded,
 	        (int)freerdp_settings_get_bool(s, FreeRDP_DynamicResolutionUpdate),
 	        (int)freerdp_settings_get_bool(s, FreeRDP_SupportDisplayControl));
+
+	/* 加载失败也别中止连接：动态分辨率是锦上添花，退化成固定分辨率即可。 */
+	return TRUE;
+}
+
+static BOOL rf_pre_connect(freerdp* instance)
+{
+	rdpSettings* s = instance->context->settings;
+	freerdp_settings_set_bool(s, FreeRDP_SoftwareGdi, TRUE);
+	freerdp_settings_set_bool(s, FreeRDP_SupportGraphicsPipeline, FALSE);
 	return TRUE;
 }
 
@@ -250,6 +322,7 @@ void* rf_rdp_create(void* user, rf_frame_cb fcb, rf_state_cb scb, rf_cert_cb ccb
 		return NULL;
 	instance->ContextSize = sizeof(rfContext);
 	instance->PreConnect = rf_pre_connect;
+	instance->LoadChannels = rf_load_channels;
 	instance->PostConnect = rf_post_connect;
 	instance->PostDisconnect = rf_post_disconnect;
 	instance->VerifyCertificateEx = rf_verify_cert_ex;

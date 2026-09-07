@@ -130,6 +130,78 @@ public sealed class SettingsPaneView : NSView
         });
     }
 
+    /// <summary>
+    /// 分组卡片（对齐 Windows 版设置页）：图标 + 组标题 + 一行说明，下面放内容。
+    /// 设置项不该看着像一堆工程开关，得有分组和解释。
+    /// </summary>
+    private static NSView Card(string title, string symbol, string desc, params NSView[] content)
+    {
+        var box = new SoftBox();
+
+        var icon = new NSImageView
+        {
+            Image = NSImage.GetSystemSymbol(symbol, null),
+            ContentTintColor = NSColor.ControlAccent,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+            SymbolConfiguration = NSImageSymbolConfiguration.Create(13, NSFontWeight.Medium),
+        };
+        var head = new NSTextField
+        {
+            StringValue = title,
+            Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
+            Font = NSFont.SystemFontOfSize(13, NSFontWeight.Semibold),
+            TextColor = NSColor.Label,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        var headRow = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.CenterY,
+            Spacing = 7,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        headRow.AddArrangedSubview(icon);
+        headRow.AddArrangedSubview(head);
+
+        var note = new NSTextField
+        {
+            StringValue = desc,
+            Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
+            Font = NSFont.SystemFontOfSize(11),
+            TextColor = NSColor.SecondaryLabel,
+            LineBreakMode = NSLineBreakMode.ByWordWrapping,
+            PreferredMaxLayoutWidth = 540,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+
+        var col = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 10,
+            EdgeInsets = new NSEdgeInsets(14, 16, 14, 16),
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        col.AddArrangedSubview(headRow);
+        col.AddArrangedSubview(note);
+        col.SetCustomSpacing(12, note);
+        foreach (var c in content)
+        {
+            col.AddArrangedSubview(c);
+        }
+
+        box.AddSubview(col);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            col.LeadingAnchor.ConstraintEqualTo(box.LeadingAnchor),
+            col.TrailingAnchor.ConstraintEqualTo(box.TrailingAnchor),
+            col.TopAnchor.ConstraintEqualTo(box.TopAnchor),
+            col.BottomAnchor.ConstraintEqualTo(box.BottomAnchor),
+            box.WidthAnchor.ConstraintGreaterThanOrEqualTo(600),
+        });
+        return box;
+    }
+
     /// <summary>低反差圆角容器：极淡中性底 + 极淡描边，跟随明暗切换。</summary>
     private sealed class SoftBox : NSView
     {
@@ -399,12 +471,13 @@ public sealed class SettingsPaneView : NSView
         clearHistory.BezelStyle = NSBezelStyle.Rounded;
 
         return Page(
-            SectionLabel("已信任的 SSH 主机密钥"),
-            listBox,
-            remove,
-            Gap(8),
-            SectionLabel("连接历史"),
-            clearHistory);
+            Card("已信任的主机", "lock.shield",
+                "首次连接时记录的主机密钥 / 证书指纹。指纹发生变化会强警告，绝不静默接受；"
+                + "只有在你确认服务器确实重装或换证书时才移除对应条目。",
+                listBox, remove),
+            Card("连接历史", "clock.arrow.circlepath",
+                "清空后不可恢复。只影响历史记录，不会动到连接配置与钥匙串里的凭据。",
+                clearHistory));
     }
 
     private HostKeyItemViewModel? _selectedHostKey;

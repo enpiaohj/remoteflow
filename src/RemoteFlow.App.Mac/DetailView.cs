@@ -168,7 +168,7 @@ public sealed class DetailView : NSView
         };
 
         // ── 头部：图标 + 名称 + 收藏；状态点；连接 / 编辑 ──
-        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.HasActiveSession);
+        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.IsConnecting);
         var name = Big(c.Name, 22);
         name.LineBreakMode = NSLineBreakMode.TruncatingTail;
 
@@ -821,7 +821,7 @@ public sealed class DetailView : NSView
 
         var tint = ProtocolStyle.Tint(c.Profile.Protocol);
         var bar = new CardView(() => tint, cornerRadius: 1.5f);
-        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.HasActiveSession);
+        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.IsConnecting);
         var name = Plain(c.Name, 14);
         name.Font = NSFont.SystemFontOfSize(14, NSFontWeight.Semibold);
         name.LineBreakMode = NSLineBreakMode.TruncatingTail;
@@ -975,7 +975,7 @@ public sealed class DetailView : NSView
 
     private NSView HomeFavRow(ConnectionItemViewModel c)
     {
-        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.HasActiveSession);
+        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.IsConnecting);
         tile.WidthAnchor.ConstraintEqualTo(30).Active = true;
         tile.HeightAnchor.ConstraintEqualTo(30).Active = true;
 

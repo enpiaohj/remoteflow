@@ -176,7 +176,7 @@ public sealed class ConnectionTreeSource : NSOutlineViewDelegate, INSOutlineView
         sub.StringValue = $"{item.HostDisplay}   ·   {item.ProtocolName}";
         icon.Image = ProtocolStyle.Symbol(item.Profile.Protocol);
         icon.ContentTintColor = ProtocolStyle.Tint(item.Profile.Protocol);
-        ProtocolStyle.ApplyStatus(badge, item.IsConnected, item.HasActiveSession);
+        ProtocolStyle.ApplyStatus(badge, item.IsConnected, item.IsConnecting);
         return cell;
     }
 
