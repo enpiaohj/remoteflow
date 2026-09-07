@@ -360,12 +360,13 @@ public sealed class DetailView : NSView
 
         if (connected || active)
         {
-            var badge = ProtocolStyle.StatusBadge();
+            // 40pt 图标块上 9pt 太小要凑近看，这里用 13pt。
+            var badge = ProtocolStyle.StatusBadge(13);
             tile.AddSubview(badge);
             NSLayoutConstraint.ActivateConstraints(new[]
             {
-                badge.TrailingAnchor.ConstraintEqualTo(tile.TrailingAnchor, 2),
-                badge.BottomAnchor.ConstraintEqualTo(tile.BottomAnchor, 2),
+                badge.TrailingAnchor.ConstraintEqualTo(tile.TrailingAnchor, 3),
+                badge.BottomAnchor.ConstraintEqualTo(tile.BottomAnchor, 3),
             });
             ProtocolStyle.ApplyStatus(badge, connected, active);
         }

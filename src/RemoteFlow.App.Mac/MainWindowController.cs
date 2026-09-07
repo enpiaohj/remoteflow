@@ -862,6 +862,16 @@ public sealed class MainWindowController : NSWindowController
         }
 
         _sessionNames.Remove(id);
+
+        // 全屏是「用户对当前这个会话」做的操作，不该被下一个会话继承：
+        // 主动点标签 / 药丸菜单切会话时保持全屏（那是明确意图），但因为**关闭**当前
+        // 会话而被动跳到另一个会话时，先退回常规三栏 —— 用户从没对那个会话要过全屏。
+        var wasShowing = _activeSessionId == id;
+        if (wasShowing && _mode != ViewMode.Normal)
+        {
+            SetViewMode(ViewMode.Normal);
+        }
+
         _tabBar.RemoveTab(id); // 若还有 Tab，内部会重选最后一个并触发 ShowSessionStage
         SyncTabBarVisibility();
         SyncSessionsItem();

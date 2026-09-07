@@ -94,6 +94,19 @@ public sealed class RdpScreenView : NSView
 
     public override bool AcceptsFirstResponder() => true;
 
+    /// <summary>拖拽改窗口结束时再确认一次尺寸（Layout 期间的去抖可能被跟踪模式压掉）。</summary>
+    public override void ViewDidEndLiveResize()
+    {
+        base.ViewDidEndLiveResize();
+        ScheduleResize();
+    }
+
+    public override void ViewDidMoveToSuperview()
+    {
+        base.ViewDidMoveToSuperview();
+        ScheduleResize();
+    }
+
     public override void ViewDidMoveToWindow()
     {
         base.ViewDidMoveToWindow();
@@ -124,7 +137,11 @@ public sealed class RdpScreenView : NSView
         }
 
         _resizeTimer?.Invalidate();
-        _resizeTimer = NSTimer.CreateScheduledTimer(0.35, _ => ApplyResize());
+        // 必须挂到 Common 模式：窗口最大化 / 进全屏期间 runloop 处于事件跟踪模式，
+        // 默认模式的定时器在那段时间不会触发，重协商就被吞掉了 —— 表现为最大化 /
+        // 全屏后画面还是旧分辨率，四周一圈大黑边。
+        _resizeTimer = NSTimer.CreateTimer(TimeSpan.FromSeconds(0.35), _ => ApplyResize());
+        NSRunLoop.Main.AddTimer(_resizeTimer, NSRunLoopMode.Common);
     }
 
     private void ApplyResize()
@@ -226,12 +243,27 @@ public sealed class RdpScreenView : NSView
         }
     }
 
-    private void OnFrameSizeChanged(object? sender, FrameSize size) => _pendingSize = size;
+    private void OnFrameSizeChanged(object? sender, FrameSize size)
+    {
+        _pendingSize = size;
+        // 记录服务端最终给到的分辨率：和请求值对不上就说明对端没接受重协商，
+        // 此时的黑边是协议层限制而非视图没铺满，便于区分两类问题。
+        System.Console.Error.WriteLine(
+            $"[RDP] 远程桌面实际 {size.Width}×{size.Height}（最近请求 {_lastReqW}×{_lastReqH}）");
+    }
 
     private void OnStateChanged(object? sender, SessionStateChangedEventArgs e)
     {
         NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
         {
+            if (e.NewState == ConnectionState.Connected)
+            {
+                // 连上瞬间视图可能刚因 Tab 条出现而变高变窄，立刻按当前尺寸校一次。
+                _lastReqW = 0;
+                _lastReqH = 0;
+                ScheduleResize();
+            }
+
             if (e.NewState is ConnectionState.Failed or ConnectionState.Disconnected or ConnectionState.Closed)
             {
                 var what = e.NewState == ConnectionState.Failed ? "会话失败" : "会话已断开";

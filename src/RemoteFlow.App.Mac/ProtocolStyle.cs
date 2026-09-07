@@ -65,11 +65,17 @@ internal static class ProtocolStyle
     /// 绿=已连接，橙=会话活动中（连接中 / 失败未清理），无会话则整个隐藏。
     /// 外圈用窗口底色描一圈，压在图标上也看得清。
     /// </summary>
-    public static NSView StatusBadge()
+    /// <param name="size">直径。列表行的小图标用 9；首页 / 详情页的 40pt 图标块用 13 才看得清。</param>
+    public static NSView StatusBadge(nfloat size = default)
     {
-        var v = new BadgeView { TranslatesAutoresizingMaskIntoConstraints = false, Hidden = true };
-        v.WidthAnchor.ConstraintEqualTo(9).Active = true;
-        v.HeightAnchor.ConstraintEqualTo(9).Active = true;
+        if (size <= 0)
+        {
+            size = 9;
+        }
+
+        var v = new BadgeView(size) { TranslatesAutoresizingMaskIntoConstraints = false, Hidden = true };
+        v.WidthAnchor.ConstraintEqualTo(size).Active = true;
+        v.HeightAnchor.ConstraintEqualTo(size).Active = true;
         return v;
     }
 
@@ -91,11 +97,11 @@ internal static class ProtocolStyle
     {
         public NSColor Fill = NSColor.SystemGreen;
 
-        public BadgeView()
+        public BadgeView(nfloat size)
         {
             WantsLayer = true;
-            Layer!.CornerRadius = 4.5f;
-            Layer.BorderWidth = 1.5f;
+            Layer!.CornerRadius = size / 2;
+            Layer.BorderWidth = size >= 12 ? 2 : 1.5f;
         }
 
         public void Refresh()
