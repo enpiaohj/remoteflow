@@ -7,6 +7,13 @@
 
 ---
 
+## [0.8.1] — 2026-09-07
+
+### 修复
+- 会话全屏在“非标准最大化”下溢出：从最大化窗口进全屏时，无边框窗口残留 WindowChrome 的约 8px 溢出矩形——上沿被顶出屏幕、底部露出本机任务栏，且顶沿胶囊工具条无法唤出。改为按物理像素定位到当前显示器完整边界（`SetWindowPos` → `rcMonitor`），并在被 WPF 重排时 snap 回；顶沿唤出判定带一并放宽做兜底。
+
+详见 [`releases/v0.8.1/CHANGELOG.md`](releases/v0.8.1/CHANGELOG.md)。
+
 ## [0.8.0] — 2026-09-06
 
 ### 新增 / 变更
@@ -110,6 +117,7 @@
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
+[0.8.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.8.1
 [0.8.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.8.0
 [0.3.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.3.1
 [0.3.2]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.3.2
