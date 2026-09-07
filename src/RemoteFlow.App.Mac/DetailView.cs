@@ -756,7 +756,7 @@ public sealed class DetailView : NSView
             Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
             Alignment = NSLayoutAttribute.Top,
             Distribution = NSStackViewDistribution.Fill,
-            Spacing = 24,
+            Spacing = 18,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
         var favCol = HomeColumnCard("收藏", "star",
@@ -770,6 +770,7 @@ public sealed class DetailView : NSView
         twoCol.AddArrangedSubview(favCol);
         twoCol.AddArrangedSubview(actCol);
         favCol.WidthAnchor.ConstraintEqualTo(actCol.WidthAnchor).Active = true;
+        favCol.HeightAnchor.ConstraintEqualTo(actCol.HeightAnchor).Active = true; // 两列齐平
         AddFill(col, twoCol);
 
         if (vm.ShowSecurityTip)
@@ -815,7 +816,7 @@ public sealed class DetailView : NSView
         card.AddSubview(border);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
-            card.HeightAnchor.ConstraintEqualTo(104),
+            card.HeightAnchor.ConstraintEqualTo(92),
             border.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor),
             border.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor),
             border.TopAnchor.ConstraintEqualTo(card.TopAnchor),
@@ -866,7 +867,13 @@ public sealed class DetailView : NSView
         Action viewAll, string footerText)
     {
         var card = Card();
-        card.HeightAnchor.ConstraintEqualTo(420).Active = true;
+        // 固定高度在内容少时会留下一大片空洞（收藏只有一两条时尤其明显）。
+        // 改成只锁上下限。下限取「刚好放得下 4 整行」——内层是滚动列表，
+        // 高度随便取会把最后一行切成半截，看着像没画完（行高 46 + 卡片头尾约 84）。
+        card.HeightAnchor.ConstraintGreaterThanOrEqualTo(4 * 46 + 84).Active = true;
+        var cap = card.HeightAnchor.ConstraintLessThanOrEqualTo(460);
+        cap.Priority = (float)NSLayoutPriority.DefaultHigh;
+        cap.Active = true;
 
         var head = new NSStackView
         {
@@ -938,10 +945,40 @@ public sealed class DetailView : NSView
         }
         else
         {
+            // 空态原来是顶上飘一行灰字，看着像没加载完。改成居中的图标 + 说明。
+            var glyph = new NSImageView
+            {
+                Image = NSImage.GetSystemSymbol(symbol, null),
+                ContentTintColor = NSColor.QuaternaryLabel,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+                SymbolConfiguration = NSImageSymbolConfiguration.Create(22, NSFontWeight.Light),
+            };
             var e = Muted(emptyText, 12);
+            e.Alignment = NSTextAlignment.Center;
             e.LineBreakMode = NSLineBreakMode.ByWordWrapping;
-            e.PreferredMaxLayoutWidth = 300;
-            body = e;
+            e.PreferredMaxLayoutWidth = 240;
+
+            var stack = new NSStackView
+            {
+                Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+                Alignment = NSLayoutAttribute.CenterX,
+                Spacing = 10,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
+            stack.AddArrangedSubview(glyph);
+            stack.AddArrangedSubview(e);
+
+            var host = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+            host.AddSubview(stack);
+            NSLayoutConstraint.ActivateConstraints(new[]
+            {
+                stack.CenterXAnchor.ConstraintEqualTo(host.CenterXAnchor),
+                stack.CenterYAnchor.ConstraintEqualTo(host.CenterYAnchor),
+                stack.LeadingAnchor.ConstraintGreaterThanOrEqualTo(host.LeadingAnchor, 12),
+                stack.TrailingAnchor.ConstraintLessThanOrEqualTo(host.TrailingAnchor, -12),
+                host.HeightAnchor.ConstraintGreaterThanOrEqualTo(120),
+            });
+            body = host;
         }
 
         var footSep = Hairline();
@@ -1378,10 +1415,12 @@ public sealed class DetailView : NSView
         }
     }
 
-    // 低反差：一层极淡的中性填充 + 极淡描边，不做「白卡压灰底」的强对比。
+    // 低反差：极淡中性填充 + 描边，不做「白卡压灰底」的强对比。
+    // 描边从 0.12 提到 0.16 —— 之前边界太弱，卡片糊在底色里像没画完；
+    // 这一档仍远低于"白卡"的反差，只是把边界交代清楚。
     private static CardView Card() =>
-        new(() => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.06f),
-            () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f), 8);
+        new(() => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.055f),
+            () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.16f), 9);
 
     private static CardView Hairline() => new(() => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f));
 

@@ -53,6 +53,8 @@ public sealed class MainWindowController : NSWindowController
     // 会话 Id → 其画面视图（SshTerminalView / VncScreenView）。多 Tab 并存。
     private readonly Dictionary<Guid, NSView> _sessionViews = new();
     private readonly Dictionary<Guid, string> _sessionNames = new();
+    /// <summary>会话 Id → 它连的那条连接，会话结束后用来把详情页切回该连接的信息卡。</summary>
+    private readonly Dictionary<Guid, Guid> _sessionProfileIds = new();
 
     private NavSidebar.Item? _currentNav;
 
@@ -256,6 +258,14 @@ public sealed class MainWindowController : NSWindowController
         {
             tb.Visible = !chromeHidden;
         }
+
+        // 全屏顶部那条白线：工具栏一藏，系统仍会在标题栏下沿画一条 hairline 分隔线
+        // （NSTitlebarSeparatorStyle 默认 Automatic）。会话画面顶到屏幕边缘时它就格外扎眼。
+        // 隐藏 chrome 时关掉分隔线并让标题栏透明，恢复时再交还系统。
+        Window.TitlebarSeparatorStyle = chromeHidden
+            ? NSTitlebarSeparatorStyle.None
+            : NSTitlebarSeparatorStyle.Automatic;
+        Window.TitlebarAppearsTransparent = chromeHidden;
 
         SyncTabBarVisibility();
         SyncPill();
@@ -865,6 +875,7 @@ public sealed class MainWindowController : NSWindowController
 
             _sessionViews[session.SessionId] = view;
             _sessionNames[session.SessionId] = name;
+            _sessionProfileIds[session.SessionId] = profile.Id;
             _tabBar.AddTab(session.SessionId, name, profile.Protocol);
             SyncTabBarVisibility();
             SyncSessionsItem();
@@ -903,6 +914,7 @@ public sealed class MainWindowController : NSWindowController
         }
 
         _sessionNames.Remove(id);
+        _sessionProfileIds.Remove(id, out var closedProfileId);
 
         // 全屏是「用户对当前这个会话」做的操作，不该被下一个会话继承：
         // 主动点标签 / 药丸菜单切会话时保持全屏（那是明确意图），但因为**关闭**当前
@@ -924,6 +936,22 @@ public sealed class MainWindowController : NSWindowController
             _activeSessionId = Guid.Empty;
             Window.Title = "RemoteFlow";
             ShowDetailStage();
+
+            // ShowDetailStage 只是把 _detail 放回舞台，_detail 自己的内容还停在
+            // 「正在连接 …」那一屏 —— 会话都关了还显示连接中，状态是错的。
+            // 切回这条连接的信息卡（能看到"未连接"和重新连接入口）；找不到就回空态。
+            var back = closedProfileId != Guid.Empty
+                ? _connectionsVm.Items.FirstOrDefault(x => x.Id == closedProfileId)
+                : null;
+            if (back is not null)
+            {
+                _connectionsVm.SelectedItem = back;
+                _detail.ShowConnection(_connectionsVm);
+            }
+            else
+            {
+                _detail.ShowEmpty();
+            }
         }
     }
 
