@@ -120,13 +120,6 @@ public sealed class SessionTabBar : NSView
 
     private void Close(Guid id) => TabClosed?.Invoke(this, id);
 
-    private static NSImage? Icon(ProtocolType p) => p switch
-    {
-        ProtocolType.Ssh => NSImage.GetSystemSymbol("apple.terminal", null) ?? NSImage.GetSystemSymbol("terminal", null),
-        ProtocolType.Rdp => NSImage.GetSystemSymbol("display", null),
-        _ => NSImage.GetSystemSymbol("rectangle.on.rectangle", null),
-    };
-
     private sealed class Tab
     {
         public Guid Id { get; }
@@ -140,8 +133,8 @@ public sealed class SessionTabBar : NSView
 
             var icon = new NSImageView
             {
-                Image = Icon(protocol),
-                ContentTintColor = NSColor.SecondaryLabel,
+                Image = ProtocolStyle.Symbol(protocol),
+                ContentTintColor = ProtocolStyle.Tint(protocol),
                 TranslatesAutoresizingMaskIntoConstraints = false,
                 SymbolConfiguration = NSImageSymbolConfiguration.Create(12, NSFontWeight.Regular),
             };

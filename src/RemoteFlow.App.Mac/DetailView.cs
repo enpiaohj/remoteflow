@@ -84,13 +84,22 @@ public sealed class DetailView : NSView
     private NSView BuildInfoCard(ConnectionItemViewModel c)
     {
         var title = Big(c.Name, 24);
-        var subtitle = Muted($"{c.ProtocolName}   ·   {c.HostDisplay}", 13);
+
+        var subtitle = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.CenterY,
+            Spacing = 8,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        subtitle.AddArrangedSubview(ProtocolStyle.Badge(c.Profile.Protocol, c.ProtocolName));
+        subtitle.AddArrangedSubview(Muted(c.HostDisplay, 13));
 
         var connect = NSButton.CreateButton("连接", () => ConnectRequested?.Invoke(this, c));
         connect.BezelStyle = NSBezelStyle.Rounded;
         connect.ControlSize = NSControlSize.Large;
-        connect.KeyEquivalent = "\r";
-        connect.WidthAnchor.ConstraintEqualTo(108).Active = true;
+        connect.KeyEquivalent = "\r"; // 默认按钮 → 系统强调色填充
+        connect.WidthAnchor.ConstraintEqualTo(112).Active = true;
 
         var stack = new NSStackView
         {
@@ -104,7 +113,7 @@ public sealed class DetailView : NSView
         stack.AddArrangedSubview(subtitle);
         stack.AddArrangedSubview(Gap(8));
         stack.AddArrangedSubview(connect);
-        stack.AddArrangedSubview(Gap(4));
+        stack.AddArrangedSubview(Gap(2));
         stack.AddArrangedSubview(Muted("右键连接可编辑 / 复制 / 删除", 11));
         stack.AddArrangedSubview(Gap(12));
         stack.AddArrangedSubview(SectionLabel("连接信息"));
@@ -170,9 +179,9 @@ public sealed class DetailView : NSView
     {
         var icon = new NSImageView
         {
-            Image = ProtocolSymbol(c.Profile.Protocol),
+            Image = ProtocolStyle.Symbol(c.Profile.Protocol),
             TranslatesAutoresizingMaskIntoConstraints = false,
-            ContentTintColor = NSColor.SecondaryLabel,
+            ContentTintColor = ProtocolStyle.Tint(c.Profile.Protocol),
             SymbolConfiguration = NSImageSymbolConfiguration.Create(13, NSFontWeight.Regular),
         };
         var col = new NSStackView
@@ -393,14 +402,6 @@ public sealed class DetailView : NSView
         ContentTintColor = tint,
         TranslatesAutoresizingMaskIntoConstraints = false,
         SymbolConfiguration = NSImageSymbolConfiguration.Create(size, NSFontWeight.Regular),
-    };
-
-    private static NSImage? ProtocolSymbol(RemoteFlow.Core.Models.ProtocolType p) => p switch
-    {
-        RemoteFlow.Core.Models.ProtocolType.Ssh => NSImage.GetSystemSymbol("apple.terminal", null)
-            ?? NSImage.GetSystemSymbol("terminal", null),
-        RemoteFlow.Core.Models.ProtocolType.Rdp => NSImage.GetSystemSymbol("display", null),
-        _ => NSImage.GetSystemSymbol("rectangle.on.rectangle", null),
     };
 
     private static NSTextField SectionLabel(string text) => new()

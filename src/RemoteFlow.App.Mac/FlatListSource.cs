@@ -107,7 +107,8 @@ public sealed class FlatListSource : NSTableViewDelegate
         name.StringValue = item.Name;
         sub.StringValue = $"{item.HostDisplay}   ·   {item.ProtocolName}";
         trailing.StringValue = item.LastConnectedDisplay;
-        icon.Image = Sym(item.Profile.Protocol);
+        icon.Image = ProtocolStyle.Symbol(item.Profile.Protocol);
+        icon.ContentTintColor = ProtocolStyle.Tint(item.Profile.Protocol);
         star.Image = item.IsFavorite ? NSImage.GetSystemSymbol("star.fill", null) : null;
         star.Hidden = !item.IsFavorite;
         return cell;
@@ -123,14 +124,6 @@ public sealed class FlatListSource : NSTableViewDelegate
         TextColor = color,
         LineBreakMode = NSLineBreakMode.TruncatingTail,
         TranslatesAutoresizingMaskIntoConstraints = false,
-    };
-
-    private static NSImage? Sym(RemoteFlow.Core.Models.ProtocolType p) => p switch
-    {
-        RemoteFlow.Core.Models.ProtocolType.Ssh => NSImage.GetSystemSymbol("apple.terminal", null)
-            ?? NSImage.GetSystemSymbol("terminal", null),
-        RemoteFlow.Core.Models.ProtocolType.Rdp => NSImage.GetSystemSymbol("display", null),
-        _ => NSImage.GetSystemSymbol("rectangle.on.rectangle", null),
     };
 
     private sealed class RowCount : NSTableViewDataSource

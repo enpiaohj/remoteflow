@@ -167,7 +167,8 @@ public sealed class ConnectionTreeSource : NSOutlineViewDelegate, INSOutlineView
 
         name.StringValue = item.Name;
         sub.StringValue = $"{item.HostDisplay}   ·   {item.ProtocolName}";
-        icon.Image = SymbolFor(item.Profile.Protocol);
+        icon.Image = ProtocolStyle.Symbol(item.Profile.Protocol);
+        icon.ContentTintColor = ProtocolStyle.Tint(item.Profile.Protocol);
         return cell;
     }
 
@@ -181,14 +182,6 @@ public sealed class ConnectionTreeSource : NSOutlineViewDelegate, INSOutlineView
         TextColor = color,
         LineBreakMode = NSLineBreakMode.TruncatingTail,
         TranslatesAutoresizingMaskIntoConstraints = false,
-    };
-
-    private static NSImage? SymbolFor(RemoteFlow.Core.Models.ProtocolType p) => p switch
-    {
-        RemoteFlow.Core.Models.ProtocolType.Ssh => NSImage.GetSystemSymbol("apple.terminal", null)
-            ?? NSImage.GetSystemSymbol("terminal", null),
-        RemoteFlow.Core.Models.ProtocolType.Rdp => NSImage.GetSystemSymbol("display", null),
-        _ => NSImage.GetSystemSymbol("rectangle.on.rectangle", null),
     };
 
     // NSOutlineView item 必须是 NSObject —— 弱引用包装 VM。
