@@ -707,16 +707,29 @@ public sealed class DetailView : NSView
             col.AddArrangedSubview(Gap(24));
         }
 
-        // 收藏 / 最近活动 —— macOS 详情列宽度有限（列表列占着），纵向堆叠而非 Windows 的两列。
-        AddFill(col, HomeColumnCard("收藏", "star",
+        // 收藏 / 最近活动 —— 首页现已全宽（列表列在首页折叠），恢复 Windows 的两列。
+        // 注：不用 Distribution.FillEqually —— 它加的等宽约束优先级不够，列卡里
+        // 文本的抗压缩优先级（750）会把它顶破，导致一列塌成 ~60px。改为显式必需等宽。
+        var twoCol = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.Top,
+            Distribution = NSStackViewDistribution.Fill,
+            Spacing = 24,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        var favCol = HomeColumnCard("收藏", "star",
             vm.HasFavorites ? vm.FavoriteItems.Select(HomeFavRow) : null,
             "还没有收藏的连接。在「我的连接」里点星标即可加入。",
-            () => vm.ViewAllFavoritesCommand.Execute(null), "管理收藏"));
-        col.AddArrangedSubview(Gap(18));
-        AddFill(col, HomeColumnCard("最近活动", "clock.arrow.circlepath",
+            () => vm.ViewAllFavoritesCommand.Execute(null), "管理收藏");
+        var actCol = HomeColumnCard("最近活动", "clock.arrow.circlepath",
             vm.HasActivity ? vm.RecentHistory.Select(HomeActivityRow) : null,
             "还没有连接记录。",
-            () => vm.ViewAllActivityCommand.Execute(null), "查看所有活动"));
+            () => vm.ViewAllActivityCommand.Execute(null), "查看所有活动");
+        twoCol.AddArrangedSubview(favCol);
+        twoCol.AddArrangedSubview(actCol);
+        favCol.WidthAnchor.ConstraintEqualTo(actCol.WidthAnchor).Active = true;
+        AddFill(col, twoCol);
 
         if (vm.ShowSecurityTip)
         {
@@ -812,7 +825,7 @@ public sealed class DetailView : NSView
         Action viewAll, string footerText)
     {
         var card = Card();
-        card.HeightAnchor.ConstraintEqualTo(248).Active = true;
+        card.HeightAnchor.ConstraintEqualTo(420).Active = true;
 
         var head = new NSStackView
         {
