@@ -102,8 +102,11 @@ public sealed class DetailView : NSView
         => Centered(Icon("checkmark.circle", 40, NSColor.SystemGreen), $"已连接 {name}",
             "该协议的会话画面尚未接入本区域。");
 
-    public void ShowError(string message)
-        => Swap(Centered(Icon("exclamationmark.triangle", 40, NSColor.SystemOrange), "连接失败", message));
+    /// <summary>错误占位。<paramref name="title"/> 一句话说清出了什么事，正文给可操作的建议。</summary>
+    public void ShowError(string message) => ShowError("连接失败", message);
+
+    public void ShowError(string title, string message)
+        => Swap(Centered(Icon("exclamationmark.triangle", 40, NSColor.SystemOrange), title, message));
 
     public void ShowSessionInfo(string name, string title, string body)
         => Swap(Centered(Icon("display", 40, NSColor.SystemBlue), title, body));

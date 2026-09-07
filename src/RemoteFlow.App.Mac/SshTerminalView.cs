@@ -194,7 +194,9 @@ public sealed class SshTerminalView : NSView
                     _ => "会话已结束",
                 };
                 var reason = _session.ErrorMessage
-                    ?? (_session.ErrorCode == ConnectionErrorCode.None ? null : _session.ErrorCode.ToString());
+                    ?? (_session.ErrorCode == ConnectionErrorCode.None
+                        ? null
+                        : RemoteFlow.Presentation.ConnectionErrorText.Title(_session.ErrorCode));
                 _status.StringValue = reason is null ? what : $"{what}：{reason}";
                 _status.Hidden = false;
                 _reconnect.Hidden = false;

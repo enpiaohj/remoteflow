@@ -284,23 +284,40 @@ public sealed class MainWindowController : NSWindowController
         => SetViewMode(_mode == ViewMode.ScreenFull ? ViewMode.WindowFull : ViewMode.Normal);
 
     /// <summary>系统侧（绿灯 / Esc / 调度中心）进出原生全屏时，把内部档位对齐。</summary>
+    private readonly List<NSObject> _windowObservers = new();
+
     private void WireFullScreenNotifications()
     {
         var nc = NSNotificationCenter.DefaultCenter;
-        nc.AddObserver(NSWindow.DidEnterFullScreenNotification, _ =>
+        _windowObservers.Add(nc.AddObserver(NSWindow.DidEnterFullScreenNotification, _ =>
         {
             if (_mode != ViewMode.ScreenFull)
             {
                 SetViewMode(ViewMode.ScreenFull);
             }
-        }, Window);
-        nc.AddObserver(NSWindow.DidExitFullScreenNotification, _ =>
+        }, Window));
+        _windowObservers.Add(nc.AddObserver(NSWindow.DidExitFullScreenNotification, _ =>
         {
             if (_mode == ViewMode.ScreenFull)
             {
                 SetViewMode(ViewMode.WindowFull);
             }
-        }, Window);
+        }, Window));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            foreach (var o in _windowObservers)
+            {
+                NSNotificationCenter.DefaultCenter.RemoveObserver(o);
+            }
+
+            _windowObservers.Clear();
+        }
+
+        base.Dispose(disposing);
     }
 
     private void SyncPill()
@@ -698,16 +715,24 @@ public sealed class MainWindowController : NSWindowController
         }
         catch (Exception ex)
         {
-            _detail.ShowError(ex.Message);
+            _detail.ShowError("新建连接失败", ex.Message);
         }
     }
 
     /// <summary>菜单「断开会话」⌘⇧W：关闭当前 Tab 的会话。</summary>
     public async void DisconnectCurrentSession()
     {
-        if (_activeSessionId != Guid.Empty)
+        // async void：异常逃逸出去就是进程级崩溃，这里必须兜住。
+        try
         {
-            await CloseSessionAsync(_activeSessionId);
+            if (_activeSessionId != Guid.Empty)
+            {
+                await CloseSessionAsync(_activeSessionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _detail.ShowError("断开会话失败", ex.Message);
         }
     }
 
@@ -811,7 +836,9 @@ public sealed class MainWindowController : NSWindowController
 
             if (session.State != RemoteFlow.Core.Models.ConnectionState.Connected)
             {
-                _detail.ShowError(session.ErrorMessage ?? session.ErrorCode.ToString());
+                _detail.ShowError(
+                    RemoteFlow.Presentation.ConnectionErrorText.Title(session.ErrorCode),
+                    RemoteFlow.Presentation.ConnectionErrorText.Describe(session.ErrorCode, session.ErrorMessage));
                 await _sessions.CloseSessionAsync(session.SessionId);
                 return;
             }

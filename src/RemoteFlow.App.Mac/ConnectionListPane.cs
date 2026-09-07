@@ -368,44 +368,44 @@ public sealed class ConnectionListPane : NSViewController
 
     private async void RunConnItem(CommunityToolkit.Mvvm.Input.IAsyncRelayCommand command, ConnectionItemViewModel conn)
     {
+        // async void：任何异常逃逸都会变成进程级崩溃，刷新也得包进来。
         try
         {
             await command.ExecuteAsync(conn);
+            await RefreshAsync();
         }
         catch
         {
             // 命令内部已负责用户提示。
         }
-
-        await RefreshAsync();
     }
 
     private async void RunMoveToGroup(ConnectionItemViewModel conn, Guid? groupId)
     {
+        // async void：任何异常逃逸都会变成进程级崩溃，刷新也得包进来。
         try
         {
             await _vm.MoveConnectionToGroupAsync(conn, groupId);
+            await RefreshAsync();
         }
         catch
         {
             // VM 内部已负责用户提示。
         }
-
-        await RefreshAsync();
     }
 
     private async void RunGroupItem(CommunityToolkit.Mvvm.Input.IAsyncRelayCommand command, ConnectionGroupNodeViewModel group)
     {
+        // async void：任何异常逃逸都会变成进程级崩溃，刷新也得包进来。
         try
         {
             await command.ExecuteAsync(group);
+            await RefreshAsync();
         }
         catch
         {
             // 命令内部已负责用户提示。
         }
-
-        await RefreshAsync();
     }
 
     private async Task RunGroupCreateAsync(ConnectionGroupNodeViewModel? parent)
@@ -418,8 +418,6 @@ public sealed class ConnectionListPane : NSViewController
         {
             // 命令内部已负责用户提示。
         }
-
-        await RefreshAsync();
     }
 
     // ── helpers ─────────────────────────────────────────────────

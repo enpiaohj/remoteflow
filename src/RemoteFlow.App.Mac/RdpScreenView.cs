@@ -352,7 +352,7 @@ public sealed class RdpScreenView : NSView
                 var reason = _session.ErrorMessage
                     ?? (_session.ErrorCode == RemoteFlow.Core.Models.ConnectionErrorCode.None
                         ? null
-                        : _session.ErrorCode.ToString());
+                        : RemoteFlow.Presentation.ConnectionErrorText.Title(_session.ErrorCode));
                 _overlay.StringValue = reason is null ? what : $"{what}：{reason}";
                 _overlay.Hidden = false;
                 _reconnect.Hidden = false;
