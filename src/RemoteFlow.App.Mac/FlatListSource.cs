@@ -39,6 +39,7 @@ public sealed class FlatListSource : NSTableViewDelegate
         NSImageView icon;
         NSTextField name, sub, trailing;
         NSImageView star;
+        NSView badge;
 
         if (tableView.MakeView(id, this) is NSTableCellView reused)
         {
@@ -49,6 +50,7 @@ public sealed class FlatListSource : NSTableViewDelegate
             sub = (NSTextField)stack.ArrangedSubviews[1];
             trailing = (NSTextField)cell.Subviews[2];
             star = (NSImageView)cell.Subviews[3];
+            badge = cell.Subviews[4];
         }
         else
         {
@@ -82,10 +84,13 @@ public sealed class FlatListSource : NSTableViewDelegate
                 SymbolConfiguration = NSImageSymbolConfiguration.Create(11, NSFontWeight.Regular),
             };
 
+            badge = ProtocolStyle.StatusBadge();
+
             cell.AddSubview(icon);
             cell.AddSubview(stack);
             cell.AddSubview(trailing);
             cell.AddSubview(star);
+            cell.AddSubview(badge);
             cell.TextField = name;
 
             NSLayoutConstraint.ActivateConstraints(new[]
@@ -101,6 +106,9 @@ public sealed class FlatListSource : NSTableViewDelegate
                 star.TrailingAnchor.ConstraintEqualTo(cell.TrailingAnchor, -6),
                 star.CenterYAnchor.ConstraintEqualTo(cell.CenterYAnchor),
                 star.WidthAnchor.ConstraintEqualTo(14),
+                // 在线徽标压在协议图标右下角
+                badge.TrailingAnchor.ConstraintEqualTo(icon.TrailingAnchor, 1),
+                badge.BottomAnchor.ConstraintEqualTo(icon.BottomAnchor, 1),
             });
         }
 
@@ -111,6 +119,7 @@ public sealed class FlatListSource : NSTableViewDelegate
         icon.ContentTintColor = ProtocolStyle.Tint(item.Profile.Protocol);
         star.Image = item.IsFavorite ? NSImage.GetSystemSymbol("star.fill", null) : null;
         star.Hidden = !item.IsFavorite;
+        ProtocolStyle.ApplyStatus(badge, item.IsConnected, item.HasActiveSession);
         return cell;
     }
 

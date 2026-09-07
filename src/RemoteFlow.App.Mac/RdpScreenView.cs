@@ -34,6 +34,11 @@ public sealed class RdpScreenView : NSView
     private FrameSize _pendingSize;
     private bool _detached;
 
+    // 动态分辨率：视图尺寸变了就把远程桌面改成同样的长宽比，避免画面被 letterbox 出黑边。
+    private NSTimer? _resizeTimer;
+    private int _lastReqW;
+    private int _lastReqH;
+
     public RdpScreenView(RdpSession session)
     {
         _session = session;
@@ -80,6 +85,8 @@ public sealed class RdpScreenView : NSView
     public void Detach()
     {
         _detached = true;
+        _resizeTimer?.Invalidate();
+        _resizeTimer = null;
         StopLoop();
         _frames.FrameSizeChanged -= OnFrameSizeChanged;
         _session.StateChanged -= OnStateChanged;
@@ -97,6 +104,63 @@ public sealed class RdpScreenView : NSView
     {
         base.Layout();
         _screen.Frame = Bounds;
+        ScheduleResize();
+    }
+
+    /// <summary>
+    /// 视图尺寸变化 → 请求远程桌面改成同样尺寸（FreeRDP DynamicResolutionUpdate）。
+    /// 不这么做的话，远程桌面是连接时定死的一个分辨率，一旦和当前视图长宽比不一致，
+    /// GravityResizeAspect 就会在上下（或左右）留黑边 —— 三栏模式下尤其明显。
+    /// 拖窗口会连续触发 Layout，这里做 0.35s 去抖，避免刷屏式重协商。
+    /// </summary>
+    private void ScheduleResize()
+    {
+        if (_detached || _session.Profile.Rdp is not { } rdp
+            || rdp.DisplayMode == RemoteFlow.Core.Models.RdpDisplayMode.FixedResolution)
+        {
+            return;
+        }
+
+        _resizeTimer?.Invalidate();
+        _resizeTimer = NSTimer.CreateScheduledTimer(0.35, _ => ApplyResize());
+    }
+
+    private void ApplyResize()
+    {
+        if (_detached || _session.State != ConnectionState.Connected)
+        {
+            return;
+        }
+
+        // 按背板像素请求，Retina 下画面才是清晰的 1:1；再给个上限别让桌面大得离谱。
+        var scale = Window?.BackingScaleFactor ?? 1;
+        var w = (int)Math.Round(Bounds.Width * scale);
+        var h = (int)Math.Round(Bounds.Height * scale);
+        const int maxW = 2560;
+        if (w > maxW)
+        {
+            h = (int)Math.Round(h * (double)maxW / w);
+            w = maxW;
+        }
+
+        // FreeRDP 要求偶数宽高。
+        w -= w % 2;
+        h -= h % 2;
+        if (w < 640 || h < 480 || (w == _lastReqW && h == _lastReqH))
+        {
+            return;
+        }
+
+        _lastReqW = w;
+        _lastReqH = h;
+        try
+        {
+            _session.Resize(w, h);
+        }
+        catch
+        {
+            // 重协商失败不影响现有画面，下次尺寸变化再试。
+        }
     }
 
     // ── 渲染循环 ────────────────────────────────────────────────

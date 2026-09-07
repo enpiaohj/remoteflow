@@ -59,4 +59,58 @@ internal static class ProtocolStyle
         });
         return pill;
     }
+
+    /// <summary>
+    /// 在线状态小圆点（贴在协议图标右下角的存在感徽标）：
+    /// 绿=已连接，橙=会话活动中（连接中 / 失败未清理），无会话则整个隐藏。
+    /// 外圈用窗口底色描一圈，压在图标上也看得清。
+    /// </summary>
+    public static NSView StatusBadge()
+    {
+        var v = new BadgeView { TranslatesAutoresizingMaskIntoConstraints = false, Hidden = true };
+        v.WidthAnchor.ConstraintEqualTo(9).Active = true;
+        v.HeightAnchor.ConstraintEqualTo(9).Active = true;
+        return v;
+    }
+
+    /// <summary>按连接的会话状态刷新徽标。</summary>
+    public static void ApplyStatus(NSView badge, bool connected, bool active)
+    {
+        if (badge is not BadgeView b)
+        {
+            return;
+        }
+
+        b.Hidden = !(connected || active);
+        b.Fill = connected ? NSColor.SystemGreen : NSColor.SystemOrange;
+        b.ToolTip = connected ? "已连接" : active ? "连接中" : null;
+        b.Refresh();
+    }
+
+    private sealed class BadgeView : NSView
+    {
+        public NSColor Fill = NSColor.SystemGreen;
+
+        public BadgeView()
+        {
+            WantsLayer = true;
+            Layer!.CornerRadius = 4.5f;
+            Layer.BorderWidth = 1.5f;
+        }
+
+        public void Refresh()
+        {
+            var prev = NSAppearance.CurrentAppearance;
+            NSAppearance.CurrentAppearance = EffectiveAppearance;
+            Layer!.BackgroundColor = Fill.CGColor;
+            Layer.BorderColor = NSColor.WindowBackground.CGColor;
+            NSAppearance.CurrentAppearance = prev;
+        }
+
+        public override void ViewDidChangeEffectiveAppearance()
+        {
+            base.ViewDidChangeEffectiveAppearance();
+            Refresh();
+        }
+    }
 }

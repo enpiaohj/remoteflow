@@ -119,6 +119,7 @@ public sealed class ConnectionTreeSource : NSOutlineViewDelegate, INSOutlineView
         NSTextField name;
         NSTextField sub;
         NSImageView icon;
+        NSView badge;
 
         if (outline.MakeView(id, outline) is NSTableCellView reused)
         {
@@ -127,6 +128,7 @@ public sealed class ConnectionTreeSource : NSOutlineViewDelegate, INSOutlineView
             var stack = (NSStackView)cell.Subviews[1];
             name = (NSTextField)stack.ArrangedSubviews[0];
             sub = (NSTextField)stack.ArrangedSubviews[1];
+            badge = cell.Subviews[2];
         }
         else
         {
@@ -154,8 +156,13 @@ public sealed class ConnectionTreeSource : NSOutlineViewDelegate, INSOutlineView
             cell.AddSubview(stack);
             cell.TextField = name;
 
+            badge = ProtocolStyle.StatusBadge();
+            cell.AddSubview(badge);
+
             NSLayoutConstraint.ActivateConstraints(new[]
             {
+                badge.TrailingAnchor.ConstraintEqualTo(icon.TrailingAnchor, 1),
+                badge.BottomAnchor.ConstraintEqualTo(icon.BottomAnchor, 1),
                 icon.LeadingAnchor.ConstraintEqualTo(cell.LeadingAnchor, 2),
                 icon.CenterYAnchor.ConstraintEqualTo(cell.CenterYAnchor),
                 icon.WidthAnchor.ConstraintEqualTo(20),
@@ -169,6 +176,7 @@ public sealed class ConnectionTreeSource : NSOutlineViewDelegate, INSOutlineView
         sub.StringValue = $"{item.HostDisplay}   ·   {item.ProtocolName}";
         icon.Image = ProtocolStyle.Symbol(item.Profile.Protocol);
         icon.ContentTintColor = ProtocolStyle.Tint(item.Profile.Protocol);
+        ProtocolStyle.ApplyStatus(badge, item.IsConnected, item.HasActiveSession);
         return cell;
     }
 

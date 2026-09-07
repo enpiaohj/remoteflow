@@ -106,6 +106,13 @@ public sealed class MainWindowController : NSWindowController
         WireFullScreenNotifications();
         _sessions.SessionClosed += (_, id) =>
             NSApplication.SharedApplication.BeginInvokeOnMainThread(() => DropSession(id));
+        // 会话创建 / 状态跳变 / 移除后重画列表行，让「在线」徽标跟上。
+        _sessions.SessionsChanged += (_, _) =>
+            NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
+            {
+                _listPane.RefreshRowStatus();
+                SyncPill();
+            });
 
         _connectionsVm.OpenConnectionRequested += (_, profile) => _ = OpenAsync(profile, profile.Name);
         _connectionsVm.NavigationRequested += (_, page) => NavigateTo(page);
@@ -741,14 +748,34 @@ public sealed class MainWindowController : NSWindowController
         {
             var session = await _sessions.CreateSessionAsync(profile);
 
-            // RDP「适应窗口」：按主屏比例请求桌面尺寸，避免默认 1920×1080 在 16:10 屏幕上出现上下黑边。
+            // RDP「适应窗口」：按**会话实际要渲染的舞台区域**请求桌面尺寸。
+            // 这里若按整块屏幕的比例要（旧做法），三栏模式下舞台是竖长条，比例对不上，
+            // 画面就会被 letterbox 出上下黑边。连上之后 RdpScreenView 还会随视图尺寸
+            // 变化继续做 DynamicResolutionUpdate。
             if (session is RemoteFlow.Protocol.Rdp.Mac.RdpSession rdpSession
                 && profile.Rdp is { DisplayMode: not RemoteFlow.Core.Models.RdpDisplayMode.FixedResolution })
             {
-                var s = (Window.Screen ?? NSScreen.MainScreen)?.Frame.Size ?? new CGSize(1680, 1050);
-                var w = (double)s.Width;
-                var h = (double)s.Height;
-                if (w > 1920) { h = h * 1920 / w; w = 1920; }
+                var stage = _stage.Bounds.Size;
+                var scale = Window.BackingScaleFactor;
+                double w, h;
+                if (stage.Width >= 320 && stage.Height >= 240)
+                {
+                    w = (double)stage.Width * scale;
+                    h = (double)stage.Height * scale;
+                }
+                else
+                {
+                    var s = (Window.Screen ?? NSScreen.MainScreen)?.Frame.Size ?? new CGSize(1680, 1050);
+                    w = (double)s.Width;
+                    h = (double)s.Height;
+                }
+
+                if (w > 2560)
+                {
+                    h = h * 2560 / w;
+                    w = 2560;
+                }
+
                 rdpSession.PreferredSize = ((int)Math.Round(w / 2) * 2, (int)Math.Round(h / 2) * 2);
             }
 

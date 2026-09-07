@@ -23,6 +23,23 @@ public sealed class ConnectionListPane : NSViewController
 
     private ConnectionTreeSource? _treeSource;
     private FlatListSource? _flatSource;
+
+    /// <summary>
+    /// 会话状态变化后重画行（在线徽标）。只重画、不重建数据源，避免打断选中与滚动位置。
+    /// </summary>
+    public void RefreshRowStatus() => NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
+    {
+        var col = Foundation.NSIndexSet.FromIndex(0);
+        if (_tree.RowCount > 0)
+        {
+            _tree.ReloadData(Foundation.NSIndexSet.FromNSRange(new Foundation.NSRange(0, _tree.RowCount)), col);
+        }
+
+        if (_flat.RowCount > 0)
+        {
+            _flat.ReloadData(Foundation.NSIndexSet.FromNSRange(new Foundation.NSRange(0, _flat.RowCount)), col);
+        }
+    });
     private Func<Task> _reload;
 
     public event EventHandler<ConnectionItemViewModel>? ConnectionSelected;
