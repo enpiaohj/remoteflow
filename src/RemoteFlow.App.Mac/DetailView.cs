@@ -147,8 +147,6 @@ public sealed class DetailView : NSView
 
     // ── 连接详情 ────────────────────────────────────────────────
 
-    private const int DetailWidth = 420;
-
     private NSView BuildDetail(ConnectionsPageViewModel vm, ConnectionItemViewModel c)
     {
         var col = new NSStackView
@@ -156,7 +154,7 @@ public sealed class DetailView : NSView
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
             Spacing = 0,
-            EdgeInsets = new NSEdgeInsets(26, 32, 32, 32),
+            EdgeInsets = new NSEdgeInsets(26, 0, 32, 0),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
 
@@ -186,8 +184,7 @@ public sealed class DetailView : NSView
         head.AddArrangedSubview(headSpacer);
         head.AddArrangedSubview(fav);
         headSpacer.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
-        head.WidthAnchor.ConstraintEqualTo(DetailWidth).Active = true;
-        col.AddArrangedSubview(head);
+        AddFill(col, head);
 
         col.AddArrangedSubview(Gap(8));
         col.AddArrangedSubview(StatusRow(vm.SelectedConnectionStatusBrushKey, vm.SelectedConnectionStatusText));
@@ -217,8 +214,7 @@ public sealed class DetailView : NSView
         connect.WidthAnchor.ConstraintEqualTo(200).Active = true;
         edit.WidthAnchor.ConstraintEqualTo(44).Active = true;
         actSpacer.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
-        actions.WidthAnchor.ConstraintEqualTo(DetailWidth).Active = true;
-        col.AddArrangedSubview(actions);
+        AddFill(col, actions);
 
         // ── 连接信息 ──
         col.AddArrangedSubview(Gap(24));
@@ -241,13 +237,13 @@ public sealed class DetailView : NSView
         {
             infoRows.Add(("备注", WrapValue(c.Notes)));
         }
-        col.AddArrangedSubview(FieldCard(infoRows));
+        AddFill(col, FieldCard(infoRows));
 
         // ── 使用信息 ──
         col.AddArrangedSubview(Gap(20));
         col.AddArrangedSubview(SectionLabel("使用信息"));
         col.AddArrangedSubview(Gap(8));
-        col.AddArrangedSubview(FieldCard(new List<(string, NSView)>
+        AddFill(col, FieldCard(new List<(string, NSView)>
         {
             ("创建时间", Muted(c.CreatedAtDisplay, 12)),
             ("最近连接", Muted(vm.SelectedLastConnectedText, 12)),
@@ -264,7 +260,7 @@ public sealed class DetailView : NSView
         {
             col.AddArrangedSubview(Muted("最近 10 次连接（柱高 = 时长）", 11));
             col.AddArrangedSubview(Gap(8));
-            col.AddArrangedSubview(SparklineCard(vm.SelectedItemSparkline.ToArray()));
+            AddFill(col, SparklineCard(vm.SelectedItemSparkline.ToArray()));
             col.AddArrangedSubview(Gap(16));
             col.AddArrangedSubview(Muted("连接历史", 11));
             col.AddArrangedSubview(Gap(6));
@@ -300,8 +296,7 @@ public sealed class DetailView : NSView
                 hstack.AddArrangedSubview(hr);
                 hr.WidthAnchor.ConstraintEqualTo(hstack.WidthAnchor).Active = true;
             }
-            hcard.WidthAnchor.ConstraintEqualTo(DetailWidth).Active = true;
-            col.AddArrangedSubview(hcard);
+            AddFill(col, hcard);
 
             col.AddArrangedSubview(Gap(10));
             var all = NSButton.CreateButton("查看全部历史", () => { vm.ViewAllHistoryCommand.Execute(null); });
@@ -318,7 +313,7 @@ public sealed class DetailView : NSView
         col.AddArrangedSubview(Gap(24));
 
         col.Menu = DetailMenu(vm, c);
-        return ScrollHost(col);
+        return ScrollHost(col, 34);
     }
 
     /// <summary>详情页右键菜单 —— 走「我的连接」既有命令。</summary>
@@ -529,14 +524,12 @@ public sealed class DetailView : NSView
             grid.TopAnchor.ConstraintEqualTo(card.TopAnchor, 12),
             grid.BottomAnchor.ConstraintEqualTo(card.BottomAnchor, -12),
         });
-        card.WidthAnchor.ConstraintEqualTo(DetailWidth).Active = true;
         return card;
     }
 
     private static NSView SparklineCard(IReadOnlyList<SparkBar> bars)
     {
         var card = Card();
-        card.WidthAnchor.ConstraintEqualTo(DetailWidth).Active = true;
         card.HeightAnchor.ConstraintEqualTo(72).Active = true;
 
         var row = new NSStackView
@@ -592,16 +585,17 @@ public sealed class DetailView : NSView
         return row;
     }
 
-    /// <summary>把内容放进纵向滚动区（翻转坐标，从上往下）。</summary>
-    private static NSView ScrollHost(NSView content)
+    /// <summary>纵向滚动区：<paramref name="content"/>（纵向 NSStackView，无左右 EdgeInsets）
+    /// 左右贴到可视区留 <paramref name="hMargin"/> 边距，随窗口伸缩；子卡片用 AddFill 一起变宽。</summary>
+    private static NSView ScrollHost(NSView content, nfloat hMargin)
     {
         var doc = new FlippedHost { TranslatesAutoresizingMaskIntoConstraints = false };
         doc.AddSubview(content);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
-            content.LeadingAnchor.ConstraintEqualTo(doc.LeadingAnchor),
+            content.LeadingAnchor.ConstraintEqualTo(doc.LeadingAnchor, hMargin),
+            content.TrailingAnchor.ConstraintEqualTo(doc.TrailingAnchor, -hMargin),
             content.TopAnchor.ConstraintEqualTo(doc.TopAnchor),
-            content.TrailingAnchor.ConstraintLessThanOrEqualTo(doc.TrailingAnchor),
             content.BottomAnchor.ConstraintEqualTo(doc.BottomAnchor),
         });
 
@@ -617,6 +611,14 @@ public sealed class DetailView : NSView
         return scroll;
     }
 
+    /// <summary>把 <paramref name="child"/> 加进 <paramref name="stack"/> 并让其宽度跟随
+    /// stack（随窗口伸缩）。必须先 AddArrangedSubview 再约束，否则无共同祖先。</summary>
+    private static void AddFill(NSStackView stack, NSView child)
+    {
+        stack.AddArrangedSubview(child);
+        child.WidthAnchor.ConstraintEqualTo(stack.WidthAnchor).Active = true;
+    }
+
     private sealed class FlippedHost : NSView
     {
         public override bool IsFlipped => true;
@@ -624,8 +626,6 @@ public sealed class DetailView : NSView
 
     // ── 首页 ────────────────────────────────────────────────────
 
-    private const int HomeWidth = 900;
-    private const int HomeColWidth = 438; // (HomeWidth - 24 间距) / 2
 
     private HomePageViewModel? _homeVm;
 
@@ -659,7 +659,7 @@ public sealed class DetailView : NSView
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
             Spacing = 0,
-            EdgeInsets = new NSEdgeInsets(34, 40, 32, 40),
+            EdgeInsets = new NSEdgeInsets(34, 0, 32, 0),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
 
@@ -680,19 +680,20 @@ public sealed class DetailView : NSView
 
         if (vm.IsFirstRun)
         {
-            col.AddArrangedSubview(HomeFirstRunCard());
+            AddFill(col, HomeFirstRunCard());
             col.AddArrangedSubview(Gap(20));
         }
 
         // 最近连接：一排大卡片
         if (vm.HasRecent)
         {
-            col.AddArrangedSubview(HomeSectionHeader("最近连接", () => vm.ViewAllRecentCommand.Execute(null)));
+            AddFill(col, HomeSectionHeader("最近连接", () => vm.ViewAllRecentCommand.Execute(null)));
             col.AddArrangedSubview(Gap(10));
             var cardsRow = new NSStackView
             {
                 Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
                 Alignment = NSLayoutAttribute.Top,
+                Distribution = NSStackViewDistribution.FillEqually,
                 Spacing = 12,
                 TranslatesAutoresizingMaskIntoConstraints = false,
             };
@@ -700,7 +701,7 @@ public sealed class DetailView : NSView
             {
                 cardsRow.AddArrangedSubview(HomeRecentCard(r));
             }
-            col.AddArrangedSubview(cardsRow);
+            AddFill(col, cardsRow);
             col.AddArrangedSubview(Gap(24));
         }
 
@@ -709,6 +710,7 @@ public sealed class DetailView : NSView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
             Alignment = NSLayoutAttribute.Top,
+            Distribution = NSStackViewDistribution.FillEqually,
             Spacing = 24,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
@@ -720,17 +722,16 @@ public sealed class DetailView : NSView
             vm.HasActivity ? vm.RecentHistory.Select(HomeActivityRow) : null,
             "还没有连接记录。",
             () => vm.ViewAllActivityCommand.Execute(null), "查看所有活动"));
-        twoCol.WidthAnchor.ConstraintEqualTo(HomeWidth).Active = true;
-        col.AddArrangedSubview(twoCol);
+        AddFill(col, twoCol);
 
         if (vm.ShowSecurityTip)
         {
             col.AddArrangedSubview(Gap(20));
-            col.AddArrangedSubview(HomeSecurityCard(() => vm.DismissSecurityTipCommand.Execute(null)));
+            AddFill(col, HomeSecurityCard(() => vm.DismissSecurityTipCommand.Execute(null)));
         }
 
         col.AddArrangedSubview(Gap(24));
-        return ScrollHost(col);
+        return ScrollHost(col, 40);
     }
 
     private static NSView HomeSectionHeader(string title, Action? viewAll)
@@ -754,7 +755,6 @@ public sealed class DetailView : NSView
             row.AddArrangedSubview(spacer);
             row.AddArrangedSubview(link);
         }
-        row.WidthAnchor.ConstraintEqualTo(HomeWidth).Active = true;
         return row;
     }
 
@@ -765,10 +765,8 @@ public sealed class DetailView : NSView
         var border = new CardView(() => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.06f),
             () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f), 10);
         card.AddSubview(border);
-        var w = (HomeWidth - 24) / 3;
         NSLayoutConstraint.ActivateConstraints(new[]
         {
-            card.WidthAnchor.ConstraintEqualTo(w),
             card.HeightAnchor.ConstraintEqualTo(104),
             border.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor),
             border.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor),
@@ -820,7 +818,6 @@ public sealed class DetailView : NSView
         Action viewAll, string footerText)
     {
         var card = Card();
-        card.WidthAnchor.ConstraintEqualTo(HomeColWidth).Active = true;
         card.HeightAnchor.ConstraintEqualTo(440).Active = true;
 
         var head = new NSStackView
@@ -888,7 +885,7 @@ public sealed class DetailView : NSView
         {
             var e = Muted(emptyText, 12);
             e.LineBreakMode = NSLineBreakMode.ByWordWrapping;
-            e.PreferredMaxLayoutWidth = HomeColWidth - 32;
+            e.PreferredMaxLayoutWidth = 300;
             body = e;
         }
 
@@ -1001,16 +998,15 @@ public sealed class DetailView : NSView
     private NSView HomeFirstRunCard()
     {
         var card = Card();
-        card.WidthAnchor.ConstraintEqualTo(HomeWidth).Active = true;
 
         var t = Big("欢迎使用 RemoteFlow", 15);
         t.Font = NSFont.SystemFontOfSize(15, NSFontWeight.Semibold);
         var b = Muted("把 RDP、SSH、VNC 连接统一到一个工作台。先新建一个连接，或从设置的「数据与备份」导入既有清单。", 12);
         b.LineBreakMode = NSLineBreakMode.ByWordWrapping;
-        b.PreferredMaxLayoutWidth = HomeWidth - 48;
+        b.PreferredMaxLayoutWidth = 760;
         var s = Styled("密码与私钥由 macOS 钥匙串加密保存，不写入连接库，也不随导出文件带走。", 11, NSFontWeight.Regular, NSColor.TertiaryLabel);
         s.LineBreakMode = NSLineBreakMode.ByWordWrapping;
-        s.PreferredMaxLayoutWidth = HomeWidth - 48;
+        s.PreferredMaxLayoutWidth = 760;
         var newBtn = NSButton.CreateButton("新建连接", () => NewConnectionRequested?.Invoke(this, EventArgs.Empty));
         newBtn.BezelStyle = NSBezelStyle.Rounded;
         newBtn.KeyEquivalent = "\r";
@@ -1043,7 +1039,6 @@ public sealed class DetailView : NSView
     {
         var card = new CardView(() => NSColor.SystemBlue.ColorWithAlphaComponent(0.09f),
             () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f), 10);
-        card.WidthAnchor.ConstraintEqualTo(HomeWidth).Active = true;
 
         var icon = new NSImageView
         {
@@ -1057,7 +1052,7 @@ public sealed class DetailView : NSView
         var b = Styled("为保障连接安全，请定期更新密码，并为关键账号启用双因素认证。", 12,
             NSFontWeight.Regular, NSColor.SecondaryLabel);
         b.LineBreakMode = NSLineBreakMode.ByWordWrapping;
-        b.PreferredMaxLayoutWidth = HomeWidth - 100;
+        b.PreferredMaxLayoutWidth = 620;
         var txt = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
