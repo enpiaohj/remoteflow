@@ -5,6 +5,7 @@
  * BGRX32 帧回调、指针 / 键盘输入、断开。所有 FreeRDP 结构体复杂度留在 C 侧，
  * 托管侧（RemoteFlow.Protocol.Rdp.Mac）只 P/Invoke 这十来个函数。
  */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -67,6 +68,7 @@ static void rf_send_monitor_layout(rfContext* rf, int width, int height)
 static void rf_on_channel_connected(void* ctx, const ChannelConnectedEventArgs* e)
 {
 	rfContext* rf = (rfContext*)ctx;
+	fprintf(stderr, "[RDP/native] 通道已连接: %s\n", e->name);
 	if (strcmp(e->name, DISP_DVC_CHANNEL_NAME) == 0)
 	{
 		rf->disp = (DispClientContext*)e->pInterface;
@@ -90,13 +92,31 @@ static BOOL rf_pre_connect(freerdp* instance)
 	freerdp_settings_set_bool(s, FreeRDP_SupportGraphicsPipeline, FALSE);
 
 	/* 挂上 Display Control 动态通道（"disp"）—— 动态改分辨率全靠它。
-	   不显式加的话通道不会建立，rf_rdp_resize 就只是改了本地一个数字。 */
+	   不显式加的话通道不会建立，rf_rdp_resize 只是改了本地一个数字。
+	   注意：这里**绝不能**因为加载失败就 return FALSE —— PreConnect 返回假会直接
+	   中止整条连接。动态分辨率是锦上添花，失败就退化成固定分辨率（有黑边），
+	   但连接本身必须照常建立。 */
+	freerdp_settings_set_bool(s, FreeRDP_SupportDynamicChannels, TRUE);
+
+	/* 关掉一切设备重定向：本产品用不到，而 brew 的 freerdp3 没带 rdpdr 插件，
+	   load_addins 加载它失败会**整体返回 FALSE**，连带 drdynvc / disp 一起不加载 ——
+	   这正是动态分辨率一直没生效的直接原因。 */
+	freerdp_settings_set_bool(s, FreeRDP_DeviceRedirection, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_RedirectDrives, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_RedirectHomeDrive, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_RedirectPrinters, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_RedirectSmartCards, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_RedirectSerialPorts, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_RedirectParallelPorts, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_RedirectClipboard, FALSE);
+
 	const char* disp_args[] = { "disp" };
-	freerdp_client_add_dynamic_channel(s, 1, disp_args);
-
-	if (!freerdp_client_load_addins(instance->context->channels, s))
-		return FALSE;
-
+	BOOL added = freerdp_client_add_dynamic_channel(s, 1, disp_args);
+	BOOL loaded = added ? freerdp_client_load_addins(instance->context->channels, s) : FALSE;
+	fprintf(stderr, "[RDP/native] disp 通道: add=%d load=%d dynRes=%d supportDC=%d\n",
+	        (int)added, (int)loaded,
+	        (int)freerdp_settings_get_bool(s, FreeRDP_DynamicResolutionUpdate),
+	        (int)freerdp_settings_get_bool(s, FreeRDP_SupportDisplayControl));
 	return TRUE;
 }
 

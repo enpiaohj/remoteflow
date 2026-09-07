@@ -130,6 +130,34 @@ public sealed class SettingsPaneView : NSView
         });
     }
 
+    /// <summary>低反差圆角容器：极淡中性底 + 极淡描边，跟随明暗切换。</summary>
+    private sealed class SoftBox : NSView
+    {
+        public SoftBox()
+        {
+            WantsLayer = true;
+            TranslatesAutoresizingMaskIntoConstraints = false;
+            Layer!.CornerRadius = 8;
+            Layer.BorderWidth = 1;
+            Refresh();
+        }
+
+        public override void ViewDidChangeEffectiveAppearance()
+        {
+            base.ViewDidChangeEffectiveAppearance();
+            Refresh();
+        }
+
+        private void Refresh()
+        {
+            var prev = NSAppearance.CurrentAppearance;
+            NSAppearance.CurrentAppearance = EffectiveAppearance;
+            Layer!.BackgroundColor = NSColor.SecondaryLabel.ColorWithAlphaComponent(0.06f).CGColor;
+            Layer.BorderColor = NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f).CGColor;
+            NSAppearance.CurrentAppearance = prev;
+        }
+    }
+
     /// <summary>下划线式标签按钮（对齐 Windows 版设置页的分页样式）。</summary>
     private sealed class TabButton : NSView
     {
@@ -342,21 +370,37 @@ public sealed class SettingsPaneView : NSView
             }
         };
 
+        // BezelBorder + 默认白底在这套低反差配色里是一块刺眼的白板，
+        // 换成与详情页卡片一致的「极淡中性底 + 极淡描边」圆角容器。
         var scroll = new NSScrollView
         {
             DocumentView = table,
-            BorderType = NSBorderType.BezelBorder,
+            BorderType = NSBorderType.NoBorder,
+            DrawsBackground = false,
             HasVerticalScroller = true,
+            AutohidesScrollers = true,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
-        scroll.HeightAnchor.ConstraintEqualTo(160).Active = true;
+
+        var listBox = new SoftBox();
+        listBox.AddSubview(scroll);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            scroll.LeadingAnchor.ConstraintEqualTo(listBox.LeadingAnchor, 1),
+            scroll.TrailingAnchor.ConstraintEqualTo(listBox.TrailingAnchor, -1),
+            scroll.TopAnchor.ConstraintEqualTo(listBox.TopAnchor, 1),
+            scroll.BottomAnchor.ConstraintEqualTo(listBox.BottomAnchor, -1),
+            // 原来没给宽度，列表在 Leading 对齐的栈里缩成一条窄缝，行根本点不中。
+            listBox.WidthAnchor.ConstraintGreaterThanOrEqualTo(560),
+            listBox.HeightAnchor.ConstraintEqualTo(200),
+        });
 
         var clearHistory = NSButton.CreateButton("清空连接历史…", () => _ = _vm.ClearHistoryCommand.ExecuteAsync(null));
         clearHistory.BezelStyle = NSBezelStyle.Rounded;
 
         return Page(
             SectionLabel("已信任的 SSH 主机密钥"),
-            scroll,
+            listBox,
             remove,
             Gap(8),
             SectionLabel("连接历史"),
