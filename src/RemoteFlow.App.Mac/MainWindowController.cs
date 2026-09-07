@@ -24,9 +24,23 @@ public sealed class MainWindowController : NSWindowController
     private readonly SessionTabBar _tabBar = new();
     private readonly SessionPillBar _pill = new();
     private bool _stageIsSession;
+
+    /// <summary>会话画面的三档视图模式。</summary>
+    private enum ViewMode
+    {
+        /// <summary>常规三栏：导航 + 列表 + 详情（会话在详情列，带 Tab 条）。</summary>
+        Normal,
+        /// <summary>窗口内全屏：折叠导航列与列表列，会话铺满窗口；窗口仍是窗口。</summary>
+        WindowFull,
+        /// <summary>完全全屏：在窗口内全屏基础上进入 macOS 原生全屏（整屏、菜单栏自动隐藏）。</summary>
+        ScreenFull,
+    }
+
+    private ViewMode _mode = ViewMode.Normal;
+    private bool _navWasCollapsed;
+    private bool _listWasCollapsed;
     private NSToolbarItem? _sessionsItem;
     private HotZone _pillHotZone = null!;
-    private bool _isFullScreen;
     private readonly NSView _stage = new() { TranslatesAutoresizingMaskIntoConstraints = false };
     private readonly NSSplitViewController _split = new();
     private readonly NSSearchField _search = new() { PlaceholderString = "搜索连接" };
@@ -74,11 +88,21 @@ public sealed class MainWindowController : NSWindowController
 
         _tabBar.TabSelected += (_, id) => ShowSessionStage(id);
         _tabBar.TabClosed += (_, id) => _ = CloseSessionAsync(id);
-        _tabBar.FullScreenRequested += (_, _) => Window.ToggleFullScreen(null);
+        _tabBar.WindowFullScreenRequested += (_, _) => EnterWindowFullScreen();
+        _tabBar.ScreenFullScreenRequested += (_, _) => ToggleScreenFullScreen();
 
         _pill.SessionsProvider = () => _tabBar.Sessions;
         _pill.SessionPicked += (_, id) => _tabBar.RequestSelect(id);
-        _pill.ExitFullScreenRequested += (_, _) => Window.ToggleFullScreen(null);
+        _pill.ExitOneLevelRequested += (_, _) => ExitOneLevel();
+        _pill.ToggleScreenFullRequested += (_, _) => ToggleScreenFullScreen();
+        _pill.MinimizeRequested += (_, _) => Window.Miniaturize(null);
+        _pill.CloseSessionRequested += (_, _) =>
+        {
+            if (_activeSessionId != Guid.Empty)
+            {
+                _ = CloseSessionAsync(_activeSessionId);
+            }
+        };
         WireFullScreenNotifications();
         _sessions.SessionClosed += (_, id) =>
             NSApplication.SharedApplication.BeginInvokeOnMainThread(() => DropSession(id));
@@ -142,10 +166,12 @@ public sealed class MainWindowController : NSWindowController
 
         // 全屏悬浮药丸 + 顶沿唤出热区（都盖在舞台之上，热区不吃点击）。
         _pillHotZone = new HotZone(
-            onEnter: () => { if (_isFullScreen && _tabBar.Count > 0) _pill.Reveal(); },
+            onEnter: () => { if (_mode != ViewMode.Normal && _tabBar.Count > 0) _pill.Reveal(); },
             onExit: () => _pill.MaybeHide());
         detailRoot.AddSubview(_pillHotZone);
         detailRoot.AddSubview(_pill);
+        _pill.CenterOffset = _pill.CenterXAnchor.ConstraintEqualTo(_stage.CenterXAnchor);
+        _pill.CenterOffset.Active = true;
         NSLayoutConstraint.ActivateConstraints(new[]
         {
             _pillHotZone.LeadingAnchor.ConstraintEqualTo(_stage.LeadingAnchor),
@@ -153,7 +179,6 @@ public sealed class MainWindowController : NSWindowController
             _pillHotZone.TopAnchor.ConstraintEqualTo(_stage.TopAnchor),
             _pillHotZone.HeightAnchor.ConstraintEqualTo(6),
 
-            _pill.CenterXAnchor.ConstraintEqualTo(_stage.CenterXAnchor),
             _pill.TopAnchor.ConstraintEqualTo(_stage.TopAnchor),
         });
 
@@ -176,28 +201,97 @@ public sealed class MainWindowController : NSWindowController
     }
 
     /// <summary>
-    /// 全屏时隐藏 Tab 条（垂直空间全给画面），改用顶沿悬浮药丸；退出全屏还原。
+    /// 会话视图模式切换。三档：
+    ///   Normal      常规三栏（会话在详情列，带 Tab 条）
+    ///   WindowFull  窗口内全屏 —— 折叠导航列 + 列表列 + 隐藏工具栏，会话铺满窗口
+    ///   ScreenFull  完全全屏 —— 在上者基础上进 macOS 原生全屏
     /// </summary>
+    private void SetViewMode(ViewMode mode)
+    {
+        if (_mode == mode)
+        {
+            return;
+        }
+
+        var wasNormal = _mode == ViewMode.Normal;
+        var goingNormal = mode == ViewMode.Normal;
+
+        // 离开常规模式时记住左侧两列原本的折叠状态，回来时照原样还原。
+        if (wasNormal && !goingNormal)
+        {
+            _navWasCollapsed = NavItem?.Collapsed ?? false;
+            _listWasCollapsed = _listItem?.Collapsed ?? false;
+        }
+
+        _mode = mode;
+
+        // 只有「舞台正在显示会话画面」才隐藏左侧两列与工具栏；
+        // 在首页 / 凭据等页面按 ⌃⌘F，就只是普通的原生全屏，界面保持完整。
+        var chromeHidden = mode != ViewMode.Normal && _stageIsSession;
+        if (NavItem is { } nav)
+        {
+            nav.Collapsed = chromeHidden || (goingNormal && _navWasCollapsed);
+        }
+
+        if (_listItem is not null)
+        {
+            _listItem.Collapsed = chromeHidden || (goingNormal && _listWasCollapsed);
+        }
+
+        if (Window.Toolbar is { } tb)
+        {
+            tb.Visible = !chromeHidden;
+        }
+
+        SyncTabBarVisibility();
+        SyncPill();
+
+        // 原生全屏只在 ScreenFull 这一档开启。
+        var wantNative = mode == ViewMode.ScreenFull;
+        if (wantNative != IsNativeFullScreen)
+        {
+            Window.ToggleFullScreen(null);
+        }
+    }
+
+    private bool IsNativeFullScreen
+        => (Window.StyleMask & NSWindowStyle.FullScreenWindow) == NSWindowStyle.FullScreenWindow;
+
+    private NSSplitViewItem? NavItem => _split.SplitViewItems.Length > 0 ? _split.SplitViewItems[0] : null;
+
+    /// <summary>「全屏」入口：常规 → 窗口内全屏 → 完全全屏，逐档进；药丸上的退出键逐档退。</summary>
+    public void EnterWindowFullScreen() => SetViewMode(ViewMode.WindowFull);
+
+    public void ToggleScreenFullScreen()
+        => SetViewMode(_mode == ViewMode.ScreenFull ? ViewMode.WindowFull : ViewMode.ScreenFull);
+
+    /// <summary>逐档退出：完全全屏 → 窗口内全屏 → 常规三栏。</summary>
+    public void ExitOneLevel()
+        => SetViewMode(_mode == ViewMode.ScreenFull ? ViewMode.WindowFull : ViewMode.Normal);
+
+    /// <summary>系统侧（绿灯 / Esc / 调度中心）进出原生全屏时，把内部档位对齐。</summary>
     private void WireFullScreenNotifications()
     {
         var nc = NSNotificationCenter.DefaultCenter;
         nc.AddObserver(NSWindow.DidEnterFullScreenNotification, _ =>
         {
-            _isFullScreen = true;
-            SyncTabBarVisibility();
-            SyncPill();
+            if (_mode != ViewMode.ScreenFull)
+            {
+                SetViewMode(ViewMode.ScreenFull);
+            }
         }, Window);
         nc.AddObserver(NSWindow.DidExitFullScreenNotification, _ =>
         {
-            _isFullScreen = false;
-            _pill.ForceHide();
-            SyncTabBarVisibility();
+            if (_mode == ViewMode.ScreenFull)
+            {
+                SetViewMode(ViewMode.WindowFull);
+            }
         }, Window);
     }
 
     private void SyncPill()
     {
-        if (!_isFullScreen || _tabBar.Count == 0)
+        if (_mode == ViewMode.Normal || _tabBar.Count == 0)
         {
             _pill.ForceHide();
             return;
@@ -206,10 +300,16 @@ public sealed class MainWindowController : NSWindowController
         var active = _tabBar.Sessions.FirstOrDefault(x => x.Id == _tabBar.ActiveId);
         if (active.Id != Guid.Empty)
         {
-            _pill.SetSession(active.Title, active.Protocol);
+            var s = _sessions.ActiveSessions.FirstOrDefault(x => x.SessionId == active.Id);
+            var host = s?.Profile is { } p
+                ? (p.Port > 0 ? $"{p.Host}:{p.Port}" : p.Host)
+                : string.Empty;
+            var connected = s?.State == RemoteFlow.Core.Models.ConnectionState.Connected;
+            _pill.SetSession(active.Title, active.Protocol, host, connected);
         }
 
-        _pill.Reveal(); // 刚进全屏先露一下，告诉用户工具条在哪；未固定则移开鼠标后收起
+        _pill.SetScreenFull(_mode == ViewMode.ScreenFull);
+        _pill.Reveal(); // 进全屏先露一下告诉用户工具条在哪；未固定则移开鼠标后收起
     }
 
     /// <summary>顶沿唤出热区：只感知鼠标进出，不拦截点击（HitTest 返回 null）。</summary>
@@ -255,7 +355,7 @@ public sealed class MainWindowController : NSWindowController
     {
         // 只有「舞台正在显示会话画面」时才出现 Tab 条 —— 首页 / 凭据 / 连接详情上
         // 挂一条会话标签既突兀也没用。全屏下也不显示（改用悬浮药丸）。
-        var show = _tabBar.Count > 0 && _stageIsSession && !_isFullScreen;
+        var show = _tabBar.Count > 0 && _stageIsSession && _mode == ViewMode.Normal;
         _tabBar.Hidden = !show;
         _stageTop.Active = !show;
         _stageTopWithTabs.Active = show;
@@ -488,6 +588,7 @@ public sealed class MainWindowController : NSWindowController
 
         if (item != NavSidebar.Item.Settings)
         {
+            SetViewMode(ViewMode.Normal); // 从会话切到普通页面，先退出全屏形态
             _tabBar.ClearHighlight();
             ShowStage(_detail);
             SyncTabBarVisibility();
@@ -729,6 +830,7 @@ public sealed class MainWindowController : NSWindowController
 
         if (_tabBar.Count == 0)
         {
+            SetViewMode(ViewMode.Normal); // 没有会话了就退回常规三栏，别把界面卡在全屏形态
             _activeSessionId = Guid.Empty;
             Window.Title = "RemoteFlow";
             ShowDetailStage();

@@ -15,7 +15,8 @@ public sealed class SessionTabBar : NSView
     private readonly NSStackView _row = new()
     {
         Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
-        Spacing = 2,
+        Spacing = 0,
+        Distribution = NSStackViewDistribution.FillEqually,
         Alignment = NSLayoutAttribute.CenterY,
         TranslatesAutoresizingMaskIntoConstraints = false,
     };
@@ -26,8 +27,11 @@ public sealed class SessionTabBar : NSView
     public event EventHandler<Guid>? TabSelected;
     public event EventHandler<Guid>? TabClosed;
 
-    /// <summary>右侧「全屏」按钮（⌃⌘F）。</summary>
-    public event EventHandler? FullScreenRequested;
+    /// <summary>右侧「窗口内全屏」按钮：折叠左侧两列，会话铺满窗口。</summary>
+    public event EventHandler? WindowFullScreenRequested;
+
+    /// <summary>右侧「完全全屏」按钮（⌃⌘F）：进 macOS 原生全屏。</summary>
+    public event EventHandler? ScreenFullScreenRequested;
 
     public int Count => _tabs.Count;
 
@@ -46,8 +50,15 @@ public sealed class SessionTabBar : NSView
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
 
-        var full = IconButton("arrow.up.left.and.arrow.down.right", "进入全屏（⌃⌘F）");
-        full.Activated += (_, _) => FullScreenRequested?.Invoke(this, EventArgs.Empty);
+        var winFull = IconButton("rectangle.expand.vertical", "窗口内全屏 —— 折叠左侧两列，会话铺满窗口");
+        if (winFull.Image is null)
+        {
+            winFull.Image = NSImage.GetSystemSymbol("arrow.left.and.right", null);
+        }
+        winFull.Activated += (_, _) => WindowFullScreenRequested?.Invoke(this, EventArgs.Empty);
+
+        var full = IconButton("arrow.up.left.and.arrow.down.right", "完全全屏（⌃⌘F）");
+        full.Activated += (_, _) => ScreenFullScreenRequested?.Invoke(this, EventArgs.Empty);
 
         var actions = new NSStackView
         {
@@ -56,6 +67,7 @@ public sealed class SessionTabBar : NSView
             Spacing = 2,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
+        actions.AddArrangedSubview(winFull);
         actions.AddArrangedSubview(full);
 
         var vsep = new NSBox { BoxType = NSBoxType.NSBoxSeparator, TranslatesAutoresizingMaskIntoConstraints = false };
@@ -71,7 +83,7 @@ public sealed class SessionTabBar : NSView
             scroll.TrailingAnchor.ConstraintEqualTo(vsep.LeadingAnchor, -6),
             scroll.TopAnchor.ConstraintEqualTo(TopAnchor),
             scroll.BottomAnchor.ConstraintEqualTo(sep.TopAnchor),
-            _row.LeadingAnchor.ConstraintEqualTo(scroll.ContentView.LeadingAnchor, 8),
+            _row.LeadingAnchor.ConstraintEqualTo(scroll.ContentView.LeadingAnchor, 6),
             _row.TopAnchor.ConstraintEqualTo(scroll.ContentView.TopAnchor),
             _row.BottomAnchor.ConstraintEqualTo(scroll.ContentView.BottomAnchor),
 
@@ -136,6 +148,7 @@ public sealed class SessionTabBar : NSView
         _tabs.Add(tab);
         _row.AddArrangedSubview(tab.View);
         Select(id);
+        SyncSeparators();
     }
 
     public void RemoveTab(Guid id)
@@ -148,6 +161,7 @@ public sealed class SessionTabBar : NSView
 
         _tabs.Remove(tab);
         tab.View.RemoveFromSuperview();
+        SyncSeparators();
 
         if (_active == id && _tabs.Count > 0)
         {
@@ -174,6 +188,8 @@ public sealed class SessionTabBar : NSView
         {
             t.SetActive(t.Id == id);
         }
+
+        SyncSeparators();
     }
 
     public void ClearHighlight()
@@ -182,6 +198,25 @@ public sealed class SessionTabBar : NSView
         foreach (var t in _tabs)
         {
             t.SetActive(false);
+        }
+
+        SyncSeparators();
+    }
+
+    /// <summary>
+    /// Safari 式竖分隔线：只画在「两侧都不是选中 / 悬停」的相邻标签之间，
+    /// 最后一个标签不画。这样选中的标签像一张浮起的卡片，两边自然断开。
+    /// </summary>
+    private void SyncSeparators()
+    {
+        for (var i = 0; i < _tabs.Count; i++)
+        {
+            var self = _tabs[i];
+            var next = i + 1 < _tabs.Count ? _tabs[i + 1] : null;
+            var show = next is not null
+                       && !self.IsActive && !self.IsHovering
+                       && !next.IsActive && !next.IsHovering;
+            self.SetSeparator(show);
         }
     }
 
@@ -193,7 +228,10 @@ public sealed class SessionTabBar : NSView
 
     private void Close(Guid id) => TabClosed?.Invoke(this, id);
 
-    /// <summary>单个会话胶囊：协议色圆点 + 名称 + 关闭（悬停 / 选中才显示）。</summary>
+    /// <summary>
+    /// 单个会话标签（Safari 风格）：平底条上，选中项浮起成一张圆角卡片；
+    /// 左槽平时是协议色圆点，悬停换成关闭叉；标题居中截断；尾部一条细竖线做分隔。
+    /// </summary>
     private sealed class Tab
     {
         public Guid Id { get; }
@@ -201,11 +239,14 @@ public sealed class SessionTabBar : NSView
         public ProtocolType Protocol { get; }
         public NSView View { get; }
 
+        public bool IsActive { get; private set; }
+        public bool IsHovering => _card.Hovering;
+
         private readonly NSTextField _label;
-        private readonly HoverPill _pill;
+        private readonly HoverCard _card;
         private readonly NSButton _close;
         private readonly NSView _dot;
-        private bool _active;
+        private readonly NSBox _sep;
 
         public Tab(Guid id, string name, ProtocolType protocol, SessionTabBar owner)
         {
@@ -213,10 +254,8 @@ public sealed class SessionTabBar : NSView
             Title = name;
             Protocol = protocol;
 
-            var tint = ProtocolStyle.Tint(protocol);
             _dot = new NSView { WantsLayer = true, TranslatesAutoresizingMaskIntoConstraints = false };
-            _dot.Layer!.CornerRadius = 3;
-            _dot.Layer.BackgroundColor = tint.CGColor;
+            _dot.Layer!.CornerRadius = 3.5f;
 
             _label = new NSTextField
             {
@@ -225,12 +264,14 @@ public sealed class SessionTabBar : NSView
                 Editable = false,
                 Selectable = false,
                 DrawsBackground = false,
+                Alignment = NSTextAlignment.Center,
                 Font = NSFont.SystemFontOfSize(12),
                 TextColor = NSColor.SecondaryLabel,
                 LineBreakMode = NSLineBreakMode.TruncatingTail,
                 TranslatesAutoresizingMaskIntoConstraints = false,
                 ToolTip = name,
             };
+            _label.SetContentCompressionResistancePriority(1, NSLayoutConstraintOrientation.Horizontal);
 
             _close = new NSButton
             {
@@ -244,33 +285,58 @@ public sealed class SessionTabBar : NSView
             };
             _close.Activated += (_, _) => owner.Close(id);
 
-            _pill = new HoverPill(() => owner.Select(id));
-            _pill.HoverChanged = _ => Restyle();
+            _card = new HoverCard(() => owner.Select(id));
+            _card.HoverChanged = _ =>
+            {
+                Restyle();
+                owner.SyncSeparators();
+            };
 
-            _pill.AddSubview(_dot);
-            _pill.AddSubview(_label);
-            _pill.AddSubview(_close);
+            // 左槽 18pt：圆点与关闭叉同位，悬停时互换（Safari 的 favicon → 关闭）。
+            _card.AddSubview(_dot);
+            _card.AddSubview(_close);
+            _card.AddSubview(_label);
+
+            _sep = new NSBox { BoxType = NSBoxType.NSBoxSeparator, TranslatesAutoresizingMaskIntoConstraints = false };
+
+            var host = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+            host.AddSubview(_card);
+            host.AddSubview(_sep);
+
             NSLayoutConstraint.ActivateConstraints(new[]
             {
-                _dot.LeadingAnchor.ConstraintEqualTo(_pill.LeadingAnchor, 10),
-                _dot.CenterYAnchor.ConstraintEqualTo(_pill.CenterYAnchor),
-                _dot.WidthAnchor.ConstraintEqualTo(6),
-                _dot.HeightAnchor.ConstraintEqualTo(6),
+                _dot.LeadingAnchor.ConstraintEqualTo(_card.LeadingAnchor, 10),
+                _dot.CenterYAnchor.ConstraintEqualTo(_card.CenterYAnchor),
+                _dot.WidthAnchor.ConstraintEqualTo(7),
+                _dot.HeightAnchor.ConstraintEqualTo(7),
 
-                _label.LeadingAnchor.ConstraintEqualTo(_dot.TrailingAnchor, 8),
-                _label.CenterYAnchor.ConstraintEqualTo(_pill.CenterYAnchor),
-                _label.WidthAnchor.ConstraintLessThanOrEqualTo(150),
+                _close.CenterXAnchor.ConstraintEqualTo(_dot.CenterXAnchor),
+                _close.CenterYAnchor.ConstraintEqualTo(_card.CenterYAnchor),
+                _close.WidthAnchor.ConstraintEqualTo(16),
+                _close.HeightAnchor.ConstraintEqualTo(16),
 
-                _close.LeadingAnchor.ConstraintEqualTo(_label.TrailingAnchor, 6),
-                _close.TrailingAnchor.ConstraintEqualTo(_pill.TrailingAnchor, -7),
-                _close.CenterYAnchor.ConstraintEqualTo(_pill.CenterYAnchor),
-                _close.WidthAnchor.ConstraintEqualTo(15),
-                _close.HeightAnchor.ConstraintEqualTo(15),
+                _label.LeadingAnchor.ConstraintEqualTo(_dot.TrailingAnchor, 7),
+                _label.TrailingAnchor.ConstraintEqualTo(_card.TrailingAnchor, -10),
+                _label.CenterYAnchor.ConstraintEqualTo(_card.CenterYAnchor),
 
-                _pill.HeightAnchor.ConstraintEqualTo(28),
+                // 标签本体：条内留 4pt 上下边距，做出「浮起卡片」的空隙。
+                _card.LeadingAnchor.ConstraintEqualTo(host.LeadingAnchor),
+                _card.TrailingAnchor.ConstraintEqualTo(host.TrailingAnchor),
+                _card.TopAnchor.ConstraintEqualTo(host.TopAnchor, 4),
+                _card.BottomAnchor.ConstraintEqualTo(host.BottomAnchor, -4),
+
+                _sep.TrailingAnchor.ConstraintEqualTo(host.TrailingAnchor),
+                _sep.CenterYAnchor.ConstraintEqualTo(host.CenterYAnchor),
+                _sep.WidthAnchor.ConstraintEqualTo(1),
+                _sep.HeightAnchor.ConstraintEqualTo(15),
+
+                // 等宽由 FillEqually 负责，这里只兜住上下限：多标签时压缩、单标签不至于拉满整条。
+                host.WidthAnchor.ConstraintGreaterThanOrEqualTo(110),
+                host.WidthAnchor.ConstraintLessThanOrEqualTo(240),
+                host.HeightAnchor.ConstraintEqualTo(BarHeight - 1),
             });
 
-            View = _pill;
+            View = host;
             Restyle();
         }
 
@@ -283,41 +349,55 @@ public sealed class SessionTabBar : NSView
 
         public void SetActive(bool active)
         {
-            _active = active;
+            IsActive = active;
             Restyle();
         }
+
+        public void SetSeparator(bool show) => _sep.Hidden = !show;
 
         public void RefreshChrome() => Restyle();
 
         private void Restyle()
         {
             var prev = NSAppearance.CurrentAppearance;
-            NSAppearance.CurrentAppearance = _pill.EffectiveAppearance;
+            NSAppearance.CurrentAppearance = _card.EffectiveAppearance;
 
-            // 选中：控件强调色淡填充 + 同色描边；悬停：极淡中性底；其余：透明。
-            NSColor fill = _active
-                ? NSColor.ControlAccent.ColorWithAlphaComponent(0.16f)
-                : _pill.Hovering
-                    ? NSColor.SecondaryLabel.ColorWithAlphaComponent(0.10f)
-                    : NSColor.Clear;
-            _pill.Layer!.BackgroundColor = fill.CGColor;
-            _pill.Layer.BorderWidth = _active ? 1 : 0;
-            _pill.Layer.BorderColor = NSColor.ControlAccent.ColorWithAlphaComponent(0.35f).CGColor;
+            var layer = _card.Layer!;
+            if (IsActive)
+            {
+                // 选中：浮起的一张卡片 —— 比条底亮一档 + 极淡描边 + 轻投影。
+                layer.BackgroundColor = NSColor.ControlBackground.CGColor;
+                layer.BorderWidth = 1;
+                layer.BorderColor = NSColor.SecondaryLabel.ColorWithAlphaComponent(0.14f).CGColor;
+                layer.ShadowOpacity = 0.10f;
+                layer.ShadowRadius = 3;
+                layer.ShadowOffset = new CGSize(0, -1);
+                layer.ShadowColor = NSColor.Black.CGColor;
+            }
+            else
+            {
+                layer.BackgroundColor = (_card.Hovering
+                    ? NSColor.SecondaryLabel.ColorWithAlphaComponent(0.09f)
+                    : NSColor.Clear).CGColor;
+                layer.BorderWidth = 0;
+                layer.ShadowOpacity = 0;
+            }
 
-            _label.TextColor = _active ? NSColor.Label : NSColor.SecondaryLabel;
-            _label.Font = NSFont.SystemFontOfSize(12, _active ? NSFontWeight.Medium : NSFontWeight.Regular);
-            _dot.Layer!.BackgroundColor = _active
-                ? ProtocolStyle.Tint(Protocol).CGColor
-                : ProtocolStyle.Tint(Protocol).ColorWithAlphaComponent(0.55f).CGColor;
+            _label.TextColor = IsActive ? NSColor.Label : NSColor.SecondaryLabel;
+            _label.Font = NSFont.SystemFontOfSize(12, IsActive ? NSFontWeight.Medium : NSFontWeight.Regular);
 
-            // 关闭按钮只在选中或悬停时出现，避免一排叉号。
-            _close.Hidden = !(_active || _pill.Hovering);
+            var tint = ProtocolStyle.Tint(Protocol);
+            _dot.Layer!.BackgroundColor = (IsActive ? tint : tint.ColorWithAlphaComponent(0.6f)).CGColor;
+
+            // 悬停时左槽换成关闭叉（Safari 的 favicon → 关闭）。
+            _close.Hidden = !_card.Hovering;
+            _dot.Hidden = _card.Hovering;
 
             NSAppearance.CurrentAppearance = prev;
         }
 
-        /// <summary>可点击 + 悬停感知的圆角容器。</summary>
-        private sealed class HoverPill : NSView
+        /// <summary>可点击 + 悬停感知的圆角卡片。</summary>
+        private sealed class HoverCard : NSView
         {
             private readonly Action _onClick;
             private NSTrackingArea? _tracking;
@@ -325,12 +405,12 @@ public sealed class SessionTabBar : NSView
             public bool Hovering { get; private set; }
             public Action<bool>? HoverChanged;
 
-            public HoverPill(Action onClick)
+            public HoverCard(Action onClick)
             {
                 _onClick = onClick;
                 WantsLayer = true;
                 TranslatesAutoresizingMaskIntoConstraints = false;
-                Layer!.CornerRadius = 7;
+                Layer!.CornerRadius = 8;
             }
 
             public override void UpdateTrackingAreas()

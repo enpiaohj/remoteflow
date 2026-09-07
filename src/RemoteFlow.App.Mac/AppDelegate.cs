@@ -141,7 +141,7 @@ public sealed class AppDelegate : NSApplicationDelegate
         viewMenu.AddItem(ToggleListMenuItem);
         viewMenu.AddItem(NSMenuItem.SeparatorItem);
         viewMenu.AddItem(new NSMenuItem("进入 / 退出全屏", "f", (_, _) =>
-            (NSApplication.SharedApplication.Delegate as AppDelegate)?._mainWindow?.Window?.ToggleFullScreen(null))
+            (NSApplication.SharedApplication.Delegate as AppDelegate)?._mainWindow?.ToggleScreenFullScreen())
         {
             KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.ControlKeyMask,
         });
