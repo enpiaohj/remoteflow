@@ -23,9 +23,15 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
+  <!--
+    dylib 不在这里 CopyToOutputDirectory —— App.Mac 用 <NativeReference> 直接把
+    runtimes/osx-<rid>/native/libremoteflow_rdp.dylib 收进 .app/Contents/MonoBundle。
+    若在此 <None Include CopyToOutputDirectory> 传播，App.Mac 的 universal 构建会让
+    osx-x64 / osx-arm64 两个子构建各自拿到同一份 x86_64 dylib，lipo 合并即 "same
+    architectures" 失败（见 build 历史）。仅保留 Pack 供未来 NuGet 打包。
+  -->
   <ItemGroup>
-    <!-- native/rdp/build.sh 产出；随包带给消费者（App.Mac）。缺失时构建仍通过，运行期缺 dylib 才报错。 -->
-    <None Include="runtimes/**/*.dylib" Pack="true" PackagePath="runtimes/" CopyToOutputDirectory="PreserveNewest" Condition="Exists('runtimes')" />
+    <None Include="runtimes/**/*.dylib" Pack="true" PackagePath="runtimes/" Condition="Exists('runtimes')" />
   </ItemGroup>
 
 </Project>
