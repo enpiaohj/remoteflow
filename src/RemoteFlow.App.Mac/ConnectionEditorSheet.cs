@@ -566,7 +566,7 @@ public sealed class ConnectionEditorSheet : NSWindowController
     }
 
     private static NSButton TextButton(string title, Func<Task> onClick)
-        => TextButton(title, () => _ = onClick());
+        => TextButton(title, (Action)(() => { _ = onClick(); }));
 
     private static NSBox Separator() => new()
     {
