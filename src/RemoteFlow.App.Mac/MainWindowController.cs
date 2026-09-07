@@ -161,7 +161,8 @@ public sealed class MainWindowController : NSWindowController
     private void ShowInfoCard(ConnectionItemViewModel c)
     {
         _tabBar.ClearHighlight();
-        _detail.ShowConnection(c);
+        _connectionsVm.SelectedItem = c; // 触发历史 / 迷你图 / 状态的异步加载
+        _detail.ShowConnection(_connectionsVm);
         ShowStage(_detail);
     }
 
