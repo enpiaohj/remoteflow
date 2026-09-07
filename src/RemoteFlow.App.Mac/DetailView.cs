@@ -313,7 +313,7 @@ public sealed class DetailView : NSView
         col.AddArrangedSubview(Gap(24));
 
         col.Menu = DetailMenu(vm, c);
-        return ScrollHost(col, 34);
+        return ScrollHost(col, 34, 400);
     }
 
     /// <summary>详情页右键菜单 —— 走「我的连接」既有命令。</summary>
@@ -587,7 +587,7 @@ public sealed class DetailView : NSView
 
     /// <summary>纵向滚动区：<paramref name="content"/>（纵向 NSStackView，无左右 EdgeInsets）
     /// 左右贴到可视区留 <paramref name="hMargin"/> 边距，随窗口伸缩；子卡片用 AddFill 一起变宽。</summary>
-    private static NSView ScrollHost(NSView content, nfloat hMargin)
+    private static NSView ScrollHost(NSView content, nfloat hMargin, nfloat minContentWidth)
     {
         var doc = new FlippedHost { TranslatesAutoresizingMaskIntoConstraints = false };
         doc.AddSubview(content);
@@ -597,6 +597,8 @@ public sealed class DetailView : NSView
             content.TrailingAnchor.ConstraintEqualTo(doc.TrailingAnchor, -hMargin),
             content.TopAnchor.ConstraintEqualTo(doc.TopAnchor),
             content.BottomAnchor.ConstraintEqualTo(doc.BottomAnchor),
+            // 内容不塌到 0：把最小宽度顶回窗格 → 窗格 → 窗口，切到首页时窗口不会自己缩窄。
+            content.WidthAnchor.ConstraintGreaterThanOrEqualTo(minContentWidth),
         });
 
         var scroll = new NSScrollView
@@ -705,24 +707,16 @@ public sealed class DetailView : NSView
             col.AddArrangedSubview(Gap(24));
         }
 
-        // 收藏 / 最近活动 两列
-        var twoCol = new NSStackView
-        {
-            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
-            Alignment = NSLayoutAttribute.Top,
-            Distribution = NSStackViewDistribution.FillEqually,
-            Spacing = 24,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        };
-        twoCol.AddArrangedSubview(HomeColumnCard("收藏", "star",
+        // 收藏 / 最近活动 —— macOS 详情列宽度有限（列表列占着），纵向堆叠而非 Windows 的两列。
+        AddFill(col, HomeColumnCard("收藏", "star",
             vm.HasFavorites ? vm.FavoriteItems.Select(HomeFavRow) : null,
             "还没有收藏的连接。在「我的连接」里点星标即可加入。",
             () => vm.ViewAllFavoritesCommand.Execute(null), "管理收藏"));
-        twoCol.AddArrangedSubview(HomeColumnCard("最近活动", "clock.arrow.circlepath",
+        col.AddArrangedSubview(Gap(18));
+        AddFill(col, HomeColumnCard("最近活动", "clock.arrow.circlepath",
             vm.HasActivity ? vm.RecentHistory.Select(HomeActivityRow) : null,
             "还没有连接记录。",
             () => vm.ViewAllActivityCommand.Execute(null), "查看所有活动"));
-        AddFill(col, twoCol);
 
         if (vm.ShowSecurityTip)
         {
@@ -731,7 +725,7 @@ public sealed class DetailView : NSView
         }
 
         col.AddArrangedSubview(Gap(24));
-        return ScrollHost(col, 40);
+        return ScrollHost(col, 40, 640);
     }
 
     private static NSView HomeSectionHeader(string title, Action? viewAll)
@@ -818,7 +812,7 @@ public sealed class DetailView : NSView
         Action viewAll, string footerText)
     {
         var card = Card();
-        card.HeightAnchor.ConstraintEqualTo(440).Active = true;
+        card.HeightAnchor.ConstraintEqualTo(248).Active = true;
 
         var head = new NSStackView
         {

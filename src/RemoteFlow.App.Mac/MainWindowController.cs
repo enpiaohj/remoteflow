@@ -95,14 +95,16 @@ public sealed class MainWindowController : NSWindowController
     {
         var navItem = NSSplitViewItem.CreateSidebar(_nav);
         navItem.MinimumThickness = 176;
-        navItem.MaximumThickness = 220;
+        navItem.MaximumThickness = 260;
         navItem.CanCollapse = true;
+        navItem.HoldingPriority = 260; // 固定宽度
         _split.AddSplitViewItem(navItem);
 
         _listItem = NSSplitViewItem.FromViewController(_listPane);
-        _listItem.MinimumThickness = 260;
-        _listItem.MaximumThickness = 420;
+        _listItem.MinimumThickness = 240;
+        _listItem.MaximumThickness = 460;
         _listItem.CanCollapse = true;
+        _listItem.HoldingPriority = 260; // 固定宽度 —— 折叠时让详情列吃掉空出的宽度，而不是缩窗口
         _split.AddSplitViewItem(_listItem);
 
         // 详情区 = [会话 Tab 条（空时隐藏）] + [舞台：详情卡 / 会话画面]。
@@ -129,6 +131,9 @@ public sealed class MainWindowController : NSWindowController
         var detailVc = new NSViewController { View = detailRoot };
         var detailItem = NSSplitViewItem.FromViewController(detailVc);
         detailItem.MinimumThickness = 420;
+        detailItem.MaximumThickness = 100_000; // 明确无上限：否则 NSSplitViewController 会按内容
+                                               // fittingSize 推断详情列最大宽 → 首页折叠列表后窗口拉不宽 / 缩窗
+        detailItem.HoldingPriority = 250;      // 最低 —— 窗口 / 折叠变化时优先由详情列伸缩
         _split.AddSplitViewItem(detailItem);
 
         Window.ContentViewController = _split;
@@ -340,11 +345,13 @@ public sealed class MainWindowController : NSWindowController
                 _ = _listPane.ShowRecentAsync();
                 break;
             case NavSidebar.Item.Home:
-                SetListVisible(false);
+                // 首页 / 凭据不折叠列表：NSSplitViewController 折叠中间窗格会把窗口宽度锁死在
+                // ContentMinSize（≈980）—— 窗口既缩窄又拉不宽。宁可留着列表列。
+                SetListVisible(true);
                 _detail.ShowHome(_services.GetRequiredService<HomePageViewModel>());
                 break;
             case NavSidebar.Item.Credentials:
-                SetListVisible(false);
+                SetListVisible(true);
                 _detail.ShowCredentials(_services.GetRequiredService<CredentialsPageViewModel>());
                 break;
             case NavSidebar.Item.Settings:
@@ -355,9 +362,18 @@ public sealed class MainWindowController : NSWindowController
 
     private void SetListVisible(bool visible)
     {
-        if (_listItem is not null)
+        if (_listItem is null || _listItem.Collapsed == !visible)
         {
-            _listItem.Collapsed = !visible;
+            return;
+        }
+
+        // NSSplitViewController 折叠窗格会顺带缩窗口 / 锁窗口宽度。折叠前记窗口 frame、之后还回去
+        // （首页 / 凭据已改为不折叠，这里主要给 ⌘⌥L 手动折叠兜底）。
+        var frame = Window.Frame;
+        _listItem.Collapsed = !visible;
+        if (!visible && Window.Frame.Width < frame.Width - 1)
+        {
+            Window.SetFrame(frame, display: true, animate: false);
         }
     }
 
