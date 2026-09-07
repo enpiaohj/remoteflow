@@ -36,6 +36,8 @@ public sealed class SettingsPaneView : NSView
     {
         _vm = vm;
         TranslatesAutoresizingMaskIntoConstraints = false;
+        WantsLayer = true;
+        RefreshGround();
 
         _pages = new[]
         {
@@ -105,6 +107,15 @@ public sealed class SettingsPaneView : NSView
         _ = _vm.LoadGroupsAsync();
         _ = _vm.LoadHostKeysAsync();
     }
+
+    public override void ViewDidChangeEffectiveAppearance()
+    {
+        base.ViewDidChangeEffectiveAppearance();
+        RefreshGround();
+    }
+
+    private void RefreshGround()
+        => Palette.With(this, () => Layer!.BackgroundColor = Palette.PageGround(this).CGColor);
 
     private void Select(int index)
     {
@@ -229,8 +240,8 @@ public sealed class SettingsPaneView : NSView
         {
             var prev = NSAppearance.CurrentAppearance;
             NSAppearance.CurrentAppearance = EffectiveAppearance;
-            Layer!.BackgroundColor = NSColor.ControlBackground.CGColor;
-            Layer.BorderColor = NSColor.SecondaryLabel.ColorWithAlphaComponent(0.13f).CGColor;
+            Layer!.BackgroundColor = Palette.CardSurface(this).CGColor;
+            Layer.BorderColor = Palette.Hairline(this).CGColor;
             Layer.ShadowColor = NSColor.Black.CGColor;
             NSAppearance.CurrentAppearance = prev;
         }
@@ -373,11 +384,12 @@ public sealed class SettingsPaneView : NSView
     // ── RDP ─────────────────────────────────────────────────────
 
     private NSView BuildRdp() => Page(
-        SectionLabel("默认行为（新建 RDP 连接时套用）"),
-        Check("默认「适应窗口」显示模式", _vm.RdpFitToWindow, v => _vm.RdpFitToWindow = v),
-        Check("默认开启剪贴板重定向", _vm.RdpRedirectClipboard, v => _vm.RdpRedirectClipboard = v),
-        Check("默认把远端音频播放到本机", _vm.RdpRedirectAudio, v => _vm.RdpRedirectAudio = v),
-        Check("默认使用全部显示器", _vm.RdpUseMultimon, v => _vm.RdpUseMultimon = v));
+        Card("默认行为", "display",
+            "新建 RDP 连接时套用这些默认值。已有连接不受影响，可在各自的编辑页单独调整。",
+            Check("默认「适应窗口」显示模式", _vm.RdpFitToWindow, v => _vm.RdpFitToWindow = v),
+            Check("默认开启剪贴板重定向", _vm.RdpRedirectClipboard, v => _vm.RdpRedirectClipboard = v),
+            Check("默认把远端音频播放到本机", _vm.RdpRedirectAudio, v => _vm.RdpRedirectAudio = v),
+            Check("默认使用全部显示器", _vm.RdpUseMultimon, v => _vm.RdpUseMultimon = v)));
 
     // ── SSH ─────────────────────────────────────────────────────
 
@@ -403,23 +415,28 @@ public sealed class SettingsPaneView : NSView
         var keepAlive = IntField(_vm.SshKeepAliveSeconds, v => _vm.SshKeepAliveSeconds = v);
 
         return Page(
-            Row("终端类型", term),
-            Row("字符编码", enc),
-            Row("终端主题", theme),
-            Row("字号", size),
-            Row("保活间隔（秒）", keepAlive),
-            Check("粘贴多行文本前确认", _vm.SshConfirmMultilinePaste, v => _vm.SshConfirmMultilinePaste = v),
-            Check("粘贴大量文本时警告", _vm.SshWarnLargePaste, v => _vm.SshWarnLargePaste = v));
+            Card("终端", "apple.terminal",
+                "终端类型与编码要和服务端匹配，否则会出现乱码或按键错位。",
+                Row("终端类型", term),
+                Row("字符编码", enc),
+                Row("终端主题", theme),
+                Row("字号", size)),
+            Card("连接与粘贴", "arrow.left.arrow.right",
+                "保活间隔用于在空闲时维持连接；粘贴确认能避免把多行内容误当命令一次性执行。",
+                Row("保活间隔（秒）", keepAlive),
+                Check("粘贴多行文本前确认", _vm.SshConfirmMultilinePaste, v => _vm.SshConfirmMultilinePaste = v),
+                Check("粘贴大量文本时警告", _vm.SshWarnLargePaste, v => _vm.SshWarnLargePaste = v)));
     }
 
     // ── VNC ─────────────────────────────────────────────────────
 
     private NSView BuildVnc() => Page(
-        SectionLabel("默认行为（新建 VNC 连接时套用）"),
-        Check("默认「适应窗口」缩放", _vm.VncFitToWindow, v => _vm.VncFitToWindow = v),
-        Check("默认只读（不发送键鼠）", _vm.VncViewOnly, v => _vm.VncViewOnly = v),
-        Check("默认共享连接（不踢掉其他客户端）", _vm.VncSharedConnection, v => _vm.VncSharedConnection = v),
-        Check("默认同步远端剪贴板到本机", _vm.VncClipboardToLocal, v => _vm.VncClipboardToLocal = v));
+        Card("默认行为", "rectangle.on.rectangle",
+            "新建 VNC 连接时套用这些默认值。「共享连接」关闭时会踢掉已连在该桌面上的其他客户端。",
+            Check("默认「适应窗口」缩放", _vm.VncFitToWindow, v => _vm.VncFitToWindow = v),
+            Check("默认只读（不发送键鼠）", _vm.VncViewOnly, v => _vm.VncViewOnly = v),
+            Check("默认共享连接（不踢掉其他客户端）", _vm.VncSharedConnection, v => _vm.VncSharedConnection = v),
+            Check("默认同步远端剪贴板到本机", _vm.VncClipboardToLocal, v => _vm.VncClipboardToLocal = v)));
 
     // ── 安全 ────────────────────────────────────────────────────
 

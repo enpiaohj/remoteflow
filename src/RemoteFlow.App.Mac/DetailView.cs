@@ -27,6 +27,8 @@ public sealed class DetailView : NSView
     public DetailView()
     {
         TranslatesAutoresizingMaskIntoConstraints = false;
+        WantsLayer = true;
+        RefreshGround();
         AddSubview(_container);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
@@ -40,6 +42,16 @@ public sealed class DetailView : NSView
     }
 
     public override bool IsFlipped => true;
+
+    public override void ViewDidChangeEffectiveAppearance()
+    {
+        base.ViewDidChangeEffectiveAppearance();
+        RefreshGround();
+    }
+
+    /// <summary>页面底衬 —— 卡片之外那片区域。用调色板的近白底，别让卡片糊在灰里。</summary>
+    private void RefreshGround()
+        => Palette.With(this, () => Layer!.BackgroundColor = Palette.PageGround(this).CGColor);
 
     public void ShowEmpty()
         => Swap(EmptyState("选择一个连接", "从左侧列表选择，或用工具栏「＋」新建连接。", "rectangle.connected.to.line.below"));
@@ -811,8 +823,7 @@ public sealed class DetailView : NSView
     private NSView HomeRecentCard(ConnectionItemViewModel c)
     {
         var card = new TapRow(() => ConnectRequested?.Invoke(this, c)) { Menu = ConnMenu(c) };
-        var border = new CardView(() => NSColor.ControlBackground,
-            () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.13f), 10, elevated: true);
+        var border = CardView.Surface(10);
         card.AddSubview(border);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
@@ -1210,7 +1221,8 @@ public sealed class DetailView : NSView
         }
 
         public override void MouseEntered(NSEvent theEvent)
-            => Layer!.BackgroundColor = NSColor.QuaternaryLabel.ColorWithAlphaComponent(0.5f).CGColor;
+            // 中性灰悬停显脏，改用强调色的极淡染色。
+            => Palette.With(this, () => Layer!.BackgroundColor = Palette.RowHover(this).CGColor);
 
         public override void MouseExited(NSEvent theEvent)
             => Layer!.BackgroundColor = null;
@@ -1328,6 +1340,9 @@ public sealed class DetailView : NSView
         var empty = Centered(Icon("key", 34, NSColor.TertiaryLabel), "还没有凭据",
             "点「新建凭据」把常用账号 / 私钥交给钥匙串保管，连接时按需引用。");
 
+        // 右键菜单：与「我的连接」保持一致的操作习惯，不用非得双击或去点行内小图标。
+        table.Menu = new NSMenu { Delegate = new CredentialRowMenu(table, vm) };
+
         var src = new CredentialListSource(table, vm.Items,
             onSelect: item => vm.SelectedItem = item,
             onActivate: item => _ = vm.EditCommand.ExecuteAsync(item),
@@ -1396,6 +1411,53 @@ public sealed class DetailView : NSView
             empty.CenterYAnchor.ConstraintEqualTo(listCard.CenterYAnchor),
         });
         return root;
+    }
+
+    /// <summary>凭据行右键菜单：按右键落点的那一行构建，而不是当前选中行。</summary>
+    private sealed class CredentialRowMenu : NSMenuDelegate
+    {
+        private readonly NSTableView _table;
+        private readonly CredentialsPageViewModel _vm;
+
+        public CredentialRowMenu(NSTableView table, CredentialsPageViewModel vm)
+        {
+            _table = table;
+            _vm = vm;
+        }
+
+        public override void MenuWillHighlightItem(NSMenu menu, NSMenuItem? item)
+        {
+        }
+
+        public override void NeedsUpdate(NSMenu menu)
+        {
+            menu.RemoveAllItems();
+
+            var row = (int)_table.ClickedRow;
+            if (row < 0 || row >= _vm.Items.Count)
+            {
+                menu.AddItem(new NSMenuItem("新建凭据…", (_, _) => _ = _vm.CreateCommand.ExecuteAsync(null)));
+                return;
+            }
+
+            var item = _vm.Items[row];
+            _table.SelectRow(row, byExtendingSelection: false);
+            _vm.SelectedItem = item;
+
+            menu.AddItem(new NSMenuItem("编辑…", (_, _) => _ = _vm.EditCommand.ExecuteAsync(item)));
+            menu.AddItem(new NSMenuItem("复制用户名", (_, _) =>
+            {
+                NSPasteboard.GeneralPasteboard.ClearContents();
+                NSPasteboard.GeneralPasteboard.SetStringForType(item.Username, "public.utf8-plain-text");
+            })
+            {
+                Enabled = !string.IsNullOrEmpty(item.Username),
+            });
+            menu.AddItem(NSMenuItem.SeparatorItem);
+            menu.AddItem(new NSMenuItem("新建凭据…", (_, _) => _ = _vm.CreateCommand.ExecuteAsync(null)));
+            menu.AddItem(NSMenuItem.SeparatorItem);
+            menu.AddItem(new NSMenuItem("删除…", (_, _) => _ = _vm.DeleteCommand.ExecuteAsync(item)));
+        }
     }
 
     /// <summary>标题旁的数量胶囊（对齐 Windows 版「凭据 (5)」）。</summary>
@@ -1521,6 +1583,16 @@ public sealed class DetailView : NSView
             Refresh();
         }
 
+        /// <summary>标准内容表面卡：调色板的卡片底 + 发丝描边 + 极轻投影。</summary>
+        public static CardView Surface(nfloat cornerRadius)
+        {
+            CardView card = null!;
+            card = new CardView(() => Palette.CardSurface(card), () => Palette.Hairline(card),
+                cornerRadius, elevated: true);
+            card.Refresh();
+            return card;
+        }
+
         private void Refresh()
         {
             var prev = NSAppearance.CurrentAppearance;
@@ -1547,11 +1619,14 @@ public sealed class DetailView : NSView
     // 深色下比窗口底稍亮），配细描边 + 极轻投影。
     // 之前是「灰底上再叠一层灰」，两者明度太近，整块看着发闷、像没渲染完；
     // 这也是 macOS 系统设置 / Finder 的分组做法，不是刺眼的"白卡压灰底"。
-    private static CardView Card() =>
-        new(() => NSColor.ControlBackground,
-            () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.13f), 9, elevated: true);
+    private static CardView Card() => CardView.Surface(9);
 
-    private static CardView Hairline() => new(() => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f));
+    private static CardView Hairline()
+    {
+        CardView line = null!;
+        line = new CardView(() => Palette.Hairline(line));
+        return line;
+    }
 
     private static NSProgressIndicator Spinner()
     {
