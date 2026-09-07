@@ -82,10 +82,10 @@ public sealed class SettingsPaneView : NSView
         AddSubview(_content);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
-            title.LeadingAnchor.ConstraintEqualTo(SafeAreaLayoutGuide.LeadingAnchor, 26),
+            title.LeadingAnchor.ConstraintEqualTo(SafeAreaLayoutGuide.LeadingAnchor, 30),
             title.TopAnchor.ConstraintEqualTo(SafeAreaLayoutGuide.TopAnchor, 22),
 
-            tabs.LeadingAnchor.ConstraintEqualTo(LeadingAnchor, 24),
+            tabs.LeadingAnchor.ConstraintEqualTo(LeadingAnchor, 22),
             tabs.TrailingAnchor.ConstraintLessThanOrEqualTo(TrailingAnchor, -24),
             tabs.TopAnchor.ConstraintEqualTo(title.BottomAnchor, 14),
 
@@ -179,7 +179,7 @@ public sealed class SettingsPaneView : NSView
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
             Spacing = 10,
-            EdgeInsets = new NSEdgeInsets(14, 16, 14, 16),
+            EdgeInsets = new NSEdgeInsets(15, 18, 16, 18),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
         col.AddArrangedSubview(headRow);
@@ -201,15 +201,21 @@ public sealed class SettingsPaneView : NSView
         return box;
     }
 
-    /// <summary>低反差圆角容器：极淡中性底 + 极淡描边，跟随明暗切换。</summary>
+    /// <summary>
+    /// 抬起的内容表面：系统内容底色 + 细描边 + 极轻投影，跟随明暗切换。
+    /// 分层靠抬升而非染色 —— 灰底上再叠灰卡会发闷。
+    /// </summary>
     private sealed class SoftBox : NSView
     {
         public SoftBox()
         {
             WantsLayer = true;
             TranslatesAutoresizingMaskIntoConstraints = false;
-            Layer!.CornerRadius = 8;
+            Layer!.CornerRadius = 9;
             Layer.BorderWidth = 1;
+            Layer.ShadowOpacity = 0.06f;
+            Layer.ShadowRadius = 3;
+            Layer.ShadowOffset = new CoreGraphics.CGSize(0, -1);
             Refresh();
         }
 
@@ -223,8 +229,9 @@ public sealed class SettingsPaneView : NSView
         {
             var prev = NSAppearance.CurrentAppearance;
             NSAppearance.CurrentAppearance = EffectiveAppearance;
-            Layer!.BackgroundColor = NSColor.SecondaryLabel.ColorWithAlphaComponent(0.06f).CGColor;
-            Layer.BorderColor = NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f).CGColor;
+            Layer!.BackgroundColor = NSColor.ControlBackground.CGColor;
+            Layer.BorderColor = NSColor.SecondaryLabel.ColorWithAlphaComponent(0.13f).CGColor;
+            Layer.ShadowColor = NSColor.Black.CGColor;
             NSAppearance.CurrentAppearance = prev;
         }
     }
@@ -463,8 +470,6 @@ public sealed class SettingsPaneView : NSView
             scroll.TrailingAnchor.ConstraintEqualTo(listBox.TrailingAnchor, -1),
             scroll.TopAnchor.ConstraintEqualTo(listBox.TopAnchor, 1),
             scroll.BottomAnchor.ConstraintEqualTo(listBox.BottomAnchor, -1),
-            // 原来没给宽度，列表在 Leading 对齐的栈里缩成一条窄缝，行根本点不中。
-            listBox.WidthAnchor.ConstraintGreaterThanOrEqualTo(560),
             listBox.HeightAnchor.ConstraintEqualTo(200),
         });
 
@@ -520,6 +525,9 @@ public sealed class SettingsPaneView : NSView
 
     // ── 版式辅助 ────────────────────────────────────────────────
 
+    /// <summary>分页内容的左右留白。与凭据页保持一致。</summary>
+    private const int PageHInset = 30;
+
     private static NSView Page(params NSView[] rows)
     {
         var stack = new NSStackView
@@ -527,15 +535,17 @@ public sealed class SettingsPaneView : NSView
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
             Spacing = 12,
-            EdgeInsets = new NSEdgeInsets(24, 26, 24, 26),
+            EdgeInsets = new NSEdgeInsets(22, PageHInset, 26, PageHInset),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
         foreach (var r in rows)
         {
             // 先加入再约束，否则两者无共同祖先。顶层行（分组卡片）通栏铺满，
             // 与 Windows 版一致；靠 Leading 对齐会让卡片缩成窄条。
+            // 注意要减去栈的左右内边距 —— 直接 == stack.Width 会盖过 EdgeInsets，
+            // 卡片左边留白、右边却顶到窗口边缘。
             stack.AddArrangedSubview(r);
-            r.WidthAnchor.ConstraintEqualTo(stack.WidthAnchor).Active = true;
+            r.WidthAnchor.ConstraintEqualTo(stack.WidthAnchor, 1, -(PageHInset * 2)).Active = true;
         }
 
         var scroll = new NSScrollView

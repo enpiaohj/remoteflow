@@ -811,8 +811,8 @@ public sealed class DetailView : NSView
     private NSView HomeRecentCard(ConnectionItemViewModel c)
     {
         var card = new TapRow(() => ConnectRequested?.Invoke(this, c)) { Menu = ConnMenu(c) };
-        var border = new CardView(() => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.06f),
-            () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f), 10);
+        var border = new CardView(() => NSColor.ControlBackground,
+            () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.13f), 10, elevated: true);
         card.AddSubview(border);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
@@ -1484,16 +1484,28 @@ public sealed class DetailView : NSView
         private readonly Func<NSColor>? _fill;
         private readonly Func<NSColor>? _border;
 
-        public CardView(Func<NSColor>? fill, Func<NSColor>? border = null, nfloat cornerRadius = default)
+        private readonly bool _elevated;
+
+        public CardView(Func<NSColor>? fill, Func<NSColor>? border = null, nfloat cornerRadius = default,
+            bool elevated = false)
         {
             _fill = fill;
             _border = border;
+            _elevated = elevated;
             WantsLayer = true;
             TranslatesAutoresizingMaskIntoConstraints = false;
             Layer!.CornerRadius = cornerRadius;
             if (border is not null)
             {
                 Layer.BorderWidth = 1;
+            }
+
+            if (elevated)
+            {
+                // 极轻投影：分层靠"抬起来"，不靠把底色染灰。
+                Layer.ShadowOpacity = 0.06f;
+                Layer.ShadowRadius = 3;
+                Layer.ShadowOffset = new CGSize(0, -1);
             }
         }
 
@@ -1521,16 +1533,23 @@ public sealed class DetailView : NSView
             {
                 Layer!.BorderColor = _border().CGColor;
             }
+
+            if (_elevated)
+            {
+                Layer!.ShadowColor = NSColor.Black.CGColor;
+            }
+
             NSAppearance.CurrentAppearance = prev;
         }
     }
 
-    // 低反差：极淡中性填充 + 描边，不做「白卡压灰底」的强对比。
-    // 描边从 0.12 提到 0.16 —— 之前边界太弱，卡片糊在底色里像没画完；
-    // 这一档仍远低于"白卡"的反差，只是把边界交代清楚。
+    // 分层靠**抬升**而不是**染色**：卡片用系统的内容表面色（浅色下接近白、
+    // 深色下比窗口底稍亮），配细描边 + 极轻投影。
+    // 之前是「灰底上再叠一层灰」，两者明度太近，整块看着发闷、像没渲染完；
+    // 这也是 macOS 系统设置 / Finder 的分组做法，不是刺眼的"白卡压灰底"。
     private static CardView Card() =>
-        new(() => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.055f),
-            () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.16f), 9);
+        new(() => NSColor.ControlBackground,
+            () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.13f), 9, elevated: true);
 
     private static CardView Hairline() => new(() => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f));
 
