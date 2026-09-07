@@ -145,6 +145,15 @@ public sealed class DetailView : NSView
 
     public void ShowCredentials(CredentialsPageViewModel vm) => Swap(BuildCredentials(vm));
 
+    /// <summary>设置页（内嵌主窗口，不再是独立偏好窗口）。只建一次，切走再切回保留分页选择。</summary>
+    public void ShowSettings(SettingsPageViewModel vm)
+    {
+        _settings ??= new SettingsPaneView(vm);
+        SafeSwap(() => _settings, "设置");
+    }
+
+    private SettingsPaneView? _settings;
+
     // ── 连接详情 ────────────────────────────────────────────────
 
     private NSView BuildDetail(ConnectionsPageViewModel vm, ConnectionItemViewModel c)

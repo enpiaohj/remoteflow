@@ -10,17 +10,32 @@ namespace RemoteFlow.App.Mac;
 /// 偏好设置窗口（⌘,）—— macOS 惯例的独立窗口 + 工具栏分页，绑共享
 /// <see cref="SettingsPageViewModel"/>。分页：常规 / RDP / SSH / VNC / 安全 / 数据与备份。
 /// </summary>
-public sealed class SettingsWindowController : NSWindowController
+/// <summary>
+/// 设置页（内嵌主窗口详情区，对齐 Windows 版）：标题「设置」+ 下划线式横向标签条
+/// （常规 / RDP / SSH / VNC / 安全 / 数据与备份）+ 分页内容。
+/// 原先是独立偏好窗口，改到主窗口内以保持与 Windows 版一致的导航模型。
+/// </summary>
+public sealed class SettingsPaneView : NSView
 {
+    private static readonly (string Title, string Symbol)[] Tabs =
+    {
+        ("常规", "gearshape"),
+        ("RDP", "display"),
+        ("SSH", "terminal"),
+        ("VNC", "rectangle.on.rectangle"),
+        ("安全", "lock.shield"),
+        ("数据与备份", "externaldrive"),
+    };
+
     private readonly SettingsPageViewModel _vm;
     private readonly NSView _content = new() { TranslatesAutoresizingMaskIntoConstraints = false };
     private readonly Lazy<NSView>[] _pages;
+    private readonly List<TabButton> _tabButtons = new();
 
-    public SettingsWindowController(SettingsPageViewModel vm)
-        : base(NewWindow())
+    public SettingsPaneView(SettingsPageViewModel vm)
     {
         _vm = vm;
-        Window.Title = "设置";
+        TranslatesAutoresizingMaskIntoConstraints = false;
 
         _pages = new[]
         {
@@ -32,25 +47,58 @@ public sealed class SettingsWindowController : NSWindowController
             new Lazy<NSView>(BuildData),
         };
 
-        var root = new NSView { TranslatesAutoresizingMaskIntoConstraints = true };
-        root.AddSubview(_content);
+        var title = new NSTextField
+        {
+            StringValue = "设置",
+            Bordered = false,
+            Editable = false,
+            Selectable = false,
+            DrawsBackground = false,
+            Font = NSFont.SystemFontOfSize(24, NSFontWeight.Bold),
+            TextColor = NSColor.Label,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+
+        var tabs = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.Bottom,
+            Spacing = 4,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        for (var i = 0; i < Tabs.Length; i++)
+        {
+            var idx = i;
+            var b = new TabButton(Tabs[i].Title, () => Select(idx));
+            _tabButtons.Add(b);
+            tabs.AddArrangedSubview(b);
+        }
+
+        var sep = new NSBox { BoxType = NSBoxType.NSBoxSeparator, TranslatesAutoresizingMaskIntoConstraints = false };
+
+        AddSubview(title);
+        AddSubview(tabs);
+        AddSubview(sep);
+        AddSubview(_content);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
-            _content.TopAnchor.ConstraintEqualTo(root.TopAnchor),
-            _content.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
-            _content.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
-            _content.BottomAnchor.ConstraintEqualTo(root.BottomAnchor),
-        });
-        Window.ContentView = root;
+            title.LeadingAnchor.ConstraintEqualTo(SafeAreaLayoutGuide.LeadingAnchor, 26),
+            title.TopAnchor.ConstraintEqualTo(SafeAreaLayoutGuide.TopAnchor, 22),
 
-        var toolbar = new NSToolbar("rf.settings")
-        {
-            Delegate = new TabToolbar(this),
-            DisplayMode = NSToolbarDisplayMode.IconAndLabel,
-            AllowsUserCustomization = false,
-        };
-        Window.Toolbar = toolbar;
-        Window.ToolbarStyle = NSWindowToolbarStyle.Preference;
+            tabs.LeadingAnchor.ConstraintEqualTo(LeadingAnchor, 24),
+            tabs.TrailingAnchor.ConstraintLessThanOrEqualTo(TrailingAnchor, -24),
+            tabs.TopAnchor.ConstraintEqualTo(title.BottomAnchor, 14),
+
+            sep.LeadingAnchor.ConstraintEqualTo(LeadingAnchor),
+            sep.TrailingAnchor.ConstraintEqualTo(TrailingAnchor),
+            sep.TopAnchor.ConstraintEqualTo(tabs.BottomAnchor),
+            sep.HeightAnchor.ConstraintEqualTo(1),
+
+            _content.TopAnchor.ConstraintEqualTo(sep.BottomAnchor),
+            _content.LeadingAnchor.ConstraintEqualTo(LeadingAnchor),
+            _content.TrailingAnchor.ConstraintEqualTo(TrailingAnchor),
+            _content.BottomAnchor.ConstraintEqualTo(BottomAnchor),
+        });
 
         Select(0);
 
@@ -58,17 +106,16 @@ public sealed class SettingsWindowController : NSWindowController
         _ = _vm.LoadHostKeysAsync();
     }
 
-    private static NSWindow NewWindow() => new(
-        new CGRect(0, 0, 580, 460),
-        NSWindowStyle.Titled | NSWindowStyle.Closable,
-        NSBackingStore.Buffered,
-        deferCreation: false);
-
     private void Select(int index)
     {
         foreach (var v in _content.Subviews.ToArray())
         {
             v.RemoveFromSuperview();
+        }
+
+        for (var i = 0; i < _tabButtons.Count; i++)
+        {
+            _tabButtons[i].SetActive(i == index);
         }
 
         var page = _pages[index].Value;
@@ -81,6 +128,77 @@ public sealed class SettingsWindowController : NSWindowController
             page.TrailingAnchor.ConstraintEqualTo(_content.TrailingAnchor),
             page.BottomAnchor.ConstraintEqualTo(_content.BottomAnchor),
         });
+    }
+
+    /// <summary>下划线式标签按钮（对齐 Windows 版设置页的分页样式）。</summary>
+    private sealed class TabButton : NSView
+    {
+        private readonly NSTextField _label;
+        private readonly NSView _underline;
+        private readonly Action _onClick;
+        private bool _active;
+
+        public TabButton(string title, Action onClick)
+        {
+            _onClick = onClick;
+            TranslatesAutoresizingMaskIntoConstraints = false;
+
+            _label = new NSTextField
+            {
+                StringValue = title,
+                Bordered = false,
+                Editable = false,
+                Selectable = false,
+                DrawsBackground = false,
+                Font = NSFont.SystemFontOfSize(13),
+                TextColor = NSColor.SecondaryLabel,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
+            _underline = new NSView { WantsLayer = true, TranslatesAutoresizingMaskIntoConstraints = false };
+            _underline.Layer!.CornerRadius = 1;
+
+            AddSubview(_label);
+            AddSubview(_underline);
+            NSLayoutConstraint.ActivateConstraints(new[]
+            {
+                _label.LeadingAnchor.ConstraintEqualTo(LeadingAnchor, 10),
+                _label.TrailingAnchor.ConstraintEqualTo(TrailingAnchor, -10),
+                _label.TopAnchor.ConstraintEqualTo(TopAnchor, 6),
+                _underline.TopAnchor.ConstraintEqualTo(_label.BottomAnchor, 7),
+                _underline.LeadingAnchor.ConstraintEqualTo(LeadingAnchor, 8),
+                _underline.TrailingAnchor.ConstraintEqualTo(TrailingAnchor, -8),
+                _underline.HeightAnchor.ConstraintEqualTo(2),
+                _underline.BottomAnchor.ConstraintEqualTo(BottomAnchor),
+            });
+
+            SetActive(false);
+        }
+
+        public void SetActive(bool active)
+        {
+            _active = active;
+            Restyle();
+        }
+
+        public override void ViewDidChangeEffectiveAppearance()
+        {
+            base.ViewDidChangeEffectiveAppearance();
+            Restyle();
+        }
+
+        private void Restyle()
+        {
+            var prev = NSAppearance.CurrentAppearance;
+            NSAppearance.CurrentAppearance = EffectiveAppearance;
+            _label.TextColor = _active ? NSColor.ControlAccent : NSColor.SecondaryLabel;
+            _label.Font = NSFont.SystemFontOfSize(13, _active ? NSFontWeight.Semibold : NSFontWeight.Regular);
+            _underline.Layer!.BackgroundColor = (_active ? NSColor.ControlAccent : NSColor.Clear).CGColor;
+            NSAppearance.CurrentAppearance = prev;
+        }
+
+        public override void MouseDown(NSEvent theEvent) => _onClick();
+
+        public override void ResetCursorRects() => AddCursorRect(Bounds, NSCursor.PointingHandCursor);
     }
 
     // ── 常规 ────────────────────────────────────────────────────
@@ -551,38 +669,4 @@ public sealed class SettingsWindowController : NSWindowController
         }
     }
 
-    // ── 工具栏分页 ─────────────────────────────────────────────
-
-    private sealed class TabToolbar : NSToolbarDelegate
-    {
-        private static readonly (string Id, string Title, string Symbol)[] Tabs =
-        {
-            ("t.general", "常规", "gearshape"),
-            ("t.rdp", "RDP", "display"),
-            ("t.ssh", "SSH", "terminal"),
-            ("t.vnc", "VNC", "rectangle.on.rectangle"),
-            ("t.security", "安全", "lock.shield"),
-            ("t.data", "数据与备份", "externaldrive"),
-        };
-
-        private readonly SettingsWindowController _o;
-        public TabToolbar(SettingsWindowController o) => _o = o;
-
-        public override string[] DefaultItemIdentifiers(NSToolbar t) => Tabs.Select(x => x.Id).ToArray();
-        public override string[] AllowedItemIdentifiers(NSToolbar t) => DefaultItemIdentifiers(t);
-        public override string[] SelectableItemIdentifiers(NSToolbar t) => DefaultItemIdentifiers(t);
-
-        public override NSToolbarItem WillInsertItem(NSToolbar toolbar, string id, bool willInsert)
-        {
-            var idx = Array.FindIndex(Tabs, x => x.Id == id);
-            var (_, title, symbol) = Tabs[idx];
-            var item = new NSToolbarItem(id)
-            {
-                Label = title,
-                Image = NSImage.GetSystemSymbol(symbol, null),
-            };
-            item.Activated += (_, _) => _o.Select(idx);
-            return item;
-        }
-    }
 }

@@ -54,7 +54,6 @@ public sealed class MainWindowController : NSWindowController
     private readonly Dictionary<Guid, NSView> _sessionViews = new();
     private readonly Dictionary<Guid, string> _sessionNames = new();
 
-    private SettingsWindowController? _settingsWindow;
     private NavSidebar.Item? _currentNav;
 
     public MainWindowController(IServiceProvider services)
@@ -612,20 +611,17 @@ public sealed class MainWindowController : NSWindowController
 
     private void OnNavSelected(object? sender, NavSidebar.Item item)
     {
-        if (_currentNav == item && item != NavSidebar.Item.Settings)
+        if (_currentNav == item)
         {
             return;
         }
 
         _currentNav = item;
 
-        if (item != NavSidebar.Item.Settings)
-        {
-            SetViewMode(ViewMode.Normal); // 从会话切到普通页面，先退出全屏形态
-            _tabBar.ClearHighlight();
-            ShowStage(_detail);
-            SyncTabBarVisibility();
-        }
+        SetViewMode(ViewMode.Normal); // 从会话切到普通页面，先退出全屏形态
+        _tabBar.ClearHighlight();
+        ShowStage(_detail);
+        SyncTabBarVisibility();
 
         switch (item)
         {
@@ -658,7 +654,9 @@ public sealed class MainWindowController : NSWindowController
                 _detail.ShowCredentials(_services.GetRequiredService<CredentialsPageViewModel>());
                 break;
             case NavSidebar.Item.Settings:
-                OpenSettings();
+                SetListApplicable(false);
+                SetListVisible(false);
+                _detail.ShowSettings(_services.GetRequiredService<SettingsPageViewModel>());
                 break;
         }
     }
@@ -688,13 +686,8 @@ public sealed class MainWindowController : NSWindowController
         _listItem.Collapsed = !visible;
     }
 
-    public void OpenSettings()
-    {
-        _settingsWindow ??= new SettingsWindowController(
-            _services.GetRequiredService<SettingsPageViewModel>());
-        _settingsWindow.ShowWindow(this);
-        _settingsWindow.Window.MakeKeyAndOrderFront(this);
-    }
+    /// <summary>⌘, / 菜单「设置…」：切到导航栏的「设置」页，而不是另开偏好窗口。</summary>
+    public void OpenSettings() => NavigateTo(NavigationPage.Settings);
 
     public async void BeginNewConnection()
     {
