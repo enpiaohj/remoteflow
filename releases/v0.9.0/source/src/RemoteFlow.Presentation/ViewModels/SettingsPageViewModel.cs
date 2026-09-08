@@ -40,7 +40,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     public sealed record TimeFormatOption(AppTimeFormat Value, string Label);
 
-    public sealed record HomeTimeOrderOption(HomeTimeOrder Value, string Name, string Sample);
+    /// <summary>「首页时间行」下拉的一项：下拉即预览，<see cref="Sample"/> 是当前格式设置下的真实样例。</summary>
+    public sealed record HomeDateLineOption(HomeDateLine Value, string Sample);
 
     public sealed record SshTerminalThemeOption(SshTerminalTheme Value, string Label);
 
@@ -107,8 +108,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     /// <summary>加载期间抑制自动保存，避免初始化赋值触发一连串写盘。</summary>
     private bool _isLoading = true;
 
-    /// <summary>重建「显示顺序」下拉样例时抑制选中项回调，避免回声递归。</summary>
-    private bool _refreshingOrderOptions;
+    /// <summary>重建「首页时间行」下拉样例时抑制选中项回调，避免回声递归。</summary>
+    private bool _refreshingDateLineOptions;
 
     public SettingsPageViewModel(
         AppSettings settings,
@@ -232,9 +233,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         new(AppTimeFormat.Hour12, "12 小时"),
     ];
 
-    /// <summary>「显示顺序」四种整行预设，每项携带真实格式化样例（由 <see cref="RefreshHomeOrderOptions"/> 重建）。</summary>
+    /// <summary>「首页时间行」四档详略预设，每项携带当前格式设置下的真实样例
+    /// （由 <see cref="RefreshHomeDateLineOptions"/> 重建）。</summary>
     [ObservableProperty]
-    private IReadOnlyList<HomeTimeOrderOption> _homeTimeOrderOptions = [];
+    private IReadOnlyList<HomeDateLineOption> _homeDateLineOptions = [];
 
     [ObservableProperty]
     private DateFormatOption _selectedDateFormat = null!;
@@ -243,25 +245,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     private TimeFormatOption _selectedTimeFormat = null!;
 
     [ObservableProperty]
-    private bool _showWeekday = true;
-
-    [ObservableProperty]
-    private bool _showHomeWeekNumber = true;
-
-    [ObservableProperty]
-    private bool _showHomeTime;
-
-    [ObservableProperty]
-    private bool _showHomeSeconds;
-
-    [ObservableProperty]
-    private HomeTimeOrderOption _selectedHomeTimeOrder = null!;
-
-    /// <summary>「显示秒」开关是否可操作：需先开启「显示时间」。</summary>
-    public bool ShowSecondsEnabled => ShowHomeTime;
-
-    /// <summary>「显示顺序」选择是否可操作：需先开启「显示时间」。</summary>
-    public bool ShowOrderEnabled => ShowHomeTime;
+    private HomeDateLineOption _selectedHomeDateLine = null!;
 
     // ── RDP ───────────────────────────────────────────────────────
 
@@ -383,10 +367,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         Language = string.IsNullOrWhiteSpace(_settings.Language) ? "zh-CN" : _settings.Language;
         SelectedDateFormat = DateFormatOptions.First(o => o.Value == _settings.DateFormat);
         SelectedTimeFormat = TimeFormatOptions.First(o => o.Value == _settings.TimeFormat);
-        ShowWeekday = _settings.ShowWeekday;
-        ShowHomeWeekNumber = _settings.ShowHomeWeekNumber;
-        ShowHomeTime = _settings.ShowHomeTime;
-        ShowHomeSeconds = _settings.ShowHomeSeconds;
 
         RdpFitToWindow = _settings.RdpDefaultDisplayMode == RdpDisplayMode.FitToWindow;
         RdpRedirectClipboard = _settings.RdpDefaultRedirectClipboard;
@@ -409,7 +389,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
         MaxConcurrentSessions = _settings.MaxConcurrentSessions;
 
-        RefreshHomeOrderOptions();
+        RefreshHomeDateLineOptions();
     }
 
     public async Task LoadHostKeysAsync(CancellationToken ct = default)
@@ -487,22 +467,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     partial void OnSelectedDateFormatChanged(DateFormatOption value) => ApplyDateTimeSettings(value.Value);
     partial void OnSelectedTimeFormatChanged(TimeFormatOption value) => ApplyDateTimeSettings(value.Value);
-    partial void OnShowWeekdayChanged(bool value) => ApplyDateTimeSettings();
-    partial void OnShowHomeWeekNumberChanged(bool value) => ApplyDateTimeSettings();
 
-    partial void OnShowHomeTimeChanged(bool value)
+    partial void OnSelectedHomeDateLineChanged(HomeDateLineOption value)
     {
-        OnPropertyChanged(nameof(ShowSecondsEnabled));
-        OnPropertyChanged(nameof(ShowOrderEnabled));
-        if (!value) ShowHomeSeconds = false; // 时间关掉时秒一并关闭
-        ApplyDateTimeSettings();
-    }
-
-    partial void OnShowHomeSecondsChanged(bool value) => ApplyDateTimeSettings();
-
-    partial void OnSelectedHomeTimeOrderChanged(HomeTimeOrderOption value)
-    {
-        if (_isLoading || _refreshingOrderOptions)
+        if (_isLoading || _refreshingDateLineOptions)
         {
             return;
         }
@@ -524,65 +492,44 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     private void ApplyDateTimeSettings()
     {
-        _settings.ShowWeekday = ShowWeekday;
-        _settings.ShowHomeWeekNumber = ShowHomeWeekNumber;
-        _settings.ShowHomeTime = ShowHomeTime;
-        _settings.ShowHomeSeconds = ShowHomeSeconds;
-        // LoadFromSettings 早期 SelectedHomeTimeOrder 尚未就绪时保留已读入的持久化值，
-        // 避免默认值回写把用户选好的「显示顺序」覆盖掉。
-        if (SelectedHomeTimeOrder is not null)
+        // LoadFromSettings 早期 SelectedHomeDateLine 尚未就绪时保留已读入的持久化值，
+        // 避免默认值回写把用户选好的详略档覆盖掉。
+        if (SelectedHomeDateLine is not null)
         {
-            _settings.ShowHomeTimeOrder = SelectedHomeTimeOrder.Value;
+            _settings.HomeDateLine = SelectedHomeDateLine.Value;
         }
 
         DateTimeDisplay.Configure(_settings);
         Save();
 
-        // 日期格式 / 12-24 小时 / 显示秒变化会反映进下拉样例文字。
-        RefreshHomeOrderOptions();
-        OnPropertyChanged(nameof(HomeTimeOrderOptions));
+        // 日期格式 / 12-24 小时变化会反映进下拉样例文字。
+        RefreshHomeDateLineOptions();
     }
 
     /// <summary>
-    /// 用当前日期时间与格式设置重建「显示顺序」下拉的四种整行预设。
-    /// 样例中星期 / 周数始终展示（仅示意排列），时间是否含秒跟随「显示秒」。
-    /// 日期格式、12/24 小时或「显示秒」改变后由 <see cref="ApplyDateTimeSettings"/> 自动调用刷新。
+    /// 用当前日期与 12/24 小时设置重建「首页时间行」下拉的四档样例——下拉即预览。
+    /// 日期格式或 12/24 小时改变后由 <see cref="ApplyDateTimeSettings"/> 自动调用刷新。
     /// </summary>
-    public void RefreshHomeOrderOptions()
+    public void RefreshHomeDateLineOptions()
     {
         var now = DateTimeOffset.Now;
-        var sampleTime = new DateTimeOffset(
-            now.Year, now.Month, now.Day, now.Hour, now.Minute,
-            ShowHomeSeconds ? now.Second : 0, now.Offset);
+        var selected = SelectedHomeDateLine?.Value ?? _settings.HomeDateLine;
 
-        var date = DateTimeDisplay.Date(sampleTime);
-        var weekday = DateTimeDisplay.Weekday(sampleTime);
-        var week = $"第{DateTimeDisplay.IsoWeek(sampleTime)}周";
-        var clock = DateTimeDisplay.Clock(sampleTime, ShowHomeSeconds);
+        HomeDateLine[] values =
+            [HomeDateLine.DateOnly, HomeDateLine.DateTime, HomeDateLine.DateWeekdayTime, HomeDateLine.Full];
+        var options = values
+            .Select(v => new HomeDateLineOption(v, DateTimeDisplay.HomeDateLineText(now, v)))
+            .ToList();
 
-        var selected = SelectedHomeTimeOrder?.Value ?? _settings.ShowHomeTimeOrder;
-        var options = new List<HomeTimeOrderOption>
-        {
-            new(HomeTimeOrder.DateWeekdayWeekTime, "日期 · 星期 · 周数 · 时间",
-                $"{date} · {weekday} · {week} · {clock}"),
-            new(HomeTimeOrder.DateTimeWeekdayWeek, "日期 · 时间 · 星期 · 周数",
-                $"{date} · {clock} · {weekday} · {week}"),
-            new(HomeTimeOrder.DateWeekdayTimeWeek, "日期 · 星期 · 时间 · 周数",
-                $"{date} · {weekday} · {clock} · {week}"),
-            // 「时间单独一行」的下拉样例也保持单行：日期行示意后加括号说明，时间不真正换行。
-            new(HomeTimeOrder.SeparateLine, "日期 · 星期 · 周数（时间另起一行）",
-                $"{date} · {weekday} · {week}（时间另起一行）")
-        };
-
-        _refreshingOrderOptions = true;
+        _refreshingDateLineOptions = true;
         try
         {
-            HomeTimeOrderOptions = options;
-            SelectedHomeTimeOrder = options.First(o => o.Value == selected);
+            HomeDateLineOptions = options;
+            SelectedHomeDateLine = options.First(o => o.Value == selected);
         }
         finally
         {
-            _refreshingOrderOptions = false;
+            _refreshingDateLineOptions = false;
         }
     }
 

@@ -239,83 +239,21 @@
                             <Grid Style="{StaticResource SettingRow}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
-                                            MaxWidth="560" HorizontalAlignment="Left">
-                                    <TextBlock Text="显示时间" Style="{StaticResource Text.Body}" />
-                                    <TextBlock Text="在首页标题行显示当前时间。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
-                                </StackPanel>
-                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" IsChecked="{Binding ShowHomeTime}" />
-                            </Grid>
-
-                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
-
-                            <Grid Style="{StaticResource SettingRow}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
-                                            MaxWidth="560" HorizontalAlignment="Left">
-                                    <TextBlock Text="显示秒" Style="{StaticResource Text.Body}" />
-                                    <TextBlock Text="在首页时间中显示秒。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
-                                </StackPanel>
-                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" IsChecked="{Binding ShowHomeSeconds}"
-                                          IsEnabled="{Binding ShowSecondsEnabled}" />
-                            </Grid>
-
-                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
-
-                            <Grid Style="{StaticResource SettingRow}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="320" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
                                             MaxWidth="560" HorizontalAlignment="Left">
-                                    <TextBlock Text="显示顺序" Style="{StaticResource Text.Body}" />
-                                    <TextBlock Text="首页标题行整行排列方式；下拉项直接展示真实样例。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    <TextBlock Text="首页时间行" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="首页标题下方那行的详略程度；下拉项即当前格式下的真实样例。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
                                 <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
-                                          ItemsSource="{Binding HomeTimeOrderOptions}" SelectedItem="{Binding SelectedHomeTimeOrder}"
-                                          IsEnabled="{Binding ShowOrderEnabled}">
+                                          ItemsSource="{Binding HomeDateLineOptions}" SelectedItem="{Binding SelectedHomeDateLine}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding Sample}" VerticalAlignment="Center" />
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
-                            </Grid>
-
-                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
-
-                            <Grid Style="{StaticResource SettingRow}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
-                                            MaxWidth="560" HorizontalAlignment="Left">
-                                    <TextBlock Text="显示星期" Style="{StaticResource Text.Body}" />
-                                    <TextBlock Text="在首页完整日期行显示周一～周日。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
-                                </StackPanel>
-                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" IsChecked="{Binding ShowWeekday}" />
-                            </Grid>
-
-                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
-
-                            <Grid Style="{StaticResource SettingRow}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
-                                            MaxWidth="560" HorizontalAlignment="Left">
-                                    <TextBlock Text="首页显示周数" Style="{StaticResource Text.Body}" />
-                                    <TextBlock Text="在首页显示 ISO 周数（周一为每周第一天）。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
-                                </StackPanel>
-                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" IsChecked="{Binding ShowHomeWeekNumber}" />
                             </Grid>
                         </StackPanel>
                     </Border>

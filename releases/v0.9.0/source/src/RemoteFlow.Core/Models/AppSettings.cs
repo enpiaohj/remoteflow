@@ -34,20 +34,23 @@ public enum AppTimeFormat
     Hour12 = 1
 }
 
-/// <summary>首页标题行的整行布局。日期恒在行首，其余段按枚举顺序拼接，各段依对应开关取舍。</summary>
-public enum HomeTimeOrder
+/// <summary>
+/// 首页标题下方那行日期的详略程度。一个下拉即预览，取代原先「显示时间 / 显示秒 /
+/// 显示星期 / 显示周数 / 显示顺序」五个分散控件。
+/// </summary>
+public enum HomeDateLine
 {
-    /// <summary>日期 · 星期 · 周数 · 时间（时间附在行尾）。</summary>
-    DateWeekdayWeekTime = 0,
+    /// <summary>只有日期。例：<c>2026年9月8日</c></summary>
+    DateOnly = 0,
 
-    /// <summary>日期 · 时间 · 星期 · 周数（时间紧跟日期）。</summary>
-    DateTimeWeekdayWeek = 1,
+    /// <summary>日期 + 时间。例：<c>2026年9月8日 · 22:30</c></summary>
+    DateTime = 1,
 
-    /// <summary>日期 · 星期 · 时间 · 周数（时间在星期后、周数前）。</summary>
-    DateWeekdayTimeWeek = 2,
+    /// <summary>日期 + 星期 + 时间。例：<c>2026年9月8日 周一 · 22:30</c></summary>
+    DateWeekdayTime = 2,
 
-    /// <summary>日期 · 星期 · 周数，时间在下一行单独显示。</summary>
-    SeparateLine = 3
+    /// <summary>完整：日期 + 星期 + 周数 + 时间。例：<c>2026年9月8日 周一 · 第37周 · 22:30</c></summary>
+    Full = 3
 }
 
 /// <summary>
@@ -68,17 +71,9 @@ public sealed class AppSettings
     // ── 日期与时间 ─────────────────────────────────────────
     public AppDateFormat DateFormat { get; set; } = AppDateFormat.Chinese;
     public AppTimeFormat TimeFormat { get; set; } = AppTimeFormat.Hour24;
-    public bool ShowWeekday { get; set; } = true;
-    public bool ShowHomeWeekNumber { get; set; } = true;
 
-    /// <summary>首页日期行是否显示当前时间。</summary>
-    public bool ShowHomeTime { get; set; } = true;
-
-    /// <summary>首页时间是否显示秒（需 ShowHomeTime）。</summary>
-    public bool ShowHomeSeconds { get; set; } = true;
-
-    /// <summary>首页标题行的整行排列方式。</summary>
-    public HomeTimeOrder ShowHomeTimeOrder { get; set; } = HomeTimeOrder.DateWeekdayWeekTime;
+    /// <summary>首页标题下方日期行的详略程度。默认「完整」≈ 旧版全开时的效果。</summary>
+    public HomeDateLine HomeDateLine { get; set; } = HomeDateLine.Full;
 
     /// <summary>是否已展示过「全屏工具条自动隐藏」的首次提示。</summary>
     public bool SessionFullScreenHintShown { get; set; }

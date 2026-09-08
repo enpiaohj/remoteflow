@@ -26,6 +26,7 @@
 - 首页问候区收紧：无已连接会话时不再显示「0 个会话已连接」；问候块与统计行间距、最近连接卡片最小高度下调。
 - 凭据列表瘦身：「保险库」列 Secret 已保存时只显示锁图标不再每行重复「已保存密码」，仅缺失时显示「未保存…」警示；未被任何连接引用的凭据用静音警告色；列宽 132 → 92，表头「保险库状态」→「保险库」。
 - 分组：老用户升级也新建「我的设备」，不再借用现有分组顶默认（共享 `Application/Services/GroupService.cs`）。
+- **设置页「首页时间显示」5 控件合并为 1 个下拉**（P4）。原「显示时间 / 显示秒 / 显示星期 / 首页显示周数 / 显示顺序（4 种排列预设）」收敛为「首页时间行」一个下拉即预览：只日期 / 日期+时间 / 日期+星期+时间 / 完整。`AppSettings` 移除 `ShowHomeTime` / `ShowHomeSeconds` / `ShowWeekday` / `ShowHomeWeekNumber` / `ShowHomeTimeOrder`（及 `HomeTimeOrder` 枚举），新增 `HomeDateLine`（默认 `Full` ≈ 旧版全开；老 `settings.json` 缺字段自然落默认，无迁移代码）。日期行格式统一走共享 `DateTimeDisplay.HomeDateLineText`，首页去掉单独时钟行。**这是一次触碰共享层的改动**——见 Known Issues。
 
 ## Fixed
 
@@ -38,18 +39,17 @@
 
 ## Known Issues
 
-- **P4（设置页「首页时间显示 5 控件合并为 1 个下拉」）本版未做**。该改动要删 `AppSettings` 的 `ShowHomeTime` / `ShowHomeSeconds` / `ShowWeekday` / `ShowHomeWeekNumber` / `ShowHomeTimeOrder` 并重构 `HomePageViewModel.RefreshHeader`，但 macOS 的 `DetailView.cs` 直接消费 `DateLine` / `ClockLine` / `HasClockLine`——是一次跨平台「同步删除」，须排一个协调窗口一起做。
-- 会话状态灯的「连接中 / 已连接」两态、多会话全屏切换 / 关会话行为、双击最小化修复、悬停连接按钮手感、**VNC 远端光标（形状 / 热点 / 隐藏切换）**、SSH WebGL 渲染器与批量泵、SSH 输入法修复——均需实机会话验证，封版时未在真实 RDP / SSH / VNC 会话上跑（本机无可连服务器凭据）。
-- 设置页的日期时间相关配置本版沿用旧的 5 控件形态（见上）。
+- **P4 触碰共享层，macOS 侧需同步跟进**。P4 从共享 `HomePageViewModel` 删掉了 `ClockLine` / `HasClockLine`，而 macOS 的 `RemoteFlow.App.Mac/DetailView.cs` 直接消费这两个成员——**本版发布后 macOS CI 构建会失败，直到 macOS 侧同步改视图**（把首页头部改为只读 `DateLine`）。此为已知、已授权的跨平台协调项，macOS 平台另行处理。Windows 版本不受影响。
+- 会话状态灯的「连接中 / 已连接」两态、多会话全屏切换 / 关会话行为、双击最小化修复、悬停连接按钮手感、**VNC 远端光标（形状 / 热点 / 隐藏切换）**、SSH WebGL 渲染器与批量泵、SSH 输入法修复、**P4 后的「首页时间行」下拉切换**——均需实机验证，封版时未在真实 RDP / SSH / VNC 会话上跑（本机无可连服务器凭据）；「首页时间行」下拉未做实机截图（设置页非 `LandingPage`），已由绑定 + 首页 `DateLine` 实际输出判定。
 
 ## Verification
 
 - Build：`dotnet build -c Release --nologo` → 0 错误（1 处 pre-existing 测试工程 `CS0067` 警告，非本版引入）。
 - Tests：`dotnet test -c Release` → Core 42 / 42；Integration（共享）92 / 92；Integration.Windows 9 / 9；Integration.Mac 10 skipped（Windows 上不可运行，预期）。
-- Runtime：`dotnet publish -c Release -r win-x64` 单文件启动 / 退出正常；首页、我的连接、凭据页 PrintWindow 截图确认静态呈现（角标空闲不显示、悬停连接、凭据列瘦身、协议徽章、首页统计行去噪均符合预期）。
+- Runtime：`dotnet publish -c Release -r win-x64` 单文件启动 / 退出正常；首页、我的连接、凭据页 PrintWindow 截图确认静态呈现（角标空闲不显示、悬停连接、凭据列瘦身、协议徽章、首页统计行去噪、P4 后首页日期行 = `2026年9月9日 · 周三 · 第37周 · HH:MM` 均符合预期）。
 - Platform / Architecture：Windows 11 · win-x64（.NET 10 self-contained single-file）。
-- Schema：数据库 schema 保持 3，无数据迁移；`settings.json` 无字段变更，向后兼容。
-- 改动范围：全部在 `src/RemoteFlow.App/`（WPF）+ `src/RemoteFlow.App/Views/Sessions/VncCursorImage.cs`（新增）；未改动 `RemoteFlow.Core` / `RemoteFlow.Presentation` / 任何 macOS 工程——macOS 版构建不受本版 UI 改动影响。
+- Schema：数据库 schema 保持 3，无数据迁移；`settings.json` 中 `HomeDateLine` 字段缺失时回退默认 `Full`，向后兼容。
+- 改动范围：`src/RemoteFlow.App/`（WPF，含新增 `Views/Sessions/VncCursorImage.cs`）+ **P4 触碰 `src/RemoteFlow.Core/Models/AppSettings.cs` 与 `src/RemoteFlow.Presentation/`（`DateTimeDisplay` / `HomePageViewModel` / `SettingsPageViewModel`）**。未改动任何 macOS 工程文件，但共享层删除会让 macOS CI 构建失败（见 Known Issues）。
 
 ## Artifacts
 
@@ -62,7 +62,7 @@ SHA-256 见 GitHub Release 页 / CI 日志。本地 `releases/v0.9.0/` 只保留
 
 ## Git
 
-- Source Snapshot Commit：`de16225`（`chore: 版本号提升至 0.9.0`）。
-- 本版含自 v0.8.1 以来的 Windows 相关提交：`e471584`（会话工具条精修）、`b5aa543`（会话状态灯 / 悬停连接 / 协议徽章 / 首页收紧 / 凭据列瘦身）、`17607fa`（VNC WPF 远端光标）；以及共享层带入的 `09496b3`（SSH 输入法 + 批量泵）、`6db1166`（VNC 画质）、`e7d9258`（SSH WebGL）、`1d69b9b`（分组种子）、`82d8ff7`（稳定性 + 错误文案）、Presentation 层抽取（`23b8d4f` / `05a36eb` / `13c7bcf` / `fefb274` / `d7e6ce2`）。
-- Tag：`v0.9.0`（指向 `release: RemoteFlow v0.9.0`）。
-- 分支：基于 `main`（含 macOS 原生版 PR #1 合并后的统一 `main`）；本版仅在 `src/RemoteFlow.App/` 增改，不含 P4，不动共享层与 macOS 工程。
+- Source Snapshot Commit：`de16225`（`chore: 版本号提升至 0.9.0`）+ `c07ef3d`（P4）+ `bd83fe1`（发布规范文档）——`source/` 快照为含 P4 的 HEAD 树。
+- 本版含自 v0.8.1 以来的 Windows 相关提交：`e471584`（会话工具条精修）、`b5aa543`（会话状态灯 / 悬停连接 / 协议徽章 / 首页收紧 / 凭据列瘦身）、`17607fa`（VNC WPF 远端光标）、`c07ef3d`（P4：首页时间行合并）；以及共享层带入的 `09496b3`（SSH 输入法 + 批量泵）、`6db1166`（VNC 画质）、`e7d9258`（SSH WebGL）、`1d69b9b`（分组种子）、`82d8ff7`（稳定性 + 错误文案）、Presentation 层抽取（`23b8d4f` / `05a36eb` / `13c7bcf` / `fefb274` / `d7e6ce2`）。
+- Tag：`v0.9.0`（指向 `release: RemoteFlow v0.9.0`）。曾误推到孤儿提交后删除重打；GitHub Release 草稿删除后由 CI 重新生成。
+- 分支：基于 `main`（含 macOS 原生版 PR #1 合并后的统一 `main`）。Windows 侧改动全绿；**P4 触碰共享层，发布后 macOS CI 会红，待 macOS 平台同步**（见 Known Issues）。

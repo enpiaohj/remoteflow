@@ -94,21 +94,14 @@ public sealed partial class HomePageViewModel : ObservableObject
     private string _greeting = string.Empty;
 
     /// <summary>
-    /// 首页标题日期行：日期恒在行首，星期 / 周数 / 时间按「显示顺序」取舍拼接。
-    /// 例：<c>2026年9月6日 · 周日 · 第37周 · 14:05</c>；「时间单独一行」时此行不含时间。
+    /// 首页标题下方的日期行，详略由「设置 → 首页时间行」决定。
+    /// 例（完整）：<c>2026年9月8日 周一 · 第37周 · 22:30</c>。
     /// </summary>
     [ObservableProperty]
     private string _dateLine = string.Empty;
 
-    /// <summary>首页时钟行（仅「显示顺序 = 单独一行」且开启时间时显示），例：<c>14:05:09</c>。</summary>
-    [ObservableProperty]
-    private string _clockLine = string.Empty;
-
-    /// <summary>时钟行是否可见：单独一行时非空。</summary>
-    public bool HasClockLine => !string.IsNullOrEmpty(ClockLine);
-
-    /// <summary>用户是否开启「显示时间」。供视图决定是否启动秒级刷新。</summary>
-    public bool ShowHomeTimeEnabled => _settings.ShowHomeTime;
+    /// <summary>日期行是否含时间。供视图决定是否启动秒级刷新（只有日期时无需刷新）。</summary>
+    public bool ShowHomeClock => _settings.HomeDateLine != HomeDateLine.DateOnly;
 
     /// <summary>底部安全提示横幅是否可见（用户可关闭，选择记入设置）。</summary>
     [ObservableProperty]
@@ -265,56 +258,11 @@ public sealed partial class HomePageViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// 合成首页标题日期行与可选的时钟行。日期恒在行首，其余段（星期 / 周数 / 时间）
-    /// 依 <see cref="HomeTimeOrder"/> 决定的槽位顺序拼接，且各段只在对应开关开启时插入；
-    /// 「时间单独一行」布局中星期 / 周数留在日期行，时间进入 <see cref="ClockLine"/>。
-    /// </summary>
+    /// <summary>按「设置 → 首页时间行」的详略程度合成首页日期行。</summary>
     private void RefreshHeader()
-    {
-        var now = DateTimeOffset.Now;
-        var date = DateTimeDisplay.Date(now);
-        var clock = _settings.ShowHomeTime ? DateTimeDisplay.Clock(now, _settings.ShowHomeSeconds) : null;
+        => DateLine = DateTimeDisplay.HomeDateLineText(DateTimeOffset.Now, _settings.HomeDateLine);
 
-        var parts = new List<string> { date };
-        string? clockLine = null;
-
-        switch (_settings.ShowHomeTimeOrder)
-        {
-            case HomeTimeOrder.SeparateLine:
-                // 日期 · 星期 · 周数，时间单独一行。
-                if (_settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
-                if (_settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
-                clockLine = clock;
-                break;
-
-            case HomeTimeOrder.DateTimeWeekdayWeek:
-                // 日期 · 时间 · 星期 · 周数。
-                if (clock is not null) parts.Add(clock);
-                if (_settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
-                if (_settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
-                break;
-
-            case HomeTimeOrder.DateWeekdayTimeWeek:
-                // 日期 · 星期 · 时间 · 周数。
-                if (_settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
-                if (clock is not null) parts.Add(clock);
-                if (_settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
-                break;
-
-            default: // DateWeekdayWeekTime —— 日期 · 星期 · 周数 · 时间
-                if (_settings.ShowWeekday) parts.Add(DateTimeDisplay.Weekday(now));
-                if (_settings.ShowHomeWeekNumber) parts.Add($"第{DateTimeDisplay.IsoWeek(now)}周");
-                if (clock is not null) parts.Add(clock);
-                break;
-        }
-
-        DateLine = string.Join(" · ", parts);
-        ClockLine = clockLine ?? "";
-        OnPropertyChanged(nameof(HasClockLine));
-    }
-
-    /// <summary>供首页视图的秒级定时器调用，刷新日期行与时钟行。</summary>
+    /// <summary>供首页视图的秒级定时器调用，刷新日期行里的时间。</summary>
     public void RefreshClock() => RefreshHeader();
 
     [RelayCommand]
