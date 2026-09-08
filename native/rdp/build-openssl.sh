@@ -24,7 +24,7 @@ PREFIX="${3:-$HOME/openssl-$OSX_ARCH}"
 if [ -f "$PREFIX/lib/libssl.3.dylib" ] && [ -d "$PREFIX/include/openssl" ]; then
   got="$(lipo -archs "$PREFIX/lib/libssl.3.dylib" 2>/dev/null || true)"
   if [ "$got" = "$OSX_ARCH" ]; then
-    echo "==> 已存在且架构匹配（$OSX_ARCH），跳过：$PREFIX"
+    echo "==> 已存在且架构匹配（${OSX_ARCH}），跳过：$PREFIX"
     exit 0
   fi
   echo "==> $PREFIX 存在但架构为 [$got]，重建"
@@ -40,7 +40,7 @@ echo "==> 下载 $URL"
 curl -fsSL "$URL" | tar xz
 cd "openssl-$VER"
 
-echo "==> Configure $SSL_TARGET（shared，min macOS 13.0）"
+echo "==> Configure ${SSL_TARGET}（shared，min macOS 13.0）"
 ./Configure "$SSL_TARGET" shared no-tests \
   --prefix="$PREFIX" \
   --openssldir="$PREFIX/ssl" \
