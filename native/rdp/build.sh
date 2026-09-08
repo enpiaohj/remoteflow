@@ -29,7 +29,12 @@ OUT_DIR="../../src/RemoteFlow.Protocol.Rdp.Mac/runtimes/$RID/native"
 mkdir -p "$OUT_DIR"
 
 echo "==> 编译 $ARCH → $OUT_DIR/libremoteflow_rdp.dylib"
+# -headerpad_max_install_names：.NET macOS SDK 打包进 MonoBundle 时会用 install_name_tool
+# 改写 install id / rpath 成更长的 @executable_path/... ，Mach-O 头没留白就报
+#   "larger updated load commands do not fit"（CI arm64 就是栽在这）。CMake 建的
+# FreeRDP dylib 默认带这个 flag，手写 cc 链接得自己加。
 cc -O2 -fPIC -shared -arch "$ARCH" \
+  -Wl,-headerpad_max_install_names \
   -o "$OUT_DIR/libremoteflow_rdp.dylib" \
   -install_name @rpath/libremoteflow_rdp.dylib \
   remoteflow_rdp.c \
