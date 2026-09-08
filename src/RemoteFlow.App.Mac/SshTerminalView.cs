@@ -174,7 +174,14 @@ public sealed class SshTerminalView : NSView
 
         if (_verify)
         {
-            Console.WriteLine($"[RF][rx] {chunk.Length} bytes");
+            var preview = System.Text.Encoding.UTF8.GetString(chunk);
+            if (preview.Length > 120)
+            {
+                preview = preview[..120] + "…";
+            }
+
+            Console.WriteLine(
+                $"[RF][rx] {chunk.Length}B \"{preview.Replace("\n", "\\n").Replace("\r", "\\r").Replace("\x1b", "\\e")}\"");
         }
 
         var payload = Convert.ToBase64String(chunk);
@@ -217,17 +224,31 @@ public sealed class SshTerminalView : NSView
     // ── 出向：后台串行发送 ─────────────────────────────────────────
     private async Task PumpOutboundAsync()
     {
+        var reader = _outbound.Reader;
         try
         {
-            await foreach (var data in _outbound.Reader.ReadAllAsync().ConfigureAwait(false))
+            while (await reader.WaitToReadAsync().ConfigureAwait(false))
             {
+                // 攒齐当前所有待发一次性 Write+Flush：逐字符 Write/Flush 既是无谓 churn，
+                // 也可能撞上 SSH.NET ShellStream 在 Write 与 Read 并发下的缓冲竞态。
+                using var ms = new MemoryStream();
+                while (reader.TryRead(out var chunk))
+                {
+                    ms.Write(chunk, 0, chunk.Length);
+                }
+
+                if (ms.Length == 0)
+                {
+                    continue;
+                }
+
                 try
                 {
-                    _session.SendInput(data);
+                    _session.SendInput(ms.ToArray());
                 }
                 catch
                 {
-                    // 单条发送失败不影响后续输入。
+                    // 单批发送失败不影响后续输入。
                 }
             }
         }
@@ -257,7 +278,15 @@ public sealed class SshTerminalView : NSView
                 {
                     try
                     {
-                        _outbound.Writer.TryWrite(Convert.FromBase64String(b64));
+                        var bytes = Convert.FromBase64String(b64);
+                        if (_verify)
+                        {
+                            var seq = Extract(body, "\"seq\":", ",");
+                            Console.WriteLine(
+                                $"[RF][in] seq={seq} {bytes.Length}B \"{System.Text.Encoding.UTF8.GetString(bytes).Replace("\n", "\\n").Replace("\r", "\\r")}\"");
+                        }
+
+                        _outbound.Writer.TryWrite(bytes);
                     }
                     catch (FormatException)
                     {

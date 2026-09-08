@@ -214,6 +214,38 @@
       console.warn('[RemoteFlow] WebGL 渲染器不可用，用 DOM 渲染器：', e);
     }
 
+    // ── 中文输入法（keyCode=229）快速输入掉字修复 ──────────────────
+    // 拼音 / 搜狗 / 豆包等 IME 即便在英文模式也对每一次按键报 keyCode=229，
+    // 从不触发 compositionstart/end。xterm 的 _inputEvent 靠 `!_keyDownSeen` 去重，
+    // 快速连打时上一击的 _keyDownSeen 还没被 keyup 复位，这一击的 insertText 就被吞掉
+    // ——表现为「cd 只出 c」「dir 出 dr」。（xterm.js issue #5887，上游未修）
+    //
+    // 修法：keyCode=229 时 _keyDown 根本没 evaluateKeyboardEvent 发字（_keyDownHandled
+    // 保持 false），所以此路径下可以放心从 _inputEvent 补发；真·中文合成（isComposing /
+    // _isSendingComposition）与正常 ASCII（_keyDownHandled=true）都交回原实现去重。
+    try {
+      const core = terminal._core;
+      const origInputEvent = core._inputEvent.bind(core);
+      core._inputEvent = function (ev) {
+        const comp = this._compositionHelper;
+        if (ev && ev.data && ev.inputType === 'insertText'
+            && !comp.isComposing
+            && !comp._isSendingComposition
+            && ev.data !== comp._dataAlreadySent
+            && !this._keyDownHandled
+            && !this._keyPressHandled
+            && !this.optionsService.rawOptions.screenReaderMode) {
+          this._unprocessedDeadKey = false;
+          this.coreService.triggerDataEvent(ev.data, true);
+          this.cancel(ev);
+          return true;
+        }
+        return origInputEvent(ev);
+      };
+    } catch (e) {
+      console.warn('[RemoteFlow] IME 掉字补丁未生效（xterm 内部结构可能已变）：', e);
+    }
+
     const searchAddon = new SearchAddon.SearchAddon();
     terminal.loadAddon(searchAddon);
 
@@ -391,8 +423,9 @@
     }
 
     // 用户键入 → 转 UTF-8 字节 → 交给宿主发往远端
+    let __inputSeq = 0;
     terminal.onData(data => {
-      post({ type: 'input', data: toBase64(encoder.encode(data)) });
+      post({ type: 'input', seq: ++__inputSeq, data: toBase64(encoder.encode(data)) });
     });
 
     // 处理 Ctrl+C 等由 xterm 直接产生的二进制序列之外的粘贴等场景

@@ -238,6 +238,12 @@ public sealed class SshSession : IRemoteSession
 
         try
         {
+            if (Environment.GetEnvironmentVariable("RF_VERIFY") == "1")
+            {
+                Console.WriteLine(
+                    $"[RF][out] {data.Length}B \"{Encoding.UTF8.GetString(data).Replace("\n", "\\n").Replace("\r", "\\r")}\"");
+            }
+
             shell.Write(data, 0, data.Length);
             shell.Flush();
         }
