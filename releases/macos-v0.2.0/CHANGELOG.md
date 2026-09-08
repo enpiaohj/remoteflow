@@ -26,7 +26,8 @@ macOS 与 Windows 为相互独立的版本线，本版本号（0.2.0）不与 Wi
 
 ## Known Issues
 
-- **仅 Apple Silicon（arm64）**。Intel Mac 未覆盖（universal 包需 Intel runner 交叉编译，待办）。
+- 提供 **arm64（Apple Silicon）** 与 **x64（Intel）** 两个独立 DMG；不提供融合 universal 二进制
+  （融合后重签会破坏 CoreCLR VM 初始化）。x64 那份在 arm64 CI runner 上交叉编译。
 - **Ad-hoc 签名，未公证**：首次打开需在 Finder 里**右键 →「打开」**，或执行
   `xattr -dr com.apple.quarantine /Applications/RemoteFlow.app`。
   配置 Apple「Developer ID Application」证书 + 公证凭据后，后续版本将自动带完整签名。
@@ -34,11 +35,11 @@ macOS 与 Windows 为相互独立的版本线，本版本号（0.2.0）不与 Wi
 
 ## Verification
 
-- Build：GitHub Actions `Release · macOS`（run 34180050362，arm64）成功；CI 三 job（shared / windows / macos）+ actionlint 通过。
+- Build：GitHub Actions `Release · macOS`（arm64 原生 + x64 交叉编译两条 matrix）成功；CI 三 job（shared / windows / macos）+ actionlint 通过。
 - Tests：`RemoteFlow.Core.Tests`、`RemoteFlow.IntegrationTests`（Linux）、`IntegrationTests.Windows`、`IntegrationTests.Mac` 通过。
 - Runtime：macOS 端多轮实机验证（RDP 动态分辨率、VNC 显示、UI）；Windows 端本轮未做运行时冒烟。
 - Platform：macOS 13+（构建 deployment target 13.0）
-- Architecture：arm64
+- Architecture：arm64 + x64（分别打包）
 
 ## Git
 
@@ -48,4 +49,5 @@ macOS 与 Windows 为相互独立的版本线，本版本号（0.2.0）不与 Wi
 
 ## 产物
 
-- `RemoteFlow-v0.2.0-macos-arm64.dmg`（约 55 MiB，ad-hoc 签名）
+- `RemoteFlow-v0.2.0-macos-arm64.dmg`（Apple Silicon，约 55 MiB，ad-hoc 签名）
+- `RemoteFlow-v0.2.0-macos-x64.dmg`（Intel，ad-hoc 签名）
