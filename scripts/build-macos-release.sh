@@ -66,9 +66,11 @@ sign_bundle() { # 自底向上签名（先所有嵌套 Mach-O，再 bundle 本�
   echo "   身份：$SIGN_ID"
   local ent=()
   [ "$SIGN_ID" != "-" ] && ent=(--options runtime --entitlements "$ENTITLEMENTS")
+  # ${ent[@]+"${ent[@]}"}：bash 3.2（CI runner 的 /bin/bash）下 set -u 遇空数组
+  # 展开 "${ent[@]}" 会报 unbound variable；ad-hoc（SIGN_ID=-）时 ent 恰为空。
   find "$app/Contents" -type f -name "*.dylib" -exec codesign --force --timestamp=none --sign "$SIGN_ID" {} \;
-  codesign --force --timestamp=none "${ent[@]}" --sign "$SIGN_ID" "$app/Contents/MacOS/RemoteFlow.App.Mac"
-  codesign --force --timestamp=none "${ent[@]}" --sign "$SIGN_ID" "$app"
+  codesign --force --timestamp=none ${ent[@]+"${ent[@]}"} --sign "$SIGN_ID" "$app/Contents/MacOS/RemoteFlow.App.Mac"
+  codesign --force --timestamp=none ${ent[@]+"${ent[@]}"} --sign "$SIGN_ID" "$app"
   codesign --verify --verbose "$app"
 }
 
