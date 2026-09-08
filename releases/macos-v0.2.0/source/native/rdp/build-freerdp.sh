@@ -44,8 +44,12 @@ esac
 
 command -v cmake >/dev/null || { echo "需要 cmake：brew install cmake" >&2; exit 1; }
 
-OPENSSL_PREFIX="$(brew --prefix openssl@3 2>/dev/null || brew --prefix openssl 2>/dev/null || true)"
-[ -n "$OPENSSL_PREFIX" ] || { echo "需要 OpenSSL：brew install openssl@3" >&2; exit 1; }
+# OpenSSL：优先用外部传入的 OPENSSL_ROOT_DIR（CI 在 arm64 runner 上交叉编译 x86_64
+# 时，brew 只有本机架构那份，需自己从源码编一份对应架构的 openssl 再从这里传进来），
+# 否则回落 brew。
+OPENSSL_PREFIX="${OPENSSL_ROOT_DIR:-$(brew --prefix openssl@3 2>/dev/null || brew --prefix openssl 2>/dev/null || true)}"
+[ -n "$OPENSSL_PREFIX" ] || { echo "需要 OpenSSL：brew install openssl@3，或设 OPENSSL_ROOT_DIR" >&2; exit 1; }
+[ -d "$OPENSSL_PREFIX/include/openssl" ] || { echo "OPENSSL 前缀无效（缺 include/openssl）：$OPENSSL_PREFIX" >&2; exit 1; }
 
 if [ ! -d "$SRC" ]; then
   echo "==> 克隆 FreeRDP $FREERDP_TAG"
@@ -78,7 +82,8 @@ cmake -S "$SRC" -B "$BUILD" \
   -DWITH_CUPS=OFF -DWITH_PCSC=OFF -DWITH_LIBUSB=OFF \
   -DWITH_PULSE=OFF -DWITH_ALSA=OFF -DWITH_OSS=OFF -DWITH_MACAUDIO=OFF \
   -DWITH_KRB5=OFF -DWITH_AAD=OFF -DWITH_WEBVIEW=OFF \
-  -DWITH_FUSE=OFF -DWITH_URIPARSER=OFF
+  -DWITH_FUSE=OFF -DWITH_URIPARSER=OFF \
+  -DWITH_JSON_DISABLED=ON
 
 echo "==> 编译 ${OSX_ARCH}（多核，耐心等几分钟）"
 cmake --build "$BUILD" --parallel "$(sysctl -n hw.ncpu)"

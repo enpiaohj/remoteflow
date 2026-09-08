@@ -1,14 +1,17 @@
-# macOS 发布 —— 打 macos-v<X.Y.Z> tag（或手动触发）时，构建 DMG 并挂到 GitHub Releases（草稿）。
+# macOS 发布 —— 打 macos-v<X.Y.Z> tag（或手动触发）时，构建各架构 DMG 并挂到 GitHub Releases（草稿）。
 #
 # 版本以 src/RemoteFlow.App.Mac/RemoteFlow.App.Mac.csproj 的 ApplicationDisplayVersion 为准，
 # tag 必须是 macos-v<该版本>。
+#
+# 架构：arm64 原生 + x64 交叉编译（GitHub 的 Intel macOS runner 已退役，只剩 arm64；
+#   x64 这份在 arm64 runner 上交叉编，openssl 自己从源码编一份 x86_64 的）。
+#   两份分别出独立 DMG（RemoteFlow-v<ver>-macos-arm64.dmg / -x64.dmg），不融合 universal
+#   二进制（融合后重签会破坏 CoreCLR VM 初始化）。
 #
 # 签名 / 公证：设了以下仓库 Secret 就走 Developer ID + notarytool，否则 ad-hoc（会被 Gatekeeper
 # 拦，仅供内部）：
 #   MACOS_CERT_P12_BASE64 / MACOS_CERT_PASSWORD        —— Developer ID Application 证书（.p12 base64）
 #   MACOS_NOTARY_APPLE_ID / MACOS_NOTARY_TEAM_ID / MACOS_NOTARY_PASSWORD  —— notarytool 凭据
-#
-# 首个版本按 arm64 单架构发（CI runner 是 Apple Silicon）。universal 见文末 TODO。
 name: Release · macOS
 
 on:
@@ -19,8 +22,18 @@ on:
 permissions:
   contents: write
 
+env:
+  # x64 交叉编译用的 OpenSSL 版本（arm64 那份走 brew）。brew 升级 openssl@3 时按需同步。
+  OPENSSL_VER: "3.6.4"
+
 jobs:
   build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, dist: arm64,  cross: false }
+          - { arch: x64,   dist: x86_64, cross: true }
     runs-on: macos-15
     env:
       HAS_CERT: ${{ secrets.MACOS_CERT_P12_BASE64 != '' }}
@@ -45,15 +58,30 @@ jobs:
             echo "tag ${GITHUB_REF_NAME} 与 csproj 版本 $V 不一致（应为 macos-v$V）"; exit 1
           fi
 
-      - name: Cache FreeRDP dist (arm64)
+      # ── x64 专属：交叉编译一份 x86_64 OpenSSL（brew 在 arm64 runner 上只有 arm64 那份）──
+      - name: Cache OpenSSL x86_64
+        if: matrix.cross
+        id: ssl-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/openssl-x86_64
+          key: openssl-x86_64-${{ env.OPENSSL_VER }}-${{ hashFiles('native/rdp/build-openssl.sh') }}
+      - name: Build OpenSSL x86_64
+        if: matrix.cross && steps.ssl-cache.outputs.cache-hit != 'true'
+        run: native/rdp/build-openssl.sh x64 "$OPENSSL_VER" "$HOME/openssl-x86_64"
+      - name: Point FreeRDP at x86_64 OpenSSL
+        if: matrix.cross
+        run: echo "OPENSSL_ROOT_DIR=$HOME/openssl-x86_64" >> "$GITHUB_ENV"
+
+      - name: Cache FreeRDP dist (${{ matrix.dist }})
         id: frdp-cache
         uses: actions/cache@v4
         with:
-          path: native/rdp/freerdp-dist/arm64
-          key: freerdp-arm64-${{ hashFiles('native/rdp/build-freerdp.sh') }}
-      - name: Build FreeRDP (arm64)
+          path: native/rdp/freerdp-dist/${{ matrix.dist }}
+          key: freerdp-${{ matrix.dist }}-${{ env.OPENSSL_VER }}-${{ hashFiles('native/rdp/build-freerdp.sh') }}
+      - name: Build FreeRDP (${{ matrix.arch }})
         if: steps.frdp-cache.outputs.cache-hit != 'true'
-        run: native/rdp/build-freerdp.sh arm64
+        run: native/rdp/build-freerdp.sh ${{ matrix.arch }}
 
       - name: 导入签名证书
         if: env.HAS_CERT == 'true'
@@ -72,7 +100,7 @@ jobs:
           echo "RF_SIGN_IDENTITY=$ID" >> "$GITHUB_ENV"
 
       - name: 打包 DMG
-        run: scripts/build-macos-release.sh arm64
+        run: scripts/build-macos-release.sh ${{ matrix.arch }}
 
       - name: 公证 + 装订
         if: env.HAS_NOTARY == 'true'
@@ -81,33 +109,56 @@ jobs:
           TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
           NOTARY_PW: ${{ secrets.MACOS_NOTARY_PASSWORD }}
         run: |
-          DMG=$(ls dist/RemoteFlow-v*-macos-arm64.dmg)
+          DMG=$(ls dist/RemoteFlow-v*-macos-${{ matrix.arch }}.dmg)
           xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$TEAM_ID" \
             --password "$NOTARY_PW" --wait
           xcrun stapler staple "$DMG"
 
       - name: 校验产物
-        run: shasum -a 256 dist/RemoteFlow-v*-macos-arm64.dmg
+        run: shasum -a 256 dist/RemoteFlow-v*-macos-${{ matrix.arch }}.dmg
 
       - uses: actions/upload-artifact@v4
         with:
-          name: RemoteFlow-macOS-arm64
-          path: dist/RemoteFlow-v*-macos-arm64.dmg
+          name: dmg-${{ matrix.arch }}
+          path: dist/RemoteFlow-v*-macos-${{ matrix.arch }}.dmg
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: 版本
+        run: |
+          V=$(sed -n 's#.*<ApplicationDisplayVersion>\(.*\)</ApplicationDisplayVersion>.*#\1#p' \
+                src/RemoteFlow.App.Mac/RemoteFlow.App.Mac.csproj)
+          echo "MAC_VERSION=$V" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dmg-*
+          merge-multiple: true
+          path: dist
+      - run: ls -la dist && test -n "$(ls dist/RemoteFlow-v*-macos-arm64.dmg dist/RemoteFlow-v*-macos-x64.dmg 2>/dev/null)"
 
       - name: GitHub Release（草稿）
-        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           name: RemoteFlow macOS v${{ env.MAC_VERSION }}
           tag_name: ${{ github.ref_name }}
-          files: dist/RemoteFlow-v*-macos-arm64.dmg
+          files: dist/RemoteFlow-v*-macos-*.dmg
           body: |
-            RemoteFlow for macOS · v${{ env.MAC_VERSION }} · arm64（Apple Silicon）
+            **RemoteFlow for macOS · v${{ env.MAC_VERSION }}**
+
+            | 架构 | 文件 |
+            | --- | --- |
+            | Apple Silicon | `RemoteFlow-v${{ env.MAC_VERSION }}-macos-arm64.dmg` |
+            | Intel | `RemoteFlow-v${{ env.MAC_VERSION }}-macos-x64.dmg` |
 
             变更详情见 `releases/macos-v${{ env.MAC_VERSION }}/CHANGELOG.md`。
 
-            > Intel Mac 暂未覆盖（universal 需 Intel runner 交叉编译）。
-
-# TODO(universal)：加 runs-on: macos-13 的并行 job 编 x64 slice + FreeRDP，
-#   再用第三个 job lipo 合并两份 .app（bundle-freerdp.sh 已支持 FREERDP_LIB_DIR）。
+            > 未配置 Developer ID 证书时为 ad-hoc 签名，首次打开需右键 →「打开」，
+            > 或 `xattr -dr com.apple.quarantine /Applications/RemoteFlow.app`。
