@@ -19,8 +19,15 @@ internal static partial class NativeRdp
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     internal delegate int CertCallback(nint user, nint host, int port, nint commonName, nint fingerprint, int changed);
 
+    /// <summary>
+    /// 光标形状变化。rgba != 0 → 设为该图（RGBA32，hotX/hotY 为热点）；
+    /// rgba == 0 且 w == 0 → 隐藏；rgba == 0 且 w &lt; 0 → 系统默认箭头。在 FreeRDP 线程上调用。
+    /// </summary>
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    internal delegate void CursorCallback(nint user, nint rgba, int w, int h, int hotX, int hotY);
+
     [LibraryImport(Lib)]
-    internal static partial nint rf_rdp_create(nint user, nint frameCb, nint stateCb, nint certCb);
+    internal static partial nint rf_rdp_create(nint user, nint frameCb, nint stateCb, nint certCb, nint cursorCb);
 
     [LibraryImport(Lib, StringMarshalling = StringMarshalling.Utf8)]
     internal static partial int rf_rdp_connect(

@@ -76,12 +76,69 @@ public sealed class RdpScreenView : NSView
 
         _frames.FrameSizeChanged += OnFrameSizeChanged;
         _session.StateChanged += OnStateChanged;
+        _session.CursorChanged += OnCursorChanged;
         var initial = _frames.FrameSize;
         _fw = initial.Width;
         _fh = initial.Height;
 
         _pump = new LayerFramePump(_frames, _screen, () => _overlay.Hidden = true);
         _pump.Start();
+    }
+
+    // ── 光标本地渲染 ────────────────────────────────────────────
+    private NSCursor? _remoteCursor;
+
+    /// <summary>隐藏光标用：一张全透明的 1×1 图。macOS 的 AddCursorRect 不接受 null。</summary>
+    private static readonly NSCursor HiddenCursor = MakeHiddenCursor();
+
+    private static NSCursor MakeHiddenCursor()
+    {
+        var rep = new NSBitmapImageRep(nint.Zero, 1, 1, 8, 4, true, false,
+            NSColorSpace.DeviceRGB, 4, 32);
+        System.Runtime.InteropServices.Marshal.Copy(new byte[4], 0, rep.BitmapData, 4); // 全透明
+        var img = new NSImage(new CoreGraphics.CGSize(1, 1));
+        img.AddRepresentation(rep);
+        return new NSCursor(img, new CoreGraphics.CGPoint(0, 0));
+    }
+
+    private void OnCursorChanged(RemoteFlow.Protocol.Rdp.Mac.RdpCursor c)
+        => NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
+        {
+            if (_detached)
+            {
+                return;
+            }
+
+            _remoteCursor = c.IsDefault ? null
+                : c.IsHidden ? HiddenCursor
+                : BuildCursor(c);
+            Window?.InvalidateCursorRectsForView(this);
+        });
+
+    private static NSCursor? BuildCursor(RemoteFlow.Protocol.Rdp.Mac.RdpCursor c)
+    {
+        if (c.Rgba is not { } rgba || c.Width <= 0 || c.Height <= 0)
+        {
+            return null;
+        }
+
+        var rep = new NSBitmapImageRep(nint.Zero, c.Width, c.Height, 8, 4, true, false,
+            NSColorSpace.DeviceRGB, c.Width * 4, 32);
+        System.Runtime.InteropServices.Marshal.Copy(rgba, 0, rep.BitmapData, rgba.Length);
+
+        var img = new NSImage(new CoreGraphics.CGSize(c.Width, c.Height));
+        img.AddRepresentation(rep);
+
+        var hot = new CoreGraphics.CGPoint(
+            Math.Clamp(c.HotX, 0, Math.Max(0, c.Width - 1)),
+            Math.Clamp(c.HotY, 0, Math.Max(0, c.Height - 1)));
+        return new NSCursor(img, hot);
+    }
+
+    public override void ResetCursorRects()
+    {
+        // 远端有光标形状就用它；否则交回系统箭头。
+        AddCursorRect(Bounds, _remoteCursor ?? NSCursor.ArrowCursor);
     }
 
     /// <summary>
@@ -123,6 +180,7 @@ public sealed class RdpScreenView : NSView
         _pump.Dispose();
         _frames.FrameSizeChanged -= OnFrameSizeChanged;
         _session.StateChanged -= OnStateChanged;
+        _session.CursorChanged -= OnCursorChanged;
     }
 
     public override bool AcceptsFirstResponder() => true;

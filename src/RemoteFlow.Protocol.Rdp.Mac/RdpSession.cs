@@ -22,9 +22,14 @@ public sealed class RdpSession : RemoteSessionBase
     private readonly NativeRdp.FrameCallback _frameCb;
     private readonly NativeRdp.StateCallback _stateCb;
     private readonly NativeRdp.CertCallback _certCb;
+    private readonly NativeRdp.CursorCallback _cursorCb;
     private readonly nint _frameCbPtr;
     private readonly nint _stateCbPtr;
     private readonly nint _certCbPtr;
+    private readonly nint _cursorCbPtr;
+
+    /// <summary>远端光标形状变化（在 FreeRDP 线程上触发，处理方需自行封送 UI 线程）。</summary>
+    public event Action<RdpCursor>? CursorChanged;
 
     private nint _handle;
     private ResolvedCredential? _credential;
@@ -55,9 +60,11 @@ public sealed class RdpSession : RemoteSessionBase
         _frameCb = OnFrame;
         _stateCb = OnState;
         _certCb = OnCert;
+        _cursorCb = OnCursor;
         _frameCbPtr = Marshal.GetFunctionPointerForDelegate(_frameCb);
         _stateCbPtr = Marshal.GetFunctionPointerForDelegate(_stateCb);
         _certCbPtr = Marshal.GetFunctionPointerForDelegate(_certCb);
+        _cursorCbPtr = Marshal.GetFunctionPointerForDelegate(_cursorCb);
     }
 
     public override ProtocolType Protocol => ProtocolType.Rdp;
@@ -74,7 +81,7 @@ public sealed class RdpSession : RemoteSessionBase
 
         try
         {
-            _handle = NativeRdp.rf_rdp_create(nint.Zero, _frameCbPtr, _stateCbPtr, _certCbPtr);
+            _handle = NativeRdp.rf_rdp_create(nint.Zero, _frameCbPtr, _stateCbPtr, _certCbPtr, _cursorCbPtr);
             if (_handle == nint.Zero)
             {
                 Fail(ConnectionErrorCode.ComponentUnavailable, "RDP 组件初始化失败（libremoteflow_rdp / FreeRDP 缺失？）");
@@ -233,6 +240,31 @@ public sealed class RdpSession : RemoteSessionBase
     private void OnFrame(nint user, nint bgrx, int width, int height, int stride,
         int dirtyX, int dirtyY, int dirtyWidth, int dirtyHeight)
         => _frames.Ingest(bgrx, width, height, stride, dirtyX, dirtyY, dirtyWidth, dirtyHeight);
+
+    private void OnCursor(nint user, nint rgba, int w, int h, int hotX, int hotY)
+    {
+        // 在 FreeRDP 线程上：rgba 缓冲随即可能被 C 侧 Pointer_Free 释放，必须同步拷出。
+        RdpCursor cursor;
+        if (rgba == nint.Zero)
+        {
+            cursor = w < 0 ? RdpCursor.Default : RdpCursor.Hidden;
+        }
+        else
+        {
+            var bytes = new byte[w * h * 4];
+            Marshal.Copy(rgba, bytes, 0, bytes.Length);
+            cursor = new RdpCursor(bytes, w, h, hotX, hotY);
+        }
+
+        try
+        {
+            CursorChanged?.Invoke(cursor);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "光标回调处理失败");
+        }
+    }
 
     private void OnState(nint user, int state, nint message)
     {

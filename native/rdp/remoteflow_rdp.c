@@ -14,6 +14,8 @@
 #include <freerdp/client.h>
 #include <freerdp/gdi/gdi.h>
 #include <freerdp/gdi/gfx.h>
+#include <freerdp/graphics.h>
+#include <freerdp/pointer.h>
 #include <freerdp/input.h>
 #include <freerdp/settings.h>
 #include <freerdp/codec/color.h>
@@ -37,6 +39,11 @@ typedef void (*rf_state_cb)(void* user, int state, const char* message);
 /* 证书校验：返回 0=拒绝 1=接受并记录 2=仅本次接受。托管侧据「首次记录 / 变化强警告」决策。 */
 typedef int (*rf_cert_cb)(void* user, const char* host, int port, const char* common_name,
                           const char* fingerprint, int changed);
+/* 光标（本地渲染，零延迟）：
+   rgba != NULL       → 设为该图，(hot_x,hot_y) 是热点
+   rgba == NULL, w==0  → 隐藏光标
+   rgba == NULL, w<0   → 用系统默认箭头 */
+typedef void (*rf_cursor_cb)(void* user, const uint8_t* rgba, int w, int h, int hot_x, int hot_y);
 
 typedef struct
 {
@@ -44,6 +51,7 @@ typedef struct
 	rf_frame_cb frame_cb;
 	rf_state_cb state_cb;
 	rf_cert_cb cert_cb;
+	rf_cursor_cb cursor_cb;
 	void* user;
 	volatile int running;
 	HANDLE thread;
@@ -250,6 +258,101 @@ static BOOL rf_load_channels(freerdp* instance)
 	return TRUE;
 }
 
+/* ── 光标本地渲染 ──────────────────────────────────────────────
+   服务端把光标形状经 Pointer PDU 单独下发，我们解成 RGBA 交给 Mac 侧用 NSCursor
+   在本地鼠标位置画 —— 光标移动零延迟，且能反映 I 型 / 手型 / 忙等待等各种形状。
+   FreeRDP 的 pointer cache 回调在 freerdp_connect 里已挂好，只差 graphics 层的
+   Pointer_Prototype，在 rf_post_connect 里 graphics_register_pointer 补上。 */
+typedef struct
+{
+	rdpPointer pointer; /* 必须第一个 */
+	BYTE* rgba;
+	UINT32 w;
+	UINT32 h;
+} rfPointer;
+
+static BOOL rf_pointer_new(rdpContext* context, rdpPointer* pointer)
+{
+	rfPointer* p = (rfPointer*)pointer;
+	if (pointer->width == 0 || pointer->height == 0)
+		return TRUE;
+
+	size_t n = (size_t)pointer->width * pointer->height * 4;
+	p->rgba = (BYTE*)malloc(n);
+	if (!p->rgba)
+		return FALSE;
+	p->w = pointer->width;
+	p->h = pointer->height;
+
+	const gdiPalette* pal = context->gdi ? &context->gdi->palette : NULL;
+	if (!freerdp_image_copy_from_pointer_data(
+	        p->rgba, PIXEL_FORMAT_RGBA32, pointer->width * 4, 0, 0, pointer->width, pointer->height,
+	        pointer->xorMaskData, pointer->lengthXorMask, pointer->andMaskData,
+	        pointer->lengthAndMask, pointer->xorBpp, pal))
+	{
+		free(p->rgba);
+		p->rgba = NULL;
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static void rf_pointer_free(rdpContext* context, rdpPointer* pointer)
+{
+	(void)context;
+	rfPointer* p = (rfPointer*)pointer;
+	free(p->rgba);
+	p->rgba = NULL;
+}
+
+static BOOL rf_pointer_set(rdpContext* context, rdpPointer* pointer)
+{
+	rfContext* rf = (rfContext*)context;
+	rfPointer* p = (rfPointer*)pointer;
+	if (rf->cursor_cb && p->rgba)
+		rf->cursor_cb(rf->user, p->rgba, (int)p->w, (int)p->h, (int)pointer->xPos,
+		              (int)pointer->yPos);
+	return TRUE;
+}
+
+static BOOL rf_pointer_set_null(rdpContext* context)
+{
+	rfContext* rf = (rfContext*)context;
+	if (rf->cursor_cb)
+		rf->cursor_cb(rf->user, NULL, 0, 0, 0, 0);
+	return TRUE;
+}
+
+static BOOL rf_pointer_set_default(rdpContext* context)
+{
+	rfContext* rf = (rfContext*)context;
+	if (rf->cursor_cb)
+		rf->cursor_cb(rf->user, NULL, -1, 0, 0, 0);
+	return TRUE;
+}
+
+static BOOL rf_pointer_set_position(rdpContext* context, UINT32 x, UINT32 y)
+{
+	(void)context;
+	(void)x;
+	(void)y;
+	/* 服务端要求把客户端光标挪到 (x,y)：桌面客户端以本地鼠标为准，忽略。 */
+	return TRUE;
+}
+
+static void rf_register_pointer(rdpContext* context)
+{
+	rdpPointer proto = { 0 };
+	proto.size = sizeof(rfPointer);
+	proto.New = rf_pointer_new;
+	proto.Free = rf_pointer_free;
+	proto.Set = rf_pointer_set;
+	proto.SetNull = rf_pointer_set_null;
+	proto.SetDefault = rf_pointer_set_default;
+	proto.SetPosition = rf_pointer_set_position;
+	graphics_register_pointer(context->graphics, &proto);
+}
+
 static BOOL rf_pre_connect(freerdp* instance)
 {
 	rdpSettings* s = instance->context->settings;
@@ -316,6 +419,9 @@ static BOOL rf_post_connect(freerdp* instance)
 	rdpUpdate* update = instance->context->update;
 	update->EndPaint = rf_end_paint;
 	update->DesktopResize = rf_desktop_resize;
+
+	/* 光标本地渲染：pointer cache 回调 freerdp_connect 里已挂，这里补 graphics 层原型。 */
+	rf_register_pointer(instance->context);
 
 	/* rdpgfx 通道可能已在 gdi_init 之前就绪，这里补接一次（rf_try_init_gfx 幂等）。 */
 	rf_try_init_gfx(rf);
@@ -398,7 +504,7 @@ static DWORD WINAPI rf_thread(LPVOID arg)
 
 /* ── C ABI ──────────────────────────────────────────────────── */
 
-void* rf_rdp_create(void* user, rf_frame_cb fcb, rf_state_cb scb, rf_cert_cb ccb)
+void* rf_rdp_create(void* user, rf_frame_cb fcb, rf_state_cb scb, rf_cert_cb ccb, rf_cursor_cb curcb)
 {
 	/* 尽早清代理 env —— FreeRDP 在 context_new / connect 各处都可能读 */
 	unsetenv("HTTP_PROXY");  unsetenv("http_proxy");
@@ -426,6 +532,7 @@ void* rf_rdp_create(void* user, rf_frame_cb fcb, rf_state_cb scb, rf_cert_cb ccb
 	rf->frame_cb = fcb;
 	rf->state_cb = scb;
 	rf->cert_cb = ccb;
+	rf->cursor_cb = curcb;
 	rf->running = 1;
 	return instance;
 }
