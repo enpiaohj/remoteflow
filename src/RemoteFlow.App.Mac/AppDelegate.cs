@@ -51,6 +51,8 @@ public sealed class AppDelegate : NSApplicationDelegate
             _mainWindow = new MainWindowController(_services);
             _mainWindow.Window.MakeKeyAndOrderFront(null);
             NSApplication.SharedApplication.ActivateIgnoringOtherApps(true);
+
+            SeedTagsInBackground(_services);
         }
         catch (Exception ex)
         {
@@ -161,23 +163,35 @@ public sealed class AppDelegate : NSApplicationDelegate
 
     private static void InitializeDatabase(IServiceProvider services)
     {
+        // 迁移 + 默认分组必须在首个页面渲染前就绪（连接页要用）。两步都很快。
+        // 经 Task.Run 隔开：ResolveDefaultAsync 内部 await 不带 ConfigureAwait(false)，
+        // 直接在主线程 .GetResult() 会撞上 AppKit 同步上下文死锁。
         services.GetRequiredService<RemoteFlowDatabase>().Initialize();
+        Task.Run(() => services.GetRequiredService<DefaultGroupResolver>().ResolveDefaultAsync())
+            .GetAwaiter().GetResult();
+    }
 
-        Task.Run(async () =>
+    /// <summary>预置标签（生产 / 测试 / 开发）没有任何启动路径依赖，挪到窗口显示后再补。</summary>
+    private static void SeedTagsInBackground(IServiceProvider services)
+        => Task.Run(async () =>
         {
-            await services.GetRequiredService<DefaultGroupResolver>().ResolveDefaultAsync();
-
-            var tags = services.GetRequiredService<ITagRepository>();
-            if ((await tags.GetAllAsync()).Count == 0)
+            try
             {
-                foreach (var (name, color) in new[]
-                         { ("生产", "#C42B1C"), ("测试", "#9D5D00"), ("开发", "#0F7B0F") })
+                var tags = services.GetRequiredService<ITagRepository>();
+                if ((await tags.GetAllAsync()).Count == 0)
                 {
-                    await tags.AddAsync(new Tag { Name = name, Color = color });
+                    foreach (var (name, color) in new[]
+                             { ("生产", "#C42B1C"), ("测试", "#9D5D00"), ("开发", "#0F7B0F") })
+                    {
+                        await tags.AddAsync(new Tag { Name = name, Color = color });
+                    }
                 }
             }
-        }).GetAwaiter().GetResult();
-    }
+            catch
+            {
+                // 预置标签补不上不影响使用，下次启动再试。
+            }
+        });
 
     private static ServiceProvider BuildServiceProvider(AppPaths paths, ILoggerFactory loggerFactory)
     {
