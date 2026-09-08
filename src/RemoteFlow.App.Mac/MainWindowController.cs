@@ -106,6 +106,7 @@ public sealed class MainWindowController : NSWindowController
             }
         };
         WireFullScreenNotifications();
+        WirePillDismissOnContentClick();
         _sessions.SessionClosed += (_, id) =>
             NSApplication.SharedApplication.BeginInvokeOnMainThread(() => DropSession(id));
         // 会话创建 / 状态跳变 / 移除后重画列表行，让「在线」徽标跟上。
@@ -312,6 +313,29 @@ public sealed class MainWindowController : NSWindowController
     /// <summary>系统侧（绿灯 / Esc / 调度中心）进出原生全屏时，把内部档位对齐。</summary>
     private readonly List<NSObject> _windowObservers = new();
 
+    /// <summary>全屏下监听画面点击：点在药丸之外就立刻收起工具条（见 <see cref="SessionPillBar.DismissForContentClick"/>）。</summary>
+    private NSObject? _pillDismissMonitor;
+
+    private void WirePillDismissOnContentClick()
+    {
+        _pillDismissMonitor = NSEvent.AddLocalMonitorForEventsMatchingMask(
+            NSEventMask.LeftMouseDown | NSEventMask.RightMouseDown,
+            evt =>
+            {
+                if (_mode != ViewMode.Normal && !_pill.Hidden
+                    && evt.Window is not null && evt.Window == Window)
+                {
+                    var p = _detailRoot.ConvertPointFromView(evt.LocationInWindow, null);
+                    if (_pill.HitTest(p) is null)
+                    {
+                        _pill.DismissForContentClick();
+                    }
+                }
+
+                return evt;
+            });
+    }
+
     private void WireFullScreenNotifications()
     {
         var nc = NSNotificationCenter.DefaultCenter;
@@ -341,6 +365,12 @@ public sealed class MainWindowController : NSWindowController
             }
 
             _windowObservers.Clear();
+
+            if (_pillDismissMonitor is not null)
+            {
+                NSEvent.RemoveMonitor(_pillDismissMonitor);
+                _pillDismissMonitor = null;
+            }
         }
 
         base.Dispose(disposing);

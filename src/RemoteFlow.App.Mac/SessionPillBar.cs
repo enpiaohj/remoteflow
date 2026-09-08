@@ -184,6 +184,23 @@ public sealed class SessionPillBar : NSView
         Hidden = true;
     }
 
+    /// <summary>
+    /// 用户在画面本身（非药丸、非其子菜单）按下鼠标 —— 视为「回到远端操作」，立刻收起，
+    /// 不走 <see cref="HideDelaySeconds"/> 宽限；已「固定」时保持常驻。
+    /// </summary>
+    public void DismissForContentClick()
+    {
+        if (_pinned || Hidden)
+        {
+            return;
+        }
+
+        CancelHideTimer();
+        _hovering = false;
+        _menuOpen = false;
+        Hidden = true;
+    }
+
     private void CancelHideTimer()
     {
         _hideTimer?.Invalidate();
