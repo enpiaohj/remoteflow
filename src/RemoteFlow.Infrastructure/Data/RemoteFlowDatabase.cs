@@ -294,8 +294,8 @@ public sealed class RemoteFlowDatabase
         // v2：分组模型正式化。
         //  - connection_groups 增加 is_system 列，显式区分系统兜底分组。
         //  - 插入唯一系统分组「未分组」（固定 Id），新连接未指定分组时归入这里。
-        //  - 默认用户分组「我的设备」的种子由服务层按「库中无用户分组」条件补齐，不写死在迁移里
-        //    （既有库里可能已有 Windows / Linux 等普通分组，此时不应再造「我的设备」）。
+        //  - 默认用户分组「我的设备」的种子由服务层（GroupService.EnsureSeedAsync）首启补齐，
+        //    不写死在迁移里；老用户升级也会新建「我的设备」，现有分组不动。
         [2] = """
         ALTER TABLE connection_groups ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0;
 

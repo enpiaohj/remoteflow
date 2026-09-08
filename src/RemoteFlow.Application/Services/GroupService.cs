@@ -69,8 +69,15 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
 
     /// <summary>
     /// 保证「未分组」存在，并返回默认新建连接分组（is_default=true 的用户组）。
-    /// <paramref name="createIfEmpty"/> 仅当库里一个普通分组都没有时才允许新建「我的设备」；
-    /// 由 App 层决定该值（首启 true，之后 false），避免“删光后每次启动又复活”。
+    /// <para>
+    /// <paramref name="createIfEmpty"/> = true（首启，App 层按 <c>DefaultGroupSeedDone</c> 决定）：
+    /// 库里没有默认组时，<b>始终新建（或复用同名的）「我的设备」</b>作为默认 + 保护，
+    /// <b>不借用户已有分组顶上</b>——老用户升级也照建，现有分组一个不动。
+    /// </para>
+    /// <para>
+    /// <paramref name="createIfEmpty"/> = false（已种过）：无默认组时直接返回 null——
+    /// 说明用户自己删掉了默认组（删默认组时已强制改选或回落未分组），不再自动复活。
+    /// </para>
     /// 返回 null 表示无默认组（新连接回落未分组）。
     /// </summary>
     public async Task<Guid?> EnsureSeedAsync(CancellationToken ct = default, bool createIfEmpty = true)
@@ -97,28 +104,28 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
             return existingDefault.Id;
         }
 
-        var userGroups = all.Where(g => !g.IsSystem).ToList();
-        if (userGroups.Count > 0)
-        {
-            // 存量回填：有普通分组但都未标记默认 → 把旧行为默认（sort_order,name 最前）标记为默认+保护。
-            var legacyDefault = userGroups
-                .OrderBy(g => g.SortOrder).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
-                .First();
-            legacyDefault.IsDefault = true;
-            legacyDefault.IsProtected = true;
-            await groups.UpdateAsync(legacyDefault, ct);
-            return legacyDefault.Id;
-        }
-
         if (!createIfEmpty)
         {
             return null;
         }
 
+        // 首次为该库补默认组。用户可能碰巧已有一个叫「我的设备」的普通组——复用它，别造重名。
+        var existingMine = all.FirstOrDefault(g => !g.IsSystem
+            && string.Equals(g.Name, DefaultGroupName, StringComparison.CurrentCultureIgnoreCase));
+        if (existingMine is not null)
+        {
+            existingMine.IsDefault = true;
+            existingMine.IsProtected = true;
+            await groups.UpdateAsync(existingMine, ct);
+            return existingMine.Id;
+        }
+
+        // 新建「我的设备」，排在所有现有分组之前，现有分组不动。
+        var userGroups = all.Where(g => !g.IsSystem).ToList();
         var defaultGroup = new ConnectionGroup
         {
             Name = DefaultGroupName,
-            SortOrder = 0,
+            SortOrder = userGroups.Count > 0 ? userGroups.Min(g => g.SortOrder) - 1 : 0,
             IsDefault = true,
             IsProtected = true
         };

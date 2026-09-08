@@ -73,14 +73,40 @@ public sealed class GroupServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task 已有用户分组时种子不再创建我的设备()
+    public async Task 已有用户分组时首次种子仍创建我的设备且不动现有分组()
     {
-        await _service.CreateAsync("公司", null);
+        var company = await _service.CreateAsync("公司", null);
 
-        await _service.EnsureSeedAsync();
+        var defaultId = await _service.EnsureSeedAsync();
 
         var all = await _groups.GetAllAsync();
-        Assert.DoesNotContain(all, g => g.Name == GroupService.DefaultGroupName);
+        var mine = Assert.Single(all, g => g.Name == GroupService.DefaultGroupName);
+        Assert.Equal(mine.Id, defaultId);
+        Assert.True(mine.IsDefault);
+        Assert.True(mine.IsProtected);
+
+        // 现有「公司」原封不动。
+        var untouched = all.Single(g => g.Id == company.Id);
+        Assert.False(untouched.IsDefault);
+        Assert.False(untouched.IsProtected);
+
+        // 「我的设备」排在「公司」之前。
+        Assert.True(mine.SortOrder < untouched.SortOrder);
+    }
+
+    [Fact]
+    public async Task 已有同名我的设备普通组时首次种子复用它而非新建()
+    {
+        var existing = await _service.CreateAsync(GroupService.DefaultGroupName, null);
+
+        var defaultId = await _service.EnsureSeedAsync();
+
+        var all = await _groups.GetAllAsync();
+        var mine = Assert.Single(all, g => g.Name == GroupService.DefaultGroupName);
+        Assert.Equal(existing.Id, mine.Id);
+        Assert.Equal(existing.Id, defaultId);
+        Assert.True(mine.IsDefault);
+        Assert.True(mine.IsProtected);
     }
 
     [Fact]
@@ -221,18 +247,17 @@ public sealed class GroupServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task 已有普通分组且无默认时回填最前一个为默认并保护()
+    public async Task 已种过且有普通分组但无默认时不回填返回null()
     {
-        // CreateAsync 递增 sort_order：后建的排后面。OrderBy(sort_order) 先取先建的那个。
-        var first = await _service.CreateAsync("首个分组", null);
+        // 已种过（createIfEmpty:false）代表用户曾经历过种子：此时无默认组 = 用户自己删了默认组。
+        // 不借用现有分组顶上，也不复活「我的设备」，返回 null（新连接回落未分组）。
+        await _service.CreateAsync("首个分组", null);
         await _service.CreateAsync("第二个分组", null);
 
         var defaultId = await _service.EnsureSeedAsync(createIfEmpty: false);
-        Assert.NotNull(defaultId);
 
-        var def = (await _groups.GetAllAsync()).Single(g => !g.IsSystem && g.IsDefault);
-        Assert.Equal(first.Id, def.Id);          // sort_order 最前 = 先建者
-        Assert.True(def.IsProtected);
+        Assert.Null(defaultId);
+        Assert.DoesNotContain(await _groups.GetAllAsync(), g => !g.IsSystem && g.IsDefault);
     }
 
     [Fact]
