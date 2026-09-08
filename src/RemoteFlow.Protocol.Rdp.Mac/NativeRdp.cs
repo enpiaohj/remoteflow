@@ -9,7 +9,8 @@ internal static partial class NativeRdp
 
     // state: 0=connecting 1=connected 2=disconnected 3=failed
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    internal delegate void FrameCallback(nint user, nint bgrx, int width, int height, int stride);
+    internal delegate void FrameCallback(nint user, nint bgrx, int width, int height, int stride,
+        int dirtyX, int dirtyY, int dirtyWidth, int dirtyHeight);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     internal delegate void StateCallback(nint user, int state, nint message);

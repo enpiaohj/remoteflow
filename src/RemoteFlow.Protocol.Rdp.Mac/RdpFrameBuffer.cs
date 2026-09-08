@@ -28,8 +28,13 @@ internal sealed class RdpFrameBuffer : IFrameSource, IDisposable
 
     public event EventHandler<FrameSize>? FrameSizeChanged;
 
-    /// <summary>C 回调：整帧 BGRX32（stride 可能 &gt; width*4）。在 FreeRDP 线程上调用。</summary>
-    public void Ingest(nint src, int width, int height, int stride)
+    /// <summary>
+    /// C 回调：<paramref name="src"/> 是整块 primary_buffer（stride 可能 &gt; width*4），
+    /// <c>(dirtyX,dirtyY,dirtyW,dirtyH)</c> 是本帧的变化矩形——只回写这一块，不全拷。
+    /// 在 FreeRDP 线程上调用。
+    /// </summary>
+    public void Ingest(nint src, int width, int height, int stride,
+        int dirtyX, int dirtyY, int dirtyW, int dirtyH)
     {
         if (src == nint.Zero || width <= 0 || height <= 0)
         {
@@ -50,17 +55,37 @@ internal sealed class RdpFrameBuffer : IFrameSource, IDisposable
                 _height = height;
                 _buffer = new byte[width * height * 4];
                 sizeChanged = true;
+                // 新缓冲全是 0，脏区必须覆盖整幅，否则边缘留黑。
+                dirtyX = 0;
+                dirtyY = 0;
+                dirtyW = width;
+                dirtyH = height;
+            }
+
+            // 夹到画面范围。
+            if (dirtyX < 0) { dirtyW += dirtyX; dirtyX = 0; }
+            if (dirtyY < 0) { dirtyH += dirtyY; dirtyY = 0; }
+            if (dirtyX + dirtyW > width) { dirtyW = width - dirtyX; }
+            if (dirtyY + dirtyH > height) { dirtyH = height - dirtyY; }
+            if (dirtyW <= 0 || dirtyH <= 0)
+            {
+                return;
             }
 
             var rowBytes = width * 4;
+            var colOffset = dirtyX * 4;
+            var copyBytes = dirtyW * 4;
             unsafe
             {
                 var s = (byte*)src;
                 fixed (byte* d = _buffer)
                 {
-                    for (var y = 0; y < height; y++)
+                    for (var y = dirtyY; y < dirtyY + dirtyH; y++)
                     {
-                        Buffer.MemoryCopy(s + (long)y * stride, d + (long)y * rowBytes, rowBytes, rowBytes);
+                        Buffer.MemoryCopy(
+                            s + (long)y * stride + colOffset,
+                            d + (long)y * rowBytes + colOffset,
+                            copyBytes, copyBytes);
                     }
                 }
             }

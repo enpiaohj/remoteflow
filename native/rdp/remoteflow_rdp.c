@@ -29,7 +29,10 @@
 #include <winpr/thread.h>
 
 /* state: 0=connecting 1=connected 2=disconnected 3=failed */
-typedef void (*rf_frame_cb)(void* user, const uint8_t* bgrx, int w, int h, int stride);
+/* bgrx 是整块 primary_buffer；(dx,dy,dw,dh) 是本次变化的矩形（脏区），托管侧据此
+   只回写这一块，避免每帧全拷 8MB。首帧 / resize 时脏区 = 整幅。 */
+typedef void (*rf_frame_cb)(void* user, const uint8_t* bgrx, int w, int h, int stride,
+                            int dx, int dy, int dw, int dh);
 typedef void (*rf_state_cb)(void* user, int state, const char* message);
 /* 证书校验：返回 0=拒绝 1=接受并记录 2=仅本次接受。托管侧据「首次记录 / 变化强警告」决策。 */
 typedef int (*rf_cert_cb)(void* user, const char* host, int port, const char* common_name,
@@ -259,12 +262,30 @@ static BOOL rf_pre_connect(freerdp* instance)
 	return TRUE;
 }
 
+static void rf_push_frame(rfContext* rf, rdpGdi* gdi, int x, int y, int w, int h)
+{
+	if (!gdi || !gdi->primary_buffer || !rf->frame_cb || w <= 0 || h <= 0)
+		return;
+	rf->frame_cb(rf->user, gdi->primary_buffer, gdi->width, gdi->height, (int)gdi->stride, x, y, w, h);
+}
+
 static BOOL rf_end_paint(rdpContext* context)
 {
 	rfContext* rf = (rfContext*)context;
 	rdpGdi* gdi = context->gdi;
-	if (gdi && gdi->primary_buffer && rf->frame_cb)
-		rf->frame_cb(rf->user, gdi->primary_buffer, gdi->width, gdi->height, (int)gdi->stride);
+	if (!gdi || !gdi->primary || !gdi->primary->hdc || !gdi->primary->hdc->hwnd)
+		return TRUE;
+
+	HGDI_RGN inv = gdi->primary->hdc->hwnd->invalid;
+	if (!inv || inv->null)
+		return TRUE; /* 本帧无变化，不推 —— 空闲时不打扰托管侧 */
+
+	int x = inv->x, y = inv->y, w = inv->w, h = inv->h;
+	if (x < 0) { w += x; x = 0; }
+	if (y < 0) { h += y; y = 0; }
+	if (x + w > gdi->width)  w = gdi->width - x;
+	if (y + h > gdi->height) h = gdi->height - y;
+	rf_push_frame(rf, gdi, x, y, w, h);
 	return TRUE;
 }
 
@@ -273,7 +294,9 @@ static BOOL rf_desktop_resize(rdpContext* context)
 	if (!gdi_resize(context->gdi, freerdp_settings_get_uint32(context->settings, FreeRDP_DesktopWidth),
 	                freerdp_settings_get_uint32(context->settings, FreeRDP_DesktopHeight)))
 		return FALSE;
-	return rf_end_paint(context);
+	rdpGdi* gdi = context->gdi;
+	rf_push_frame((rfContext*)context, gdi, 0, 0, gdi->width, gdi->height); /* 尺寸变了，整幅 */
+	return TRUE;
 }
 
 static BOOL rf_post_connect(freerdp* instance)
@@ -292,7 +315,8 @@ static BOOL rf_post_connect(freerdp* instance)
 	rf_try_init_gfx(rf);
 
 	rf->state_cb(rf->user, 1, NULL);
-	rf_end_paint(instance->context); /* 首帧 */
+	rf_push_frame(rf, instance->context->gdi, 0, 0, instance->context->gdi->width,
+	              instance->context->gdi->height); /* 首帧整幅 */
 	return TRUE;
 }
 

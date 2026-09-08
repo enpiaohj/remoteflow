@@ -230,8 +230,9 @@ public sealed class RdpSession : RemoteSessionBase
     }
 
     // ── C 回调 ──────────────────────────────────────────────────
-    private void OnFrame(nint user, nint bgrx, int width, int height, int stride)
-        => _frames.Ingest(bgrx, width, height, stride);
+    private void OnFrame(nint user, nint bgrx, int width, int height, int stride,
+        int dirtyX, int dirtyY, int dirtyWidth, int dirtyHeight)
+        => _frames.Ingest(bgrx, width, height, stride, dirtyX, dirtyY, dirtyWidth, dirtyHeight);
 
     private void OnState(nint user, int state, nint message)
     {
