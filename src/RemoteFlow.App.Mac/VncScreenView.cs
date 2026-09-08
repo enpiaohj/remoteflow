@@ -71,10 +71,31 @@ public sealed class VncScreenView : NSView
 
         _session.StateChanged += OnStateChanged;
         _session.ClipboardTextReceived += OnClipboardTextReceived;
+        _session.CursorChanged += OnCursorChanged;
 
         _pump = new LayerFramePump(_frames, _screen, () => _overlay.Hidden = true);
         _pump.Start();
     }
+
+    // ── 本地光标（NSCursor 构造见 CursorImage）──────────────────
+    private NSCursor? _remoteCursor;
+
+    private void OnCursorChanged(VncCursorShape? shape)
+        => NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
+        {
+            if (_detached)
+            {
+                return;
+            }
+
+            _remoteCursor = shape is null
+                ? CursorImage.Hidden
+                : CursorImage.FromRgba(shape.Rgba, shape.Width, shape.Height, shape.HotX, shape.HotY);
+            Window?.InvalidateCursorRectsForView(this);
+        });
+
+    public override void ResetCursorRects()
+        => AddCursorRect(Bounds, _remoteCursor ?? NSCursor.ArrowCursor);
 
     /// <summary>
     /// 画面四周的衬底。远程桌面分辨率与视图比例对不上时必然留边，
@@ -111,6 +132,7 @@ public sealed class VncScreenView : NSView
         _winObservers.Clear();
         _session.StateChanged -= OnStateChanged;
         _session.ClipboardTextReceived -= OnClipboardTextReceived;
+        _session.CursorChanged -= OnCursorChanged;
     }
 
     // 远端复制 → 本机剪贴板（连接级开关 Profile.Vnc.ClipboardToLocal 已在会话层把关）。
