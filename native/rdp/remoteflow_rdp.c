@@ -209,14 +209,18 @@ static BOOL rf_load_channels(freerdp* instance)
 	   libfreerdp-client3 的，磁盘上没有模块文件 —— 一律 "Failed to load channel"。 */
 	freerdp_register_addin_provider(freerdp_channels_load_static_addin_entry, 0);
 
-	/* 别去碰 rdpdr：NetworkAutoDetect / SupportHeartbeatPdu / SupportMultitransport
-	   默认开着会让 FreeRDP 强制打开 DeviceRedirection（RDP8 特性依赖 rdpdr），
-	   而 rdpdr 加载失败会让 load_addins 整体返回 FALSE，drdynvc / disp 跟着遭殃。
-	   这些我们都用不到。 */
-	freerdp_settings_set_bool(s, FreeRDP_NetworkAutoDetect, FALSE);
-	freerdp_settings_set_bool(s, FreeRDP_SupportHeartbeatPdu, FALSE);
+	/* NetworkAutoDetect：让服务端测 RTT / 带宽，据此自适应调图形质量与帧率
+	   （微软叫 "adaptive graphics"）。跨 VPN / 公网时它会自动降质而不是硬发导致卡。
+	   代价：freerdp_client_load_addins 里这仨 RDP8 特性任一开就强制 DeviceRedirection=TRUE
+	   → 拉起 rdpdr 静态通道。rdpdr 已编进库、addin provider 上面也注册了，会空加载
+	   （不宣告任何设备），无副作用。
+	   Heartbeat（死连接更快发现）也顺带开；Multitransport（UDP）FreeRDP 实现还不稳，保持关。 */
+	freerdp_settings_set_bool(s, FreeRDP_NetworkAutoDetect, TRUE);
+	freerdp_settings_set_bool(s, FreeRDP_SupportHeartbeatPdu, TRUE);
 	freerdp_settings_set_bool(s, FreeRDP_SupportMultitransport, FALSE);
-	freerdp_settings_set_bool(s, FreeRDP_DeviceRedirection, FALSE);
+
+	/* rdpdr 会被 load_addins 强制拉起（见上），但所有具体重定向一律关 ——
+	   rdpdr 通道空转，不碰任何本地设备 / 剪贴板 / 打印机。 */
 	freerdp_settings_set_bool(s, FreeRDP_RedirectDrives, FALSE);
 	freerdp_settings_set_bool(s, FreeRDP_RedirectHomeDrive, FALSE);
 	freerdp_settings_set_bool(s, FreeRDP_RedirectPrinters, FALSE);
@@ -234,11 +238,13 @@ static BOOL rf_load_channels(freerdp* instance)
 	BOOL added = freerdp_client_add_dynamic_channel(s, 1, disp_args);
 	added = freerdp_client_add_dynamic_channel(s, 1, gfx_args) && added;
 	BOOL loaded = added ? freerdp_client_load_addins(instance->context->channels, s) : FALSE;
-	fprintf(stderr, "[RDP/native] LoadChannels: add=%d load=%d dynRes=%d supportDC=%d gfx=%d\n",
+	fprintf(stderr,
+	        "[RDP/native] LoadChannels: add=%d load=%d dynRes=%d gfx=%d autoDetect=%d dev=%d(强制)\n",
 	        (int)added, (int)loaded,
 	        (int)freerdp_settings_get_bool(s, FreeRDP_DynamicResolutionUpdate),
-	        (int)freerdp_settings_get_bool(s, FreeRDP_SupportDisplayControl),
-	        (int)freerdp_settings_get_bool(s, FreeRDP_SupportGraphicsPipeline));
+	        (int)freerdp_settings_get_bool(s, FreeRDP_SupportGraphicsPipeline),
+	        (int)freerdp_settings_get_bool(s, FreeRDP_NetworkAutoDetect),
+	        (int)freerdp_settings_get_bool(s, FreeRDP_DeviceRedirection));
 
 	/* 加载失败也别中止连接：动态分辨率是锦上添花，退化成固定分辨率即可。 */
 	return TRUE;
