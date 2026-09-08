@@ -46,7 +46,7 @@
 
 ## 版本与发布
 
-- Semantic Versioning。版本号统一在 `Directory.Build.props` 的 `VersionPrefix` / `AssemblyVersion` / `FileVersion` 维护。
+- Semantic Versioning。Windows 版本在 `Directory.Build.props` 的 `VersionPrefix` / `AssemblyVersion` / `FileVersion` 维护；macOS 版本见下条（独立版本线）。
 - 「测试 / 编译 / 运行 / 看看效果」不等于正式发布。
 - 仅当用户明确说「发布 / Release / 打版本」时，才创建 `releases/v<X.Y.Z>/`（含 `source/`、`CHANGELOG.md`、规范命名产物），并执行 `git tag vX.Y.Z`。
 - **平台版本线相互独立**：Windows 与 macOS 各自按需发布，不强制同步。
