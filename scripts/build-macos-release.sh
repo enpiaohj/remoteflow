@@ -51,8 +51,13 @@ ensure_native() { # $1 = x64 | arm64
 
 # 优先用本机 Apple Development 证书（稳定身份 → 钥匙串 ACL 跨构建不失效）；
 # 没有则回落 ad-hoc（"-"）。正式发布传 RF_SIGN_IDENTITY="Developer ID Application: ..."。
-SIGN_ID="${RF_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null \
-  | grep -m1 -oE '"Apple Development:[^"]+"' | tr -d '"')}"
+# 末尾 `|| true`：CI runner 无签名身份时 grep 无匹配退出 1，配合 set -euo pipefail
+# 会误杀整个脚本；这里本就是"取不到就回落 ad-hoc"，失败即空字符串。
+detect_sign_id() {
+  security find-identity -v -p codesigning 2>/dev/null \
+    | grep -m1 -oE '"Apple Development:[^"]+"' | tr -d '"' || true
+}
+SIGN_ID="${RF_SIGN_IDENTITY:-$(detect_sign_id)}"
 SIGN_ID="${SIGN_ID:--}"
 ENTITLEMENTS="src/RemoteFlow.App.Mac/Entitlements.plist"
 
