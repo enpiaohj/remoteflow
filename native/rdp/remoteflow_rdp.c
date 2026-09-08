@@ -13,12 +13,15 @@
 #include <freerdp/freerdp.h>
 #include <freerdp/client.h>
 #include <freerdp/gdi/gdi.h>
+#include <freerdp/gdi/gfx.h>
 #include <freerdp/input.h>
 #include <freerdp/settings.h>
 #include <freerdp/codec/color.h>
 #include <freerdp/client/channels.h>
 #include <freerdp/client/disp.h>
+#include <freerdp/client/rdpgfx.h>
 #include <freerdp/channels/disp.h>
+#include <freerdp/channels/rdpgfx.h>
 #include <freerdp/channels/channels.h>
 #include <freerdp/addin.h>
 #include <winpr/synch.h>
@@ -49,6 +52,10 @@ typedef struct
 	int disp_ready;        /* 收到服务端 DISPLAY_CONTROL_CAPS 才算真正可发 */
 	UINT32 disp_max_mon;
 	UINT64 last_layout_ms; /* 上次发 monitor layout 的时刻，用于限频 */
+	/* RDP8+ 图形管线（rdpgfx）：Progressive / ClearCodec / ZGFX + 帧确认背压。
+	   SoftwareGdi 下 FreeRDP 的 gdi 自己解进 primary_buffer，rf_end_paint 照常触发。 */
+	RdpgfxClientContext* gfx;
+	int gfx_pipeline_up;  /* gdi_graphics_pipeline_init 是否已接上（幂等保护） */
 } rfContext;
 
 /* MS-RDPEDISP 的硬约束与实践经验：
@@ -126,6 +133,22 @@ static UINT rf_disp_caps(DispClientContext* ctx, UINT32 maxNumMonitors, UINT32 m
 	return CHANNEL_RC_OK;
 }
 
+/* rdpgfx 通道就绪 + gdi 已 init → 把图形管线接上。两个条件哪个后到都在这里补。 */
+static void rf_try_init_gfx(rfContext* rf)
+{
+	rdpGdi* gdi = ((rdpContext*)rf)->gdi;
+	if (rf->gfx && gdi && !rf->gfx_pipeline_up)
+	{
+		if (gdi_graphics_pipeline_init(gdi, rf->gfx))
+		{
+			rf->gfx_pipeline_up = 1;
+			fprintf(stderr, "[RDP/native] 图形管线已接上（GFX/Progressive）\n");
+		}
+		else
+			fprintf(stderr, "[RDP/native] gdi_graphics_pipeline_init 失败，退化传统位图路径\n");
+	}
+}
+
 static void rf_on_channel_connected(void* ctx, const ChannelConnectedEventArgs* e)
 {
 	rfContext* rf = (rfContext*)ctx;
@@ -137,6 +160,11 @@ static void rf_on_channel_connected(void* ctx, const ChannelConnectedEventArgs* 
 		rf->disp->DisplayControlCaps = rf_disp_caps;
 		/* 真正可发要等服务端回 CAPS（见 rf_disp_caps），这里只挂钩子。 */
 	}
+	else if (strcmp(e->name, RDPGFX_DVC_CHANNEL_NAME) == 0)
+	{
+		rf->gfx = (RdpgfxClientContext*)e->pInterface;
+		rf_try_init_gfx(rf);
+	}
 }
 
 static void rf_on_channel_disconnected(void* ctx, const ChannelDisconnectedEventArgs* e)
@@ -146,6 +174,14 @@ static void rf_on_channel_disconnected(void* ctx, const ChannelDisconnectedEvent
 	{
 		rf->disp = NULL;
 		rf->disp_ready = 0;
+	}
+	else if (strcmp(e->name, RDPGFX_DVC_CHANNEL_NAME) == 0)
+	{
+		rdpGdi* gdi = ((rdpContext*)rf)->gdi;
+		if (rf->gfx && gdi && rf->gfx_pipeline_up)
+			gdi_graphics_pipeline_uninit(gdi, rf->gfx);
+		rf->gfx = NULL;
+		rf->gfx_pipeline_up = 0;
 	}
 }
 
@@ -186,16 +222,20 @@ static BOOL rf_load_channels(freerdp* instance)
 	freerdp_settings_set_bool(s, FreeRDP_RedirectParallelPorts, FALSE);
 	freerdp_settings_set_bool(s, FreeRDP_RedirectClipboard, FALSE);
 
-	/* 动态分辨率走 Display Control 动态通道（disp），它跑在 drdynvc 之上；
-	   load_addins 见到有动态通道就会自动把 drdynvc 这个静态通道挂上。 */
+	/* 动态通道都跑在 drdynvc 之上；load_addins 见到有动态通道就会自动挂上 drdynvc。
+	   - disp   ：Display Control，动态分辨率的唯一通路
+	   - rdpgfx ：RDP8+ 图形管线（Progressive / ClearCodec / ZGFX / 帧确认） */
 	freerdp_settings_set_bool(s, FreeRDP_SupportDynamicChannels, TRUE);
 	const char* disp_args[] = { "disp" };
+	const char* gfx_args[] = { "rdpgfx" };
 	BOOL added = freerdp_client_add_dynamic_channel(s, 1, disp_args);
+	added = freerdp_client_add_dynamic_channel(s, 1, gfx_args) && added;
 	BOOL loaded = added ? freerdp_client_load_addins(instance->context->channels, s) : FALSE;
-	fprintf(stderr, "[RDP/native] LoadChannels: add=%d load=%d dynRes=%d supportDC=%d\n",
+	fprintf(stderr, "[RDP/native] LoadChannels: add=%d load=%d dynRes=%d supportDC=%d gfx=%d\n",
 	        (int)added, (int)loaded,
 	        (int)freerdp_settings_get_bool(s, FreeRDP_DynamicResolutionUpdate),
-	        (int)freerdp_settings_get_bool(s, FreeRDP_SupportDisplayControl));
+	        (int)freerdp_settings_get_bool(s, FreeRDP_SupportDisplayControl),
+	        (int)freerdp_settings_get_bool(s, FreeRDP_SupportGraphicsPipeline));
 
 	/* 加载失败也别中止连接：动态分辨率是锦上添花，退化成固定分辨率即可。 */
 	return TRUE;
@@ -205,7 +245,17 @@ static BOOL rf_pre_connect(freerdp* instance)
 {
 	rdpSettings* s = instance->context->settings;
 	freerdp_settings_set_bool(s, FreeRDP_SoftwareGdi, TRUE);
-	freerdp_settings_set_bool(s, FreeRDP_SupportGraphicsPipeline, FALSE);
+
+	/* RDP8+ 图形管线：Progressive（小波 + 渐进细化，滚动 / 大重绘不再卡）、
+	   ClearCodec（文本 / UI）、ZGFX 批压缩、帧确认背压。都是 FreeRDP 内建、无外部依赖。
+	   H.264（GfxH264 / GfxAVC444）需要 openh264/ffmpeg 后端，暂不开。 */
+	freerdp_settings_set_bool(s, FreeRDP_SupportGraphicsPipeline, TRUE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxProgressive, TRUE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxProgressiveV2, TRUE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxH264, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxAVC444, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxAVC444v2, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxSmallCache, FALSE);
 	return TRUE;
 }
 
@@ -238,6 +288,9 @@ static BOOL rf_post_connect(freerdp* instance)
 	update->EndPaint = rf_end_paint;
 	update->DesktopResize = rf_desktop_resize;
 
+	/* rdpgfx 通道可能已在 gdi_init 之前就绪，这里补接一次（rf_try_init_gfx 幂等）。 */
+	rf_try_init_gfx(rf);
+
 	rf->state_cb(rf->user, 1, NULL);
 	rf_end_paint(instance->context); /* 首帧 */
 	return TRUE;
@@ -245,6 +298,12 @@ static BOOL rf_post_connect(freerdp* instance)
 
 static void rf_post_disconnect(freerdp* instance)
 {
+	rfContext* rf = (rfContext*)instance->context;
+	/* 正常情况下通道断开事件已 uninit；这里兜底，避免 gdi_free 时管线还挂着。 */
+	if (rf->gfx && instance->context->gdi && rf->gfx_pipeline_up)
+		gdi_graphics_pipeline_uninit(instance->context->gdi, rf->gfx);
+	rf->gfx = NULL;
+	rf->gfx_pipeline_up = 0;
 	gdi_free(instance);
 }
 
