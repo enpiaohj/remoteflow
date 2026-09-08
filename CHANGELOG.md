@@ -7,6 +7,38 @@
 
 ---
 
+## [0.9.0] — 2026-09-09
+
+Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在本次范围内。
+
+### 架构
+- 抽出平台无关的 `RemoteFlow.Presentation` 工程：ViewModel 与视图无关服务（格式化、探测、对话框抽象、终端资产）下沉，Windows(WPF) 与 macOS(AppKit) 双端共用。
+- 新增 GitHub Actions：每次 push / PR 在 Ubuntu 跑共享测试、Windows / macOS 各验构建与平台专属测试；打 `v*` tag 自动构建 win-x64 单文件并挂 GitHub Release 草稿。
+
+### 新增
+- 会话状态灯：连接列表、首页最近连接、收藏行的图标右下角，连接中琥珀、已连接绿，空闲不显示。
+- 悬停就地连接：「我的连接」列表行、首页收藏行悬停浮出「连接」按钮；首页最近连接大卡悬停显「连接 →」提示。
+- 详情面板「协议」字段改用协议色徽章，与列表 / 首页统一。
+- SSH 终端启用 xterm.js WebGL 渲染器（共享层带入）。
+- VNC 画质旋钮：内网高画质 + 低压缩（共享层带入）。
+
+### 变更
+- 全屏胶囊工具条默认停留 2.5s → 3s；常驻条 / 全屏药丸状态入口只有状态图标可点，主机 IP 不再是点击热区。
+- 首页问候区收紧（无会话时隐藏「0 个会话已连接」、间距与卡片高度下调）；凭据列表「保险库」列瘦身、孤儿凭据警示色。
+- 分组：老用户升级也新建「我的设备」，不再借用现有分组顶默认。
+
+### 修复
+- 多会话全屏下切换会话后胶囊工具条丢失；关闭会话后回到常驻条（切换会话保持全屏）。
+- 双击常驻条状态入口会把窗口最小化。
+- Windows VNC 会话看不到远端光标（共享层无条件挂 `CursorHandler` 后的回归）——WPF 侧改为按热点把光标套成画面指针。
+- SSH 中文输入法快速输入掉字（keyCode=229）+ 出向批量泵（共享层带入）。
+- 稳定性打磨：堵住 async void 崩溃口、错误提示说人话（共享层带入）。
+
+### 未含
+- 设置页「首页时间显示 5 控件合并为 1 下拉」（P4）：涉及共享层字段删除 + macOS 视图同步，留待跨平台协调窗口。
+
+详见 [`releases/v0.9.0/CHANGELOG.md`](releases/v0.9.0/CHANGELOG.md)。
+
 ## [0.8.1] — 2026-09-07
 
 ### 修复
@@ -117,6 +149,7 @@
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
+[0.9.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.9.0
 [0.8.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.8.1
 [0.8.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.8.0
 [0.3.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.3.1
