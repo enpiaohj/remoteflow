@@ -16,19 +16,24 @@
 
 ## 技术基线（不可随意更改）
 
-- 目标平台 Windows 11；开发语言 C#；Runtime **.NET 10 LTS**（`global.json` 锁定 `10.0.400`）。
-- UI 为 **WPF + MVVM**，不引入其他 UI 框架。
-- 协议不自研：RDP 用系统 `mstscax.dll` ActiveX；SSH 用 SSH.NET + xterm.js/WebView2；VNC 用 Community.MarcusW.VncClient。
-- 本地数据库 SQLite；凭据保护 Windows DPAPI；日志 Serilog。
+- 双平台：**Windows 版 = WPF（`RemoteFlow.App`）**，**macOS 版 = 原生 AppKit（`RemoteFlow.App.Mac`，.NET for macOS）**；
+  开发语言 C#；Runtime **.NET 10 LTS**（`global.json` 锁定 `10.0.400`）。Windows 侧不引入 WPF 以外的 UI 框架。
+- 两端共享 `RemoteFlow.Core`（模型）+ `RemoteFlow.Presentation`（ViewModel + 视图无关服务），各自用平台原生 UI 呈现。
+- 协议不自研：RDP —— Windows 用系统 `mstscax.dll` ActiveX，macOS 用应用内嵌 FreeRDP（`native/rdp/`）；
+  SSH 用 SSH.NET + xterm.js（WebView2 / WKWebView）；VNC 用 Community.MarcusW.VncClient。
+- 本地数据库 SQLite；凭据保护 Windows DPAPI / macOS Keychain；日志 Serilog。
 - 集中式包版本管理（`Directory.Packages.props`），新增依赖须说明原因并在此处/PR 记录。
 
 ## 架构约束
 
-- 依赖方向：`UI → Application → Core ← Infrastructure / Protocol.*`。UI 不直接引用协议实现。
-- `RemoteFlow.Core` 保持平台无关（`net10.0`，不引用 WPF/WinForms/Windows 专属 API）。
+- 依赖方向：`UI(App / App.Mac) → Presentation → Application → Core ← Infrastructure.* / Protocol.*`。UI 不直接引用协议实现。
+- `RemoteFlow.Core` / `RemoteFlow.Presentation` 保持平台无关，不引用 WPF/WinForms/AppKit/平台专属 API。
+- **UI 层极薄**：只做视图构造 + 平台互操作；逻辑一律下沉到 ViewModel。同一个 `if` 写在两个平台的 view code-behind 里 = 它该在 ViewModel。
+- **改 `Core` / `Presentation` = 同时影响两端**，按 API 变更对待：优先加法（旧的标 `[Obsolete]`）；
+  必须删除 / 改签名时，在同一改动里把 `App`(WPF) + `App.Mac`(AppKit) 的相关视图一起改到，**两端 CI 都绿**才合。
 - View 不操作协议实现；ViewModel 不保存 Secret；`SessionManager` 统一管理会话生命周期。
 - 数据库访问统一走 Repository，不散落 SQL。
-- 新增协议 = 新增一个 `IConnectionProvider` 实现 + 在 `App.xaml.cs` 注册，不改动既有架构。
+- 新增协议 = 新增一个 `IConnectionProvider` 实现 + 在组合根注册，不改动既有架构。
 
 ## 安全红线
 
@@ -54,6 +59,9 @@
   - Tag：Windows 沿用 `v<X.Y.Z>`（历史如此）；macOS 用 `macos-v<X.Y.Z>`。
   - Release Snapshot：`releases/v<X.Y.Z>/`（Windows）/ `releases/macos-v<X.Y.Z>/`（macOS）。
   - 每个版本内部（csproj / 关于页 / CHANGELOG / Tag / Release）保持一致；跨平台不要求一致。
+- 打 `v*` / `macos-v*` tag → 对应 workflow 自动 build/test/publish → **创建 GitHub Release 草稿**，人工审核后手动 Publish / 设 Latest。
+- **完整发布流程、分支纪律、共享层改动规则、草稿重来的授权边界、统一发布路线图见
+  `docs/04-发布/2026-09-09-RemoteFlow双平台发布规范-v1.0.md`（发布相关以它为准）。**
 - `releases/` 内的大文件用 `.gitignore` 排除，改上传 GitHub Releases；`source/` 与 `CHANGELOG.md` 入库。
 
 ## Commit 规范
