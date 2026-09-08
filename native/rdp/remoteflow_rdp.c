@@ -460,6 +460,19 @@ int rf_rdp_connect(void* h, const char* host, int port, const char* username, co
 	freerdp_settings_set_bool(s, FreeRDP_TlsSecurity, TRUE);
 	freerdp_settings_set_bool(s, FreeRDP_RdpSecurity, TRUE);
 
+	/* ── 性能相关（Tier 4）──
+	   这些 Disable* 会算进 PerformanceFlags 发给服务端，服务端据此决定不发某类内容。
+	   观感优先：壁纸 / 主题 / 字体平滑一律保留 —— LAN + GFX 下它们几乎不耗流量，
+	   为省一点带宽把桌面搞得像被扒了皮不值。只关真正无谓的动画。 */
+	freerdp_settings_set_uint32(s, FreeRDP_ConnectionType, CONNECTION_TYPE_LAN); /* 内网，给服务端的带宽提示 */
+	freerdp_settings_set_bool(s, FreeRDP_DisableWallpaper, FALSE);      /* 壁纸保留（GFX 下第一帧后几乎不耗流量） */
+	freerdp_settings_set_bool(s, FreeRDP_DisableThemes, FALSE);         /* 主题保留 */
+	freerdp_settings_set_bool(s, FreeRDP_DisableFullWindowDrag, TRUE);  /* 拖窗口只画轮廓（RDP 默认行为，观感无损） */
+	freerdp_settings_set_bool(s, FreeRDP_DisableMenuAnims, TRUE);       /* 菜单淡入淡出动画（默认就关） */
+	freerdp_settings_set_bool(s, FreeRDP_AllowFontSmoothing, TRUE);     /* ClearType，可读性 */
+	freerdp_settings_set_bool(s, FreeRDP_CompressionEnabled, TRUE);     /* 批量压缩（默认就开，显式写明） */
+	freerdp_settings_set_bool(s, FreeRDP_BitmapCacheEnabled, TRUE);     /* GFX 未协商上时的传统路径缓存 */
+
 	rfContext* rf = (rfContext*)instance->context;
 	PubSub_SubscribeChannelConnected(instance->context->pubSub, rf_on_channel_connected);
 	PubSub_SubscribeChannelDisconnected(instance->context->pubSub, rf_on_channel_disconnected);
