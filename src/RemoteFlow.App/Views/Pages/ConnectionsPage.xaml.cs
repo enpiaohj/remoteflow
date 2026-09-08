@@ -326,6 +326,16 @@ public partial class ConnectionsPage : UserControl
         }
     }
 
+    /// <summary>行悬停浮出的「连接」按钮：DataContext 即该行 VM。</summary>
+    private async void OnRowConnectClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is ConnectionItemViewModel item
+            && ViewModel is { IsMultiSelect: false } viewModel)
+        {
+            await viewModel.ConnectAsync(item);
+        }
+    }
+
     /// <summary>「断开连接」：关闭该连接的全部活动会话（含连接中 / 失败未清）。</summary>
     private async void OnDisconnectMenuClick(object sender, RoutedEventArgs e)
     {

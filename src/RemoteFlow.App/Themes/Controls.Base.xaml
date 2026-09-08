@@ -74,6 +74,33 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
+    <!-- 会话状态点：叠在图标块右下角。空闲隐藏（可见性由使用处按 HasActiveSession 绑定），
+         仅连接中 / 已连接时点亮。外圈用页面底色描一圈，把点从图标块里"抬"出来。
+         内点 Fill 由 SessionStatusDot.Fill 按 IsConnected 决定绿 / 琥珀。 -->
+    <Style x:Key="SessionStatusDot" TargetType="Border">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Background" Value="{DynamicResource Bg.Layer}" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="VerticalAlignment" Value="Bottom" />
+        <Setter Property="Margin" Value="0,0,-4,-4" />
+    </Style>
+
+    <Style x:Key="SessionStatusDot.Fill" TargetType="Ellipse">
+        <Setter Property="Width" Value="11" />
+        <Setter Property="Height" Value="11" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <!-- 默认琥珀 = 连接中；IsConnected 时转绿 -->
+        <Setter Property="Fill" Value="{DynamicResource Status.Warning}" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                <Setter Property="Fill" Value="{DynamicResource Status.Success}" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
     <!-- ── 排版 ───────────────────────────────────────────────── -->
 
     <Style x:Key="Text.PageTitle" TargetType="TextBlock">

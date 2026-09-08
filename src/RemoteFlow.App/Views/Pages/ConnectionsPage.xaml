@@ -183,6 +183,11 @@
                         <TextBlock Style="{StaticResource IconTile.Glyph}"
                                    Text="{Binding ProtocolIcon}"
                                    Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                        <!-- 会话状态点（右下角）：空闲隐藏，连接中琥珀 / 已连接绿 -->
+                        <Border Style="{StaticResource SessionStatusDot}"
+                                Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}">
+                            <Ellipse Style="{StaticResource SessionStatusDot.Fill}" />
+                        </Border>
                     </Grid>
                     <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" Margin="14,0,8,0"
                                MaxWidth="360" TextTrimming="CharacterEllipsis" />
@@ -224,6 +229,30 @@
                     <TextBlock Text="{Binding OverflowTagCount, StringFormat=+{0}}" Style="{StaticResource Text.Caption}"
                                VerticalAlignment="Center"
                                Visibility="{Binding OverflowTagCount, Converter={StaticResource CountToVisibility}}" />
+                </StackPanel>
+
+                <!-- 悬停快捷操作：鼠标移到行上时在弹性列里就地浮出「连接」，省去双击 / 走详情面板。
+                     多选模式下隐藏。 -->
+                <StackPanel Grid.Column="5" Orientation="Horizontal" HorizontalAlignment="Right"
+                            VerticalAlignment="Center" Margin="0,0,8,0">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Opacity" Value="0" />
+                            <Setter Property="IsHitTestVisible" Value="False" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                    <Setter Property="Opacity" Value="1" />
+                                    <Setter Property="IsHitTestVisible" Value="True" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding DataContext.IsMultiSelect, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Button Style="{StaticResource Button.Subtle}" Height="28" Padding="10,0" FontSize="12"
+                            Content="连接" ToolTip="连接 (Enter)"
+                            Click="OnRowConnectClick" />
                 </StackPanel>
 
                 <!-- 「最近连接」列：真正已连接时显示绿点 +「已连接」，否则回退显示最近连接时间。

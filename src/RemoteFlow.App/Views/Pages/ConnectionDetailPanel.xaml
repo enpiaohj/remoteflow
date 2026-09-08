@@ -207,7 +207,14 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="协议" Style="{StaticResource Text.Label}" />
-                        <TextBlock Grid.Column="1" Text="{Binding ProtocolName}" Style="{StaticResource Text.Body}" />
+                        <!-- 协议色小徽章：与列表 / 首页同一套视觉语言 -->
+                        <Grid Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <Border CornerRadius="4"
+                                    Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                    Opacity="0.14" />
+                            <TextBlock Text="{Binding ProtocolName}" FontSize="11" FontWeight="SemiBold" Margin="8,3"
+                                       Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                        </Grid>
                     </Grid>
 
                     <Grid Style="{StaticResource FieldRow}">

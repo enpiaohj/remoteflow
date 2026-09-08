@@ -56,7 +56,7 @@
 
         <!-- 最近连接：大号快捷卡片。是首页最突出的快捷入口，给足高度和图标尺寸 -->
         <DataTemplate x:Key="RecentCard" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Grid Margin="0,0,14,0" MinHeight="122"
+            <Grid Margin="0,0,14,0" MinHeight="102"
                   ContextMenu="{StaticResource HomeRowMenu}">
                 <Button Cursor="Hand" HorizontalContentAlignment="Stretch"
                         Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -72,10 +72,10 @@
                                     CornerRadius="{StaticResource Radius.Large}"
                                     SnapsToDevicePixels="True">
                                 <Grid>
-                                    <Border Width="3" HorizontalAlignment="Left" Margin="0,18"
+                                    <Border Width="3" HorizontalAlignment="Left" Margin="0,16"
                                             Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
                                             CornerRadius="0,2,2,0" />
-                                    <ContentPresenter Margin="20,18,16,16" />
+                                    <ContentPresenter Margin="20,16,16,14" />
                                 </Grid>
                             </Border>
                             <ControlTemplate.Triggers>
@@ -107,7 +107,7 @@
                         </Grid.ColumnDefinitions>
 
                         <!-- 首页「最近连接」是图标系统里唯一放大到 64 的例外，突显这块快捷入口 -->
-                        <Grid Grid.Column="0" VerticalAlignment="Center">
+                        <Grid Grid.Column="0" VerticalAlignment="Center" Width="64" Height="64">
                             <Border Style="{StaticResource IconTile.Background}"
                                     Width="64" Height="64" CornerRadius="{StaticResource Radius.Large}"
                                     Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
@@ -115,7 +115,29 @@
                             <TextBlock Style="{StaticResource IconTile.Glyph}" FontSize="28"
                                        Text="{Binding ProtocolIcon}"
                                        Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                            <!-- 会话状态点：空闲隐藏，连接中琥珀 / 已连接绿 -->
+                            <Border Style="{StaticResource SessionStatusDot}" Width="18" Height="18" CornerRadius="9" Margin="0,0,-3,-3"
+                                    Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}">
+                                <Ellipse Style="{StaticResource SessionStatusDot.Fill}" Width="13" Height="13" />
+                            </Border>
                         </Grid>
+
+                        <!-- 悬停浮出「连接 →」提示：整张卡片本身就是连接按钮，这里只作可见性引导 -->
+                        <TextBlock Grid.Column="1" Text="连接 &#x2192;" FontSize="12" FontWeight="SemiBold"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                                   IsHitTestVisible="False"
+                                   Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Opacity" Value="0" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                                            <Setter Property="Opacity" Value="1" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
 
                         <StackPanel Grid.Column="1" Margin="18,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontWeight="SemiBold" FontSize="15"
@@ -181,19 +203,45 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- 图标块显示协议（与收藏 / 连接列表同一套语言） -->
-                <Grid Grid.Column="0" VerticalAlignment="Center">
+                <Grid Grid.Column="0" VerticalAlignment="Center"
+                      Width="{StaticResource IconTile.Size}" Height="{StaticResource IconTile.Size}">
                     <Border Style="{StaticResource IconTile.Background}"
                             Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
                             Opacity="{StaticResource IconTile.ColorBgOpacity}" />
                     <TextBlock Style="{StaticResource IconTile.Glyph}"
                                Text="{Binding ProtocolIcon}"
                                Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    <Border Style="{StaticResource SessionStatusDot}"
+                            Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}">
+                        <Ellipse Style="{StaticResource SessionStatusDot.Fill}" />
+                    </Border>
                 </Grid>
 
                 <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding HostDisplay}" Style="{StaticResource Text.Caption}"
                                FontFamily="{StaticResource MonoFont}" Margin="0,1,0,0" />
+                </StackPanel>
+
+                <!-- 悬停就地浮出「连接」：与「我的连接」列表一致，省去双击 -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                            VerticalAlignment="Center" Margin="0,0,4,0">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Opacity" Value="0" />
+                            <Setter Property="IsHitTestVisible" Value="False" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Grid}}" Value="True">
+                                    <Setter Property="Opacity" Value="1" />
+                                    <Setter Property="IsHitTestVisible" Value="True" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Button Style="{StaticResource Button.Subtle}" Height="26" Padding="10,0" FontSize="12"
+                            Content="连接" ToolTip="连接"
+                            Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}" />
                 </StackPanel>
 
                 <Grid Grid.Column="2" VerticalAlignment="Center" Margin="8,0">
@@ -262,8 +310,8 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-            <!-- 问候语 + 统一日期 + 常显统计行（N 个连接 · M 个会话已连接） -->
-            <StackPanel Grid.Row="0" Margin="0,0,0,18">
+            <!-- 问候语 + 统一日期 + 统计行（N 个连接；有已连接会话时才追加「· M 个会话已连接」） -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,14">
                 <TextBlock Style="{StaticResource Text.PageTitle}" Text="{Binding Greeting, Mode=OneWay}" />
                 <TextBlock Text="{Binding DateLine, Mode=OneWay}" Style="{StaticResource Text.PageSubtitle}"
                            Foreground="{DynamicResource Text.Tertiary}" Margin="0,3,0,0" />
@@ -272,14 +320,21 @@
                            Foreground="{DynamicResource Text.Secondary}"
                            Margin="0,2,0,0"
                            Visibility="{Binding HasClockLine, Converter={StaticResource BoolToVisibility}}" />
-                <TextBlock Style="{StaticResource Text.PageSubtitle}" Margin="0,7,0,0">
-                    <Run Text="{Binding TotalConnections, Mode=OneWay}" FontWeight="SemiBold"
-                         Foreground="{DynamicResource Text.Secondary}" />
-                    <Run Text=" 个连接 · " Foreground="{DynamicResource Text.Tertiary}" />
-                    <Run Text="{Binding ConnectedSessions, Mode=OneWay}" FontWeight="SemiBold"
-                         Foreground="{DynamicResource Text.Secondary}" />
-                    <Run Text=" 个会话已连接" Foreground="{DynamicResource Text.Tertiary}" />
-                </TextBlock>
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <TextBlock Style="{StaticResource Text.PageSubtitle}">
+                        <Run Text="{Binding TotalConnections, Mode=OneWay}" FontWeight="SemiBold"
+                             Foreground="{DynamicResource Text.Secondary}" />
+                        <Run Text=" 个连接" Foreground="{DynamicResource Text.Tertiary}" />
+                    </TextBlock>
+                    <!-- 没有已连接会话时「0 个会话已连接」是噪声——只在 >0 时显示 -->
+                    <TextBlock Style="{StaticResource Text.PageSubtitle}"
+                               Visibility="{Binding ConnectedSessions, Converter={StaticResource CountToVisibility}}">
+                        <Run Text=" · " Foreground="{DynamicResource Text.Tertiary}" />
+                        <Run Text="{Binding ConnectedSessions, Mode=OneWay}" FontWeight="SemiBold"
+                             Foreground="{DynamicResource Status.Success}" />
+                        <Run Text=" 个会话已连接" Foreground="{DynamicResource Text.Tertiary}" />
+                    </TextBlock>
+                </StackPanel>
             </StackPanel>
 
             <!-- 首次使用引导 -->
