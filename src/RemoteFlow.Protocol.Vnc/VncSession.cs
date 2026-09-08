@@ -78,6 +78,9 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
 
     public event EventHandler<SessionStateChangedEventArgs>? StateChanged;
 
+    /// <summary>远端光标形状变化（协议线程触发；null = 隐藏）。UI 需自行封送主线程。</summary>
+    public event Action<VncCursorShape?>? CursorChanged;
+
     /// <summary>是否已进入关闭 / 收尾流程（Disconnect / Dispose / 远端关闭释放后为 true）。</summary>
     public bool IsClosing => _closing;
 
@@ -128,6 +131,13 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
                 AuthenticationHandler = this,
                 InitialRenderTarget = RenderTarget,
 
+                // 画质旋钮（内网优先清晰 + 省客户端解码 CPU；带宽无所谓）：
+                //   JPEG 质量高、不做色度抽样（4:4:4），压缩级别调低（少压 = 服务端 CPU 省、
+                //   客户端解码快）。库默认三项都是自动/中档。
+                JpegQualityLevel = 92,
+                JpegSubsamplingLevel = JpegSubsamplingLevel.None,
+                PreferredCompressionLevel = 1,
+
                 // 剪贴板接收依赖 OutputHandler：库在无 OutputHandler 时会直接跳过
                 // ServerCutText（不读取正文），因此需要接收时挂上处理器。其余服务器
                 // 输出事件（铃响 / 桌面名 / LED 等）当前无 UI 消费，交 ServerOutputHandler 空实现。
@@ -168,6 +178,9 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
             }
 
             connection.PropertyChanged += OnConnectionPropertyChanged;
+
+            // 本地光标：挂上 CursorHandler，库就把光标伪编码交给我们而不是合成进帧缓冲。
+            connection.CursorHandler = new VncCursorHandler(shape => CursorChanged?.Invoke(shape));
 
             // 认领成功后再次确认：关闭流程若恰在「检查 + 认领」之间启动，撤销写入并释放。
             // 若释放已被并发 Disconnect/Dispose 认领，槽位中的连接由认领者负责释放，这里不再重复释放。
