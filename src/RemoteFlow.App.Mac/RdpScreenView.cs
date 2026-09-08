@@ -1,8 +1,6 @@
-using System.Runtime.InteropServices;
 using AppKit;
 using CoreAnimation;
 using Foundation;
-using CoreGraphics;
 using RemoteFlow.Core.Sessions;
 using RemoteFlow.Protocol.Rdp.Mac;
 using ConnectionState = RemoteFlow.Core.Models.ConnectionState;
@@ -16,11 +14,10 @@ namespace RemoteFlow.App.Mac;
 /// </summary>
 public sealed class RdpScreenView : NSView
 {
-    private const double FrameIntervalMs = 33;
-
     private readonly RdpSession _session;
     private readonly IFrameSource _frames;
     private readonly CALayer _screen = new() { ContentsGravity = CALayer.GravityResizeAspect };
+    private readonly LayerFramePump _pump;
     private readonly NSTextField _overlay;
     private readonly NSButton _reconnect;
 
@@ -28,11 +25,8 @@ public sealed class RdpScreenView : NSView
 
     public RemoteFlow.Core.Models.ConnectionProfile Profile => _session.Profile;
 
-    private NSTimer? _timer;
-    private byte[] _buffer = [];
     private int _fw;
     private int _fh;
-    private FrameSize _pendingSize;
     private bool _detached;
 
     // 动态分辨率：视图尺寸变了就把远程桌面改成同样的长宽比，避免画面被 letterbox 出黑边。
@@ -82,8 +76,12 @@ public sealed class RdpScreenView : NSView
 
         _frames.FrameSizeChanged += OnFrameSizeChanged;
         _session.StateChanged += OnStateChanged;
-        _pendingSize = _frames.FrameSize;
-        StartLoop();
+        var initial = _frames.FrameSize;
+        _fw = initial.Width;
+        _fh = initial.Height;
+
+        _pump = new LayerFramePump(_frames, _screen, () => _overlay.Hidden = true);
+        _pump.Start();
     }
 
     /// <summary>
@@ -122,7 +120,7 @@ public sealed class RdpScreenView : NSView
         }
 
         _winObservers.Clear();
-        StopLoop();
+        _pump.Dispose();
         _frames.FrameSizeChanged -= OnFrameSizeChanged;
         _session.StateChanged -= OnStateChanged;
     }
@@ -147,6 +145,7 @@ public sealed class RdpScreenView : NSView
         base.ViewDidMoveToWindow();
         Window?.MakeFirstResponder(this);
         HookWindowNotifications();
+        SyncPumpPaused();
     }
 
     /// <summary>
@@ -175,6 +174,13 @@ public sealed class RdpScreenView : NSView
         Watch(NSWindow.DidEnterFullScreenNotification);
         Watch(NSWindow.DidExitFullScreenNotification);
         Watch(NSWindow.DidEndLiveResizeNotification);
+
+        // 最小化 / 遮挡 → 暂停取帧（画面重协商仍按 ApplyResize 走）。
+        void WatchPaused(NSString name) => _winObservers.Add(
+            NSNotificationCenter.DefaultCenter.AddObserver(name, _ => SyncPumpPaused(), win));
+
+        WatchPaused(NSWindow.DidMiniaturizeNotification);
+        WatchPaused(NSWindow.DidDeminiaturizeNotification);
     }
 
     public override void Layout()
@@ -289,68 +295,20 @@ public sealed class RdpScreenView : NSView
         }
     }
 
-    // ── 渲染循环 ────────────────────────────────────────────────
-    private void StartLoop()
-    {
-        StopLoop();
-        _timer = NSTimer.CreateRepeatingScheduledTimer(
-            TimeSpan.FromMilliseconds(FrameIntervalMs), _ => PumpFrame());
-        NSRunLoop.Main.AddTimer(_timer, NSRunLoopMode.Common);
-    }
+    // ── 渲染 ────────────────────────────────────────────────────
+    // 取帧 / 贴图层 / 缓冲乒乓 / 不可见暂停 都在 LayerFramePump 里。这里只跟踪
+    // 服务端实际帧尺寸（_fw/_fh），供动态分辨率重协商比对。
 
-    private void StopLoop()
-    {
-        _timer?.Invalidate();
-        _timer = null;
-    }
-
-    private void PumpFrame()
-    {
-        if (_detached || _session.State != ConnectionState.Connected)
-        {
-            return;
-        }
-
-        if (!_pendingSize.IsEmpty)
-        {
-            _fw = _pendingSize.Width;
-            _fh = _pendingSize.Height;
-            _buffer = new byte[_fw * _fh * 4];
-            _pendingSize = FrameSize.Empty;
-        }
-
-        if (_buffer.Length == 0)
-        {
-            return;
-        }
-
-        var handle = GCHandle.Alloc(_buffer, GCHandleType.Pinned);
-        bool copied;
-        try
-        {
-            copied = _frames.TryCopyLatestFrame(
-                handle.AddrOfPinnedObject(), _buffer.Length, _fw * 4, _fw, _fh);
-        }
-        finally
-        {
-            handle.Free();
-        }
-
-        if (copied)
-        {
-            _overlay.Hidden = true;
-            using var provider = new CGDataProvider(_buffer, 0, _buffer.Length);
-            using var cs = CGColorSpace.CreateDeviceRGB();
-            _screen.Contents = new CGImage(
-                _fw, _fh, 8, 32, _fw * 4, cs,
-                CGBitmapFlags.ByteOrder32Little | CGBitmapFlags.NoneSkipFirst,
-                provider, null, false, CGColorRenderingIntent.Default);
-        }
-    }
+    /// <summary>视图从舞台移走（切 Tab）、窗口最小化、被完全遮挡时暂停取帧。</summary>
+    private void SyncPumpPaused()
+        => _pump.Paused = _detached
+            || Window is null
+            || Window.IsMiniaturized;
 
     private void OnFrameSizeChanged(object? sender, FrameSize size)
     {
-        _pendingSize = size;
+        _fw = size.Width;
+        _fh = size.Height;
         // 记录服务端最终给到的分辨率：和请求值对不上就说明对端没接受重协商，
         // 此时的黑边是协议层限制而非视图没铺满，便于区分两类问题。
         System.Console.Error.WriteLine(

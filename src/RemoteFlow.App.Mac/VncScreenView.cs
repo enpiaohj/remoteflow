@@ -1,7 +1,5 @@
-using System.Runtime.InteropServices;
 using AppKit;
 using CoreAnimation;
-using CoreGraphics;
 using Foundation;
 using MarcusW.VncClient;
 using RemoteFlow.Core.Sessions;
@@ -18,24 +16,19 @@ namespace RemoteFlow.App.Mac;
 /// </summary>
 public sealed class VncScreenView : NSView
 {
-    private const double FrameIntervalMs = 33; // ≈30fps
-
     private readonly VncSession _session;
     private readonly IFrameSource _frames;
     private readonly CALayer _screen = new() { ContentsGravity = CALayer.GravityResizeAspect };
+    private readonly LayerFramePump _pump;
     private readonly NSTextField _overlay;
     private readonly NSButton _reconnect;
+    private readonly List<NSObject> _winObservers = new();
 
     /// <summary>会话断开后用户点「重新连接」。</summary>
     public event EventHandler? ReconnectRequested;
 
     public RemoteFlow.Core.Models.ConnectionProfile Profile => _session.Profile;
 
-    private NSTimer? _timer;
-    private byte[] _buffer = Array.Empty<byte>();
-    private int _fw;
-    private int _fh;
-    private FrameSize _pendingSize;
     private uint _prevFlags;
     private bool _detached;
 
@@ -76,12 +69,11 @@ public sealed class VncScreenView : NSView
             _reconnect.TopAnchor.ConstraintEqualTo(_overlay.BottomAnchor, 12),
         });
 
-        _frames.FrameSizeChanged += OnFrameSizeChanged;
         _session.StateChanged += OnStateChanged;
         _session.ClipboardTextReceived += OnClipboardTextReceived;
 
-        _pendingSize = _frames.FrameSize;
-        StartLoop();
+        _pump = new LayerFramePump(_frames, _screen, () => _overlay.Hidden = true);
+        _pump.Start();
     }
 
     /// <summary>
@@ -110,8 +102,13 @@ public sealed class VncScreenView : NSView
     public void Detach()
     {
         _detached = true;
-        StopLoop();
-        _frames.FrameSizeChanged -= OnFrameSizeChanged;
+        _pump.Dispose();
+        foreach (var t in _winObservers)
+        {
+            NSNotificationCenter.DefaultCenter.RemoveObserver(t);
+        }
+
+        _winObservers.Clear();
         _session.StateChanged -= OnStateChanged;
         _session.ClipboardTextReceived -= OnClipboardTextReceived;
     }
@@ -130,6 +127,8 @@ public sealed class VncScreenView : NSView
     public override void ViewDidMoveToWindow()
     {
         base.ViewDidMoveToWindow();
+        HookWindowNotifications();
+        SyncPumpPaused();
         if (Window is not null)
         {
             Window.MakeFirstResponder(this);
@@ -142,81 +141,31 @@ public sealed class VncScreenView : NSView
         _screen.Frame = Bounds;
     }
 
-    // ── 渲染循环 ────────────────────────────────────────────────
-    private void StartLoop()
-    {
-        StopLoop();
-        _timer = NSTimer.CreateRepeatingScheduledTimer(
-            TimeSpan.FromMilliseconds(FrameIntervalMs), _ => PumpFrame());
-        NSRunLoop.Main.AddTimer(_timer, NSRunLoopMode.Common);
-    }
+    /// <summary>视图从舞台移走（切 Tab）、窗口最小化、被完全遮挡时暂停取帧。</summary>
+    private void SyncPumpPaused()
+        => _pump.Paused = _detached
+            || Window is null
+            || Window.IsMiniaturized;
 
-    private void StopLoop()
+    private void HookWindowNotifications()
     {
-        _timer?.Invalidate();
-        _timer = null;
-    }
+        foreach (var t in _winObservers)
+        {
+            NSNotificationCenter.DefaultCenter.RemoveObserver(t);
+        }
 
-    private void PumpFrame()
-    {
-        if (_detached || _session.State != ConnectionState.Connected)
+        _winObservers.Clear();
+        if (Window is not { } win)
         {
             return;
         }
 
-        if (!_pendingSize.IsEmpty)
-        {
-            RecreateBuffer(_pendingSize);
-            _pendingSize = FrameSize.Empty;
-        }
+        void Watch(NSString name) => _winObservers.Add(
+            NSNotificationCenter.DefaultCenter.AddObserver(name, _ => SyncPumpPaused(), win));
 
-        if (_buffer.Length == 0)
-        {
-            return;
-        }
-
-        var handle = GCHandle.Alloc(_buffer, GCHandleType.Pinned);
-        bool copied;
-        try
-        {
-            copied = _frames.TryCopyLatestFrame(
-                handle.AddrOfPinnedObject(), _buffer.Length, _fw * 4, _fw, _fh);
-        }
-        finally
-        {
-            handle.Free();
-        }
-
-        if (copied)
-        {
-            _overlay.Hidden = true;
-            _screen.Contents = MakeImage();
-        }
+        Watch(NSWindow.DidMiniaturizeNotification);
+        Watch(NSWindow.DidDeminiaturizeNotification);
     }
-
-    private void RecreateBuffer(FrameSize size)
-    {
-        if (size.Width <= 0 || size.Height <= 0)
-        {
-            return;
-        }
-
-        _fw = size.Width;
-        _fh = size.Height;
-        _buffer = new byte[_fw * _fh * 4];
-    }
-
-    private CGImage? MakeImage()
-    {
-        using var provider = new CGDataProvider(_buffer, 0, _buffer.Length);
-        using var space = CGColorSpace.CreateDeviceRGB();
-        return new CGImage(
-            _fw, _fh, 8, 32, _fw * 4, space,
-            CGBitmapFlags.ByteOrder32Little | CGBitmapFlags.NoneSkipFirst,
-            provider, null, false, CGColorRenderingIntent.Default);
-    }
-
-    private void OnFrameSizeChanged(object? sender, FrameSize size) => _pendingSize = size;
 
     private void OnStateChanged(object? sender, SessionStateChangedEventArgs e)
     {
@@ -283,27 +232,28 @@ public sealed class VncScreenView : NSView
     /// <summary>视图坐标 → 远端画面坐标（按 aspect-fit 缩放与居中，视图为非翻转）。</summary>
     private VncPosition? ToRemote(NSEvent e)
     {
-        if (_fw == 0 || _fh == 0)
+        int fw = _pump.Width, fh = _pump.Height;
+        if (fw == 0 || fh == 0)
         {
             return null;
         }
 
         var p = ConvertPointFromView(e.LocationInWindow, null);
         var avail = Bounds.Size;
-        var scale = Math.Min(avail.Width / _fw, avail.Height / _fh);
+        var scale = Math.Min(avail.Width / fw, avail.Height / fh);
         if (scale <= 0)
         {
             return null;
         }
 
-        var offX = (avail.Width - _fw * scale) / 2;
-        var offY = (avail.Height - _fh * scale) / 2;
+        var offX = (avail.Width - fw * scale) / 2;
+        var offY = (avail.Height - fh * scale) / 2;
 
         // AppKit 视图坐标原点在左下；远端画面原点在左上 → Y 翻转。
         var x = (int)Math.Round((p.X - offX) / scale);
         var y = (int)Math.Round((avail.Height - p.Y - offY) / scale);
 
-        if (x < 0 || y < 0 || x >= _fw || y >= _fh)
+        if (x < 0 || y < 0 || x >= fw || y >= fh)
         {
             return null;
         }
