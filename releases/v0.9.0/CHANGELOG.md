@@ -55,10 +55,16 @@
 
 由 `release-windows.yml` 在 tag 推送后构建并上传到 GitHub Release：
 
-- `RemoteFlow-v0.9.0-win-x64.exe`（self-contained 单文件）
-- `RemoteFlow-v0.9.0-win-x64.zip`（含运行时资源目录）
+- `RemoteFlow-v0.9.0-win-x64.exe`
+  - Size：74,725,130 bytes
+  - SHA-256：`5636253E7D08FF9C47CC8F9A61D3B7DE28A79C18FECAE0DD8CA440BE9FB4BEC2`
+- `RemoteFlow-v0.9.0-win-x64.zip`
+  - Size：69,252,168 bytes
+  - SHA-256：`743AF4848115E8F16439072DA448D8FC70AD646F696941B8F739ABE57A3DDB3E`
 
-SHA-256 见 GitHub Release 页 / CI 日志。本地 `releases/v0.9.0/` 只保留 `source/` 与本 CHANGELOG。
+产物入库策略：`releases/v0.9.0/` 目录里 `source/` + 本 CHANGELOG **入 Git**；exe / zip 由 `.gitignore`
+排除（不进 Git History），但**同步下载一份到本地 `releases/v0.9.0/` 做磁盘快照**，用于快速回退 / 现场保留
+（`gh release download v0.9.0`，SHA-256 与上面核对一致）。用户下载走 GitHub Release 页。
 
 ## Git
 

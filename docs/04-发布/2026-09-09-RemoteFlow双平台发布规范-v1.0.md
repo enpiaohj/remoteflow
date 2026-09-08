@@ -144,14 +144,22 @@ git push origin vX.Y.Z
 - **不得移动 / 删除已推送并已发布的 tag。** 草稿阶段的 tag（Release 还没手动发布）若确需重来，
   见 §7。
 
-### 5.6 CI 出草稿 → 人工发布
+### 5.6 CI 出草稿 → 人工发布 → 本地留存
 
 - tag 推上去后 `release-windows.yml` 自动跑：build + test + publish + （有证书则 signtool 签）+ 打包 +
   `upload-artifact` + **创建 GitHub Release 草稿**（`draft: true`，作者 `github-actions[bot]`）。
 - `gh run list --workflow=release-windows.yml --limit 1` 看结果；`gh release view vX.Y.Z` 看草稿与产物。
-- **人工审核草稿**：产物名 / 大小对；Release body（可把 `releases/vX.Y.Z/CHANGELOG.md` 正文贴进去）；
-  确认没问题再在网页上「Publish release」。
-- 发布时若要设为 Latest，取消勾其它版本的 Latest。
+- **人工审核草稿**：产物名 / 大小对；Release body（用 `--notes-file releases/vX.Y.Z/CHANGELOG.md` 或网页贴入）；
+  确认没问题再 `gh release edit vX.Y.Z --draft=false --latest`（或网页 Publish）。设 Latest 会自动取消其它版本的 Latest。
+- **产物的两个去处**（历史一直如此，`v0.9.0` 起构建从本地 `seal-release.ps1` 迁到 CI，此步需手动补）：
+  1. **GitHub Release 页** = 用户下载渠道（CI 已上传）。
+  2. **本地 `releases/vX.Y.Z/` 目录** = 磁盘上的不可变快照，用于快速回退 / 现场保留（`.gitignore` 排除 `*.exe|*.zip|*.dmg`，不入库）。
+     发布后执行：
+     ```
+     cd releases/vX.Y.Z && gh release download vX.Y.Z --pattern "RemoteFlow-vX.Y.Z-*"
+     sha256sum RemoteFlow-vX.Y.Z-*        # 与 CI 日志 / Release 页核对
+     ```
+  → 两处一致后，`releases/vX.Y.Z/` 里应有 `source/` + `CHANGELOG.md`（入库）+ exe + zip（本地，gitignore）。
 
 ### 5.7 发布报告（中文，至少含）
 
