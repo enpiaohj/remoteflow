@@ -1,73 +1,110 @@
 # RemoteFlow macOS v0.3.0
 
-发布日期：2026-09-08
+发布日期：2026-09-08 · 上一版本 macos-v0.2.0
 
-上一版本 macos-v0.2.0。本版聚焦三协议（RDP / SSH / VNC）的性能与手感，
-并修掉一个默认分组的存量数据问题。macOS 与 Windows 为独立版本线，本版本号不与 Windows 版对齐。
+本版聚焦三个远程协议（RDP / SSH / VNC）的**性能与操作手感**，把画面渲染、
+输入延迟、光标响应逐条打磨到位，并修复了一个影响老用户的默认分组数据问题。
+无破坏性变更，直接覆盖安装即可。
 
-## Changed
+> macOS 与 Windows 是相互独立的版本线，本版本号（0.3.0）不与 Windows 版对齐。
 
-- **默认分组规则**：老用户（升级前已有分组的库）此前会把第一个真实分组静默提成
-  受保护默认组、且不创建「我的设备」。现改为首启时一律新建「我的设备」作默认 + 保护，
-  排在所有现有分组之前，现有分组一个不动。
+---
 
-## Improved — RDP
+## 安装
 
-- **启用 RDP8+ 图形管线（GFX / Progressive）**：滚动、切窗口等大重绘不再整屏卡顿，
-  文本走 ClearCodec 更清晰，带宽占用大幅下降，帧确认背压避免服务端甩帧。
-- **脏区帧推送**：只回写画面变化的矩形，不再每帧全量拷贝（1080p 约 8MB / 帧），
-  打字 / 移动鼠标等日常操作对协议解码线程的压力明显减小。
-- **服务端自适应图形**（NetworkAutoDetect）：服务端测量 RTT / 带宽后动态调整图形质量与
-  帧率，跨 VPN / 公网时自动降质而非硬发导致卡顿。
-- **本地光标渲染**：远端光标形状在本地鼠标位置绘制，零延迟，且正确反映 I 型 / 手型 /
-  忙等待等各种形状。
-- **连接性能参数**：内网带宽提示 + 关闭无谓的菜单 / 拖影动画；壁纸、主题、字体平滑一律保留。
+1. 下载对应架构的 DMG（Apple Silicon 选 `arm64`，Intel 选 `x64`），打开后把
+   `RemoteFlow.app` 拖进「应用程序」。
+2. **首次启动**：本版为 ad-hoc 签名、未做 Apple 公证，直接双击会被 Gatekeeper 拦。
+   在「应用程序」里 **右键 RemoteFlow →「打开」**，弹窗再点一次「打开」即可；
+   或在终端执行一次：
+   ```
+   xattr -dr com.apple.quarantine /Applications/RemoteFlow.app
+   ```
+3. 之后正常双击启动。数据存放在 `~/Library/Application Support/RemoteFlow/`，
+   升级不影响既有连接、凭据、历史。
 
-## Improved — SSH
+---
 
-- **xterm.js WebGL 渲染器**：终端渲染改为 GPU 加速，大输出刷屏 / 彩色日志 /
-  `top`、`htop` 明显更顺，渲染 CPU 占用更低。
-- **中文输入法快速输入掉字修复**：拼音 / 搜狗 / 豆包等输入法即便英文模式也对每次按键
-  上报 `keyCode=229`，触发 xterm.js 的一个去重缺陷（上游未修，issue #5887）——
-  快速连打时「cd 只出 c」「dir 出 dr」。本版给 xterm 打了补丁；真正的中文合成输入不受影响。
-- 出向输入改为批量发送，减少逐字符 Write/Flush 开销。
+## 变更详情
 
-## Improved — VNC
+### 默认分组规则修复（Changed）
 
-- **会话画面渲染**（同时惠及 RDP）：去掉每帧的数组钉固、色彩空间重建、整帧拷贝；
-  双缓冲乒乓 + GPU 图层直引用；会话不可见（切标签 / 窗口最小化）时暂停取帧。
-- **画质参数**：内网优先清晰 —— JPEG 高质量、4:4:4 不做色度抽样、低压缩级别
-  （省客户端解码 CPU）。
-- **本地光标渲染**：与 RDP 同款，零延迟。
+**影响对象**：在「默认分组」功能上线前就已经建过分组的老用户。
 
-## Fixed
+- **旧行为**：升级后不会创建「我的设备」，而是把你排在最前面的那个真实分组
+  （比如「生产环境」）**静默提升为受保护的默认分组** —— 于是它突然不能重命名 / 删除 /
+  移动层级了，你也找不到「我的设备」。
+- **新行为**：首次启动时**一律新建「我的设备」**作为默认分组并开启保护，排在所有
+  现有分组之前，**你现有的分组一个都不动**。如果你库里恰好已有一个叫「我的设备」的
+  普通分组，会直接复用它。
+- 已经被误提升的分组，本版启动后会自动恢复（解除保护、清除默认标记，改由新建的
+  「我的设备」承担默认身份）。你之前建的分组和里面的连接原封不动。
 
-- 预置标签种子挪出启动关键路径，缩短冷启动。
-- CI 发布流水线多处修复（详见 Git 历史 `fix(ci)`）。
+### RDP —— 图形与交互
 
-## Known Issues
+| 改进 | 对你意味着什么 |
+| --- | --- |
+| **启用 RDP8+ 图形管线（GFX / RemoteFX Progressive）** | 之前只跑 RDP6 时代的传统位图路径。现在滚动网页、切换窗口这类「大面积重绘」不再整屏卡顿一下；文字走 ClearCodec 更锐利；相同画面带宽占用大幅下降；服务端不会再甩帧。 |
+| **脏区帧推送** | 之前每一帧都把整块画面（1080p 约 8 MB）从协议层拷一遍。现在只回写实际变化的那个矩形 —— 打字、移动鼠标时 CPU 占用明显更低，尤其惠及 Intel 机。 |
+| **服务端自适应图形（Network Auto-Detect）** | 服务端会测量网络往返延迟与带宽，动态调整画质和帧率。跨 VPN / 公网连接时自动降质保流畅，而不是硬发数据导致卡顿；纯内网则维持高画质。 |
+| **本地光标渲染** | 远端光标形状在你本地鼠标位置直接绘制，**零延迟**，并正确显示 I 型（文本框）、手型（链接）、双向箭头（拖拽边框）、忙等待转圈等各种形状。 |
+| **连接性能参数调优** | 关闭远端的菜单淡入淡出、拖动残影等无谓动画；**壁纸、主题、字体平滑（ClearType）一律保留**，桌面看起来和本机一致。 |
 
-- 提供 **arm64（Apple Silicon）** 与 **x64（Intel）** 两个独立 DMG；不提供融合 universal 二进制。
-  x64 那份在 arm64 CI runner 上交叉编译。
-- **Ad-hoc 签名，未公证**：首次打开需在 Finder 里右键 →「打开」，或
-  `xattr -dr com.apple.quarantine /Applications/RemoteFlow.app`。
-  配置 Apple「Developer ID Application」证书 + 公证凭据后，后续版本将自动带完整签名。
-- RDP 动态分辨率 / GFX 需服务端为 Windows 8 / Server 2012 及以上。
+> RDP 的 GFX 管线与动态分辨率需要服务端为 Windows 8 / Windows Server 2012 及以上。
 
-## Verification
+### SSH —— 终端
 
-- Build：GitHub Actions `Release · macOS`（arm64 原生 + x64 交叉编译）；CI 三 job（shared / windows / macos）+ actionlint 通过。
-- Tests：`RemoteFlow.Core.Tests`、`RemoteFlow.IntegrationTests`（Linux）、`IntegrationTests.Windows`、`IntegrationTests.Mac` 通过。
-- Runtime：macOS 端逐项实机验证（默认分组修复、RDP GFX / 脏区 / 自适应 / 光标、SSH WebGL / 中文输入法、VNC 画质 / 光标）；Windows 端本轮未做运行时冒烟。
-- Platform：macOS 13+
-- Architecture：arm64 + x64（分别打包）
+| 改进 | 对你意味着什么 |
+| --- | --- |
+| **xterm.js 切换到 WebGL 渲染器** | 终端渲染改为 GPU 加速。`cat` 大文件、`top` / `htop` 刷新、彩色日志刷屏时明显更顺，渲染 CPU 占用更低。WebGL 不可用（旧显卡 / 系统休眠丢上下文）会自动回落到原渲染器，不影响使用。 |
+| **中文输入法快速输入掉字修复** | 拼音 / 搜狗 / 豆包等输入法即便切到英文模式，也会对每一次按键上报 `keyCode=229`，触发了 xterm.js 的一个去重缺陷（[上游 issue #5887](https://github.com/xtermjs/xterm.js/issues/5887)，尚未修复）——快速连打时「cd 只出 c」「dir 出 dr」。本版给 xterm.js 打了针对性补丁；真正的中文合成输入（在 `vim` 里输中文等）不受影响。 |
+| **出向输入批量发送** | 逐字符的写入 / flush 合并成批，减少开销，也规避 SSH.NET 在读写并发下的缓冲竞态。 |
+
+### VNC —— 画面
+
+| 改进 | 对你意味着什么 |
+| --- | --- |
+| **会话画面渲染优化**（同时惠及 RDP） | 去掉每帧的托管数组钉固、色彩空间重建、整帧内存拷贝；改用双缓冲乒乓 + GPU 图层直接引用；会话不可见（切到别的标签、窗口最小化）时暂停取帧，不再空耗 CPU。 |
+| **画质参数** | 内网优先清晰：JPEG 高质量、4:4:4 不做色度抽样、压缩级别调低（省客户端解码 CPU，内网带宽无所谓）。 |
+| **本地光标渲染** | 与 RDP 同款，光标零延迟。 |
+
+### 其它修复（Fixed）
+
+- 预置标签（生产 / 测试 / 开发）的初始化挪出启动关键路径，冷启动更快。
+- CI / 发布流水线多处修复：`Release · macOS` 现在同时产出 arm64 与 x64（Intel 交叉编译）
+  两个 DMG；发布脚本在无签名证书的 CI 环境下不再中断。
+
+---
+
+## 已知问题
+
+- **架构**：提供 **arm64（Apple Silicon）** 与 **x64（Intel）** 两个独立 DMG，
+  不提供融合的 universal 二进制（融合后重签会破坏 .NET 运行时初始化）。
+  x64 那份在 arm64 的 CI runner 上交叉编译产出。
+- **签名**：ad-hoc 签名、未公证，安装见上方说明。待配置 Apple「Developer ID Application」
+  证书 + 公证凭据后，后续版本会自动带完整签名，届时可直接双击打开。
+- **Windows 侧**：本轮共享层改动在 Windows 上通过了编译与集成测试，但未做运行时冒烟。
+
+---
+
+## 验证
+
+- **构建**：GitHub Actions `Release · macOS`（arm64 原生 + x64 交叉编译两条 matrix）成功；
+  推送前 CI 三 job（shared / windows / macos）+ `actionlint` 通过。
+- **测试**：`RemoteFlow.Core.Tests`、`RemoteFlow.IntegrationTests`（Linux）、
+  `IntegrationTests.Windows`、`IntegrationTests.Mac` 全部通过。
+- **实机**：macOS 端逐项验证 —— 默认分组修复、RDP（GFX / 脏区 / 自适应 / 本地光标）、
+  SSH（WebGL / 中文输入法快速输入）、VNC（画质 / 本地光标）。
+- **平台**：macOS 13 及以上 · **架构**：arm64 + x64（分别打包）
+
+---
 
 ## Git
 
-- Tag：macos-v0.3.0
-- 范围：macos-v0.2.0..（12 个提交，`1d69b9b`..`09496b3`）
+- Tag：`macos-v0.3.0`
+- 提交范围：`macos-v0.2.0..`（`1d69b9b` … `09496b3`，共 12 个提交）
 
 ## 产物
 
-- `RemoteFlow-v0.3.0-macos-arm64.dmg`（Apple Silicon，ad-hoc 签名）
-- `RemoteFlow-v0.3.0-macos-x64.dmg`（Intel，ad-hoc 签名）
+- `RemoteFlow-v0.3.0-macos-arm64.dmg` —— Apple Silicon，约 55 MiB，ad-hoc 签名
+- `RemoteFlow-v0.3.0-macos-x64.dmg` —— Intel，约 57 MiB，ad-hoc 签名

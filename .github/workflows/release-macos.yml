@@ -150,15 +150,7 @@ jobs:
           name: RemoteFlow macOS v${{ env.MAC_VERSION }}
           tag_name: ${{ github.ref_name }}
           files: dist/RemoteFlow-v*-macos-*.dmg
-          body: |
-            **RemoteFlow for macOS · v${{ env.MAC_VERSION }}**
-
-            | 架构 | 文件 |
-            | --- | --- |
-            | Apple Silicon | `RemoteFlow-v${{ env.MAC_VERSION }}-macos-arm64.dmg` |
-            | Intel | `RemoteFlow-v${{ env.MAC_VERSION }}-macos-x64.dmg` |
-
-            变更详情见 `releases/macos-v${{ env.MAC_VERSION }}/CHANGELOG.md`。
-
-            > 未配置 Developer ID 证书时为 ad-hoc 签名，首次打开需右键 →「打开」，
-            > 或 `xattr -dr com.apple.quarantine /Applications/RemoteFlow.app`。
+          # 发布正文直接用该版本的 CHANGELOG（含安装说明 / 变更详情 / 已知问题 / 验证）。
+          # 因此每次发版前务必把 releases/macos-v<X.Y.Z>/CHANGELOG.md 写完整
+          #（seal-release-macos.sh 会校验它存在且首行匹配）。
+          body_path: releases/macos-v${{ env.MAC_VERSION }}/CHANGELOG.md
