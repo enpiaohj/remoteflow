@@ -1,28 +1,32 @@
 using System.Collections.Immutable;
 using System.Runtime.InteropServices;
-using System.Windows;
-using System.Windows.Media.Imaging;
 using MarcusW.VncClient;
 using MarcusW.VncClient.Rendering;
+using RemoteFlow.Core.Sessions;
 using VncSize = MarcusW.VncClient.Size;
 
 namespace RemoteFlow.Protocol.Vnc;
 
 /// <summary>
-/// VNC 帧缓冲渲染目标。
+/// VNC 帧缓冲渲染目标。同时是协议库的 <see cref="IRenderTarget"/> 与
+/// RemoteFlow 的 <see cref="IFrameSource"/>。
 /// <para>
 /// <b>线程模型（这是 VNC 内嵌最关键的一点）：</b>
-/// RFB 协议在后台线程解码并写入画面，而 WPF 的 <see cref="WriteableBitmap"/>
-/// 只能在 UI 线程访问。因此这里以一块非托管缓冲区作为中转：
-/// 协议线程直接写缓冲区，UI 线程按显示帧率把缓冲区整体拷贝进位图。
-/// 两侧通过锁与脏标记协调，既不阻塞协议解码，也不违反 WPF 的线程约束。
+/// RFB 协议在后台线程解码并写入画面，而 UI 框架的位图只能在 UI 线程访问。
+/// 因此这里以一块非托管缓冲区作为中转：协议线程直接写缓冲区，
+/// UI 线程按显示帧率把缓冲区拷贝进自己的位图。
+/// 两侧通过锁与脏标记协调，既不阻塞协议解码，也不违反 UI 框架的线程约束。
+/// </para>
+/// <para>
+/// 本类<b>不引用任何 UI 框架</b>：具体位图类型由各 UI 工程通过
+/// <see cref="IFrameSource.TryCopyLatestFrame"/> 自行承接（技术方案 §6.5）。
 /// </para>
 /// </summary>
-public sealed class VncRenderTarget : IRenderTarget, IDisposable
+public sealed class VncRenderTarget : IRenderTarget, IFrameSource, IDisposable
 {
     /// <summary>
-    /// 帧缓冲像素格式，与 <see cref="System.Windows.Media.PixelFormats.Bgra32"/> 逐字节对应：
-    /// 内存中依次为 B、G、R、A，因此在小端平台上等价于 0xAARRGGBB。
+    /// 帧缓冲像素格式：内存中依次为 B、G、R、A，在小端平台上等价于 0xAARRGGBB。
+    /// 与 WPF 的 <c>PixelFormats.Bgra32</c>、Avalonia 的 <c>PixelFormat.Bgra8888</c> 逐字节对应，
     /// 直接用目标格式接收，避免每帧再做一次像素转换。
     /// </summary>
     public static readonly PixelFormat FramebufferFormat = new(
@@ -43,8 +47,8 @@ public sealed class VncRenderTarget : IRenderTarget, IDisposable
     private bool _dirty;
     private bool _disposed;
 
-    /// <summary>远端桌面尺寸发生变化。UI 需要据此重建 <see cref="WriteableBitmap"/>。</summary>
-    public event EventHandler<VncSize>? FramebufferSizeChanged;
+    /// <summary>远端桌面尺寸发生变化。UI 需要据此重建自己的位图。</summary>
+    public event EventHandler<FrameSize>? FrameSizeChanged;
 
     /// <summary>当前帧缓冲尺寸。</summary>
     public VncSize Size
@@ -54,6 +58,18 @@ public sealed class VncRenderTarget : IRenderTarget, IDisposable
             lock (_sync)
             {
                 return _size;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public FrameSize FrameSize
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return new FrameSize(_size.Width, _size.Height);
             }
         }
     }
@@ -95,17 +111,19 @@ public sealed class VncRenderTarget : IRenderTarget, IDisposable
 
         if (sizeChanged)
         {
-            FramebufferSizeChanged?.Invoke(this, size);
+            FrameSizeChanged?.Invoke(this, new FrameSize(size.Width, size.Height));
         }
 
         return new FramebufferReference(this);
     }
 
-    /// <summary>
-    /// 由 UI 线程调用，把最新帧拷贝进位图。
-    /// </summary>
-    /// <returns>本次是否真的产生了新画面。无新帧时返回 false，避免无谓的重绘。</returns>
-    public bool RenderTo(WriteableBitmap bitmap)
+    /// <inheritdoc />
+    public bool TryCopyLatestFrame(
+        nint destination,
+        long destinationCapacityBytes,
+        int destinationStride,
+        int expectedWidth,
+        int expectedHeight)
     {
         lock (_sync)
         {
@@ -115,28 +133,35 @@ public sealed class VncRenderTarget : IRenderTarget, IDisposable
             }
 
             // 尺寸不一致说明 UI 尚未按新尺寸重建位图，跳过本帧等待下一轮。
-            if (bitmap.PixelWidth != _size.Width || bitmap.PixelHeight != _size.Height)
+            if (expectedWidth != _size.Width || expectedHeight != _size.Height)
             {
                 return false;
             }
 
-            bitmap.Lock();
-            try
+            var sourceStride = _size.Width * FramebufferFormat.BytesPerPixel;
+
+            if (destinationStride < sourceStride ||
+                destinationCapacityBytes < (long)destinationStride * _size.Height)
             {
-                unsafe
+                // 目标缓冲区放不下，拷贝会越界——宁可丢一帧也不能写坏内存。
+                return false;
+            }
+
+            unsafe
+            {
+                var source = (byte*)_buffer;
+                var target = (byte*)destination;
+
+                // 逐行拷贝并遵循目标 stride：目标位图可能有行对齐填充，
+                // 整块拷贝会让每一行逐渐错位（原实现的潜在缺陷）。
+                for (var y = 0; y < _size.Height; y++)
                 {
                     Buffer.MemoryCopy(
-                        source: (void*)_buffer,
-                        destination: (void*)bitmap.BackBuffer,
-                        destinationSizeInBytes: bitmap.BackBufferStride * (long)bitmap.PixelHeight,
-                        sourceBytesToCopy: _bufferByteCount);
+                        source: source + (long)y * sourceStride,
+                        destination: target + (long)y * destinationStride,
+                        destinationSizeInBytes: destinationCapacityBytes - (long)y * destinationStride,
+                        sourceBytesToCopy: sourceStride);
                 }
-
-                bitmap.AddDirtyRect(new Int32Rect(0, 0, bitmap.PixelWidth, bitmap.PixelHeight));
-            }
-            finally
-            {
-                bitmap.Unlock();
             }
 
             _dirty = false;

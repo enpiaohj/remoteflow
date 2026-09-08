@@ -46,9 +46,14 @@
 
 ## 版本与发布
 
-- Semantic Versioning。版本号统一在 `Directory.Build.props` 的 `VersionPrefix` / `AssemblyVersion` / `FileVersion` 维护。
+- Semantic Versioning。Windows 版本在 `Directory.Build.props` 的 `VersionPrefix` / `AssemblyVersion` / `FileVersion` 维护；macOS 版本见下条（独立版本线）。
 - 「测试 / 编译 / 运行 / 看看效果」不等于正式发布。
 - 仅当用户明确说「发布 / Release / 打版本」时，才创建 `releases/v<X.Y.Z>/`（含 `source/`、`CHANGELOG.md`、规范命名产物），并执行 `git tag vX.Y.Z`。
+- **平台版本线相互独立**：Windows 与 macOS 各自按需发布，不强制同步。
+  - 版本来源：Windows = `Directory.Build.props` 的 `VersionPrefix`；macOS = `RemoteFlow.App.Mac.csproj` 的 `ApplicationDisplayVersion`。
+  - Tag：Windows 沿用 `v<X.Y.Z>`（历史如此）；macOS 用 `macos-v<X.Y.Z>`。
+  - Release Snapshot：`releases/v<X.Y.Z>/`（Windows）/ `releases/macos-v<X.Y.Z>/`（macOS）。
+  - 每个版本内部（csproj / 关于页 / CHANGELOG / Tag / Release）保持一致；跨平台不要求一致。
 - `releases/` 内的大文件用 `.gitignore` 排除，改上传 GitHub Releases；`source/` 与 `CHANGELOG.md` 入库。
 
 ## Commit 规范

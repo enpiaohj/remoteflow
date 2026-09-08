@@ -1,11 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    RemoteFlow.Infrastructure —— SQLite 持久化、Credential Vault（DPAPI）、日志。
-    使用 Windows Data Protection API，因此目标框架为 net10.0-windows。
+    RemoteFlow.Infrastructure —— SQLite 持久化、应用设置、日志。
+    保持平台无关（net10.0），供 Windows 与 macOS 两端共用。
+    依赖 Windows 专属 API 的 DpapiCredentialVault 已剥离到
+    RemoteFlow.Infrastructure.Windows；macOS 侧由 Keychain 实现对应能力。
   -->
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>RemoteFlow.Infrastructure</RootNamespace>
   </PropertyGroup>
 
@@ -16,7 +18,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Sinks.File" />
     <PackageReference Include="Serilog.Extensions.Logging" />

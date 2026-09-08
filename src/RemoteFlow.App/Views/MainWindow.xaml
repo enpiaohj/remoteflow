@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
-        xmlns:vm="clr-namespace:RemoteFlow.App.ViewModels"
+        xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
         xmlns:pages="clr-namespace:RemoteFlow.App.Views.Pages"
         xmlns:sessions="clr-namespace:RemoteFlow.App.Views.Sessions"
         Title="RemoteFlow"

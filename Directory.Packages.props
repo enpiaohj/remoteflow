@@ -27,6 +27,13 @@
     <!-- 终端宿主 -->
     <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
 
+    <!-- macOS 客户端 UI（技术方案 §8）：Avalonia 官方 + 官方 WebView（MIT） -->
+    <PackageVersion Include="Avalonia" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Controls.WebView" Version="12.1.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.11" />
+
     <!-- 凭据保护（DPAPI） -->
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.11" />
 

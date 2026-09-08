@@ -8,7 +8,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using RemoteFlow.App.Services;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Infrastructure.Settings;
 

@@ -75,3 +75,12 @@ vault.dat
 
 ## ── Claude Code 会话运行时（本地工具状态，不入库）───────
 .claude/
+dist/
+
+## ── native 构建产物（源码 native/rdp/*.c 入库，dylib 由 build.sh 现编）──
+src/RemoteFlow.Protocol.Rdp.Mac/runtimes/**/native/*.dylib
+
+# 自建 FreeRDP（源码/构建/产物，不入库）
+native/rdp/freerdp-src/
+native/rdp/freerdp-build*/
+native/rdp/freerdp-dist/

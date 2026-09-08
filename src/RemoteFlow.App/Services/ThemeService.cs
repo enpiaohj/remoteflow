@@ -12,7 +12,7 @@ namespace RemoteFlow.App.Services;
 /// 因此替换调色板即可让整个界面即时换肤，无需重建任何控件。
 /// </para>
 /// </summary>
-public sealed class ThemeService
+public sealed class ThemeService : RemoteFlow.Presentation.Host.IThemeService
 {
     private const string LightThemeUri = "Themes/Theme.Light.xaml";
     private const string DarkThemeUri = "Themes/Theme.Dark.xaml";

@@ -7,8 +7,9 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Shell;
 using RemoteFlow.App.Services;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Core.Models;
+using RemoteFlow.Presentation.Services;
 
 namespace RemoteFlow.App.Views;
 

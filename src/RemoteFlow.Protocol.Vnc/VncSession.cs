@@ -265,9 +265,20 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
     // ── 剪贴板（远端 → 本机）────────────────────────────────────
 
     /// <summary>
-    /// 收到服务器剪贴板更新（server → client CutText）。在协议库线程上被调用，
-    /// 不能直接操作 WPF 剪贴板，须调度到 UI 线程执行。
+    /// 远端剪贴板文本到达（server → client CutText）。
+    /// <para>
+    /// <b>在协议库线程上触发</b>，且协议层<b>不接触系统剪贴板</b>——写剪贴板是 UI 框架
+    /// 的职责（WPF 的 <c>Clipboard</c> 与 macOS 的 <c>NSPasteboard</c> 语义、线程要求
+    /// 都不同）。订阅方负责封送到自己的 UI 线程并处理写入失败。
+    /// </para>
+    /// <para>
+    /// 事件参数是远端复制的正文，<b>可能含密码等敏感内容</b>：订阅方不得写入日志。
+    /// 连接级开关 <c>Profile.Vnc.ClipboardToLocal</c> 与连接状态已在此处把关，
+    /// 事件只在应当回写时触发。
+    /// </para>
     /// </summary>
+    public event EventHandler<string>? ClipboardTextReceived;
+
     private void HandleServerClipboard(string text)
     {
         // 连接级开关与连接状态双重把关：开关关闭或会话已不在连接态时直接丢弃。
@@ -285,30 +296,14 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
         // 不以日志形式记录剪贴板正文：远端复制内容可能含密码 / 敏感信息。
         _logger.LogInformation("VNC 会话 {SessionId} 收到远端剪贴板更新（远端 → 本机）", SessionId);
 
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.HasShutdownStarted)
-        {
-            return;
-        }
-
         try
         {
-            dispatcher.InvokeAsync(() =>
-            {
-                try
-                {
-                    System.Windows.Clipboard.SetText(text);
-                }
-                catch (Exception ex)
-                {
-                    // 剪贴板被其它进程占用等场景：只记录，不让协议线程崩溃。
-                    _logger.LogWarning(ex, "VNC 会话 {SessionId} 写入本机剪贴板失败", SessionId);
-                }
-            });
+            ClipboardTextReceived?.Invoke(this, text);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "VNC 会话 {SessionId} 调度写本机剪贴板失败", SessionId);
+            // 订阅方异常不得让协议线程崩溃。
+            _logger.LogWarning(ex, "VNC 会话 {SessionId} 分发远端剪贴板事件失败", SessionId);
         }
     }
 

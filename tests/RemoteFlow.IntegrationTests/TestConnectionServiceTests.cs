@@ -1,8 +1,8 @@
 using System.Net;
-using RemoteFlow.App.Services;
 using RemoteFlow.Core.Models;
 using Sockets = System.Net.Sockets;
 using Xunit;
+using RemoteFlow.Presentation.Services;
 
 namespace RemoteFlow.IntegrationTests;
 

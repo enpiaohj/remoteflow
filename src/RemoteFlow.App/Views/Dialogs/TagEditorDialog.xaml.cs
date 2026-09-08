@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using RemoteFlow.App.Services;
+using RemoteFlow.Presentation.Services;
 
 namespace RemoteFlow.App.Views.Dialogs;
 

@@ -1,4 +1,4 @@
-using RemoteFlow.App.Services;
+using RemoteFlow.Presentation.Terminal;
 using Xunit;
 
 namespace RemoteFlow.IntegrationTests;

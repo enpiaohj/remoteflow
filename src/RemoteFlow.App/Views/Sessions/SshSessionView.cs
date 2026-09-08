@@ -9,9 +9,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using RemoteFlow.App.Services;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.Terminal;
+using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Protocol.Ssh;
+using RemoteFlow.Presentation.Services;
 
 namespace RemoteFlow.App.Views.Sessions;
 

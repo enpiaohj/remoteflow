@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Core.Models;
 
 namespace RemoteFlow.App.Views.Pages;
@@ -18,6 +20,13 @@ public partial class ConnectionsPage : UserControl
     /// <summary>右键菜单打开时记录的目标连接，供「移动到分组」子项使用。</summary>
     private ConnectionItemViewModel? _menuConnection;
 
+    /// <summary>
+    /// 连接列表的查看（带分组）。VM 只维护扁平 <c>Items</c> 集合，分组由 UI 层承接：
+    /// 「最近连接」按日期桶（今天 / 昨天 / 更早）分组，其余为平铺。
+    /// 在代码后置重建 <see cref="ListCollectionView"/> 以保持此行为（技术方案 §6.6）。
+    /// </summary>
+    private ListCollectionView? _connectionView;
+
     public ConnectionsPage()
     {
         InitializeComponent();
@@ -25,6 +34,45 @@ public partial class ConnectionsPage : UserControl
         // 多选模式下行单击 = 切换勾选（不进详情）。挂在两个列表上统一处理。
         ConnectionList.PreviewMouseLeftButtonDown += OnListMouseDown;
         GroupedList.PreviewMouseLeftButtonDown += OnListMouseDown;
+
+        // VM 经 DataTemplate 注入、可整体切换；跟随其变化重建分组查看并把列表绑回。
+        DataContextChanged += OnDataContextChanged;
+    }
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.OldValue is ConnectionsPageViewModel oldVm)
+        {
+            oldVm.PropertyChanged -= OnVmPropertyChanged;
+        }
+
+        if (e.NewValue is ConnectionsPageViewModel vm)
+        {
+            _connectionView = new ListCollectionView(vm.Items);
+            ApplyGrouping();
+            ConnectionList.ItemsSource = _connectionView;
+            vm.PropertyChanged += OnVmPropertyChanged;
+        }
+    }
+
+    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // 筛选切到 / 切出「最近连接」时，分组与否随之变化。
+        if (e.PropertyName == nameof(ConnectionsPageViewModel.IsRecentView))
+        {
+            ApplyGrouping();
+        }
+    }
+
+    private void ApplyGrouping()
+    {
+        _connectionView?.GroupDescriptions.Clear();
+
+        if (_connectionView is not null && ViewModel is { IsRecentView: true })
+        {
+            _connectionView.GroupDescriptions.Add(
+                new PropertyGroupDescription(nameof(ConnectionItemViewModel.RecentBucket)));
+        }
     }
 
     private ConnectionsPageViewModel? ViewModel => DataContext as ConnectionsPageViewModel;

@@ -1,11 +1,12 @@
 using System.Windows;
 using Microsoft.Extensions.Logging;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.App.Views.Sessions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Protocol.Rdp;
 using RemoteFlow.Protocol.Ssh;
 using RemoteFlow.Protocol.Vnc;
+using RemoteFlow.Presentation.Services;
 
 namespace RemoteFlow.App.Services;
 

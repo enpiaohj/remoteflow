@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
+using RemoteFlow.Presentation.ViewModels;
 
 namespace RemoteFlow.App.Converters;
 
@@ -142,7 +143,7 @@ public sealed class EnumToVisibilityConverter : IValueConverter
 public sealed class IsGroupNodeConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => value is ViewModels.ConnectionGroupNodeViewModel;
+        => value is ConnectionGroupNodeViewModel;
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();

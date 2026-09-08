@@ -3,7 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Threading;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.ViewModels;
 
 namespace RemoteFlow.App.Views.Pages;
 

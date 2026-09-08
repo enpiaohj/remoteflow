@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using RemoteFlow.App.Services;
 using RemoteFlow.Core.Models;
+using RemoteFlow.Presentation.Services;
 
 namespace RemoteFlow.App.Views.Dialogs;
 

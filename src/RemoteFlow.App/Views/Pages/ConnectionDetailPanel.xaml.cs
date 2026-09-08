@@ -1,6 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
-using RemoteFlow.App.ViewModels;
+using RemoteFlow.Presentation.ViewModels;
 
 namespace RemoteFlow.App.Views.Pages;
 
