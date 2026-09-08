@@ -30,7 +30,7 @@ public partial class HomePage : UserControl
     {
         // 页面经导航切回可视区时触发。仅当用户开启「显示时间」才计时，
         // 否则标题行是静态日期，无需秒级刷新。
-        if (DataContext is HomePageViewModel { ShowHomeTimeEnabled: true } && !_clockTimer.IsEnabled)
+        if (DataContext is HomePageViewModel { ShowHomeClock: true } && !_clockTimer.IsEnabled)
         {
             _clockTimer.Start();
         }

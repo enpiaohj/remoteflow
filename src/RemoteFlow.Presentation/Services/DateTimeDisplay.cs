@@ -18,9 +18,7 @@ public static class DateTimeDisplay
     private static AppSettings Defaults() => new()
     {
         DateFormat = AppDateFormat.Chinese,
-        TimeFormat = AppTimeFormat.Hour24,
-        ShowWeekday = true,
-        ShowHomeWeekNumber = true
+        TimeFormat = AppTimeFormat.Hour24
     };
 
     /// <summary>用最新设置刷新显示规则。启动与设置保存后各调用一次。</summary>
@@ -82,19 +80,27 @@ public static class DateTimeDisplay
         => ISOWeek.GetWeekOfYear(value.ToLocalTime().Date);
 
     /// <summary>
-    /// 首页标题用的完整日期行，例：<c>2026年9月5日 · 周六 · 第36周</c>。
+    /// 首页标题下方的日期行，详略由 <see cref="HomeDateLine"/> 决定。
+    /// 例（Full）：<c>2026年9月8日 周一 · 第37周 · 22:30</c>。
+    /// 星期紧跟日期（空格分隔），周数与时间各占一段（<c> · </c> 分隔）。
     /// </summary>
-    public static string FullDateHeader(DateTimeOffset value)
+    public static string HomeDateLineText(DateTimeOffset value, HomeDateLine style)
     {
-        var parts = new List<string> { Date(value) };
-        if (S.ShowWeekday)
+        var head = Date(value);
+        if (style is HomeDateLine.DateWeekdayTime or HomeDateLine.Full)
         {
-            parts.Add(Weekday(value));
+            head += " " + Weekday(value);
         }
 
-        if (S.ShowHomeWeekNumber)
+        var parts = new List<string> { head };
+        if (style == HomeDateLine.Full)
         {
             parts.Add($"第{IsoWeek(value)}周");
+        }
+
+        if (style != HomeDateLine.DateOnly)
+        {
+            parts.Add(Clock(value, withSeconds: false));
         }
 
         return string.Join(" · ", parts);
