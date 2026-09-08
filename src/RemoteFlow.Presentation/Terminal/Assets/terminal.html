@@ -95,6 +95,7 @@
   <script src="xterm.js"></script>
   <script src="addon-fit.js"></script>
   <script src="addon-search.js"></script>
+  <script src="addon-webgl.js"></script>
   <script>
     'use strict';
 
@@ -197,6 +198,21 @@
     const fitAddon = new FitAddon.FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(document.getElementById('terminal'));
+
+    // GPU 渲染（WebGL）——比默认 DOM 渲染器快得多，尤其大输出刷屏 / 彩色日志 /
+    // top、htop。渲染吃 CPU 少，也能腾出 WebContent 的 JS 线程更快处理按键事件，
+    // 顺带缓解快速输入掉字。context 丢失（OOM / 系统休眠）就 dispose，xterm 自动
+    // 回落 DOM 渲染器，不影响可用性。
+    try {
+      const webgl = new WebglAddon.WebglAddon();
+      webgl.onContextLoss(() => {
+        console.warn('[RemoteFlow] WebGL context 丢失，回落 DOM 渲染器');
+        webgl.dispose();
+      });
+      terminal.loadAddon(webgl);
+    } catch (e) {
+      console.warn('[RemoteFlow] WebGL 渲染器不可用，用 DOM 渲染器：', e);
+    }
 
     const searchAddon = new SearchAddon.SearchAddon();
     terminal.loadAddon(searchAddon);
