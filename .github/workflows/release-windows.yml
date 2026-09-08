@@ -1,0 +1,77 @@
+# Windows 发布 —— 打 v<X.Y.Z> tag（或手动触发）时，构建 win-x64 单文件并挂到 GitHub Releases（草稿）。
+#
+# 版本以 Directory.Build.props 的 VersionPrefix 为准，tag 必须是 v<该版本>。
+# 代码签名：设了 WINDOWS_CERT_PFX_BASE64 + WINDOWS_CERT_PASSWORD 就用 signtool 签，否则不签。
+name: Release · Windows
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]   # 只匹配 v0.0.0，不匹配 macos-v*
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: 版本一致性
+        shell: pwsh
+        run: |
+          $v = (Select-String '<VersionPrefix>(.*)</VersionPrefix>' Directory.Build.props).Matches[0].Groups[1].Value
+          "WIN_VERSION=$v" | Out-File -Append $env:GITHUB_ENV
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$v") {
+            throw "tag $($env:GITHUB_REF_NAME) 与 VersionPrefix $v 不一致（应为 v$v）"
+          }
+
+      - name: Build + Test (Release)
+        run: |
+          dotnet build -c Release --nologo
+          dotnet test -c Release --nologo --logger "trx;LogFileName=win.trx" --results-directory artifacts/test
+
+      - name: Publish (win-x64 self-contained single file)
+        run: dotnet publish src/RemoteFlow.App -c Release -r win-x64 --nologo -o artifacts/publish
+
+      - name: 签名
+        if: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
+        shell: pwsh
+        env:
+          PFX: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          PFX_PW: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\c.pfx", [Convert]::FromBase64String($env:PFX))
+          $st = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Select-Object -Last 1
+          & $st.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 `
+            /f "$env:RUNNER_TEMP\c.pfx" /p $env:PFX_PW artifacts/publish/RemoteFlow.exe
+
+      - name: 规范命名 + 打包
+        shell: pwsh
+        run: |
+          $t = "v$env:WIN_VERSION"
+          Copy-Item artifacts/publish/RemoteFlow.exe "artifacts/RemoteFlow-$t-win-x64.exe"
+          Compress-Archive artifacts/publish/* "artifacts/RemoteFlow-$t-win-x64.zip" -Force
+          Get-FileHash "artifacts/RemoteFlow-$t-win-x64.exe" -Algorithm SHA256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RemoteFlow-Windows-x64
+          path: artifacts/RemoteFlow-v*-win-x64.*
+
+      - name: GitHub Release（草稿）
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: RemoteFlow v${{ env.WIN_VERSION }}
+          tag_name: ${{ github.ref_name }}
+          files: artifacts/RemoteFlow-v*-win-x64.*
+          body: |
+            RemoteFlow for Windows · v${{ env.WIN_VERSION }} · win-x64
+
+            变更详情见 `releases/v${{ env.WIN_VERSION }}/CHANGELOG.md`。

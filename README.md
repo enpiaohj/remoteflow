@@ -105,6 +105,47 @@ dotnet publish src/RemoteFlow.App -c Release
 > 备份时请同时保留 `remoteflow.db` 与 `vault.dat`；
 > 后者只能在**同一 Windows 账户**下解密。
 
+### macOS 构建
+
+```bash
+# 一次性：自建带 Display Control 通道的 FreeRDP（动态分辨率靠它），约 5 分钟
+native/rdp/build-freerdp.sh          # 本机架构；或 build-freerdp.sh arm64
+native/rdp/build.sh                  # 编 C ABI 封装 shim
+
+# 构建 / 运行
+dotnet build src/RemoteFlow.App.Mac
+open src/RemoteFlow.App.Mac/bin/Debug/net10.0-macos/RemoteFlow.app
+
+# 打 DMG（ad-hoc 签名）
+scripts/build-macos-release.sh arm64   # 或 x64 / universal
+```
+
+---
+
+## CI / 发布
+
+`.github/workflows/` 三个流水线：
+
+| 文件 | 触发 | 做什么 |
+| --- | --- | --- |
+| `ci.yml` | push 到 `main` / `feature/**`、PR、手动 | ubuntu 跑共享测试（主门禁）；windows / macos 各验平台 head 能否构建 + 平台专属集成测试 |
+| `release-windows.yml` | tag `v<X.Y.Z>`、手动 | win-x64 单文件 → GitHub Releases 草稿 |
+| `release-macos.yml` | tag `macos-v<X.Y.Z>`、手动 | arm64 DMG → GitHub Releases 草稿 |
+
+两平台版本线相互独立：Windows 版本取 `Directory.Build.props` 的 `VersionPrefix`（tag `v*`），
+macOS 版本取 `src/RemoteFlow.App.Mac/*.csproj` 的 `ApplicationDisplayVersion`（tag `macos-v*`）。
+
+**签名 / 公证**默认不做（产物 ad-hoc 签名，仅供内部）。配好对应 Secret 后自动启用：
+
+| Secret | 用途 |
+| --- | --- |
+| `MACOS_CERT_P12_BASE64` / `MACOS_CERT_PASSWORD` | Developer ID Application 证书（.p12 的 base64） |
+| `MACOS_NOTARY_APPLE_ID` / `MACOS_NOTARY_TEAM_ID` / `MACOS_NOTARY_PASSWORD` | notarytool 公证凭据 |
+| `WINDOWS_CERT_PFX_BASE64` / `WINDOWS_CERT_PASSWORD` | Windows 代码签名证书 |
+
+> macOS release 目前只出 arm64（CI runner 是 Apple Silicon，Intel slice 需另一台 Intel runner
+> 交叉编译 —— 见 `release-macos.yml` 文末 TODO）。
+
 ---
 
 ## 安全模型
