@@ -24,7 +24,11 @@ public sealed class SessionPillBar : NSView
 
     private bool _pinned;
     private bool _hovering;
+    private bool _menuOpen;       // 药丸弹出的菜单开着时不收（否则移到菜单上就整条消失）
+    private NSTimer? _hideTimer;  // 延迟隐藏：鼠标离开后给一段宽限，避开热区↔药丸↔子菜单之间的空隙
     private NSTrackingArea? _tracking;
+
+    private const double HideDelaySeconds = 2.5;
 
     /// <summary>「切换会话」被点开时向宿主要当前会话清单。</summary>
     public Func<IReadOnlyList<(Guid Id, string Title, ProtocolType Protocol)>>? SessionsProvider { get; set; }
@@ -147,22 +151,60 @@ public sealed class SessionPillBar : NSView
 
     public void Reveal()
     {
+        CancelHideTimer();
         Hidden = false;
         AlphaValue = 1;
     }
 
+    /// <summary>鼠标离开等场景调用：不立刻收，排一个宽限定时器；期间再 Reveal 就取消。</summary>
     public void MaybeHide()
     {
-        if (!_pinned && !_hovering)
+        if (_pinned || _hovering || _menuOpen)
         {
-            Hidden = true;
+            return;
         }
+
+        CancelHideTimer();
+        _hideTimer = NSTimer.CreateScheduledTimer(HideDelaySeconds, _ =>
+        {
+            _hideTimer = null;
+            if (!_pinned && !_hovering && !_menuOpen)
+            {
+                Hidden = true;
+            }
+        });
     }
 
+    /// <summary>立刻收起（切换会话 / 退出全屏等确定性场景），不走宽限。</summary>
     public void ForceHide()
     {
+        CancelHideTimer();
         _hovering = false;
+        _menuOpen = false;
         Hidden = true;
+    }
+
+    /// <summary>
+    /// 用户在画面本身（非药丸、非其子菜单）按下鼠标 —— 视为「回到远端操作」，立刻收起，
+    /// 不走 <see cref="HideDelaySeconds"/> 宽限；已「固定」时保持常驻。
+    /// </summary>
+    public void DismissForContentClick()
+    {
+        if (_pinned || Hidden)
+        {
+            return;
+        }
+
+        CancelHideTimer();
+        _hovering = false;
+        _menuOpen = false;
+        Hidden = true;
+    }
+
+    private void CancelHideTimer()
+    {
+        _hideTimer?.Invalidate();
+        _hideTimer = null;
     }
 
     // ── 内部 ────────────────────────────────────────────────────
@@ -205,7 +247,7 @@ public sealed class SessionPillBar : NSView
             return;
         }
 
-        var menu = new NSMenu();
+        var menu = new NSMenu { Delegate = new PillMenuDelegate(this) };
         foreach (var (id, title, protocol) in list)
         {
             menu.AddItem(new NSMenuItem(title, (_, _) => SessionPicked?.Invoke(this, id))
@@ -214,7 +256,19 @@ public sealed class SessionPillBar : NSView
             });
         }
 
+        // 菜单开着期间不收药丸；关闭后按宽限收。
+        _menuOpen = true;
+        CancelHideTimer();
         menu.PopUpMenu(null, new CGPoint(0, anchor.Bounds.Height + 4), anchor);
+    }
+
+    private sealed class PillMenuDelegate(SessionPillBar owner) : NSMenuDelegate
+    {
+        public override void MenuDidClose(NSMenu menu)
+        {
+            owner._menuOpen = false;
+            owner.MaybeHide();
+        }
     }
 
     private static NSStackView Row(nfloat spacing) => new()
