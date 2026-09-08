@@ -1,18 +1,14 @@
 # macOS 发布 —— 打 macos-v<X.Y.Z> tag（或手动触发）时，构建 DMG 并挂到 GitHub Releases（草稿）。
 #
 # 版本以 src/RemoteFlow.App.Mac/RemoteFlow.App.Mac.csproj 的 ApplicationDisplayVersion 为准，
-# tag 必须是 macos-v<该版本>（脚本会校验一致性）。
+# tag 必须是 macos-v<该版本>。
 #
-# 签名 / 公证：设了以下仓库 Secret 就走 Developer ID + notarytool，否则 ad-hoc（可本地跑但会被
-# Gatekeeper 拦，仅供内部）。
-#   MACOS_CERT_P12_BASE64   —— Developer ID Application 证书（.p12）的 base64
-#   MACOS_CERT_PASSWORD     —— 该 .p12 的导出密码
-#   MACOS_NOTARY_APPLE_ID   —— 用于公证的 Apple ID
-#   MACOS_NOTARY_TEAM_ID    —— Team ID（4HFW56UM65）
-#   MACOS_NOTARY_PASSWORD   —— App 专用密码
+# 签名 / 公证：设了以下仓库 Secret 就走 Developer ID + notarytool，否则 ad-hoc（会被 Gatekeeper
+# 拦，仅供内部）：
+#   MACOS_CERT_P12_BASE64 / MACOS_CERT_PASSWORD        —— Developer ID Application 证书（.p12 base64）
+#   MACOS_NOTARY_APPLE_ID / MACOS_NOTARY_TEAM_ID / MACOS_NOTARY_PASSWORD  —— notarytool 凭据
 #
-# 首个版本按 arm64 单架构发（CI runner 是 Apple Silicon，x64 需另一台 Intel runner 交叉，
-# 见文末 TODO）。Intel Mac 用户暂不覆盖。
+# 首个版本按 arm64 单架构发（CI runner 是 Apple Silicon）。universal 见文末 TODO。
 name: Release · macOS
 
 on:
@@ -26,25 +22,27 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
+    env:
+      HAS_CERT: ${{ secrets.MACOS_CERT_P12_BASE64 != '' }}
+      HAS_NOTARY: ${{ secrets.MACOS_NOTARY_PASSWORD != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
       - run: dotnet workload install macos --skip-manifest-update
-      - run: brew install cmake openssl@3 create-dmg || brew install cmake openssl@3
+      - run: brew install cmake openssl@3
 
       - name: 版本一致性
         run: |
           V=$(sed -n 's#.*<ApplicationDisplayVersion>\(.*\)</ApplicationDisplayVersion>.*#\1#p' \
                 src/RemoteFlow.App.Mac/RemoteFlow.App.Mac.csproj)
           echo "MAC_VERSION=$V" >> "$GITHUB_ENV"
-          if [ "${GITHUB_REF_TYPE}" = tag ]; then
-            [ "${GITHUB_REF_NAME}" = "macos-v$V" ] || {
-              echo "tag ${GITHUB_REF_NAME} 与 csproj 版本 $V 不一致（应为 macos-v$V）"; exit 1; }
+          if [ "${GITHUB_REF_TYPE}" = tag ] && [ "${GITHUB_REF_NAME}" != "macos-v$V" ]; then
+            echo "tag ${GITHUB_REF_NAME} 与 csproj 版本 $V 不一致（应为 macos-v$V）"; exit 1
           fi
 
       - name: Cache FreeRDP dist (arm64)
@@ -58,27 +56,26 @@ jobs:
         run: native/rdp/build-freerdp.sh arm64
 
       - name: 导入签名证书
-        if: ${{ secrets.MACOS_CERT_P12_BASE64 != '' }}
+        if: env.HAS_CERT == 'true'
         env:
           P12: ${{ secrets.MACOS_CERT_P12_BASE64 }}
           P12_PW: ${{ secrets.MACOS_CERT_PASSWORD }}
         run: |
-          echo "$P12" | base64 -d > /tmp/cert.p12
+          echo "$P12" | base64 -d > "$RUNNER_TEMP/cert.p12"
           security create-keychain -p ci build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p ci build.keychain
-          security import /tmp/cert.p12 -k build.keychain -P "$P12_PW" -T /usr/bin/codesign
+          security import "$RUNNER_TEMP/cert.p12" -k build.keychain -P "$P12_PW" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
-          ID=$(security find-identity -v -p codesigning build.keychain | grep -m1 -oE '"Developer ID Application:[^"]+"' | tr -d '"')
+          ID=$(security find-identity -v -p codesigning build.keychain \
+                | grep -m1 -oE '"Developer ID Application:[^"]+"' | tr -d '"')
           echo "RF_SIGN_IDENTITY=$ID" >> "$GITHUB_ENV"
 
       - name: 打包 DMG
-        env:
-          RF_SIGN_IDENTITY: ${{ env.RF_SIGN_IDENTITY }}
         run: scripts/build-macos-release.sh arm64
 
       - name: 公证 + 装订
-        if: ${{ secrets.MACOS_NOTARY_PASSWORD != '' }}
+        if: env.HAS_NOTARY == 'true'
         env:
           APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
           TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
@@ -90,9 +87,7 @@ jobs:
           xcrun stapler staple "$DMG"
 
       - name: 校验产物
-        run: |
-          spctl -a -vv -t open --context context:primary-signature dist/RemoteFlow.app 2>&1 || true
-          shasum -a 256 dist/RemoteFlow-v*-macos-arm64.dmg
+        run: shasum -a 256 dist/RemoteFlow-v*-macos-arm64.dmg
 
       - uses: actions/upload-artifact@v4
         with:
@@ -112,7 +107,7 @@ jobs:
 
             变更详情见 `releases/macos-v${{ env.MAC_VERSION }}/CHANGELOG.md`。
 
-            > Intel Mac 暂未覆盖（universal 需 Intel runner 交叉编译，见 workflow TODO）。
+            > Intel Mac 暂未覆盖（universal 需 Intel runner 交叉编译）。
 
-# TODO(universal)：加一个 runs-on: macos-13 的并行 job 编 x64 slice + FreeRDP，
-#   再用第三个 job lipo 合并两份 .app，bundle-freerdp.sh 已支持 FREERDP_LIB_DIR 指向合过的目录。
+# TODO(universal)：加 runs-on: macos-13 的并行 job 编 x64 slice + FreeRDP，
+#   再用第三个 job lipo 合并两份 .app（bundle-freerdp.sh 已支持 FREERDP_LIB_DIR）。

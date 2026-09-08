@@ -23,8 +23,8 @@ jobs:
   shared:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
       # 只碰平台无关的测试项目——不 restore 整个 slnx（里面有 net10.0-windows 项目）
@@ -45,8 +45,8 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
       - name: Build · RemoteFlow.App
@@ -65,11 +65,11 @@ jobs:
   macos:
     runs-on: macos-15   # Apple Silicon；FreeRDP / App 均按 arm64 构建
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
       - run: dotnet workload install macos --skip-manifest-update

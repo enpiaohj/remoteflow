@@ -6,7 +6,7 @@ name: Release · Windows
 
 on:
   push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]   # 只匹配 v0.0.0，不匹配 macos-v*
+    tags: ["v[0-9]*"]        # v0.8.0 之类；不匹配 macos-v*
   workflow_dispatch:
 
 permissions:
@@ -15,9 +15,12 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      # secrets 不能直接出现在 step 的 if: —— 在 job 级 env 里转成布尔字符串再用
+      HAS_CERT: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
 
@@ -39,7 +42,7 @@ jobs:
         run: dotnet publish src/RemoteFlow.App -c Release -r win-x64 --nologo -o artifacts/publish
 
       - name: 签名
-        if: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' }}
+        if: env.HAS_CERT == 'true'
         shell: pwsh
         env:
           PFX: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
