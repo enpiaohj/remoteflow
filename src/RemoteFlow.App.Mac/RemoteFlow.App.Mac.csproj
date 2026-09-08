@@ -18,8 +18,11 @@
 
     <ApplicationTitle>RemoteFlow</ApplicationTitle>
     <ApplicationId>com.remoteflow.mac</ApplicationId>
-    <ApplicationVersion>1</ApplicationVersion>
-    <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
+    <!-- macOS 版有独立的版本线：两个平台各自按需发布，不强制同步。
+         这里是 macOS 的唯一版本来源——About 页、DMG 名、Tag、releases/ 目录都以它为准。
+         正式发布时在此递增；CFBundleVersion 是单调递增整数，随之 +1。 -->
+    <ApplicationDisplayVersion>0.2.0</ApplicationDisplayVersion>
+    <ApplicationVersion>2</ApplicationVersion>
     <SupportedOSPlatformVersion>13.0</SupportedOSPlatformVersion>
 
     <!--
@@ -57,8 +60,14 @@
   <ItemGroup>
     <!-- 内嵌 RDP 的 FreeRDP 封装 dylib（native/rdp/build.sh 产出）。缺失时应用仍启动，
          RDP 回落外部客户端（见 RdpConnectionProvider.IsAvailable / RdpLauncher）。 -->
-    <NativeReference Include="..\RemoteFlow.Protocol.Rdp.Mac\runtimes\osx-x64\native\libremoteflow_rdp.dylib"
-                     Kind="Dynamic" Condition="Exists('..\RemoteFlow.Protocol.Rdp.Mac\runtimes\osx-x64\native\libremoteflow_rdp.dylib')" />
+    <NativeReference Include="..\RemoteFlow.Protocol.Rdp.Mac\runtimes\$(RuntimeIdentifier)\native\libremoteflow_rdp.dylib"
+                     Kind="Dynamic"
+                     Condition="'$(RuntimeIdentifier)' != '' And Exists('..\RemoteFlow.Protocol.Rdp.Mac\runtimes\$(RuntimeIdentifier)\native\libremoteflow_rdp.dylib')" />
+    <!-- Debug：自建 FreeRDP dylib 一起进 MonoBundle，靠 shim 的 @loader_path 解析（内循环免 bundle）。
+         Release 不走这条——由 scripts/bundle-freerdp.sh 收进 Contents/Frameworks 并重写路径。 -->
+    <NativeReference Include="..\RemoteFlow.Protocol.Rdp.Mac\runtimes\$(RuntimeIdentifier)\native\libfreerdp*.dylib;..\RemoteFlow.Protocol.Rdp.Mac\runtimes\$(RuntimeIdentifier)\native\libwinpr*.dylib"
+                     Kind="Dynamic"
+                     Condition="'$(Configuration)' == 'Debug' And '$(RuntimeIdentifier)' != ''" />
   </ItemGroup>
 
   <ItemGroup>

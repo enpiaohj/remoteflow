@@ -13,23 +13,33 @@
 # 因此不产生额外的通道 dylib，scripts/bundle-freerdp.sh 的传递依赖收集逻辑无需改动。
 #
 # 用法：
-#   native/rdp/build-freerdp.sh            # 首次：克隆 + 配置 + 编译 + 安装到 dist
-#   native/rdp/build-freerdp.sh --rebuild  # 只重编（源码已在）
-#   native/rdp/build-freerdp.sh --clean    # 清掉 build 与 dist 重来
+#   native/rdp/build-freerdp.sh [x64|arm64]          # 默认本机架构；克隆+配置+编译+安装
+#   native/rdp/build-freerdp.sh [x64|arm64] --clean  # 清掉该架构的 build/dist 重来
 #
-# 产物：native/rdp/freerdp-dist/{include,lib}
+# 产物：native/rdp/freerdp-dist/<arch>/{include,lib}   （arch = x86_64 | arm64）
 # 之后 build.sh 会优先用它（没有则回落 brew）。
+#
+# 交叉编译到 arm64 需要 arm64 的 openssl（brew 在 Apple Silicon 上是 /opt/homebrew）。
+# Intel 机器上大概率没有 arm64 openssl，arm64 构建会失败——那就只发 x64。
 set -euo pipefail
 cd "$(dirname "$0")"
 
 FREERDP_TAG="${FREERDP_TAG:-3.31.1}"   # 与此前 brew 版本对齐，保持 API 一致
-SRC="freerdp-src"
-BUILD="freerdp-build"
-DIST="$PWD/freerdp-dist"
 
-case "${1:-}" in
+ARCH_IN="${1:-$(uname -m)}"
+case "$ARCH_IN" in
+  x64|x86_64) OSX_ARCH=x86_64 ;;
+  arm64|aarch64) OSX_ARCH=arm64 ;;
+  --clean) OSX_ARCH="$(uname -m)"; set -- --clean ;;
+  *) echo "未知架构：${ARCH_IN}（x64 | arm64）" >&2; exit 1 ;;
+esac
+
+SRC="freerdp-src"                       # 源码单份，多架构共用
+BUILD="freerdp-build-$OSX_ARCH"
+DIST="$PWD/freerdp-dist/$OSX_ARCH"
+
+case "${2:-${1:-}}" in
   --clean) echo "==> 清理 $BUILD 与 $DIST"; rm -rf "$BUILD" "$DIST" ;;
-  --rebuild) ;;
 esac
 
 command -v cmake >/dev/null || { echo "需要 cmake：brew install cmake" >&2; exit 1; }
@@ -47,7 +57,8 @@ cmake -S "$SRC" -B "$BUILD" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="$DIST" \
   -DCMAKE_INSTALL_RPATH="@loader_path" \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+  -DCMAKE_OSX_ARCHITECTURES="$OSX_ARCH" \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
   -DBUILD_SHARED_LIBS=ON \
   -DBUILD_TESTING=OFF \
   -DOPENSSL_ROOT_DIR="$OPENSSL_PREFIX" \
@@ -56,6 +67,8 @@ cmake -S "$SRC" -B "$BUILD" \
   -DCHANNEL_DISP=ON -DCHANNEL_DISP_CLIENT=ON \
   -DCHANNEL_DRDYNVC=ON -DCHANNEL_DRDYNVC_CLIENT=ON \
   -DCHANNEL_CLIPRDR=ON -DCHANNEL_CLIPRDR_CLIENT=ON \
+  -DCHANNEL_URBDRC=OFF -DCHANNEL_URBDRC_CLIENT=OFF \
+  -DWITH_LIBUSB=OFF \
   -DWITH_CLIENT=ON -DWITH_CLIENT_COMMON=ON \
   -DWITH_CLIENT_SDL=OFF -DWITH_CLIENT_SDL2=OFF -DWITH_CLIENT_SDL3=OFF \
   -DWITH_X11=OFF -DWITH_WAYLAND=OFF \
@@ -67,7 +80,7 @@ cmake -S "$SRC" -B "$BUILD" \
   -DWITH_KRB5=OFF -DWITH_AAD=OFF -DWITH_WEBVIEW=OFF \
   -DWITH_FUSE=OFF -DWITH_URIPARSER=OFF
 
-echo "==> 编译（多核，耐心等几分钟）"
+echo "==> 编译 ${OSX_ARCH}（多核，耐心等几分钟）"
 cmake --build "$BUILD" --parallel "$(sysctl -n hw.ncpu)"
 
 echo "==> 安装到 $DIST"
@@ -83,4 +96,4 @@ else
   exit 1
 fi
 
-echo "完成。接着跑 native/rdp/build.sh 重编 shim（会自动优先用 $DIST）。"
+echo "完成（${OSX_ARCH}）。接着跑 native/rdp/build.sh $ARCH_IN 重编 shim（会自动优先用 ${DIST}）。"
