@@ -48,32 +48,36 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- 状态入口：整块可点击，打开连接质量详情 Flyout（常驻条本身保持简洁） -->
-                <Button Grid.Column="0"
-                        Style="{StaticResource Button.Subtle}"
-                        Height="30"
-                        Padding="8,0"
-                        Margin="-6,0,0,0"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Center"
-                        Click="OnStatusEntryClick"
-                        ToolTip="连接状态 · 查看质量详情">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{Binding StateIcon}"
-                                   FontFamily="{StaticResource IconFont}"
-                                   FontSize="12"
-                                   VerticalAlignment="Center"
-                                   Foreground="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}" />
-                        <TextBlock Text="{Binding StateText}"
-                                   Style="{StaticResource Text.Caption}"
-                                   Margin="7,0,0,0" />
-                        <Border Width="1" Height="16" Margin="10,0"
-                                Background="{DynamicResource Stroke.Default}" />
-                        <TextBlock Text="{Binding Profile.Host}"
-                                   Style="{StaticResource Text.Caption}"
-                                   FontFamily="{StaticResource MonoFont}" />
-                    </StackPanel>
-                </Button>
+                <!-- 状态入口：只有「状态图标 + 状态文字」是按钮（打开质量详情 Flyout）；
+                     主机名只作展示，不再是点击热区——那截长，容易误触。 -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal"
+                            HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-6,0,0,0">
+                    <Button Style="{StaticResource Button.Subtle}"
+                            Height="30"
+                            Padding="8,0"
+                            Click="OnStatusEntryClick"
+                            ToolTip="连接状态 · 查看质量详情">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding StateIcon}"
+                                       FontFamily="{StaticResource IconFont}"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Foreground="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}" />
+                            <TextBlock Text="{Binding StateText}"
+                                       Style="{StaticResource Text.Caption}"
+                                       VerticalAlignment="Center"
+                                       Margin="7,0,0,0" />
+                        </StackPanel>
+                    </Button>
+                    <Border Width="1" Height="16" Margin="10,0"
+                            Background="{DynamicResource Stroke.Default}"
+                            IsHitTestVisible="False" />
+                    <TextBlock Text="{Binding Profile.Host}"
+                               Style="{StaticResource Text.Caption}"
+                               FontFamily="{StaticResource MonoFont}"
+                               VerticalAlignment="Center"
+                               IsHitTestVisible="False" />
+                </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <StackPanel x:Name="RdpToolsDock" Orientation="Horizontal" Visibility="Collapsed">
@@ -297,26 +301,22 @@
                     <Border Width="1" Height="16" Margin="4,0"
                             Background="{DynamicResource Stroke.Default}" />
 
-                    <!-- 状态入口：全屏药丸上也可点击，打开连接质量详情 Flyout -->
-                    <Button Style="{StaticResource Session.BarButton}"
-                            Width="Auto"
-                            Padding="8,0"
-                            Margin="2,0,0,0"
-                            Click="OnStatusEntryClick"
-                            ToolTip="连接状态 · 查看质量详情">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding StateIcon}"
-                                       FontFamily="{StaticResource IconFont}"
-                                       FontSize="12"
-                                       VerticalAlignment="Center"
-                                       Foreground="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}" />
-                            <TextBlock Text="{Binding Profile.Host}"
-                                       Style="{StaticResource Text.Caption}"
-                                       FontFamily="{StaticResource MonoFont}"
-                                       VerticalAlignment="Center"
-                                       Margin="7,0,3,0" />
-                        </StackPanel>
-                    </Button>
+                    <!-- 状态入口：只有状态图标（对号）可点击打开质量详情；主机名只作展示，
+                         不再是点击热区——药丸窄、拖动多，整块可点极易误触。 -->
+                    <StackPanel Orientation="Horizontal" Margin="2,0,0,0">
+                        <Button Style="{StaticResource Session.BarButton}"
+                                Content="{Binding StateIcon}"
+                                FontSize="12"
+                                Foreground="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}"
+                                Click="OnStatusEntryClick"
+                                ToolTip="连接状态 · 查看质量详情" />
+                        <TextBlock Text="{Binding Profile.Host}"
+                                   Style="{StaticResource Text.Caption}"
+                                   FontFamily="{StaticResource MonoFont}"
+                                   VerticalAlignment="Center"
+                                   IsHitTestVisible="False"
+                                   Margin="5,0,3,0" />
+                    </StackPanel>
 
                     <Border Width="1" Height="16" Margin="4,0"
                             Background="{DynamicResource Stroke.Default}" />

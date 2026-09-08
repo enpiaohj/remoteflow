@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -51,6 +52,10 @@ public partial class MainWindow : Window
         // 会话工具条的「全屏」按钮与 F11 都只翻转 IsSessionFullScreen，
         // 真正的窗口去边框铺满在这里响应。
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
+
+        // 关闭会话是一次打断性的上下文切换（跳到另一个会话或回工作区）——退出全屏
+        // 回到常驻条，让用户看清被切到哪。主动切换会话（不涉及移除）则保持全屏。
+        ((INotifyCollectionChanged)viewModel.Tabs).CollectionChanged += OnTabsCollectionChanged;
 
         SizeChanged += OnWindowSizeChanged;
         StateChanged += OnWindowStateChanged;
@@ -183,6 +188,21 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(MainViewModel.IsSessionFullScreen))
         {
             ApplyFullScreen(_viewModel.IsSessionFullScreen);
+        }
+    }
+
+    /// <summary>
+    /// Tab 集合变化。有会话 Tab 被<b>移除</b>（= 关闭会话）且当前处于全屏时，退出全屏。
+    /// 关闭当前会话后 MainViewModel 会自动选中另一个会话或回工作区——这次上下文切换
+    /// 应当在常驻条模式下发生，让用户看清自己被切到哪。主动切换会话不移除 Tab，不受影响。
+    /// </summary>
+    private void OnTabsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Remove
+            && e.OldItems?.OfType<SessionTabViewModel>().Any() == true
+            && _viewModel.IsSessionFullScreen)
+        {
+            _viewModel.IsSessionFullScreen = false;
         }
     }
 

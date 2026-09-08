@@ -32,8 +32,14 @@ namespace RemoteFlow.App.Views.Sessions;
 /// </summary>
 public partial class SessionHostView : UserControl
 {
-    /// <summary>进入全屏后，若鼠标未落到药丸上，多久自动收起。</summary>
-    private static readonly TimeSpan InitialAutoHideDelay = TimeSpan.FromSeconds(2.5);
+    /// <summary>
+    /// 进入全屏后，若鼠标未落到药丸上，多久自动收起。
+    /// <para>
+    /// Windows 端取 3s——比其他平台略长，给用户看清工具条的时间；单击远端画面
+    /// 仍由低级鼠标钩子立即收起（见 <see cref="LowLevelMouseHook"/>），不受此值影响。
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan InitialAutoHideDelay = TimeSpan.FromSeconds(3);
 
     /// <summary>鼠标离开药丸后多久收起——比初次短，尽快让出画面。</summary>
     private static readonly TimeSpan AwayAutoHideDelay = TimeSpan.FromMilliseconds(900);
@@ -144,31 +150,42 @@ public partial class SessionHostView : UserControl
             _window.SizeChanged += OnWindowMovedOrResized;
         }
 
-        // 视图可能是在已全屏的状态下加载的；也可能加载时还不可见，
-        // 那种情况留给可见性变化时再套用。
+        // 多会话下切换 Tab 靠 Collapsed/Visible，视图实例不销毁——每次切回来都要
+        // 重新套用全屏模式（重建药丸 / 计时器 / 钩子），切走时拆掉交给下一个可见视图。
+        IsVisibleChanged -= OnViewVisibilityChanged;
+        IsVisibleChanged += OnViewVisibilityChanged;
+
+        if (IsVisible)
+        {
+            ApplyFullScreenMode(_main?.IsSessionFullScreen == true);
+        }
+    }
+
+    /// <summary>
+    /// 本视图可见性变化。切回来（且当前处于全屏）→ 重新套用全屏模式；
+    /// 切走 → 拆掉本视图的悬浮药丸、计时器与低级鼠标钩子，避免多个后台视图的
+    /// 药丸 / 钩子并存。（一次性的「首次可见」不够——切走再切回就不会再触发。）
+    /// </summary>
+    private void OnViewVisibilityChanged(object? sender, DependencyPropertyChangedEventArgs e)
+    {
         if (IsVisible)
         {
             ApplyFullScreenMode(_main?.IsSessionFullScreen == true);
         }
         else
         {
-            IsVisibleChanged += OnFirstBecameVisible;
+            _edgeWatch.Stop();
+            _autoHideTimer.Stop();
+            RemoveMouseHook();
+            CloseQualityFlyout();
+            FullScreenHint.Visibility = Visibility.Collapsed;
+            ToolbarPopup.IsOpen = false;
         }
-    }
-
-    private void OnFirstBecameVisible(object? sender, DependencyPropertyChangedEventArgs e)
-    {
-        if (!IsVisible)
-        {
-            return;
-        }
-
-        IsVisibleChanged -= OnFirstBecameVisible;
-        ApplyFullScreenMode(_main?.IsSessionFullScreen == true);
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        IsVisibleChanged -= OnViewVisibilityChanged;
         _autoHideTimer.Stop();
         _edgeWatch.Stop();
         RemoveMouseHook();
@@ -678,9 +695,22 @@ public partial class SessionHostView : UserControl
 
     // ── 连接质量详情 Flyout ──────────────────────────────────────
 
+    private DateTime _lastStatusClick = DateTime.MinValue;
+
     /// <summary>常驻条 / 全屏药丸的状态入口点击 → 打开 Flyout。</summary>
     private void OnStatusEntryClick(object sender, RoutedEventArgs e)
     {
+        // 双击这里会触发 Flyout 开→（第二击令主窗激活、Flyout 失活关闭）→开 的竞态；
+        // owned + ShowInTaskbar=False 的无边框窗口在这种反复激活/关闭中会把宿主窗口
+        // 最小化（已知 WPF 问题）。250ms 内的第二次点击直接吞掉。
+        var now = DateTime.UtcNow;
+        if (now - _lastStatusClick < TimeSpan.FromMilliseconds(250))
+        {
+            return;
+        }
+
+        _lastStatusClick = now;
+
         if (sender is FrameworkElement anchor)
         {
             OpenQualityFlyout(anchor);
@@ -762,6 +792,13 @@ public partial class SessionHostView : UserControl
             {
                 _tab?.RequestSessionFocus();
             }
+        }
+
+        // 兜底：owned 无任务栏按钮的无边框窗口关闭时，Windows 偶尔会把宿主窗口最小化。
+        if (_window is { WindowState: WindowState.Minimized })
+        {
+            _window.WindowState = WindowState.Normal;
+            _window.Activate();
         }
 
         if (ReferenceEquals(_flyout, sender))
