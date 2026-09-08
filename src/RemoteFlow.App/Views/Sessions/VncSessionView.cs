@@ -37,6 +37,9 @@ public sealed class VncSessionView : ContentControl, IDisposable
     private bool _connectStarted;
     private bool _disposed;
 
+    /// <summary>当前远端光标（由服务端光标伪编码下发）。协议线程收形状 → 封送 UI 线程套到画面。</summary>
+    private Cursor? _remoteCursor;
+
     public VncSessionView(VncSession session, SessionTabViewModel viewModel, ILogger<VncSessionView> logger)
     {
         _session = session;
@@ -80,6 +83,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         _session.RenderTarget.FrameSizeChanged += OnFrameSizeChanged;
         _session.ClipboardTextReceived += OnClipboardTextReceived;
+        _session.CursorChanged += OnCursorChanged;
         _viewModel.ActionRequested += OnActionRequested;
 
         Loaded += OnLoaded;
@@ -209,6 +213,44 @@ public sealed class VncSessionView : ContentControl, IDisposable
         {
             // 调度失败（应用正在退出）同样静默放弃。
         }
+    }
+
+    /// <summary>
+    /// 远端光标形状变化。库挂了 <c>CursorHandler</c> 后就不再把光标合成进帧缓冲，
+    /// 改由这里按热点把它套成画面的鼠标指针（同 macOS 侧 NSCursor 思路）。
+    /// 事件来自协议线程，封送到 UI 线程再改控件。
+    /// </summary>
+    private void OnCursorChanged(VncCursorShape? shape)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.HasShutdownStarted)
+        {
+            return;
+        }
+
+        dispatcher.InvokeAsync(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            var next = shape is null
+                ? VncCursorImage.Hidden
+                : VncCursorImage.FromRgba(shape.Rgba, shape.Width, shape.Height, shape.HotX, shape.HotY);
+
+            // 构造失败（罕见）就回退系统箭头，不要让画面卡在旧光标。
+            _image.Cursor = next ?? Cursors.Arrow;
+
+            if (!ReferenceEquals(_remoteCursor, next)
+                && !ReferenceEquals(_remoteCursor, VncCursorImage.Hidden)
+                && _remoteCursor is not null)
+            {
+                _remoteCursor.Dispose();
+            }
+
+            _remoteCursor = next;
+        });
     }
 
     private void RecreateBitmap(VncSize size)
@@ -467,10 +509,19 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         _session.RenderTarget.FrameSizeChanged -= OnFrameSizeChanged;
         _session.ClipboardTextReceived -= OnClipboardTextReceived;
+        _session.CursorChanged -= OnCursorChanged;
         _viewModel.ActionRequested -= OnActionRequested;
 
         // 断开 WriteableBitmap 引用：即使控件仍在可视树中也不再取帧。
         _image.Source = null;
         _bitmap = null;
+
+        if (_remoteCursor is not null && !ReferenceEquals(_remoteCursor, VncCursorImage.Hidden))
+        {
+            _remoteCursor.Dispose();
+        }
+
+        _remoteCursor = null;
+        _image.Cursor = Cursors.Arrow;
     }
 }
