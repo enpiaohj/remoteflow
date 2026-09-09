@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using RemoteFlow.Core.Cloud;
 
@@ -190,21 +191,52 @@ public sealed class SyncCoordinator(
     private async Task<(int Pulled, int Conflicts, long Cursor, SyncStatus Status)> PullAsync(
         SyncContext context, long cursor, CancellationToken ct)
     {
-        int pulled = 0, conflicts = 0;
-
-        // 依赖父实体尚未落地的变更（credential-secret 先于其 credential 到达）——整轮拉完再重试。
-        var deferred = new List<SyncPulledChange>();
+        // 先把整段变更收进内存（按实体去重，保留最高 Revision 的那条），再按依赖顺序整体应用。
+        // 设计文档 §6「一批 Changes 全部成功应用后才能推进 Cursor」、§12「按依赖顺序落地」、
+        // §17「单个损坏实体不推进游标、标记 Error、保留本地数据」。
+        var batch = new Dictionary<(string Type, string Id), SyncPulledChange>();
+        var startCursor = cursor;
 
         while (true)
         {
             ct.ThrowIfCancellationRequested();
             var page = await client.PullAsync(cursor, _options.PullBatchSize, ct);
-
-            // 同一页内按依赖顺序应用：父实体（credential 等）先于依赖它的 credential-secret。
-            foreach (var change in page.Changes.OrderBy(c => DependencyRank(c.EntityType)))
+            foreach (var change in page.Changes)
             {
-                var outcome = await TryApplyPulledAsync(context, change, ct);
-                switch (outcome)
+                var key = (change.EntityType, change.EntityId);
+                if (!batch.TryGetValue(key, out var existing) || change.Revision > existing.Revision)
+                {
+                    batch[key] = change;
+                }
+            }
+
+            cursor = page.NextCursor;
+            if (!page.HasMore)
+            {
+                break;
+            }
+        }
+
+        if (batch.Count == 0)
+        {
+            await store.SetCursorAsync(context.AppId, cursor, ct);
+            return (0, 0, cursor, SyncStatus.Synced);
+        }
+
+        // group / tag / credential → credential-secret → connection（依赖它们的排最后）。
+        var ordered = batch.Values.OrderBy(c => DependencyRank(c.EntityType)).ThenBy(c => c.Revision).ToList();
+
+        int pulled = 0, conflicts = 0;
+        var pending = ordered;
+
+        // 两轮：第一轮按依赖顺序尽量落地；跨页导致父实体在后一页的，收集起来第二轮重试
+        //（此时父实体已落地）。第二轮仍失败的才是真问题。
+        for (var round = 0; round < 2 && pending.Count > 0; round++)
+        {
+            var stillFailing = new List<SyncPulledChange>();
+            foreach (var change in pending)
+            {
+                switch (await TryApplyPulledAsync(context, change, ct))
                 {
                     case PullOutcome.Applied:
                         pulled++;
@@ -212,50 +244,37 @@ public sealed class SyncCoordinator(
                     case PullOutcome.Conflict:
                         conflicts++;
                         break;
-                    case PullOutcome.DependencyDeferred:
-                        deferred.Add(change);
+                    case PullOutcome.Deferred:
+                        stillFailing.Add(change);
                         break;
                     case PullOutcome.DecryptFailed:
                         logger.LogError(
-                            "拉取的实体解密失败：{Type}/{Id}——停止，不推进游标", change.EntityType, change.EntityId);
-                        return (pulled, conflicts, cursor, SyncStatus.Error);
+                            "拉取的实体解密失败：{Type}/{Id}——不推进游标，保留本地数据", change.EntityType, change.EntityId);
+                        return (pulled, conflicts, startCursor, SyncStatus.Error);
                 }
             }
 
-            cursor = page.NextCursor;
-            await store.SetCursorAsync(context.AppId, cursor, ct);
-            if (!page.HasMore)
-            {
-                break;
-            }
+            pending = stillFailing;
         }
 
-        // 父实体现在都已落地——重试延后的变更。仍缺父实体则为孤儿 Secret，跳过并告警。
-        foreach (var change in deferred)
+        if (pending.Count > 0)
         {
-            var outcome = await TryApplyPulledAsync(context, change, ct);
-            switch (outcome)
+            // 仍落不下去（多为引用了已被删除的实体，或损坏）——不推进游标，下轮重试；标记 Error 让用户可见。
+            foreach (var change in pending)
             {
-                case PullOutcome.Applied:
-                    pulled++;
-                    break;
-                case PullOutcome.Conflict:
-                    conflicts++;
-                    break;
-                case PullOutcome.DependencyDeferred:
-                    logger.LogWarning(
-                        "拉取的 {Type}/{Id} 始终找不到父实体，跳过（孤儿 Secret）", change.EntityType, change.EntityId);
-                    break;
-                case PullOutcome.DecryptFailed:
-                    logger.LogError("重试延后变更时解密失败：{Type}/{Id}", change.EntityType, change.EntityId);
-                    return (pulled, conflicts, cursor, SyncStatus.Error);
+                logger.LogError(
+                    "拉取的 {Type}/{Id} 反复无法落地（可能引用了缺失的实体）——不推进游标",
+                    change.EntityType, change.EntityId);
             }
+
+            return (pulled, conflicts, startCursor, SyncStatus.Error);
         }
 
+        await store.SetCursorAsync(context.AppId, cursor, ct);
         return (pulled, conflicts, cursor, conflicts > 0 ? SyncStatus.Conflicted : SyncStatus.Synced);
     }
 
-    private enum PullOutcome { Skipped, Applied, Conflict, DependencyDeferred, DecryptFailed }
+    private enum PullOutcome { Skipped, Applied, Conflict, Deferred, DecryptFailed }
 
     private async Task<PullOutcome> TryApplyPulledAsync(
         SyncContext context, SyncPulledChange change, CancellationToken ct)
@@ -292,9 +311,10 @@ public sealed class SyncCoordinator(
         {
             return PullOutcome.DecryptFailed;
         }
-        catch (SyncDependencyNotReadyException)
+        catch (Exception ex) when (ex is SyncDependencyNotReadyException or SqliteException)
         {
-            return PullOutcome.DependencyDeferred;
+            // 依赖的实体（credential / group / tag）还没落地——外键失败或显式信号，本轮之后重试。
+            return PullOutcome.Deferred;
         }
 
         await store.SetServerVersionAsync(change.EntityType, change.EntityId, change.Version, ct);
@@ -309,9 +329,17 @@ public sealed class SyncCoordinator(
         return PullOutcome.Applied;
     }
 
-    /// <summary>拉取时的应用顺序：数值小的先应用。credential-secret 依赖 credential，排在后面。</summary>
-    private static int DependencyRank(string entityType) =>
-        entityType == SyncEntityTypes.CredentialSecret ? 1 : 0;
+    /// <summary>
+    /// 拉取时的应用顺序（数值小的先应用），对齐设计文档 §12：
+    /// group / tag / credential 无依赖；credential-secret 依赖 credential；
+    /// connection 依赖 group + credential（外键），且 connection_tags 依赖 tag。
+    /// </summary>
+    private static int DependencyRank(string entityType) => entityType switch
+    {
+        SyncEntityTypes.CredentialSecret => 1,
+        SyncEntityTypes.Connection => 2,
+        _ => 0,
+    };
 
     private async Task ApplyChangeAsync(
         SyncContext context, ISyncEntitySource source, SyncPulledChange change, CancellationToken ct)
