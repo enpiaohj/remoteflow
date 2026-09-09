@@ -344,10 +344,9 @@ public sealed class SettingsPaneView : NSView
     }
 
     /// <summary>分组内的一行：标题（+可选副文案）在左，操作控件在右。行高 ≥ 42。</summary>
-    /// <param name="monoSub">副文案用等宽字体（路径 / 指纹）。</param>
-    /// <param name="wrapSub">副文案换行而非中截（指纹要看全时）。</param>
+    /// <param name="monoSub">副文案用等宽字体、单行中截（路径类）。</param>
     private static NSView ListRow(string label, string? sub, NSView? trailing,
-        bool danger = false, bool monoSub = false, bool wrapSub = false)
+        bool danger = false, bool monoSub = false)
     {
         var head = new NSTextField
         {
@@ -373,8 +372,8 @@ public sealed class SettingsPaneView : NSView
                 Bordered = false, Editable = false, Selectable = monoSub, DrawsBackground = false,
                 Font = monoSub ? NSFont.MonospacedSystemFont(10, NSFontWeight.Regular) : NSFont.SystemFontOfSize(11),
                 TextColor = NSColor.SecondaryLabel,
-                LineBreakMode = (monoSub && !wrapSub) ? NSLineBreakMode.TruncatingMiddle : NSLineBreakMode.ByWordWrapping,
-                MaximumNumberOfLines = (monoSub && !wrapSub) ? 1 : 0,
+                LineBreakMode = monoSub ? NSLineBreakMode.TruncatingMiddle : NSLineBreakMode.ByWordWrapping,
+                MaximumNumberOfLines = monoSub ? 1 : 0,
                 TranslatesAutoresizingMaskIntoConstraints = false,
             };
             subLabel.SetContentCompressionResistancePriority(200, NSLayoutConstraintOrientation.Horizontal);
@@ -1120,30 +1119,63 @@ public sealed class SettingsPaneView : NSView
                 + "绝不静默接受 —— 只有在你确认服务器确实重装或换了证书后，才删除对应条目。")));
     }
 
+    /// <summary>
+    /// 主机密钥行（不走 <see cref="ListRow"/>）：第一行 host 在左、算法 + 「删除」在最右；
+    /// 第二行是**通栏的完整指纹**（不截断，可选中，装不下则按字符换行）。
+    /// </summary>
     private NSView HostKeyRow(HostKeyItemViewModel item)
     {
-        var algo = new NSTextField
+        NSTextField Text(string s, nfloat size, NSColor color, bool mono = false) => new()
         {
-            StringValue = item.Algorithm,
+            StringValue = s,
             Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
-            Font = NSFont.MonospacedSystemFont(10, NSFontWeight.Regular),
-            TextColor = NSColor.TertiaryLabel,
+            Font = mono ? NSFont.MonospacedSystemFont(size, NSFontWeight.Regular) : NSFont.SystemFontOfSize(size),
+            TextColor = color,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
+
+        var host = Text(item.Host, 13, NSColor.Label);
+        host.LineBreakMode = NSLineBreakMode.TruncatingTail;
+        host.SetContentCompressionResistancePriority(200, NSLayoutConstraintOrientation.Horizontal);
+
+        var algo = Text(item.Algorithm, 10, NSColor.TertiaryLabel, mono: true);
+
         var remove = RowButton("删除", () => _ = _vm.RemoveHostKeyCommand.ExecuteAsync(item));
+        remove.TranslatesAutoresizingMaskIntoConstraints = false;
 
-        var trail = new NSStackView
+        var fingerprint = Text(item.Fingerprint, 10, NSColor.SecondaryLabel, mono: true);
+        fingerprint.Selectable = true;
+        fingerprint.LineBreakMode = NSLineBreakMode.CharWrapping;
+        fingerprint.MaximumNumberOfLines = 0;
+        fingerprint.ToolTip = item.Fingerprint;
+
+        var row = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        row.AddSubview(host);
+        row.AddSubview(algo);
+        row.AddSubview(remove);
+        row.AddSubview(fingerprint);
+
+        NSLayoutConstraint.ActivateConstraints(new[]
         {
-            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
-            Alignment = NSLayoutAttribute.CenterY,
-            Spacing = 8,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        };
-        trail.AddArrangedSubview(algo);
-        trail.AddArrangedSubview(remove);
+            // 第一行：host … algo 「删除」
+            remove.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor, -RowPadX),
+            remove.TopAnchor.ConstraintEqualTo(row.TopAnchor, 7),
+            algo.TrailingAnchor.ConstraintEqualTo(remove.LeadingAnchor, -8),
+            algo.CenterYAnchor.ConstraintEqualTo(remove.CenterYAnchor),
+            host.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor, RowPadX),
+            host.CenterYAnchor.ConstraintEqualTo(remove.CenterYAnchor),
+            host.TrailingAnchor.ConstraintLessThanOrEqualTo(algo.LeadingAnchor, -8),
 
-        // 指纹单行中截（悬停 / 选中看全），整行两行高，和设计稿一致。
-        return ListRow(item.Host, item.Fingerprint, trail, monoSub: true);
+            // 第二行：通栏完整指纹
+            fingerprint.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor, RowPadX),
+            fingerprint.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor, -RowPadX),
+            fingerprint.TopAnchor.ConstraintGreaterThanOrEqualTo(remove.BottomAnchor, 4),
+            fingerprint.TopAnchor.ConstraintGreaterThanOrEqualTo(host.BottomAnchor, 3),
+            fingerprint.BottomAnchor.ConstraintEqualTo(row.BottomAnchor, -9),
+
+            row.HeightAnchor.ConstraintGreaterThanOrEqualTo(46),
+        });
+        return row;
     }
 
     // ── 数据与备份 ──────────────────────────────────────────────
