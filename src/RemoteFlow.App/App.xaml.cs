@@ -220,6 +220,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<AppServices.ImportExportService>();
         services.AddSingleton<AppServices.CredentialBackupService>();
         services.AddSingleton<LocalBackupService>();
+        services.AddSingleton<LocalDataWiper>();
         services.AddCloudSync();
         services.AddSingleton<AppServices.SessionManager>();
 

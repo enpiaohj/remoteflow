@@ -240,6 +240,25 @@ public sealed class CloudSyncViewModelTests
     }
 
     [Fact]
+    public async Task Restore_from_cloud_needs_a_danger_confirm_and_calls_through()
+    {
+        _sync.SignInResult = CloudUnlockState.Ready;
+        var vm = NewViewModel();
+        vm.Email = "me@example.com";
+        vm.Password = "cloud-passw0rd";
+        await vm.ConnectCommand.ExecuteAsync(null);
+        Assert.True(vm.RestoreFromCloudCommand.CanExecute(null));
+
+        _dialogs.ConfirmResult = false;
+        await vm.RestoreFromCloudCommand.ExecuteAsync(null);
+        Assert.False(_sync.RestoredFromCloud);
+
+        _dialogs.ConfirmResult = true;
+        await vm.RestoreFromCloudCommand.ExecuteAsync(null);
+        Assert.True(_sync.RestoredFromCloud);
+    }
+
+    [Fact]
     public async Task A_failed_connect_surfaces_the_error_message()
     {
         _sync.ThrowOnSignIn = new CloudSignInException("邮箱或密码错误");

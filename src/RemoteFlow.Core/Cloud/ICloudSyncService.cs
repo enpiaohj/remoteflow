@@ -84,4 +84,10 @@ public interface ICloudSyncService
     /// （「清除此设备云数据」），本地连接 / 凭据不动。
     /// </summary>
     Task SignOutAsync(bool wipeLocalCloudData, CancellationToken ct = default);
+
+    /// <summary>
+    /// 兜底（以云端为准）：清除本机全部业务数据与同步状态，然后从云端完整拉取恢复。
+    /// 与「清除此设备云数据」（保留本地、清同步状态）语义相反。
+    /// </summary>
+    Task RestoreFromCloudAsync(CancellationToken ct = default);
 }

@@ -1622,13 +1622,16 @@ public sealed class SettingsPaneView : NSView
     {
         var signOut = NSButton.CreateButton("退出云账号", () => c.DisconnectCommand.Execute(null));
         var wipe = NSButton.CreateButton("清除此设备云数据", () => c.DisconnectAndWipeCommand.Execute(null));
+        var restore = NSButton.CreateButton("清除本地数据并从云端恢复", () => c.RestoreFromCloudCommand.Execute(null));
         signOut.BezelStyle = NSBezelStyle.Rounded;
         wipe.BezelStyle = NSBezelStyle.Rounded;
+        restore.BezelStyle = NSBezelStyle.Rounded;
 
         var card = Card("账号", "person.crop.circle",
             "退出仅撤销本机登录并停止同步，本地连接与凭据保留。"
-            + "清除云数据还会清掉本机的同步状态与 Vault 密钥缓存，下次需重新登录。",
-            HStack(8, signOut, wipe));
+            + "「清除此设备云数据」清同步状态与密钥缓存、保留本地；"
+            + "「清除本地数据并从云端恢复」则以云端为准：删除本机全部数据后重新拉取。",
+            HStack(8, signOut, wipe), restore);
 
         GateByState(c, card, s => s == CloudSyncUiState.Ready);
         return card;

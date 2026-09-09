@@ -26,6 +26,7 @@ public sealed class FakeCloudSyncService : ICloudSyncService
     public bool BootstrapRequireApproval { get; private set; }
     public (Guid Id, ConflictResolution Resolution)? ResolvedConflict { get; private set; }
     public bool? SignedOutWipe { get; private set; }
+    public bool RestoredFromCloud { get; private set; }
     public Exception? ThrowOnSignIn { get; set; }
 
     public bool IsSignedIn { get; private set; }
@@ -148,6 +149,12 @@ public sealed class FakeCloudSyncService : ICloudSyncService
         SignedOutWipe = wipeLocalCloudData;
         IsSignedIn = false;
         IsVaultUnlocked = false;
+        return Task.CompletedTask;
+    }
+
+    public Task RestoreFromCloudAsync(CancellationToken ct = default)
+    {
+        RestoredFromCloud = true;
         return Task.CompletedTask;
     }
 

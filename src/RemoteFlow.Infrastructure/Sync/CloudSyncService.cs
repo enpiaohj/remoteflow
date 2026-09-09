@@ -18,7 +18,8 @@ public sealed class CloudSyncService(
     SqliteSyncStore store,
     AppSettings settings,
     JsonSettingsStore settingsStore,
-    ILogger<CloudSyncService> logger) : ICloudSyncService
+    ILogger<CloudSyncService> logger,
+    LocalDataWiper? wiper = null) : ICloudSyncService
 {
     private const string AppId = "com.appscloud.remoteflow";
 
@@ -225,6 +226,25 @@ public sealed class CloudSyncService(
         }
 
         await settingsStore.SaveAsync(settings, ct);
+    }
+
+    /// <summary>
+    /// 兜底：清除本机全部业务数据与同步状态，然后从云端完整拉取恢复（以云端为准）。
+    /// 需 Vault 已解锁（<see cref="RequireContext"/> 保证）；保留云会话、设备身份与本地 Secret 之外的一切。
+    /// 离线时本地被清空但拉取失败 —— 调用方应提示用户网络后重试（本地仅剩系统默认分组，由启动逻辑补种）。
+    /// </summary>
+    public async Task RestoreFromCloudAsync(CancellationToken ct = default)
+    {
+        var context = RequireContext();
+        if (wiper is null)
+        {
+            throw new InvalidOperationException("当前构建未注册 LocalDataWiper（不支持清除本地数据）。");
+        }
+
+        await wiper.WipeLocalDataForCloudRestoreAsync(ct);
+        // sync_state 已清空 → 游标归 0 → 本轮同步把云端作为权威完整拉取。
+        await coordinator.RunOnceAsync(context, ct);
+        logger.LogInformation("已清除本地数据并从云端恢复");
     }
 
     // ── 内部 ────────────────────────────────────────────────────

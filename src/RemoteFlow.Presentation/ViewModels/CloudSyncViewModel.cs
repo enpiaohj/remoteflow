@@ -418,6 +418,25 @@ public sealed partial class CloudSyncViewModel(
         ResetToSignedOut();
     });
 
+    /// <summary>兜底：以云端为准 —— 清空本机数据后从云端完整恢复。</summary>
+    [RelayCommand(CanExecute = nameof(IsReady))]
+    private Task RestoreFromCloudAsync() => RunAsync(async () =>
+    {
+        if (!await dialogs.ConfirmAsync(
+                "清除本地数据并从云端恢复",
+                "将删除本机的全部连接、凭据、分组、标签与密码，然后从云端重新拉取一份。\n\n"
+                + "仅当另一台设备上的数据才是完整源、且本机没有未上云的改动时使用——"
+                + "本机的本地改动会丢失，不可恢复。",
+                confirmText: "清除并恢复", isDanger: true))
+        {
+            return;
+        }
+
+        await sync.RestoreFromCloudAsync();
+        InfoMessage = "已清除本地数据并从云端恢复。";
+        await RefreshInternalAsync();
+    });
+
     [RelayCommand(CanExecute = nameof(IsReady))]
     private Task KeepLocalAsync(CloudConflictRow? conflict) => ResolveAsync(conflict, ConflictResolution.KeepLocal);
 
@@ -581,6 +600,7 @@ public sealed partial class CloudSyncViewModel(
         RefreshCommand.NotifyCanExecuteChanged();
         ChangePasswordCommand.NotifyCanExecuteChanged();
         ResetRecoveryKeyCommand.NotifyCanExecuteChanged();
+        RestoreFromCloudCommand.NotifyCanExecuteChanged();
         ApproveDeviceCommand.NotifyCanExecuteChanged();
         KeepLocalCommand.NotifyCanExecuteChanged();
         UseRemoteCommand.NotifyCanExecuteChanged();
