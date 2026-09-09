@@ -40,7 +40,7 @@ public sealed class CloudSyncService(
         var publicKey = Convert.ToBase64String(await deviceKeys.EnsureDeviceKeyAsync(ct));
         var device = new CloudDeviceInfo(
             AppId, EnsureDeviceId(), Environment.MachineName, PlatformTag(), publicKey);
-        await client.LoginAsync(email, password, device, ct);
+        await LoginOrRegisterAsync(email, password, device, ct);
 
         _userId = await client.GetUserIdAsync(ct);
         _email = email;
@@ -138,6 +138,43 @@ public sealed class CloudSyncService(
     }
 
     // ── 内部 ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 登录；若该邮箱在 AppsCloud 尚无账号（首次使用），自动创建后再登录。
+    /// 设计文档「注册 / 登录」为同一步：新部署或换服务地址时用户无需先去别处开户。
+    /// 账号已存在但密码不符时按凭据错误处理，绝不覆盖既有账号。
+    /// </summary>
+    private async Task LoginOrRegisterAsync(
+        string email, string password, CloudDeviceInfo device, CancellationToken ct)
+    {
+        try
+        {
+            await client.LoginAsync(email, password, device, ct);
+            return;
+        }
+        catch (CloudApiException ex) when (ex.StatusCode == 401)
+        {
+            logger.LogInformation("AppsCloud 登录返回 401，按首次使用尝试创建账号");
+        }
+
+        CloudRegisterOutcome outcome;
+        try
+        {
+            outcome = await client.RegisterAsync(email, password, ct);
+        }
+        catch (CloudApiException ex) when (ex.StatusCode == 400)
+        {
+            throw new InvalidOperationException("首次使用需创建 AppsCloud 账号，密码至少 12 位。", ex);
+        }
+
+        if (outcome == CloudRegisterOutcome.AlreadyExists)
+        {
+            throw new InvalidOperationException("邮箱或密码不正确。");
+        }
+
+        await client.LoginAsync(email, password, device, ct);
+        logger.LogInformation("已创建 AppsCloud 账号并登录");
+    }
 
     private async Task<CloudUnlockState> UnlockAsync(CancellationToken ct)
     {

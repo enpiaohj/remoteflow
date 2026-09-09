@@ -30,6 +30,26 @@ public sealed class CloudSyncFacadeTests : IDisposable
     }
 
     [RequiresAppsCloudFact]
+    public async Task Sign_in_with_an_unregistered_email_creates_the_account_and_proceeds_to_bootstrap()
+    {
+        var baseUrl = Environment.GetEnvironmentVariable("APPSCLOUD_BASE_URL")!;
+        var email = $"rf-signup-{Guid.NewGuid():N}@example.com";
+        const string password = "Signup-Passw0rd!";
+
+        var device = NewDevice(baseUrl);
+
+        // 未在别处开户，直接 SignInAsync：应自动注册后登录，落到「需初始化 Vault」。
+        Assert.Equal(CloudUnlockState.NeedsBootstrap, await device.Sync.SignInAsync(baseUrl, email, password));
+
+        // 同一邮箱、错误密码：账号已存在，按凭据错误处理，不得静默改写。
+        var bad = NewDevice(baseUrl);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => bad.Sync.SignInAsync(baseUrl, email, "Wrong-Passw0rd!"));
+
+        await device.Sync.SignOutAsync(wipeLocalCloudData: true);
+    }
+
+    [RequiresAppsCloudFact]
     public async Task A_fresh_device_recovers_connections_credentials_and_secrets_via_the_facade()
     {
         var baseUrl = Environment.GetEnvironmentVariable("APPSCLOUD_BASE_URL")!;
