@@ -7,6 +7,43 @@
 
 ---
 
+## [0.11.3] — 2026-09-10
+
+修复「两台设备都显示已同步、连接数却不一致」。Windows 与 macOS 同步发布，macOS 侧见
+[`releases/macos-v0.5.3/CHANGELOG.md`](releases/macos-v0.5.3/CHANGELOG.md)。
+
+### 修复
+- **干净设备拉取时 `connection` 落地报外键错误 → 整轮同步失败、数据永不收敛**：
+  首次同步时 `ReconcileAsync` 按 source 注册顺序把本地既有数据入队，`connection` 排在
+  `credential` / `group` 之前，于是 `connection` 在服务端拿到更小的 `Revision`。一台干净设备
+  按 `Revision` 顺序拉取时，`connection` 先到、它引用的 `credential` / `group` 还没落地 →
+  `SqliteConnectionRepository.AddAsync` 触发 `FOREIGN KEY constraint failed` → 抛
+  `SqliteException`（不在 v0.11.2 的延后捕获范围内）→ `SyncCoordinator` 整轮 `catch` →
+  `SyncStatus.Error`、游标不推进、每轮都失败。界面可能停在上一次的「已同步」，
+  两台机器的数据一直不一致。
+- 按设计文档「同步协议 §6 / §12 / §17」重构拉取：
+  - 整段变更先收进内存（跨页按实体去重、保留最高 `Revision`），**不再逐页推进游标**
+    —— 一批全部成功才推进（§6）。
+  - **按依赖顺序落地**：`group` / `tag` / `credential` → `credential-secret` → `connection`（§12）。
+  - 落不下去的（依赖信号或外键失败）**两轮重试**；跨页时父实体在后一页的，第二轮就能过。
+  - 两轮后仍失败：**不推进游标、标记 `Error`、保留已落地的本地数据**，下轮整批重试
+    （已落地的靠版本号跳过），不造成永久缺口（§17）。
+
+### 验证
+- `dotnet build RemoteFlow.slnx -c Release` 0 错误；`dotnet test -c Release` ——
+  Core.Tests 42、IntegrationTests 159（`SyncDependencyOrderingTests` 重写为真实仓储：
+  在启用云同步前建 group + credential + 引用它们的 connection → 首次同步使 connection
+  Revision 更小 → 干净设备一次拉取即收敛、`Synced` 而非 `Error`、再跑一轮 0 推送）、
+  IntegrationTests.Windows 9 全绿。
+- 端到端 `CloudRoundTripTests` / `CloudSyncFacadeTests` 对 `https://sync.appscloud.cn/` 3/3 通过。
+- 未执行：完整 UI 手动走查、两台物理机的同步演练。
+
+### 升级说明
+- 之前卡住的设备升级后会自动重试整批拉取并收敛。若因为服务端数据被重置过，本机的同步
+  指针可能指向已不存在的云端数据 → 在「云同步」里做一次「清除此设备云数据」再重新登录即可。
+
+详见 [`releases/v0.11.3/CHANGELOG.md`](releases/v0.11.3/CHANGELOG.md)。
+
 ## [0.11.2] — 2026-09-10
 
 继续修复云同步在「第二台设备」上的阻塞。v0.11.1 修了陈旧 VMK 缓存，本版修更常见的两个成因。
@@ -305,6 +342,7 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
+[0.11.3]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.3
 [0.11.2]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.2
 [0.11.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.1
 [0.11.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.0
