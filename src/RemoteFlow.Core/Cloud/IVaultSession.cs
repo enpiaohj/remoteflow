@@ -11,4 +11,7 @@ public interface IVaultSession : IDisposable
     EncryptedPayload Encrypt(PayloadContext context, ReadOnlySpan<byte> plaintext);
 
     byte[] Decrypt(PayloadContext context, EncryptedPayload payload);
+
+    /// <summary>用目标设备公钥（SPKI DER）把本会话持有的 VMK 包装成设备信封——批准新设备时用，VMK 不出会话。</summary>
+    DeviceKeyEnvelope WrapMasterKeyForDevice(byte[] recipientPublicKey);
 }
