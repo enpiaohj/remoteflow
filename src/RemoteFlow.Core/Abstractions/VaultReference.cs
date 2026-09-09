@@ -1,4 +1,4 @@
-namespace RemoteFlow.Application.Security;
+namespace RemoteFlow.Core.Abstractions;
 
 /// <summary>
 /// Vault 引用键的命名规则。引用键会明文保存在 SQLite 中，

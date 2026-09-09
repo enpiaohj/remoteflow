@@ -398,6 +398,20 @@ public sealed class SqliteSyncStore(RemoteFlowDatabase database)
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>清空全部同步本地状态（「清除此设备云数据」）。本地连接 / 凭据不受影响。</summary>
+    public async Task ResetAsync(CancellationToken ct = default)
+    {
+        await using var connection = database.OpenConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            DELETE FROM sync_outbox;
+            DELETE FROM sync_state;
+            DELETE FROM sync_entity_state;
+            DELETE FROM sync_conflict;
+            """;
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     // ── 辅助 ────────────────────────────────────────────────────
 
     private static string Iso(DateTimeOffset value) => value.ToString("o", CultureInfo.InvariantCulture);

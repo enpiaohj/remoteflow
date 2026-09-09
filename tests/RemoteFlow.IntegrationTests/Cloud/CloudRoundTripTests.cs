@@ -87,9 +87,11 @@ public sealed class CloudRoundTripTests
 
     private static Device NewDevice()
     {
-        var http = new HttpClient(new HttpClientHandler { UseProxy = false }) { BaseAddress = new Uri(BaseUrl) };
+        var http = new HttpClient(new HttpClientHandler { UseProxy = false });
         var keyStore = new InMemoryVaultKeyStore();
-        var client = new AppsCloudClient(http, new InMemoryCloudTokenStore(), NullLogger<AppsCloudClient>.Instance);
+        var client = new AppsCloudClient(
+            http, new CloudEndpoint { BaseUrl = BaseUrl }, new InMemoryCloudTokenStore(),
+            NullLogger<AppsCloudClient>.Instance);
         var deviceKeys = new DeviceKeyService(keyStore);
         var vault = new VaultMasterKeyService(
             client, keyStore, deviceKeys, new RecoveryKeyService(), NullLogger<VaultMasterKeyService>.Instance);

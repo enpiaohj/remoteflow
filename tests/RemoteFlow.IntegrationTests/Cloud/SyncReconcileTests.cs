@@ -39,7 +39,8 @@ public sealed class SyncReconcileTests : IDisposable
     [Fact]
     public async Task Change_tracker_wired_into_ConnectionService_enqueues_the_outbox()
     {
-        var tracker = new OutboxSyncChangeTracker(_store, NullLogger<OutboxSyncChangeTracker>.Instance);
+        var tracker = new OutboxSyncChangeTracker(
+            _store, new CloudSyncGate { Enabled = true }, NullLogger<OutboxSyncChangeTracker>.Instance);
         var service = new ConnectionService(_connections, new SqliteGroupRepository(_database),
             new SqliteTagRepository(_database), tracker);
 

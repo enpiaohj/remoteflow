@@ -13,6 +13,7 @@ namespace RemoteFlow.Infrastructure.Sync;
 /// </summary>
 public sealed class AppsCloudClient(
     HttpClient http,
+    CloudEndpoint endpoint,
     ICloudTokenStore tokenStore,
     ILogger<AppsCloudClient> logger) : ICloudClient
 {
@@ -266,7 +267,7 @@ public sealed class AppsCloudClient(
     private async Task<HttpResponseMessage> SendOnceAsync(
         HttpMethod method, string path, object? body, bool authenticated, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(method, path);
+        using var request = new HttpRequestMessage(method, new Uri(endpoint.RequireBase(), path));
         if (body is not null)
         {
             request.Content = new StringContent(

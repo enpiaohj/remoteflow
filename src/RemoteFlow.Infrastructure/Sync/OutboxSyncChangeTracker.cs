@@ -3,8 +3,12 @@ using RemoteFlow.Core.Cloud;
 
 namespace RemoteFlow.Infrastructure.Sync;
 
-/// <summary>把业务变更登记进 <c>sync_outbox</c>。写失败不抛（best-effort），由对账兜底。</summary>
-public sealed class OutboxSyncChangeTracker(SqliteSyncStore store, ILogger<OutboxSyncChangeTracker> logger)
+/// <summary>
+/// 把业务变更登记进 <c>sync_outbox</c>——仅当 <see cref="CloudSyncGate.Enabled"/> 为真。
+/// 写失败不抛（best-effort），由对账兜底。
+/// </summary>
+public sealed class OutboxSyncChangeTracker(
+    SqliteSyncStore store, CloudSyncGate gate, ILogger<OutboxSyncChangeTracker> logger)
     : ISyncChangeTracker
 {
     public Task TrackUpsertAsync(string entityType, string entityId, CancellationToken ct = default) =>
@@ -16,6 +20,11 @@ public sealed class OutboxSyncChangeTracker(SqliteSyncStore store, ILogger<Outbo
     private async Task EnqueueAsync(
         string entityType, string entityId, OutboxOperationType operation, CancellationToken ct)
     {
+        if (!gate.Enabled)
+        {
+            return;
+        }
+
         try
         {
             var baseVersion = await store.GetServerVersionAsync(entityType, entityId, ct);

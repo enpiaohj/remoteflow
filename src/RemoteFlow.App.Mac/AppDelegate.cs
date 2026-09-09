@@ -225,6 +225,7 @@ public sealed class AppDelegate : NSApplicationDelegate
         services.AddSingleton<AppServices.ImportExportService>();
         services.AddSingleton<AppServices.CredentialBackupService>();
         services.AddSingleton<LocalBackupService>();
+        services.AddCloudSync();
         services.AddSingleton<ISshHostKeyPolicy, RemoteFlow.Presentation.Services.InteractiveSshHostKeyPolicy>();
         services.AddSingleton<AppServices.SessionManager>();
 

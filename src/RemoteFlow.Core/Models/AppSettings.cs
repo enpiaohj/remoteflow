@@ -128,6 +128,16 @@ public sealed class AppSettings
     /// <summary>连接历史保留天数。0 表示不自动清理。</summary>
     public int HistoryRetentionDays { get; set; }
 
+    // ── 云同步 ────────────────────────────────────────────
+    /// <summary>AppsCloud 服务地址（含 PathBase，末尾带斜杠），例：<c>https://host/appscloud/</c>。留空表示未配置。</summary>
+    public string CloudBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>是否已启用云同步（登录过 AppsCloud 且本地保留会话）。</summary>
+    public bool CloudSyncEnabled { get; set; }
+
+    /// <summary>本机云设备标识（首次登录时生成的稳定 Guid 字符串）。清除云数据时一并清空。</summary>
+    public string CloudDeviceId { get; set; } = string.Empty;
+
     // ── 数据 ──────────────────────────────────────────────
     /// <summary>数据库文件所在目录。留空表示使用默认的 %LOCALAPPDATA%\RemoteFlow。</summary>
     public string DataDirectory { get; set; } = string.Empty;

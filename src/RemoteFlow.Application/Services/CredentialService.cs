@@ -34,13 +34,13 @@ public sealed class CredentialService(
         if (!string.IsNullOrEmpty(password))
         {
             credential.SecretReference = await vault.StoreSecretAsync(
-                Security.VaultReference.ForPassword(credential.Id), password, ct);
+                VaultReference.ForPassword(credential.Id), password, ct);
         }
 
         if (!string.IsNullOrEmpty(privateKey))
         {
             credential.KeyReference = await vault.StoreSecretAsync(
-                Security.VaultReference.ForPrivateKey(credential.Id), privateKey, ct);
+                VaultReference.ForPrivateKey(credential.Id), privateKey, ct);
         }
 
         credential.CreatedAt = DateTimeOffset.Now;
@@ -48,6 +48,11 @@ public sealed class CredentialService(
 
         await repository.AddAsync(credential, ct);
         await _sync.TrackUpsertAsync(SyncEntityTypes.Credential, credential.Id.ToString(), ct);
+        if (credential.SecretReference is not null || credential.KeyReference is not null)
+        {
+            await _sync.TrackUpsertAsync(SyncEntityTypes.CredentialSecret, credential.Id.ToString(), ct);
+        }
+
         logger.LogInformation("已新建凭据 {CredentialName}（类型 {Type}）", credential.Name, credential.Type);
 
         return credential;
@@ -66,17 +71,22 @@ public sealed class CredentialService(
         if (password is not null)
         {
             credential.SecretReference = await ReplaceSecretAsync(
-                credential.SecretReference, Security.VaultReference.ForPassword(credential.Id), password, ct);
+                credential.SecretReference, VaultReference.ForPassword(credential.Id), password, ct);
         }
 
         if (privateKey is not null)
         {
             credential.KeyReference = await ReplaceSecretAsync(
-                credential.KeyReference, Security.VaultReference.ForPrivateKey(credential.Id), privateKey, ct);
+                credential.KeyReference, VaultReference.ForPrivateKey(credential.Id), privateKey, ct);
         }
 
         await repository.UpdateAsync(credential, ct);
         await _sync.TrackUpsertAsync(SyncEntityTypes.Credential, credential.Id.ToString(), ct);
+        if (password is not null || privateKey is not null)
+        {
+            await _sync.TrackUpsertAsync(SyncEntityTypes.CredentialSecret, credential.Id.ToString(), ct);
+        }
+
         logger.LogInformation("已更新凭据 {CredentialName}", credential.Name);
     }
 
@@ -100,6 +110,7 @@ public sealed class CredentialService(
         }
 
         await repository.DeleteAsync(id, ct);
+        await _sync.TrackDeleteAsync(SyncEntityTypes.CredentialSecret, id.ToString(), ct);
         await _sync.TrackDeleteAsync(SyncEntityTypes.Credential, id.ToString(), ct);
         logger.LogInformation("已删除凭据 {CredentialName}", credential.Name);
     }
