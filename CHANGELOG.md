@@ -7,6 +7,39 @@
 
 ---
 
+## [0.11.2] — 2026-09-10
+
+继续修复云同步在「第二台设备」上的阻塞。v0.11.1 修了陈旧 VMK 缓存，本版修更常见的两个成因。
+Windows 与 macOS 同步发布，macOS 侧见
+[`releases/macos-v0.5.2/CHANGELOG.md`](releases/macos-v0.5.2/CHANGELOG.md)。
+
+### 修复
+- **第二台设备一直「同步出错，将自动重试」（拉取时父实体未到）**：服务端按 Revision 排序返回变更，
+  而 `credential-secret` 的 Revision 常常低于它的 `credential`（父实体被另一台设备改过、secret 没动
+  就会这样）。secret 先到、父 `credential` 还没落地时，`CredentialSecretSyncSource.ApplyAsync`
+  直接抛 `InvalidOperationException` → `SyncCoordinator` 整轮 `catch` → `SyncStatus.Error`，
+  游标不推进，**重启也一样**。
+  - 改抛可延后的 `SyncDependencyNotReadyException`。
+  - `PullAsync`：同一页内按依赖排序（`credential` 等先于 `credential-secret`）；跨页时把延后项
+    收集起来，整轮拉完（父实体都在了）再重试；仍找不到父实体则记为孤儿 Secret，跳过并告警，不再卡死。
+- **两台设备版本号无限互相推高 / 反复出现「刷新后好多冲突」**：`SqliteConnectionRepository` /
+  `SqliteCredentialRepository` 的 `UpdateAsync` 会把 `UpdatedAt` 置为当前时间。于是拉取落地后，
+  `GetPlaintextAsync` 读出来的内容和刚拉下来的明文不一致 → 对账把正常拉取当成本地漂移又推上去，
+  两台设备来回推、版本号乱涨（也正是上面 Revision 倒挂的根源）。
+  - 拉取落地后，内容哈希改用「重新读取的实际状态」计算，不用拉下来的明文——对账从此稳定。
+- **注册 2 台设备，账号里显示 5 台**：「云同步 → 清除此设备云数据」会清空本机的设备标识，
+  于是每次「清除 + 重新登录」都在服务端注册一个新设备行。
+  - 「清除此设备云数据」不再清空设备标识——它是这台机器的稳定身份，清缓存 / 清同步状态即可。
+
+### 验证
+- `dotnet build RemoteFlow.slnx -c Release` 0 错误；`dotnet test -c Release` ——
+  Core.Tests 42、IntegrationTests 159（+`SyncDependencyOrderingTests`：父实体后到时延后重试不再整轮失败、
+  重跑不再假推送）、IntegrationTests.Windows 9 全绿。
+- 端到端 `CloudRoundTripTests` / `CloudSyncFacadeTests` 对 `https://sync.appscloud.cn/` 3/3 通过。
+- 未执行：完整 UI 手动走查、实机会话回归、两台物理机的同步演练。
+
+详见 [`releases/v0.11.2/CHANGELOG.md`](releases/v0.11.2/CHANGELOG.md)。
+
 ## [0.11.1] — 2026-09-09
 
 修复 v0.11.0 的一个云同步阻塞性缺陷。Windows 与 macOS 同步发布，macOS 侧见
@@ -272,6 +305,7 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
+[0.11.2]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.2
 [0.11.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.1
 [0.11.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.0
 [0.10.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.10.0
