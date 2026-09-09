@@ -100,10 +100,15 @@ macOS 原生版同一功能、同一批提交，走 `macos-v0.4.0`（AppKit 界�
 
 ## Artifacts
 
-由 `.github/workflows/release-windows.yml` 在 `v0.10.0` tag 推送后构建并上传到 GitHub Release：
+由 `.github/workflows/release-windows.yml` 在 `v0.10.0` tag 推送后构建并上传到 GitHub Release
+（`untagged-74c7a8b9e0ffe0b4f9cd` 草稿，人工审核后 Publish）：
 
-- `RemoteFlow-v0.10.0-win-x64.exe` —— Size / SHA-256 待 CI 产物核对后补录本节。
-- `RemoteFlow-v0.10.0-win-x64.zip` —— 含 `Assets/Terminal/`（单文件 exe 的 SSH 终端需同目录资源）。
+- `RemoteFlow-v0.10.0-win-x64.exe`
+  - Size：74,837,330 bytes
+  - SHA-256：`B9815C98EF5C037095A9F260A3D8F8446680666AD3DC726C312E0ABE7A01C8DA`
+- `RemoteFlow-v0.10.0-win-x64.zip`（含 `Assets/Terminal/`，单文件 exe 的 SSH 终端需同目录资源）
+  - Size：69,364,537 bytes
+  - SHA-256：`40A623491CF2A8435ED692E357F531FA5701004DE0E9F069C47F25E2D25904BE`
 
 产物入库策略：`releases/v0.10.0/` 里 `source/` + 本 CHANGELOG **入 Git**；exe / zip 由 `.gitignore`
 排除，发布后 `gh release download v0.10.0` 下载一份到本地 `releases/v0.10.0/` 做磁盘快照，

@@ -108,5 +108,12 @@
 
 ## 产物
 
+由 `.github/workflows/release-macos.yml` 在 `macos-v0.4.0` tag 推送后构建并上传到 GitHub Release
+（`untagged-be7773524c4faf9686ca` 草稿，人工审核后 Publish）：
+
 - `RemoteFlow-v0.4.0-macos-arm64.dmg` —— Apple Silicon，ad-hoc 签名
-- `RemoteFlow-v0.4.0-macos-x64.dmg` —— Intel，ad-hoc 签名
+  - Size：57,285,694 bytes
+  - SHA-256：`66525F8A52AD51E21F5DA0B0E2006291797727BDF1AE9C8DCC52744FFA0E1220`
+- `RemoteFlow-v0.4.0-macos-x64.dmg` —— Intel（arm64 runner 交叉编译），ad-hoc 签名
+  - Size：60,184,749 bytes
+  - SHA-256：`E1EB369CF9C372AD760523C36EE44DA58C32BC8C066C0F7CFA26258DDB8345FB`
