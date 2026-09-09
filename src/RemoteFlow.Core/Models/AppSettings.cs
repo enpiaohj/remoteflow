@@ -139,6 +139,9 @@ public sealed class AppSettings
     /// <summary>是否已启用云同步（登录过 AppsCloud 且本地保留会话）。</summary>
     public bool CloudSyncEnabled { get; set; }
 
+    /// <summary>上次登录的邮箱，回填到登录框省得重输。「清除此设备云数据」时一并清空。</summary>
+    public string CloudEmail { get; set; } = string.Empty;
+
     /// <summary>本机云设备标识（首次登录时生成的稳定 Guid 字符串）。清除云数据时一并清空。</summary>
     public string CloudDeviceId { get; set; } = string.Empty;
 

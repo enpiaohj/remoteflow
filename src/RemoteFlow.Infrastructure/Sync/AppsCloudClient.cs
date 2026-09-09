@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using RemoteFlow.Core.Cloud;
+using RemoteFlow.Infrastructure.Security;
 
 namespace RemoteFlow.Infrastructure.Sync;
 
@@ -29,23 +30,14 @@ public sealed class AppsCloudClient(
     public async Task<Guid> GetUserIdAsync(CancellationToken ct = default) =>
         (await tokenStore.GetAsync(ct) ?? throw new CloudAuthRequiredException("Not signed in.")).UserId;
 
-    public async Task<Guid> GetCurrentDeviceIdAsync(CancellationToken ct = default)
-    {
-        var session = await tokenStore.GetAsync(ct) ?? throw new CloudAuthRequiredException("Not signed in.");
-        using var response = await SendAsync(HttpMethod.Get, "api/v1/devices", null, authenticated: true, ct);
-        response.EnsureSuccessStatusCode();
-        var devices = await ReadAsync<List<DeviceListItemDto>>(response, ct);
-        var match = devices.Find(d => d.ClientDeviceId == session.ClientDeviceId)
-            ?? throw new CloudApiException(404, "Current device is not registered.");
-        return match.Id;
-    }
-
     // ── 账号 ────────────────────────────────────────────────────
 
     public async Task<CloudRegisterOutcome> RegisterAsync(string email, string password, CancellationToken ct = default)
     {
+        var authKey = VaultCryptography.DeriveAuthKey(password, email);
         using var response = await SendAsync(
-            HttpMethod.Post, "api/v1/auth/register", new { email, password }, authenticated: false, ct);
+            HttpMethod.Post, "api/v1/auth/register",
+            new { email, password = authKey }, authenticated: false, ct);
         return response.StatusCode switch
         {
             HttpStatusCode.Created => CloudRegisterOutcome.Created,
@@ -60,12 +52,11 @@ public sealed class AppsCloudClient(
         using var response = await SendAsync(HttpMethod.Post, "api/v1/auth/login", new
         {
             email,
-            password,
+            password = VaultCryptography.DeriveAuthKey(password, email),
             appId = device.AppId,
             clientDeviceId = device.ClientDeviceId,
             deviceName = device.DeviceName,
             platform = device.Platform,
-            publicKey = device.PublicKey,
         }, authenticated: false, ct);
         if (!response.IsSuccessStatusCode)
         {
@@ -78,6 +69,20 @@ public sealed class AppsCloudClient(
             new CloudSession(tokens.RefreshToken, userId, device.AppId, device.ClientDeviceId), ct);
         SetAccessToken(tokens);
         logger.LogInformation("已登录 AppsCloud，UserId {UserId}", userId);
+    }
+
+    public async Task ChangePasswordAsync(
+        string email, string currentPassword, string newPassword, CancellationToken ct = default)
+    {
+        using var response = await SendAsync(HttpMethod.Post, "api/v1/auth/change-password", new
+        {
+            currentPassword = VaultCryptography.DeriveAuthKey(currentPassword, email),
+            newPassword = VaultCryptography.DeriveAuthKey(newPassword, email),
+        }, authenticated: true, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await ApiError(response);
+        }
     }
 
     public async Task LogoutAsync(CancellationToken ct = default)
@@ -109,15 +114,15 @@ public sealed class AppsCloudClient(
         using var response = await SendAsync(HttpMethod.Get, "api/v1/vault/status", null, authenticated: true, ct);
         response.EnsureSuccessStatusCode();
         var dto = await ReadAsync<VaultStatusDto>(response, ct);
-        return new CloudVaultStatus(dto.Exists, dto.CurrentKeyVersion, dto.ThisDeviceAuthorized, dto.HasRecoveryEnvelope);
+        return new CloudVaultStatus(dto.Exists, dto.CurrentKeyVersion, dto.HasPasswordEnvelope, dto.HasRecoveryEnvelope);
     }
 
     public async Task<bool> BootstrapVaultAsync(
-        DeviceKeyEnvelope deviceEnvelope, RecoveryKeyEnvelope recoveryEnvelope, CancellationToken ct = default)
+        VaultKeyEnvelope passwordEnvelope, VaultKeyEnvelope recoveryEnvelope, CancellationToken ct = default)
     {
         using var response = await SendAsync(HttpMethod.Post, "api/v1/vault/bootstrap", new
         {
-            deviceEnvelope = ToWire(deviceEnvelope),
+            passwordEnvelope = ToWire(passwordEnvelope),
             recoveryEnvelope = ToWire(recoveryEnvelope),
         }, authenticated: true, ct);
         return response.StatusCode switch
@@ -128,63 +133,25 @@ public sealed class AppsCloudClient(
         };
     }
 
-    public async Task<DeviceKeyEnvelope?> GetDeviceEnvelopeAsync(CancellationToken ct = default)
+    public async Task<VaultKeyEnvelope?> GetVaultEnvelopeAsync(string kind, CancellationToken ct = default)
     {
         using var response = await SendAsync(
-            HttpMethod.Get, "api/v1/vault/device-envelope", null, authenticated: true, ct);
+            HttpMethod.Get, $"api/v1/vault/envelope/{kind}", null, authenticated: true, ct);
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
             return null;
         }
 
         response.EnsureSuccessStatusCode();
-        var dto = await ReadAsync<DeviceEnvelopeDto>(response, ct);
-        return new DeviceKeyEnvelope(
-            dto.Algorithm, B64(dto.WrappedKey), B64(dto.Nonce), B64(dto.EphemeralPublicKey));
+        var dto = await ReadAsync<VaultEnvelopeDto>(response, ct);
+        return new VaultKeyEnvelope(
+            dto.Kind, dto.Algorithm, B64(dto.WrappedKey), B64(dto.Nonce), B64(dto.Salt), dto.Iterations);
     }
 
-    public async Task<IReadOnlyList<CloudPendingDevice>> GetPendingDevicesAsync(CancellationToken ct = default)
+    public async Task PutVaultEnvelopeAsync(VaultKeyEnvelope envelope, CancellationToken ct = default)
     {
         using var response = await SendAsync(
-            HttpMethod.Get, "api/v1/vault/pending-devices", null, authenticated: true, ct);
-        response.EnsureSuccessStatusCode();
-        var dtos = await ReadAsync<List<PendingDeviceDto>>(response, ct);
-        return dtos.ConvertAll(x => new CloudPendingDevice(
-            x.DeviceId, x.ClientDeviceId, x.DisplayName, x.Platform, B64(x.PublicKey), x.LastSeenAt));
-    }
-
-    public async Task AddDeviceEnvelopeAsync(
-        Guid targetDeviceId, DeviceKeyEnvelope envelope, CancellationToken ct = default)
-    {
-        using var response = await SendAsync(HttpMethod.Post, "api/v1/vault/device-envelopes", new
-        {
-            targetDeviceId,
-            envelope = ToWire(envelope),
-        }, authenticated: true, ct);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw await ApiError(response);
-        }
-    }
-
-    public async Task<RecoveryKeyEnvelope?> GetRecoveryEnvelopeAsync(CancellationToken ct = default)
-    {
-        using var response = await SendAsync(
-            HttpMethod.Get, "api/v1/vault/recovery-envelope", null, authenticated: true, ct);
-        if (response.StatusCode == HttpStatusCode.NotFound)
-        {
-            return null;
-        }
-
-        response.EnsureSuccessStatusCode();
-        var dto = await ReadAsync<RecoveryEnvelopeDto>(response, ct);
-        return new RecoveryKeyEnvelope(dto.Algorithm, B64(dto.WrappedKey), B64(dto.Nonce), B64(dto.Salt));
-    }
-
-    public async Task PutRecoveryEnvelopeAsync(RecoveryKeyEnvelope envelope, CancellationToken ct = default)
-    {
-        using var response = await SendAsync(
-            HttpMethod.Put, "api/v1/vault/recovery-envelope", ToWire(envelope), authenticated: true, ct);
+            HttpMethod.Put, $"api/v1/vault/envelope/{envelope.Kind}", ToWire(envelope), authenticated: true, ct);
         if (!response.IsSuccessStatusCode)
         {
             throw await ApiError(response);
@@ -335,20 +302,13 @@ public sealed class AppsCloudClient(
 
     // ── 辅助 ────────────────────────────────────────────────────
 
-    private static object ToWire(DeviceKeyEnvelope e) => new
-    {
-        algorithm = e.Algorithm,
-        wrappedKey = Convert.ToBase64String(e.WrappedKey),
-        nonce = Convert.ToBase64String(e.Nonce),
-        ephemeralPublicKey = Convert.ToBase64String(e.EphemeralPublicKey),
-    };
-
-    private static object ToWire(RecoveryKeyEnvelope e) => new
+    private static object ToWire(VaultKeyEnvelope e) => new
     {
         algorithm = e.Algorithm,
         wrappedKey = Convert.ToBase64String(e.WrappedKey),
         nonce = Convert.ToBase64String(e.Nonce),
         salt = Convert.ToBase64String(e.Salt),
+        iterations = e.Iterations,
     };
 
     private static byte[] B64(string value) => Convert.FromBase64String(value);
@@ -427,16 +387,10 @@ public sealed class AppsCloudClient(
     // ── 线格 DTO ───────────────────────────────────────────────
 
     private sealed record TokenDto(string AccessToken, string RefreshToken, DateTimeOffset ExpiresAt);
-    private sealed record DeviceListItemDto(Guid Id, string ClientDeviceId);
     private sealed record VaultStatusDto(
-        bool Exists, int? CurrentKeyVersion, bool ThisDeviceAuthorized, bool HasRecoveryEnvelope);
-    private sealed record DeviceEnvelopeDto(
-        int KeyVersion, string Algorithm, string WrappedKey, string Nonce, string EphemeralPublicKey);
-    private sealed record RecoveryEnvelopeDto(
-        int KeyVersion, string Algorithm, string WrappedKey, string Nonce, string Salt);
-    private sealed record PendingDeviceDto(
-        Guid DeviceId, string ClientDeviceId, string DisplayName, string Platform, string PublicKey,
-        DateTimeOffset LastSeenAt);
+        bool Exists, int? CurrentKeyVersion, bool HasPasswordEnvelope, bool HasRecoveryEnvelope);
+    private sealed record VaultEnvelopeDto(
+        string Kind, int KeyVersion, string Algorithm, string WrappedKey, string Nonce, string Salt, int Iterations);
     private sealed record PushResponseDto(long StreamRevision, List<PushResultDto> Results);
     private sealed record PushResultDto(
         string OperationId, string Status, string EntityType, string EntityId,

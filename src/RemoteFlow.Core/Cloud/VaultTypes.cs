@@ -3,30 +3,36 @@ using System.Text;
 
 namespace RemoteFlow.Core.Cloud;
 
+/// <summary>信封类型（与服务端 <c>VaultKeyEnvelope.Kind</c> 一致）。</summary>
+public static class VaultEnvelopeKinds
+{
+    public const string Password = "password";
+    public const string Recovery = "recovery";
+}
+
 /// <summary>
-/// Vault 加密算法标识。字符串与 AppsCloud 服务端 <c>DeviceKeyEnvelope.Algorithm</c> /
-/// <c>RecoveryEnvelope.Algorithm</c> 保持一致——服务端不解析，仅作自描述。
+/// Vault 加密算法标识。字符串与 AppsCloud 服务端 <c>VaultKeyEnvelope.Algorithm</c> 一致——
+/// 服务端不解析，仅作自描述。
 /// </summary>
 public static class VaultAlgorithms
 {
-    public const string DeviceEnvelope = "ECDH-P256_HKDF-SHA256_AES-256-GCM";
-    public const string RecoveryEnvelope = "RK_HKDF-SHA256_AES-256-GCM";
+    /// <summary>口令 / Recovery Key 信封统一：PBKDF2-SHA256 派生 KEK + AES-256-GCM 包装 VMK。</summary>
+    public const string SecretEnvelope = "PBKDF2-SHA256_AES-256-GCM";
+
     public const string Payload = "HKDF-SHA256_AES-256-GCM";
 }
 
-/// <summary>面向单个设备的 wrapped VMK 信封。全部字段对 AppsCloud 不透明。</summary>
-public sealed record DeviceKeyEnvelope(
+/// <summary>
+/// 一份 wrapped VMK。<see cref="Kind"/> 区分 password / recovery。全部字段对 AppsCloud 不透明：
+/// <see cref="Salt"/> / <see cref="Iterations"/> 是客户端 PBKDF2 参数。
+/// </summary>
+public sealed record VaultKeyEnvelope(
+    string Kind,
     string Algorithm,
     byte[] WrappedKey,
     byte[] Nonce,
-    byte[] EphemeralPublicKey);
-
-/// <summary>面向 Recovery Key 的 wrapped VMK 信封。</summary>
-public sealed record RecoveryKeyEnvelope(
-    string Algorithm,
-    byte[] WrappedKey,
-    byte[] Nonce,
-    byte[] Salt);
+    byte[] Salt,
+    int Iterations);
 
 /// <summary>一个业务实体加密后的载荷，直接对应 AppsCloud <c>SyncEntity</c> 的 Ciphertext / Nonce。</summary>
 public sealed record EncryptedPayload(byte[] Ciphertext, byte[] Nonce, int KeyVersion, int SchemaVersion);

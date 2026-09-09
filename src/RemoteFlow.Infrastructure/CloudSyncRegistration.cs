@@ -25,7 +25,6 @@ public static class CloudSyncRegistration
         services.AddSingleton<IVaultKeyStore, CredentialVaultKeyStore>();
         services.AddSingleton<ICloudClient, AppsCloudClient>();
 
-        services.AddSingleton<DeviceKeyService>();
         services.AddSingleton<RecoveryKeyService>();
         services.AddSingleton<VaultMasterKeyService>();
 

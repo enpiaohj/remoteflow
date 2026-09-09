@@ -26,8 +26,8 @@ public sealed class VaultSession : IVaultSession
     public byte[] Decrypt(PayloadContext context, EncryptedPayload payload) =>
         VaultCryptography.DecryptPayload(RequireKey(), context, payload);
 
-    public DeviceKeyEnvelope WrapMasterKeyForDevice(byte[] recipientPublicKey) =>
-        VaultCryptography.WrapForDevice(recipientPublicKey, RequireKey());
+    public VaultKeyEnvelope WrapWithSecret(string kind, string secret) =>
+        VaultCryptography.WrapWithSecret(kind, secret, RequireKey());
 
     private ReadOnlySpan<byte> RequireKey() =>
         _masterKey ?? throw new InvalidOperationException("Vault session is locked.");

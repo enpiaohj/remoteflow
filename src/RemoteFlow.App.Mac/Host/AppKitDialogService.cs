@@ -78,6 +78,19 @@ public sealed class AppKitDialogService : IDialogService
         return tcs.Task;
     }
 
+    public Task CopyToClipboardAsync(string text)
+    {
+        var tcs = new TaskCompletionSource();
+        NSApplication.SharedApplication.InvokeOnMainThread(() =>
+        {
+            var pb = NSPasteboard.GeneralPasteboard;
+            pb.ClearContents();
+            pb.WriteObjects([(Foundation.NSString)(text ?? string.Empty)]);
+            tcs.SetResult();
+        });
+        return tcs.Task;
+    }
+
     public Task<bool> ConfirmHostKeyAsync(SshHostKeyVerificationContext context)
     {
         var changed = context.IsMismatch;

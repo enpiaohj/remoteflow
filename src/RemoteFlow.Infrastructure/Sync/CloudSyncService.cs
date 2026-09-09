@@ -13,7 +13,6 @@ public sealed class CloudSyncService(
     CloudEndpoint endpoint,
     CloudSyncGate gate,
     VaultMasterKeyService vaultKeys,
-    DeviceKeyService deviceKeys,
     SyncCoordinator coordinator,
     ConflictService conflicts,
     SqliteSyncStore store,
@@ -28,29 +27,82 @@ public sealed class CloudSyncService(
     private string _email = string.Empty;
     private int _keyVersion = 1;
 
+    /// <summary>登录后暂存主口令，供 bootstrap / 解锁使用；解锁成功或退出后清空。</summary>
+    private string? _pendingPassword;
+
     public bool IsSignedIn { get; private set; }
 
     public bool IsVaultUnlocked => _session is not null;
 
     public async Task<CloudUnlockState> SignInAsync(
         string baseUrl, string email, string password, CancellationToken ct = default)
+        => await AuthenticateAsync(baseUrl, email, password, register: false, ct);
+
+    public async Task<CloudUnlockState> RegisterAsync(
+        string baseUrl, string email, string password, CancellationToken ct = default)
+        => await AuthenticateAsync(baseUrl, email, password, register: true, ct);
+
+    private async Task<CloudUnlockState> AuthenticateAsync(
+        string baseUrl, string email, string password, bool register, CancellationToken ct)
     {
         endpoint.BaseUrl = baseUrl;
+        var device = new CloudDeviceInfo(AppId, EnsureDeviceId(), Environment.MachineName, PlatformTag());
 
-        var publicKey = Convert.ToBase64String(await deviceKeys.EnsureDeviceKeyAsync(ct));
-        var device = new CloudDeviceInfo(
-            AppId, EnsureDeviceId(), Environment.MachineName, PlatformTag(), publicKey);
-        await LoginOrRegisterAsync(email, password, device, ct);
+        if (register)
+        {
+            await RegisterThenLoginAsync(email, password, device, ct);
+        }
+        else
+        {
+            try
+            {
+                await client.LoginAsync(email, password, device, ct);
+            }
+            catch (CloudApiException ex) when (ex.StatusCode is 401)
+            {
+                throw new CloudSignInException("邮箱或密码不正确。若还没有账号，请点「注册」。");
+            }
+        }
 
         _userId = await client.GetUserIdAsync(ct);
         _email = email;
+        _pendingPassword = password;
         IsSignedIn = true;
 
         settings.CloudBaseUrl = endpoint.BaseUrl!;
+        settings.CloudEmail = email;
         settings.CloudSyncEnabled = true;
         await settingsStore.SaveAsync(settings, ct);
 
         return await UnlockAsync(ct);
+    }
+
+    private async Task RegisterThenLoginAsync(
+        string email, string password, CloudDeviceInfo device, CancellationToken ct)
+    {
+        CloudRegisterOutcome outcome;
+        try
+        {
+            outcome = await client.RegisterAsync(email, password, ct);
+        }
+        catch (CloudApiException ex) when (ex.StatusCode is 400)
+        {
+            throw new CloudSignInException("创建账号失败：" + ex.Message, ex);
+        }
+
+        if (outcome == CloudRegisterOutcome.AlreadyExists)
+        {
+            throw new CloudSignInException("该邮箱已注册，请改用「登录」。");
+        }
+
+        try
+        {
+            await client.LoginAsync(email, password, device, ct);
+        }
+        catch (CloudApiException ex)
+        {
+            throw new CloudSignInException("账号已创建，但登录失败，请重试。", ex);
+        }
     }
 
     public async Task<CloudUnlockState?> TryResumeAsync(CancellationToken ct = default)
@@ -67,13 +119,23 @@ public sealed class CloudSyncService(
 
         endpoint.BaseUrl = settings.CloudBaseUrl;
         _userId = session.UserId;
+        _email = settings.CloudEmail;
         IsSignedIn = true;
+        return await UnlockAsync(ct);
+    }
+
+    /// <summary>NeedsPassword 状态下用户补输口令解锁。</summary>
+    public async Task<CloudUnlockState> UnlockWithPasswordAsync(string password, CancellationToken ct = default)
+    {
+        _pendingPassword = password;
         return await UnlockAsync(ct);
     }
 
     public async Task<string> BootstrapVaultAsync(CancellationToken ct = default)
     {
-        var (session, recoveryKey) = await vaultKeys.BootstrapAsync(ct);
+        var password = _pendingPassword
+            ?? throw new InvalidOperationException("请先登录。");
+        var (session, recoveryKey) = await vaultKeys.BootstrapAsync(password, ct);
         AdoptSession(session, keyVersion: 1);
         return recoveryKey.ToDisplayString();
     }
@@ -82,6 +144,26 @@ public sealed class CloudSyncService(
     {
         var session = await vaultKeys.RecoverAsync(recoveryKey, ct);
         AdoptSession(session, await CurrentKeyVersionAsync(ct));
+    }
+
+    public async Task ChangePasswordAsync(
+        string currentPassword, string newPassword, CancellationToken ct = default)
+    {
+        var session = RequireContext().Session;
+        // 1) 换认证密钥（服务端作废其它会话）；2) 用新会话重登；3) 重新包装口令信封。
+        await client.ChangePasswordAsync(_email, currentPassword, newPassword, ct);
+        var device = new CloudDeviceInfo(AppId, EnsureDeviceId(), Environment.MachineName, PlatformTag());
+        await client.LoginAsync(_email, newPassword, device, ct);
+        await vaultKeys.ReWrapPasswordEnvelopeAsync(session, newPassword, ct);
+        _pendingPassword = null;
+        logger.LogInformation("主口令已更改");
+    }
+
+    public async Task<string> ResetRecoveryKeyAsync(CancellationToken ct = default)
+    {
+        var session = RequireContext().Session;
+        var key = await vaultKeys.ResetRecoveryKeyAsync(session, ct);
+        return key.ToDisplayString();
     }
 
     public async Task<SyncRunResult> SyncNowAsync(CancellationToken ct = default)
@@ -100,17 +182,6 @@ public sealed class CloudSyncService(
     public Task<int> GetPendingOutboxCountAsync(CancellationToken ct = default) =>
         store.PendingCountAsync(ct);
 
-    public Task<IReadOnlyList<CloudPendingDevice>> GetPendingDevicesAsync(CancellationToken ct = default) =>
-        client.GetPendingDevicesAsync(ct);
-
-    public async Task ApproveDeviceAsync(Guid deviceId, CancellationToken ct = default)
-    {
-        var session = RequireContext().Session;
-        var pending = (await client.GetPendingDevicesAsync(ct)).FirstOrDefault(p => p.DeviceId == deviceId)
-            ?? throw new InvalidOperationException("待批准设备不存在（可能已被批准或撤销）。");
-        await vaultKeys.ApprovePendingDeviceAsync(session, pending, ct);
-    }
-
     public Task<IReadOnlyList<SyncConflictRecord>> GetConflictsAsync(CancellationToken ct = default) =>
         conflicts.ListAsync(ct);
 
@@ -123,6 +194,7 @@ public sealed class CloudSyncService(
         await client.LogoutAsync(ct);
         _session?.Dispose();
         _session = null;
+        _pendingPassword = null;
         IsSignedIn = false;
         gate.Enabled = false;
 
@@ -132,6 +204,7 @@ public sealed class CloudSyncService(
             await vaultKeys.ForgetAsync(ct);
             await store.ResetAsync(ct);
             settings.CloudDeviceId = string.Empty;
+            settings.CloudEmail = string.Empty;
         }
 
         await settingsStore.SaveAsync(settings, ct);
@@ -139,77 +212,21 @@ public sealed class CloudSyncService(
 
     // ── 内部 ────────────────────────────────────────────────────
 
-    /// <summary>创建账号时 AppsCloud 要求的最短密码长度（与服务端 RegisterRequest 对齐）。</summary>
-    private const int MinNewAccountPasswordLength = 12;
-
-    /// <summary>
-    /// 登录；若该邮箱在 AppsCloud 尚无账号（首次使用），自动创建后再登录。
-    /// 设计文档「注册 / 登录」为同一步：新部署或换服务地址时用户无需先去别处开户。
-    /// 账号已存在但密码不符时按凭据错误处理，绝不覆盖既有账号。
-    /// </summary>
-    /// <exception cref="CloudSignInException">凭据错误、或需要用户修正后重试的可读失败。</exception>
-    private async Task LoginOrRegisterAsync(
-        string email, string password, CloudDeviceInfo device, CancellationToken ct)
-    {
-        try
-        {
-            await client.LoginAsync(email, password, device, ct);
-            return;
-        }
-        catch (CloudApiException ex) when (ex.StatusCode is 401)
-        {
-            logger.LogInformation("AppsCloud 登录被拒（401），按首次使用尝试创建账号");
-        }
-
-        if (password.Length < MinNewAccountPasswordLength)
-        {
-            // 账号不存在才会走到这里；密码太短则注册必失败，直接给准话。
-            throw new CloudSignInException(
-                $"该邮箱在 AppsCloud 尚无账号。若要创建，密码至少需 {MinNewAccountPasswordLength} 位；"
-                + "若账号已存在，请检查密码是否输错。");
-        }
-
-        CloudRegisterOutcome outcome;
-        try
-        {
-            outcome = await client.RegisterAsync(email, password, ct);
-        }
-        catch (CloudApiException ex) when (ex.StatusCode is 400)
-        {
-            throw new CloudSignInException("创建 AppsCloud 账号失败：" + ex.Message, ex);
-        }
-
-        if (outcome == CloudRegisterOutcome.AlreadyExists)
-        {
-            throw new CloudSignInException("邮箱或密码不正确。");
-        }
-
-        try
-        {
-            await client.LoginAsync(email, password, device, ct);
-        }
-        catch (CloudApiException ex)
-        {
-            throw new CloudSignInException("账号已创建，但随后登录失败，请重试。", ex);
-        }
-
-        logger.LogInformation("已创建 AppsCloud 账号并登录");
-    }
-
     private async Task<CloudUnlockState> UnlockAsync(CancellationToken ct)
     {
-        var result = await vaultKeys.TryUnlockAsync(ct);
+        var result = await vaultKeys.TryUnlockAsync(_pendingPassword, ct);
         switch (result.State)
         {
             case VaultUnlockState.Unlocked:
                 AdoptSession(result.Session!, await CurrentKeyVersionAsync(ct));
+                _pendingPassword = null;
                 return CloudUnlockState.Ready;
 
             case VaultUnlockState.NeedsBootstrap:
                 return CloudUnlockState.NeedsBootstrap;
 
             default:
-                return CloudUnlockState.NeedsApproval;
+                return CloudUnlockState.NeedsPassword;
         }
     }
 

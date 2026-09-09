@@ -37,6 +37,13 @@ public sealed class DialogService(
             return true;
         });
 
+    public Task CopyToClipboardAsync(string text)
+        => InvokeOnUiAsync(() =>
+        {
+            Clipboard.SetText(text ?? string.Empty);
+            return true;
+        });
+
     public async Task<ConnectionEditorResult?> EditConnectionAsync(ConnectionProfile? existing, ProtocolType? preselectedProtocol = null)
     {
         // 编辑器需要凭据、分组、标签作为下拉数据源，先在后台取齐再开对话框。

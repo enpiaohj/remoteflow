@@ -8,15 +8,15 @@ public enum CloudUnlockState
     /// <summary>该账号还没有 Vault，需本设备执行 <see cref="ICloudSyncService.BootstrapVaultAsync"/>。</summary>
     NeedsBootstrap,
 
-    /// <summary>Vault 存在但本设备未授权，需其他设备批准或用 Recovery Key 恢复。</summary>
-    NeedsApproval,
+    /// <summary>Vault 存在但本地无缓存 VMK，需要用户补输主口令（或用 Recovery Key 恢复）。</summary>
+    NeedsPassword,
 }
 
 public sealed record CloudAccountInfo(bool SignedIn, Guid UserId, string Email, CloudUnlockState UnlockState);
 
 /// <summary>
-/// 云同步对 UI / ViewModel 的唯一入口。封装登录、Vault 解锁 / 初始化 / 恢复、
-/// 手动同步、设备批准、冲突解决与登出。
+/// 云同步对 UI / ViewModel 的唯一入口。封装登录 / 注册、Vault 解锁 / 初始化 / 恢复、
+/// 改口令、手动同步、冲突解决与登出。口令派生模型：新设备只需账号 + 主口令。
 /// </summary>
 public interface ICloudSyncService
 {
@@ -24,18 +24,31 @@ public interface ICloudSyncService
 
     bool IsVaultUnlocked { get; }
 
-    /// <summary>登录 AppsCloud 并尝试解锁 Vault。<paramref name="baseUrl"/> 含 PathBase。返回解锁状态。</summary>
+    /// <summary>登录 AppsCloud 并尝试解锁 Vault。<paramref name="password"/> 是主口令。</summary>
     Task<CloudUnlockState> SignInAsync(
+        string baseUrl, string email, string password, CancellationToken ct = default);
+
+    /// <summary>注册新账号并登录。</summary>
+    Task<CloudUnlockState> RegisterAsync(
         string baseUrl, string email, string password, CancellationToken ct = default);
 
     /// <summary>用已保存的会话尝试解锁（应用启动时调用）。未登录时返回 null。</summary>
     Task<CloudUnlockState?> TryResumeAsync(CancellationToken ct = default);
 
+    /// <summary>NeedsPassword 状态下补输主口令解锁。</summary>
+    Task<CloudUnlockState> UnlockWithPasswordAsync(string password, CancellationToken ct = default);
+
     /// <summary>首设备初始化 Vault，返回一次性展示的 Recovery Key（分组字符串）。</summary>
     Task<string> BootstrapVaultAsync(CancellationToken ct = default);
 
-    /// <summary>用 Recovery Key 恢复 Vault 访问权。</summary>
+    /// <summary>忘记口令时用 Recovery Key 恢复 Vault 访问权。</summary>
     Task RecoverVaultAsync(string recoveryKey, CancellationToken ct = default);
+
+    /// <summary>更改主口令：换认证密钥并重新包装口令信封。</summary>
+    Task ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken ct = default);
+
+    /// <summary>重置 Recovery Key，返回一次性展示的新 Key。</summary>
+    Task<string> ResetRecoveryKeyAsync(CancellationToken ct = default);
 
     /// <summary>立即执行一次同步循环。</summary>
     Task<SyncRunResult> SyncNowAsync(CancellationToken ct = default);
@@ -43,12 +56,6 @@ public interface ICloudSyncService
     Task<SyncStateSnapshot> GetStateAsync(CancellationToken ct = default);
 
     Task<int> GetPendingOutboxCountAsync(CancellationToken ct = default);
-
-    // ── 设备批准 ────────────────────────────────────────────────
-
-    Task<IReadOnlyList<CloudPendingDevice>> GetPendingDevicesAsync(CancellationToken ct = default);
-
-    Task ApproveDeviceAsync(Guid deviceId, CancellationToken ct = default);
 
     // ── 冲突 ────────────────────────────────────────────────────
 

@@ -8,8 +8,8 @@ namespace RemoteFlow.Infrastructure.Security;
 /// Vault 加密原语。全部用 BCL <see cref="System.Security.Cryptography"/>，平台无关、无第三方依赖。
 /// <list type="bullet">
 ///   <item>VMK：256-bit CSPRNG。</item>
-///   <item>设备信封：临时 ECDH-P256 → HKDF-SHA256 → AES-256-GCM 包装 VMK。</item>
-///   <item>Recovery 信封：Recovery Key → HKDF-SHA256(salt) → AES-256-GCM 包装 VMK。</item>
+///   <item>认证密钥：PBKDF2-SHA256(password, salt=email) —— 客户端派生后发给服务端，服务端拿不到明文口令。</item>
+///   <item>信封（password / recovery）：PBKDF2-SHA256(secret, salt) → KEK → AES-256-GCM 包装 VMK。</item>
 ///   <item>载荷：HKDF-SHA256(VMK, salt=EntityId) → AES-256-GCM，AAD 绑定实体上下文。</item>
 /// </list>
 /// 禁止自研算法、固定 Nonce、可逆编码。
@@ -19,94 +19,74 @@ public static class VaultCryptography
     private const int KeyBytes = 32;
     private const int NonceBytes = 12;
     private const int TagBytes = 16;
+    private const int SaltBytes = 16;
 
-    private static readonly byte[] DeviceInfo = Encoding.UTF8.GetBytes("RemoteFlow/DeviceEnvelope/v1");
-    private static readonly byte[] RecoveryInfo = Encoding.UTF8.GetBytes("RemoteFlow/RecoveryEnvelope/v1");
+    /// <summary>PBKDF2 迭代次数。与后端存储的 <c>Iterations</c> 字段一致；提高需同时改客户端 + 已存信封。</summary>
+    public const int Pbkdf2Iterations = 600_000;
+
     private static readonly byte[] EntityInfo = Encoding.UTF8.GetBytes("RemoteFlow/Entity/v1");
 
-    // ── VMK / 设备密钥对 ─────────────────────────────────────────
+    // ── VMK ────────────────────────────────────────────────────
 
     public static byte[] NewMasterKey() => RandomNumberGenerator.GetBytes(KeyBytes);
 
-    /// <summary>生成设备 ECDH-P256 密钥对，返回 (PKCS#8 私钥 DER, SPKI 公钥 DER)。</summary>
-    public static (byte[] PrivateKey, byte[] PublicKey) NewDeviceKeyPair()
+    // ── 认证密钥 ────────────────────────────────────────────────
+
+    /// <summary>
+    /// 从主口令派生发给 AppsCloud 的认证密钥（base64(32B)）。salt = 规范化邮箱，
+    /// 确定性——每次登录本地重算即可，无需 prelogin。
+    /// </summary>
+    public static string DeriveAuthKey(string password, string email)
     {
-        using var ecdh = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
-        return (ecdh.ExportPkcs8PrivateKey(), ecdh.ExportSubjectPublicKeyInfo());
-    }
-
-    public static byte[] PublicKeyOf(byte[] pkcs8PrivateKey)
-    {
-        using var ecdh = ECDiffieHellman.Create();
-        ecdh.ImportPkcs8PrivateKey(pkcs8PrivateKey, out _);
-        return ecdh.ExportSubjectPublicKeyInfo();
-    }
-
-    // ── 设备信封 ────────────────────────────────────────────────
-
-    /// <summary>用接收方设备公钥（SPKI DER）包装 VMK。bootstrap 时接收方公钥即本机公钥。</summary>
-    public static DeviceKeyEnvelope WrapForDevice(byte[] recipientPublicKey, ReadOnlySpan<byte> masterKey)
-    {
-        using var ephemeral = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
-        using var recipient = ECDiffieHellman.Create();
-        recipient.ImportSubjectPublicKeyInfo(recipientPublicKey, out _);
-
-        var shared = ephemeral.DeriveRawSecretAgreement(recipient.PublicKey);
+        var salt = Encoding.UTF8.GetBytes("RemoteFlow/auth/v1:" + email.Trim().ToLowerInvariant());
+        var key = Rfc2898DeriveBytes.Pbkdf2(
+            Encoding.UTF8.GetBytes(password), salt, Pbkdf2Iterations, HashAlgorithmName.SHA256, KeyBytes);
         try
         {
-            var kek = Hkdf(shared, salt: default, DeviceInfo);
+            return Convert.ToBase64String(key);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+        }
+    }
+
+    // ── 口令 / Recovery 信封 ────────────────────────────────────
+
+    /// <summary>用一个 secret（主口令或 Recovery Key 显示串）派生 KEK 并包装 VMK。</summary>
+    public static VaultKeyEnvelope WrapWithSecret(string kind, string secret, ReadOnlySpan<byte> masterKey)
+    {
+        var salt = RandomNumberGenerator.GetBytes(SaltBytes);
+        var kek = Pbkdf2Kek(secret, salt, Pbkdf2Iterations);
+        try
+        {
             var (wrapped, nonce) = AesGcmEncrypt(kek, masterKey, associatedData: default);
-            CryptographicOperations.ZeroMemory(kek);
-            return new DeviceKeyEnvelope(
-                VaultAlgorithms.DeviceEnvelope, wrapped, nonce, ephemeral.ExportSubjectPublicKeyInfo());
+            return new VaultKeyEnvelope(
+                kind, VaultAlgorithms.SecretEnvelope, wrapped, nonce, salt, Pbkdf2Iterations);
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(shared);
+            CryptographicOperations.ZeroMemory(kek);
         }
     }
 
-    /// <summary>用本机设备私钥解开设备信封，得到 VMK。信封被篡改会抛 <see cref="CryptographicException"/>。</summary>
-    public static byte[] UnwrapFromDevice(byte[] devicePrivateKey, DeviceKeyEnvelope envelope)
+    /// <summary>用 secret 解开信封得到 VMK。secret / 信封被篡改会抛 <see cref="CryptographicException"/>。</summary>
+    public static byte[] UnwrapWithSecret(string secret, VaultKeyEnvelope envelope)
     {
-        using var device = ECDiffieHellman.Create();
-        device.ImportPkcs8PrivateKey(devicePrivateKey, out _);
-        using var ephemeral = ECDiffieHellman.Create();
-        ephemeral.ImportSubjectPublicKeyInfo(envelope.EphemeralPublicKey, out _);
-
-        var shared = device.DeriveRawSecretAgreement(ephemeral.PublicKey);
+        var kek = Pbkdf2Kek(secret, envelope.Salt, envelope.Iterations > 0 ? envelope.Iterations : Pbkdf2Iterations);
         try
         {
-            var kek = Hkdf(shared, salt: default, DeviceInfo);
-            var result = AesGcmDecrypt(kek, envelope.WrappedKey, envelope.Nonce, associatedData: default);
-            CryptographicOperations.ZeroMemory(kek);
-            return result;
+            return AesGcmDecrypt(kek, envelope.WrappedKey, envelope.Nonce, associatedData: default);
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(shared);
+            CryptographicOperations.ZeroMemory(kek);
         }
     }
 
-    // ── Recovery 信封 ───────────────────────────────────────────
-
-    public static RecoveryKeyEnvelope WrapForRecovery(ReadOnlySpan<byte> recoveryKey, ReadOnlySpan<byte> masterKey)
-    {
-        var salt = RandomNumberGenerator.GetBytes(16);
-        var kek = Hkdf(recoveryKey, salt, RecoveryInfo);
-        var (wrapped, nonce) = AesGcmEncrypt(kek, masterKey, associatedData: default);
-        CryptographicOperations.ZeroMemory(kek);
-        return new RecoveryKeyEnvelope(VaultAlgorithms.RecoveryEnvelope, wrapped, nonce, salt);
-    }
-
-    /// <summary>用 Recovery Key 解开 Recovery 信封。Key 错误会抛 <see cref="CryptographicException"/>。</summary>
-    public static byte[] UnwrapFromRecovery(ReadOnlySpan<byte> recoveryKey, RecoveryKeyEnvelope envelope)
-    {
-        var kek = Hkdf(recoveryKey, envelope.Salt, RecoveryInfo);
-        var result = AesGcmDecrypt(kek, envelope.WrappedKey, envelope.Nonce, associatedData: default);
-        CryptographicOperations.ZeroMemory(kek);
-        return result;
-    }
+    private static byte[] Pbkdf2Kek(string secret, byte[] salt, int iterations) =>
+        Rfc2898DeriveBytes.Pbkdf2(
+            Encoding.UTF8.GetBytes(secret), salt, iterations, HashAlgorithmName.SHA256, KeyBytes);
 
     // ── 载荷 ────────────────────────────────────────────────────
 
@@ -159,16 +139,13 @@ public static class VaultCryptography
         var blob = new byte[plaintext.Length + TagBytes];
         using var gcm = new AesGcm(key, TagBytes);
         gcm.Encrypt(
-            nonce,
-            plaintext,
-            blob.AsSpan(0, plaintext.Length),
-            blob.AsSpan(plaintext.Length, TagBytes),
+            nonce, plaintext,
+            blob.AsSpan(0, plaintext.Length), blob.AsSpan(plaintext.Length, TagBytes),
             associatedData);
         return (blob, nonce);
     }
 
-    private static byte[] AesGcmDecrypt(
-        byte[] key, byte[] blob, byte[] nonce, ReadOnlySpan<byte> associatedData)
+    private static byte[] AesGcmDecrypt(byte[] key, byte[] blob, byte[] nonce, ReadOnlySpan<byte> associatedData)
     {
         if (blob.Length < TagBytes)
         {
@@ -180,10 +157,8 @@ public static class VaultCryptography
         using var gcm = new AesGcm(key, TagBytes);
         gcm.Decrypt(
             nonce,
-            blob.AsSpan(0, plaintextLength),
-            blob.AsSpan(plaintextLength, TagBytes),
-            plaintext,
-            associatedData);
+            blob.AsSpan(0, plaintextLength), blob.AsSpan(plaintextLength, TagBytes),
+            plaintext, associatedData);
         return plaintext;
     }
 }

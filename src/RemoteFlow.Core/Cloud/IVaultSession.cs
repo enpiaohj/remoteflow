@@ -12,6 +12,6 @@ public interface IVaultSession : IDisposable
 
     byte[] Decrypt(PayloadContext context, EncryptedPayload payload);
 
-    /// <summary>用目标设备公钥（SPKI DER）把本会话持有的 VMK 包装成设备信封——批准新设备时用，VMK 不出会话。</summary>
-    DeviceKeyEnvelope WrapMasterKeyForDevice(byte[] recipientPublicKey);
+    /// <summary>用一个 secret（主口令 / Recovery Key 显示串）把本会话的 VMK 包装成信封——改口令 / 重置 Recovery Key 时用，VMK 不出会话。</summary>
+    VaultKeyEnvelope WrapWithSecret(string kind, string secret);
 }

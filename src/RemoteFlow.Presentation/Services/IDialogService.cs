@@ -23,6 +23,9 @@ public interface IDialogService
     /// <summary>信息提示。</summary>
     Task ShowMessageAsync(string title, string message, DialogKind kind = DialogKind.Info);
 
+    /// <summary>把文本写入系统剪贴板。</summary>
+    Task CopyToClipboardAsync(string text);
+
     /// <summary>
     /// 新建或编辑连接。<paramref name="existing"/> 为 null 表示新建。
     /// <paramref name="preselectedProtocol"/> 在新建时预选协议（托盘「新建连接 → 协议」入口用），

@@ -3,13 +3,13 @@ namespace RemoteFlow.Core.Cloud;
 /// <summary>登录后持久化的云会话。RefreshToken 是 Secret，须经平台密钥库保护落盘。</summary>
 public sealed record CloudSession(string RefreshToken, Guid UserId, string AppId, string ClientDeviceId);
 
-/// <summary>登录 / 设备注册时上报的本机设备信息。</summary>
+/// <summary>登录时上报的本机设备信息。PublicKey 保留字段，口令派生模型下不再用于 VMK 分发。</summary>
 public sealed record CloudDeviceInfo(
     string AppId,
     string ClientDeviceId,
     string DeviceName,
     string Platform,
-    string PublicKey);
+    string PublicKey = "");
 
 public enum CloudRegisterOutcome
 {
@@ -20,16 +20,8 @@ public enum CloudRegisterOutcome
 public sealed record CloudVaultStatus(
     bool Exists,
     int? CurrentKeyVersion,
-    bool ThisDeviceAuthorized,
+    bool HasPasswordEnvelope,
     bool HasRecoveryEnvelope);
-
-public sealed record CloudPendingDevice(
-    Guid DeviceId,
-    string ClientDeviceId,
-    string DisplayName,
-    string Platform,
-    byte[] PublicKey,
-    DateTimeOffset LastSeenAt);
 
 public enum SyncPushOperationType
 {

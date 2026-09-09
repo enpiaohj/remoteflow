@@ -5,7 +5,7 @@ namespace RemoteFlow.Core.Cloud;
 
 /// <summary>
 /// 256-bit Recovery Key。生成时给用户看的是分组 Base32（RFC 4648，去掉易混字符无关——用标准表），
-/// 只显示一次，服务端只存 <see cref="RecoveryKeyEnvelope"/>，不存明文（安全设计 §8）。
+/// 只显示一次，服务端只存 信封，不存明文（安全设计 §8）。
 /// </summary>
 public sealed class RecoveryKey
 {
@@ -62,7 +62,7 @@ public sealed class RecoveryKey
         return new RecoveryKey([.. output]);
     }
 
-    /// <summary>只读原始字节，用于 HKDF。</summary>
+    /// <summary>只读原始字节，用于 KDF。</summary>
     public ReadOnlySpan<byte> AsSpan() => _bytes;
 
     /// <summary>给用户展示 / 保存的分组字符串，例如 <c>ABCD EFGH ... </c>（13 组 4 字符）。</summary>

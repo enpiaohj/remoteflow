@@ -9,37 +9,32 @@ public interface ICloudClient
     /// <summary>当前是否已有持久化的登录会话。</summary>
     Task<bool> HasSessionAsync(CancellationToken ct = default);
 
+    /// <summary>注册账号。<paramref name="password"/> 是主口令，内部派生认证密钥后发送——服务端拿不到明文口令。</summary>
     Task<CloudRegisterOutcome> RegisterAsync(string email, string password, CancellationToken ct = default);
 
-    /// <summary>登录并持久化会话。<paramref name="device"/> 的 PublicKey 用本机设备 ECDH 公钥（SPKI base64）。</summary>
+    /// <summary>登录并持久化会话。<paramref name="password"/> 是主口令（内部派生认证密钥）。</summary>
     Task LoginAsync(string email, string password, CloudDeviceInfo device, CancellationToken ct = default);
+
+    /// <summary>改主口令：换认证密钥并作废其它会话（口令信封另行 PUT）。</summary>
+    Task ChangePasswordAsync(string email, string currentPassword, string newPassword, CancellationToken ct = default);
 
     Task LogoutAsync(CancellationToken ct = default);
 
     Task<Guid> GetUserIdAsync(CancellationToken ct = default);
 
-    /// <summary>本机设备在 AppsCloud 的内部 Id（用于 Vault 信封 target）。</summary>
-    Task<Guid> GetCurrentDeviceIdAsync(CancellationToken ct = default);
-
     // ── Vault ───────────────────────────────────────────────────
 
     Task<CloudVaultStatus> GetVaultStatusAsync(CancellationToken ct = default);
 
-    /// <summary>首设备初始化。已存在时返回 false（并发 / 重复），调用方应改走解锁流程。</summary>
+    /// <summary>首设备初始化：上传口令信封 + Recovery 信封。已存在时返回 false。</summary>
     Task<bool> BootstrapVaultAsync(
-        DeviceKeyEnvelope deviceEnvelope, RecoveryKeyEnvelope recoveryEnvelope, CancellationToken ct = default);
+        VaultKeyEnvelope passwordEnvelope, VaultKeyEnvelope recoveryEnvelope, CancellationToken ct = default);
 
-    /// <summary>取本设备的 wrapped VMK 信封。未授权 / 无 Vault 返回 null。</summary>
-    Task<DeviceKeyEnvelope?> GetDeviceEnvelopeAsync(CancellationToken ct = default);
+    /// <summary>取指定类型（password / recovery）的信封。无 Vault / 无该信封返回 null。</summary>
+    Task<VaultKeyEnvelope?> GetVaultEnvelopeAsync(string kind, CancellationToken ct = default);
 
-    Task<IReadOnlyList<CloudPendingDevice>> GetPendingDevicesAsync(CancellationToken ct = default);
-
-    /// <summary>为目标设备（含自己）上传信封。</summary>
-    Task AddDeviceEnvelopeAsync(Guid targetDeviceId, DeviceKeyEnvelope envelope, CancellationToken ct = default);
-
-    Task<RecoveryKeyEnvelope?> GetRecoveryEnvelopeAsync(CancellationToken ct = default);
-
-    Task PutRecoveryEnvelopeAsync(RecoveryKeyEnvelope envelope, CancellationToken ct = default);
+    /// <summary>覆盖指定类型的信封（改口令 / 重置 Recovery Key）。</summary>
+    Task PutVaultEnvelopeAsync(VaultKeyEnvelope envelope, CancellationToken ct = default);
 
     // ── Sync ────────────────────────────────────────────────────
 

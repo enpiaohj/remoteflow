@@ -6,19 +6,24 @@ namespace RemoteFlow.Infrastructure.Security;
 public sealed class RecoveryKeyService
 {
     /// <summary>
-    /// 首次开启 Cloud Vault 时调用：生成 Recovery Key（返回给 UI 一次性展示）与其 Envelope（上传）。
+    /// 生成 Recovery Key（返回给 UI 一次性展示）与其信封（上传）。
+    /// KDF 输入用规范分组串——用户抄下的就是这个。
     /// </summary>
-    public (RecoveryKey Key, RecoveryKeyEnvelope Envelope) Create(ReadOnlySpan<byte> masterKey)
+    public (RecoveryKey Key, VaultKeyEnvelope Envelope) Create(ReadOnlySpan<byte> masterKey)
     {
         var key = RecoveryKey.Generate();
-        var envelope = VaultCryptography.WrapForRecovery(key.AsSpan(), masterKey);
+        var envelope = VaultCryptography.WrapWithSecret(
+            VaultEnvelopeKinds.Recovery, key.ToDisplayString(), masterKey);
         return (key, envelope);
     }
 
-    /// <summary>用户输入 Recovery Key + 服务端 Envelope 恢复 VMK。Key 错误抛 <see cref="System.Security.Cryptography.CryptographicException"/>。</summary>
-    public byte[] RecoverMasterKey(string userInput, RecoveryKeyEnvelope envelope)
+    /// <summary>
+    /// 用户输入 Recovery Key + 服务端信封恢复 VMK。输入非法抛 <see cref="FormatException"/>，
+    /// Key 不匹配抛 <see cref="System.Security.Cryptography.CryptographicException"/>。
+    /// </summary>
+    public byte[] RecoverMasterKey(string userInput, VaultKeyEnvelope envelope)
     {
-        var key = RecoveryKey.Parse(userInput);
-        return VaultCryptography.UnwrapFromRecovery(key.AsSpan(), envelope);
+        var canonical = RecoveryKey.Parse(userInput).ToDisplayString();
+        return VaultCryptography.UnwrapWithSecret(canonical, envelope);
     }
 }
