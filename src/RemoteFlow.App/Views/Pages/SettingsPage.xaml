@@ -684,7 +684,7 @@
                                                 <Button Grid.Column="1" Style="{StaticResource Button.Icon}"
                                                         Width="30" Height="30" FontSize="13"
                                                         Content="{StaticResource Icon.Delete}"
-                                                        ToolTip="移除该主机密钥"
+                                                        ToolTip="删除该主机密钥"
                                                         Foreground="{DynamicResource Status.Danger}"
                                                         Command="{Binding DataContext.RemoveHostKeyCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />

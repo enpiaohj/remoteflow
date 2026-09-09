@@ -1,4 +1,3 @@
-using System.Collections.Specialized;
 using AppKit;
 using CoreGraphics;
 using RemoteFlow.Core.Models;
@@ -224,75 +223,108 @@ public sealed class SettingsPaneView : NSView
         return box;
     }
 
-    // ── 「一行一操作」式卡片（数据 / 安全页）─────────────────────
+    // ── 分组列表（macOS 系统设置式 inset grouped list，用于「安全」「数据与备份」）──
+    //
+    //   小节标签（容器外）
+    //   ┌───────────────────────────────┐   ← 纯圆角描边容器，无标题栏 / 无投影
+    //   │  标题            副文案   [按钮] │
+    //   │ ───────────────────────────── │   ← 通栏发丝分隔
+    //   │  标题                     [按钮] │
+    //   └───────────────────────────────┘
+    //   footnote（容器外下方）
 
-    private const int SectionCardInset = 16;
+    private const int RowPadX = 14;
 
-    /// <summary>
-    /// 标题卡 + 若干**通栏**内容行。与 <see cref="Card"/> 的区别：内容行拉满卡片内宽，
-    /// 便于把操作按钮压到最右（对齐 Windows 设置页的「LinkRow」）。
-    /// </summary>
-    private static NSView SectionCard(string title, string symbol, string? desc, params NSView[] rows)
+    /// <summary>页面竖向骨架：Spacing 0 的竖栈，子项通栏。用 <see cref="Gap"/> 显式控制间距。</summary>
+    private static NSView PageColumn(params NSView[] items)
     {
-        var box = new SoftBox();
-
-        var headRow = new NSStackView
+        var stack = new NSStackView
         {
-            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
-            Alignment = NSLayoutAttribute.CenterY,
-            Spacing = 7,
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 0,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
-        headRow.AddArrangedSubview(new NSImageView
+        foreach (var it in items)
         {
-            Image = NSImage.GetSystemSymbol(symbol, null),
-            ContentTintColor = NSColor.ControlAccent,
-            SymbolConfiguration = NSImageSymbolConfiguration.Create(13, NSFontWeight.Medium),
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        });
-        headRow.AddArrangedSubview(new NSTextField
-        {
-            StringValue = title,
-            Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
-            Font = NSFont.SystemFontOfSize(13, NSFontWeight.Semibold),
-            TextColor = NSColor.Label,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        });
+            stack.AddArrangedSubview(it);
+            it.WidthAnchor.ConstraintEqualTo(stack.WidthAnchor).Active = true;
+        }
 
+        return stack;
+    }
+
+    /// <summary>小节标签：11 / 600，坐在分组容器上方。</summary>
+    private static NSView SectionLabel(string text, string? trailing = null)
+    {
+        var label = new NSTextField
+        {
+            StringValue = text,
+            Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
+            Font = NSFont.SystemFontOfSize(11, NSFontWeight.Semibold),
+            TextColor = NSColor.SecondaryLabel,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        if (trailing is null)
+        {
+            label.SetContentHuggingPriorityForOrientation(250, NSLayoutConstraintOrientation.Horizontal);
+            return Indent(label, 2);
+        }
+
+        var count = new NSTextField
+        {
+            StringValue = trailing,
+            Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
+            Font = NSFont.SystemFontOfSize(11),
+            TextColor = NSColor.TertiaryLabel,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        var row = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.FirstBaseline,
+            Spacing = 5,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        row.AddArrangedSubview(label);
+        row.AddArrangedSubview(count);
+        return Indent(row, 2);
+    }
+
+    private static NSView Indent(NSView v, nfloat left)
+    {
+        var host = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        host.AddSubview(v);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            v.LeadingAnchor.ConstraintEqualTo(host.LeadingAnchor, left),
+            v.TopAnchor.ConstraintEqualTo(host.TopAnchor),
+            v.BottomAnchor.ConstraintEqualTo(host.BottomAnchor),
+            v.TrailingAnchor.ConstraintLessThanOrEqualTo(host.TrailingAnchor),
+        });
+        return host;
+    }
+
+    /// <summary>分组容器：圆角 10 + 发丝描边 + 内容底色，无投影。行之间通栏发丝分隔。</summary>
+    private static NSView GroupList(params NSView[] rows)
+    {
+        var box = new PlainBox();
         var col = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
-            Spacing = 8,
-            EdgeInsets = new NSEdgeInsets(13, SectionCardInset, 13, SectionCardInset),
+            Spacing = 0,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
-        col.AddArrangedSubview(headRow);
 
-        if (!string.IsNullOrEmpty(desc))
+        for (var i = 0; i < rows.Length; i++)
         {
-            var note = new NSTextField
+            if (i > 0)
             {
-                StringValue = desc,
-                Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
-                Font = NSFont.SystemFontOfSize(11),
-                TextColor = NSColor.SecondaryLabel,
-                LineBreakMode = NSLineBreakMode.ByWordWrapping,
-                MaximumNumberOfLines = 0,
-                PreferredMaxLayoutWidth = 520,
-                TranslatesAutoresizingMaskIntoConstraints = false,
-            };
-            col.AddArrangedSubview(note);
-            col.SetCustomSpacing(10, note);
-        }
-        else
-        {
-            col.SetCustomSpacing(10, headRow);
-        }
+                col.AddArrangedSubview(HairlineDivider());
+            }
 
-        foreach (var r in rows)
-        {
-            col.AddArrangedSubview(r);
+            col.AddArrangedSubview(rows[i]);
         }
 
         box.AddSubview(col);
@@ -303,110 +335,160 @@ public sealed class SettingsPaneView : NSView
             col.TopAnchor.ConstraintEqualTo(box.TopAnchor),
             col.BottomAnchor.ConstraintEqualTo(box.BottomAnchor),
         });
-
-        // 内容行（含 note）通栏；标题行保持自然宽度。
-        foreach (var r in rows)
+        foreach (var v in col.ArrangedSubviews)
         {
-            r.WidthAnchor.ConstraintEqualTo(col.WidthAnchor, 1, -SectionCardInset * 2).Active = true;
+            v.WidthAnchor.ConstraintEqualTo(col.WidthAnchor).Active = true;
         }
 
         return box;
     }
 
-    /// <summary>卡内的一条操作行：图标底片 · 标题 + 副文案 · 右侧操作控件。</summary>
-    private static NSView ActionRow(string symbol, NSColor tint, string title, string subtitle,
-        NSView trailing, bool monoSubtitle = false)
+    /// <summary>分组内的一行：标题（+可选副文案）在左，操作控件在右。行高 ≥ 42。</summary>
+    /// <param name="monoSub">副文案用等宽字体（路径 / 指纹）。</param>
+    /// <param name="wrapSub">副文案换行而非中截（指纹要看全时）。</param>
+    private static NSView ListRow(string label, string? sub, NSView? trailing,
+        bool danger = false, bool monoSub = false, bool wrapSub = false)
     {
-        var tile = IconTile(symbol, tint);
-
         var head = new NSTextField
         {
-            StringValue = title,
+            StringValue = label,
             Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
-            Font = NSFont.SystemFontOfSize(12, NSFontWeight.Semibold),
-            TextColor = NSColor.Label,
+            Font = NSFont.SystemFontOfSize(13),
+            TextColor = danger ? NSColor.SystemRed : NSColor.Label,
             LineBreakMode = NSLineBreakMode.TruncatingTail,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
-        var sub = new NSTextField
-        {
-            StringValue = subtitle,
-            Bordered = false, Editable = false, Selectable = monoSubtitle, DrawsBackground = false,
-            Font = monoSubtitle ? NSFont.MonospacedSystemFont(10, NSFontWeight.Regular) : NSFont.SystemFontOfSize(11),
-            TextColor = NSColor.SecondaryLabel,
-            LineBreakMode = monoSubtitle ? NSLineBreakMode.TruncatingMiddle : NSLineBreakMode.ByWordWrapping,
-            MaximumNumberOfLines = monoSubtitle ? 1 : 0,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        };
-        // 副文案的抗压缩优先级压到很低：宽度不够时它换行 / 截断，而不是把右侧按钮挤出行外。
-        sub.SetContentCompressionResistancePriority(200, NSLayoutConstraintOrientation.Horizontal);
         head.SetContentCompressionResistancePriority(200, NSLayoutConstraintOrientation.Horizontal);
 
-        var textCol = new NSStackView
+        NSView body;
+        if (sub is null)
         {
-            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
-            Alignment = NSLayoutAttribute.Leading,
-            Spacing = 2,
+            body = head;
+        }
+        else
+        {
+            var subLabel = new NSTextField
+            {
+                StringValue = sub,
+                Bordered = false, Editable = false, Selectable = monoSub, DrawsBackground = false,
+                Font = monoSub ? NSFont.MonospacedSystemFont(10, NSFontWeight.Regular) : NSFont.SystemFontOfSize(11),
+                TextColor = NSColor.SecondaryLabel,
+                LineBreakMode = (monoSub && !wrapSub) ? NSLineBreakMode.TruncatingMiddle : NSLineBreakMode.ByWordWrapping,
+                MaximumNumberOfLines = (monoSub && !wrapSub) ? 1 : 0,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
+            subLabel.SetContentCompressionResistancePriority(200, NSLayoutConstraintOrientation.Horizontal);
+
+            var stack = new NSStackView
+            {
+                Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+                Alignment = NSLayoutAttribute.Leading,
+                Spacing = 2,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
+            stack.AddArrangedSubview(head);
+            stack.AddArrangedSubview(subLabel);
+            // 竖栈默认不把子项拉到全宽 —— 显式绑定，标题才会按行宽截断、副文案才会换行。
+            head.WidthAnchor.ConstraintEqualTo(stack.WidthAnchor).Active = true;
+            subLabel.WidthAnchor.ConstraintEqualTo(stack.WidthAnchor).Active = true;
+            body = stack;
+        }
+
+        var row = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        row.AddSubview(body);
+
+        // body 居中 + 上下至少 9pt 留白；行高取「内容 + 18」与 42 的较大者。
+        // 用 >= 而非 ==，避免内容不足 42 时和最小高冲突。
+        var cons = new List<NSLayoutConstraint>
+        {
+            body.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor, RowPadX),
+            body.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
+            body.TopAnchor.ConstraintGreaterThanOrEqualTo(row.TopAnchor, 9),
+            row.HeightAnchor.ConstraintGreaterThanOrEqualTo(body.HeightAnchor, 1, 18),
+            row.HeightAnchor.ConstraintGreaterThanOrEqualTo(42),
+        };
+
+        if (trailing is null)
+        {
+            cons.Add(body.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor, -RowPadX));
+        }
+        else
+        {
+            trailing.TranslatesAutoresizingMaskIntoConstraints = false;
+            trailing.SetContentHuggingPriorityForOrientation(750, NSLayoutConstraintOrientation.Horizontal);
+            trailing.SetContentCompressionResistancePriority(750, NSLayoutConstraintOrientation.Horizontal);
+            row.AddSubview(trailing);
+            cons.Add(trailing.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor, -RowPadX));
+            cons.Add(trailing.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor));
+            cons.Add(body.TrailingAnchor.ConstraintEqualTo(trailing.LeadingAnchor, -12));
+        }
+
+        NSLayoutConstraint.ActivateConstraints(cons.ToArray());
+        return row;
+    }
+
+    /// <summary>分组内的空态行：居中的一句浅色说明。</summary>
+    private static NSView EmptyRow(string text)
+    {
+        var label = new NSTextField
+        {
+            StringValue = text,
+            Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
+            Alignment = NSTextAlignment.Center,
+            Font = NSFont.SystemFontOfSize(11),
+            TextColor = NSColor.TertiaryLabel,
+            LineBreakMode = NSLineBreakMode.ByWordWrapping,
+            MaximumNumberOfLines = 0,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
-        textCol.AddArrangedSubview(head);
-        textCol.AddArrangedSubview(sub);
-
-        trailing.SetContentHuggingPriorityForOrientation(750, NSLayoutConstraintOrientation.Horizontal);
-        trailing.SetContentCompressionResistancePriority(750, NSLayoutConstraintOrientation.Horizontal);
-
-        // 显式约束而非 NSStackView 的优先级博弈：图钉左、按钮右、文字列吃中间，
-        // 换行宽度由「按钮左沿」决定，行高由文字列撑开（至少 44）。
         var row = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
-        row.AddSubview(tile);
-        row.AddSubview(textCol);
-        row.AddSubview(trailing);
+        row.AddSubview(label);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
-            tile.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor),
-            tile.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
-
-            textCol.LeadingAnchor.ConstraintEqualTo(tile.TrailingAnchor, 11),
-            textCol.TrailingAnchor.ConstraintEqualTo(trailing.LeadingAnchor, -12),
-            textCol.TopAnchor.ConstraintEqualTo(row.TopAnchor, 9),
-            textCol.BottomAnchor.ConstraintEqualTo(row.BottomAnchor, -9),
-
-            trailing.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor),
-            trailing.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
-
-            row.HeightAnchor.ConstraintGreaterThanOrEqualTo(44),
+            label.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor, 18),
+            label.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor, -18),
+            label.TopAnchor.ConstraintEqualTo(row.TopAnchor, 18),
+            label.BottomAnchor.ConstraintEqualTo(row.BottomAnchor, -18),
         });
         return row;
     }
 
-    private static NSView IconTile(string symbol, NSColor tint)
+    /// <summary>分组容器下方的说明文字。</summary>
+    private static NSView Footnote(string text)
     {
-        var tile = new NSView { WantsLayer = true, TranslatesAutoresizingMaskIntoConstraints = false };
-        tile.Layer!.CornerRadius = 6;
-        tile.Layer.BackgroundColor = tint.ColorWithAlphaComponent(0.13f).CGColor;
-        tile.WidthAnchor.ConstraintEqualTo(26).Active = true;
-        tile.HeightAnchor.ConstraintEqualTo(26).Active = true;
-
-        var glyph = new NSImageView
+        var label = new NSTextField
         {
-            Image = NSImage.GetSystemSymbol(symbol, null),
-            ContentTintColor = tint,
-            SymbolConfiguration = NSImageSymbolConfiguration.Create(12, NSFontWeight.Medium),
+            StringValue = text,
+            Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
+            Font = NSFont.SystemFontOfSize(11),
+            TextColor = NSColor.SecondaryLabel,
+            LineBreakMode = NSLineBreakMode.ByWordWrapping,
+            MaximumNumberOfLines = 0,
+            PreferredMaxLayoutWidth = 460,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
-        tile.AddSubview(glyph);
-        NSLayoutConstraint.ActivateConstraints(new[]
-        {
-            glyph.CenterXAnchor.ConstraintEqualTo(tile.CenterXAnchor),
-            glyph.CenterYAnchor.ConstraintEqualTo(tile.CenterYAnchor),
-        });
-        return tile;
+        return Indent(label, 2);
     }
 
-    private static NSBox HairlineDivider()
+    private static NSView HairlineDivider()
     {
-        var b = new NSBox { BoxType = NSBoxType.NSBoxSeparator, TranslatesAutoresizingMaskIntoConstraints = false };
-        b.HeightAnchor.ConstraintEqualTo(1).Active = true;
+        var line = new PlainBox { IsHairline = true };
+        line.HeightAnchor.ConstraintEqualTo(1).Active = true;
+        return line;
+    }
+
+    /// <summary>标准圆角 bordered 按钮（分组行右侧的操作）。</summary>
+    private static NSButton RowButton(string title, Action run, bool danger = false)
+    {
+        var b = NSButton.CreateButton(title, () => run());
+        b.BezelStyle = NSBezelStyle.Rounded;
+        b.ControlSize = NSControlSize.Small;
+        b.Font = NSFont.SystemFontOfSize(12);
+        if (danger)
+        {
+            b.ContentTintColor = NSColor.SystemRed;
+        }
+
         return b;
     }
 
@@ -420,7 +502,7 @@ public sealed class SettingsPaneView : NSView
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
             Spacing = 12,
-            EdgeInsets = new NSEdgeInsets(15, SectionCardInset, 15, SectionCardInset),
+            EdgeInsets = new NSEdgeInsets(15, RowPadX, 15, RowPadX),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
 
@@ -471,6 +553,8 @@ public sealed class SettingsPaneView : NSView
             group.AddArrangedSubview(headRow);
             group.AddArrangedSubview(bodyLabel);
             col.AddArrangedSubview(group);
+            group.WidthAnchor.ConstraintEqualTo(col.WidthAnchor, 1, -RowPadX * 2).Active = true;
+            bodyLabel.WidthAnchor.ConstraintEqualTo(group.WidthAnchor).Active = true;
         }
 
         panel.AddSubview(col);
@@ -541,6 +625,56 @@ public sealed class SettingsPaneView : NSView
             Layer!.BackgroundColor = Palette.CardSurface(this).CGColor;
             Layer.BorderColor = Palette.Hairline(this).CGColor;
             Layer.ShadowColor = NSColor.Black.CGColor;
+            NSAppearance.CurrentAppearance = prev;
+        }
+    }
+
+    /// <summary>
+    /// 分组列表容器 / 发丝分隔线。<see cref="IsHairline"/> = true 时退化成一条纯色发丝线
+    /// （无圆角 / 无描边）；否则是圆角 10 + 发丝描边 + 内容底色的分组容器，**无投影**
+    /// （层次靠描边，不靠抬升 —— 对齐 macOS 系统设置的分组）。
+    /// </summary>
+    private sealed class PlainBox : NSView
+    {
+        private bool _hairline;
+
+        public PlainBox()
+        {
+            WantsLayer = true;
+            TranslatesAutoresizingMaskIntoConstraints = false;
+            Refresh();
+        }
+
+        public bool IsHairline
+        {
+            get => _hairline;
+            set { _hairline = value; Refresh(); }
+        }
+
+        public override void ViewDidChangeEffectiveAppearance()
+        {
+            base.ViewDidChangeEffectiveAppearance();
+            Refresh();
+        }
+
+        private void Refresh()
+        {
+            var prev = NSAppearance.CurrentAppearance;
+            NSAppearance.CurrentAppearance = EffectiveAppearance;
+            if (_hairline)
+            {
+                Layer!.CornerRadius = 0;
+                Layer.BorderWidth = 0;
+                Layer.BackgroundColor = Palette.Hairline(this).CGColor;
+            }
+            else
+            {
+                Layer!.CornerRadius = 10;
+                Layer.BorderWidth = 1;
+                Layer.BorderColor = Palette.Hairline(this).CGColor;
+                Layer.BackgroundColor = Palette.CardSurface(this).CGColor;
+            }
+
             NSAppearance.CurrentAppearance = prev;
         }
     }
@@ -811,150 +945,117 @@ public sealed class SettingsPaneView : NSView
 
     private NSView BuildSecurity()
     {
-        var table = new NSTableView
-        {
-            HeaderView = null,
-            RowHeight = 40,
-            BackgroundColor = NSColor.Clear,
-            SelectionHighlightStyle = NSTableViewSelectionHighlightStyle.Regular,
-            Style = NSTableViewStyle.Inset,
-        };
-        table.AddColumn(new NSTableColumn("h") { ResizingMask = NSTableColumnResizing.Autoresizing });
+        // 分组内容随「已信任主机」列表变化重建（条目少，直接重建整组，不用表格）。
+        var groupHost = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        NSView? current = null;
 
-        var remove = new NSButton { Title = "移除所选", Enabled = false, BezelStyle = NSBezelStyle.Rounded };
-        var src = new HostKeySource(table, _vm.TrustedHostKeys, item =>
+        void Rebuild()
         {
-            _selectedHostKey = item;
-            remove.Enabled = item is not null;
-        });
-        _ = src;
-        remove.Activated += (_, _) =>
-        {
-            if (_selectedHostKey is { } k)
+            current?.RemoveFromSuperview();
+
+            var rows = _vm.TrustedHostKeys.Count == 0
+                ? new[] { EmptyRow("还没有已信任的主机。首次连接某台服务器时，它的指纹会记在这里。") }
+                : _vm.TrustedHostKeys.Select(HostKeyRow).ToArray();
+
+            current = GroupList(rows);
+            groupHost.AddSubview(current);
+            NSLayoutConstraint.ActivateConstraints(new[]
             {
-                _ = _vm.RemoveHostKeyCommand.ExecuteAsync(k);
-            }
-        };
+                current.LeadingAnchor.ConstraintEqualTo(groupHost.LeadingAnchor),
+                current.TrailingAnchor.ConstraintEqualTo(groupHost.TrailingAnchor),
+                current.TopAnchor.ConstraintEqualTo(groupHost.TopAnchor),
+                current.BottomAnchor.ConstraintEqualTo(groupHost.BottomAnchor),
+            });
+        }
 
-        // BezelBorder + 默认白底在这套低反差配色里是一块刺眼的白板，
-        // 换成与详情页卡片一致的「极淡中性底 + 极淡描边」圆角容器。
-        var scroll = new NSScrollView
-        {
-            DocumentView = table,
-            BorderType = NSBorderType.NoBorder,
-            DrawsBackground = false,
-            HasVerticalScroller = true,
-            AutohidesScrollers = true,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        };
-
-        var listBox = new SoftBox();
-        listBox.AddSubview(scroll);
-        NSLayoutConstraint.ActivateConstraints(new[]
-        {
-            scroll.LeadingAnchor.ConstraintEqualTo(listBox.LeadingAnchor, 1),
-            scroll.TrailingAnchor.ConstraintEqualTo(listBox.TrailingAnchor, -1),
-            scroll.TopAnchor.ConstraintEqualTo(listBox.TopAnchor, 1),
-            scroll.BottomAnchor.ConstraintEqualTo(listBox.BottomAnchor, -1),
-            listBox.HeightAnchor.ConstraintEqualTo(200),
-        });
-
-        // 空态：没有已信任条目时盖一层说明，别只剩一块空容器。
-        var empty = new NSTextField
-        {
-            StringValue = "还没有已信任的主机。首次连接某台服务器时，它的密钥指纹会记在这里。",
-            Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
-            Alignment = NSTextAlignment.Center,
-            Font = NSFont.SystemFontOfSize(11),
-            TextColor = NSColor.TertiaryLabel,
-            LineBreakMode = NSLineBreakMode.ByWordWrapping,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        };
-        listBox.AddSubview(empty);
-        NSLayoutConstraint.ActivateConstraints(new[]
-        {
-            empty.CenterXAnchor.ConstraintEqualTo(listBox.CenterXAnchor),
-            empty.CenterYAnchor.ConstraintEqualTo(listBox.CenterYAnchor),
-            empty.WidthAnchor.ConstraintLessThanOrEqualTo(listBox.WidthAnchor, 1, -48),
-        });
-        void SyncEmpty() => empty.Hidden = _vm.TrustedHostKeys.Count > 0;
-        SyncEmpty();
+        Rebuild();
         _vm.TrustedHostKeys.CollectionChanged += (_, _) =>
-            NSApplication.SharedApplication.BeginInvokeOnMainThread(SyncEmpty);
+            NSApplication.SharedApplication.BeginInvokeOnMainThread(Rebuild);
 
-        return Page(
-            SectionCard("已信任的主机", "lock.shield",
-                "首次连接时记录主机密钥 / 证书指纹。指纹变化会强警告、绝不静默接受；"
-                + "只有在你确认服务器确实重装或换了证书时，才移除对应条目。",
-                listBox,
-                ButtonRow(remove)));
+        return Page(PageColumn(
+            SectionLabel("已信任的主机"),
+            Gap(7),
+            groupHost,
+            Gap(9),
+            Footnote("首次连接时记录主机密钥 / 证书指纹。指纹发生变化会中止连接并强警告，"
+                + "绝不静默接受 —— 只有在你确认服务器确实重装或换了证书后，才删除对应条目。")));
     }
 
-    private HostKeyItemViewModel? _selectedHostKey;
+    private NSView HostKeyRow(HostKeyItemViewModel item)
+    {
+        var algo = new NSTextField
+        {
+            StringValue = item.Algorithm,
+            Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
+            Font = NSFont.MonospacedSystemFont(10, NSFontWeight.Regular),
+            TextColor = NSColor.TertiaryLabel,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        var remove = RowButton("删除", () => _ = _vm.RemoveHostKeyCommand.ExecuteAsync(item));
+
+        var trail = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Alignment = NSLayoutAttribute.CenterY,
+            Spacing = 8,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        trail.AddArrangedSubview(algo);
+        trail.AddArrangedSubview(remove);
+
+        return ListRow(item.Host, item.Fingerprint, trail, monoSub: true, wrapSub: true);
+    }
 
     // ── 数据与备份 ──────────────────────────────────────────────
 
     private NSView BuildData()
     {
-        NSButton Action(string title, Action run)
-        {
-            var b = NSButton.CreateButton(title, () => run());
-            b.BezelStyle = NSBezelStyle.Rounded;
-            b.SetContentHuggingPriorityForOrientation(251, NSLayoutConstraintOrientation.Horizontal);
-            return b;
-        }
+        var connList = GroupList(
+            ListRow("导出连接列表", "存为 CSV，便于备份或迁移。不含任何密码 / 私钥。",
+                RowButton("导出…", () => _ = _vm.ExportConnectionsCsvCommand.ExecuteAsync(null))),
+            ListRow("导入连接列表", "从 CSV 批量添加服务器，同名连接自动跳过。",
+                RowButton("导入…", () => _ = _vm.ImportConnectionsCsvCommand.ExecuteAsync(null))));
 
-        var accent = NSColor.ControlAccent;
-        var green = NSColor.SystemGreen;
-        var muted = NSColor.SecondaryLabel;
+        var credList = GroupList(
+            ListRow("导出加密备份", "存为 .rfbackup，含密码 / 私钥，用你设的口令加密。",
+                RowButton("导出…", () => _ = _vm.ExportCredentialsCommand.ExecuteAsync(null))),
+            ListRow("从加密备份恢复", "导入 .rfbackup 里保存的登录信息，需要当初的口令。",
+                RowButton("恢复…", () => _ = _vm.ImportCredentialsCommand.ExecuteAsync(null))));
 
-        // ── 连接列表 ────────────────────────────────────────────
-        var connData = SectionCard("连接列表", "list.bullet.rectangle", null,
-            ActionRow("square.and.arrow.down", accent, "导入连接列表",
-                "从 CSV 批量添加服务器。同名连接会跳过。",
-                Action("导入…", () => _ = _vm.ImportConnectionsCsvCommand.ExecuteAsync(null))),
-            HairlineDivider(),
-            ActionRow("square.and.arrow.up", accent, "导出连接列表",
-                "导出为 CSV，便于备份或迁移。不含任何密码 / 私钥。",
-                Action("导出…", () => _ = _vm.ExportConnectionsCsvCommand.ExecuteAsync(null))));
+        var appList = GroupList(
+            ListRow("数据文件夹", _vm.DataDirectory,
+                RowButton("在访达中打开", () => _vm.OpenDataDirectoryCommand.Execute(null)), monoSub: true),
+            ListRow("日志文件夹", _vm.LogDirectory,
+                RowButton("在访达中打开", () => _vm.OpenLogDirectoryCommand.Execute(null)), monoSub: true),
+            ListRow("完整备份", "把连接数据库与设置复制到你选的目录（钥匙串里的凭据不随此备份）。",
+                RowButton("完整备份…", () => _ = _vm.BackupDataCommand.ExecuteAsync(null))),
+            ListRow("清理连接历史", "删除历史记录、释放空间。不影响连接配置与凭据，删除后不可恢复。",
+                RowButton("清理…", () => _ = _vm.ClearHistoryCommand.ExecuteAsync(null)), danger: true));
 
-        // ── 凭据备份 ────────────────────────────────────────────
-        var credBackup = SectionCard("凭据备份", "key.fill", null,
-            ActionRow("square.and.arrow.down", green, "导入凭据",
-                "从 .rfbackup 恢复保存的登录信息，需要导出时设的口令。",
-                Action("导入…", () => _ = _vm.ImportCredentialsCommand.ExecuteAsync(null))),
-            HairlineDivider(),
-            ActionRow("square.and.arrow.up", green, "导出凭据",
-                "导出为 .rfbackup —— 口令派生（PBKDF2-SHA256）+ AES-256-GCM 加密，含密码 / 私钥，请离线保管。",
-                Action("导出…", () => _ = _vm.ExportCredentialsCommand.ExecuteAsync(null))));
-
-        // ── 应用数据 ────────────────────────────────────────────
-        var appData = SectionCard("应用数据", "externaldrive", null,
-            ActionRow("folder", muted, "数据目录", _vm.DataDirectory,
-                Action("在访达中打开", () => _vm.OpenDataDirectoryCommand.Execute(null)), monoSubtitle: true),
-            HairlineDivider(),
-            ActionRow("doc.text", muted, "日志目录", _vm.LogDirectory,
-                Action("在访达中打开", () => _vm.OpenLogDirectoryCommand.Execute(null)), monoSubtitle: true),
-            HairlineDivider(),
-            ActionRow("arrow.down.doc", muted, "完整备份",
-                "把连接数据库与设置复制到你选的目录（钥匙串里的凭据不随此备份，走上面的「导出凭据」）。",
-                Action("完整备份…", () => _ = _vm.BackupDataCommand.ExecuteAsync(null))),
-            HairlineDivider(),
-            ActionRow("trash", NSColor.SystemRed, "清理连接历史",
-                "删除历史记录、释放空间。不影响连接配置与钥匙串里的凭据，删除后不可恢复。",
-                Action("清理历史…", () => _ = _vm.ClearHistoryCommand.ExecuteAsync(null))));
-
-        // ── 数据安全（说明面板）────────────────────────────────
-        var security = InfoPanel(
-            ("checkmark.shield", green, "仅存本地",
+        var trust = InfoPanel(
+            ("checkmark.shield", NSColor.SecondaryLabel, "仅存本地",
                 "所有数据只保存在这台 Mac 上，不上传、不同步任何云端。"),
-            ("lock", muted, "加密保护",
+            ("lock", NSColor.SecondaryLabel, "凭据在钥匙串",
                 "密码与私钥由 macOS 钥匙串（Keychain）保管，和连接数据库分开存放 —— "
-                + "单独拷走 remoteflow.db 得不到任何密码。.rfbackup 的加密与平台无关，换到 Windows 也能导入。"));
+                + "单独拷走数据库文件拿不到任何密码。"));
 
-        var version = Muted($"RemoteFlow {_vm.AppVersion} · macOS");
+        return Page(PageColumn(
+            SectionLabel("连接列表"),
+            Gap(7), connList, Gap(22),
 
-        return Page(connData, credBackup, appData, security, ImportMessagesPanel(), Gap(2), version);
+            SectionLabel("凭据备份"),
+            Gap(7), credList, Gap(8),
+            Footnote(".rfbackup 用口令派生（PBKDF2-HMAC-SHA256，600 000 次）+ AES-256-GCM 加密，"
+                + "与平台无关 —— 在 Windows 版 RemoteFlow 里也能导入。"),
+            Gap(22),
+
+            SectionLabel("应用数据"),
+            Gap(7), appList, Gap(20),
+
+            trust,
+            ImportMessagesPanel(),
+            Gap(16),
+            Footnote($"RemoteFlow {_vm.AppVersion} · macOS")));
     }
 
     /// <summary>导入 CSV / 凭据后逐行提示（跳过的重复项等）。无消息时整块隐藏。</summary>
@@ -964,11 +1065,21 @@ public sealed class SettingsPaneView : NSView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
-            Spacing = 4,
+            Spacing = 3,
+            EdgeInsets = new NSEdgeInsets(11, RowPadX, 11, RowPadX),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
+        var box = new PlainBox();
+        box.AddSubview(list);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            list.LeadingAnchor.ConstraintEqualTo(box.LeadingAnchor),
+            list.TrailingAnchor.ConstraintEqualTo(box.TrailingAnchor),
+            list.TopAnchor.ConstraintEqualTo(box.TopAnchor),
+            list.BottomAnchor.ConstraintEqualTo(box.BottomAnchor),
+        });
 
-        var card = SectionCard("导入提示", "exclamationmark.bubble", null, list);
+        var host = PageColumn(SectionLabel("导入提示"), Gap(7), box);
 
         void Sync()
         {
@@ -980,14 +1091,21 @@ public sealed class SettingsPaneView : NSView
 
             foreach (var msg in _vm.ImportMessages)
             {
-                var lbl = Muted("· " + msg);
-                lbl.LineBreakMode = NSLineBreakMode.ByWordWrapping;
-                lbl.MaximumNumberOfLines = 0;
+                var lbl = new NSTextField
+                {
+                    StringValue = "· " + msg,
+                    Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
+                    Font = NSFont.SystemFontOfSize(11),
+                    TextColor = NSColor.SecondaryLabel,
+                    LineBreakMode = NSLineBreakMode.ByWordWrapping,
+                    MaximumNumberOfLines = 0,
+                    TranslatesAutoresizingMaskIntoConstraints = false,
+                };
                 list.AddArrangedSubview(lbl);
-                lbl.WidthAnchor.ConstraintEqualTo(list.WidthAnchor).Active = true;
+                lbl.WidthAnchor.ConstraintEqualTo(list.WidthAnchor, 1, -RowPadX * 2).Active = true;
             }
 
-            card.Hidden = !_vm.HasMessages;
+            host.Hidden = !_vm.HasMessages;
         }
 
         Sync();
@@ -1000,7 +1118,7 @@ public sealed class SettingsPaneView : NSView
                 NSApplication.SharedApplication.BeginInvokeOnMainThread(Sync);
             }
         };
-        return card;
+        return host;
     }
 
     // ── 版式辅助 ────────────────────────────────────────────────
@@ -1077,24 +1195,6 @@ public sealed class SettingsPaneView : NSView
         };
         row.AddArrangedSubview(Caption(label));
         row.AddArrangedSubview(control);
-        return row;
-    }
-
-    /// <summary>一行左对齐的按钮组（导出 / 导入 / 备份等成组操作）。</summary>
-    private static NSView ButtonRow(params NSButton[] buttons)
-    {
-        var row = new NSStackView
-        {
-            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
-            Spacing = 8,
-            Alignment = NSLayoutAttribute.CenterY,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        };
-        foreach (var b in buttons)
-        {
-            row.AddArrangedSubview(b);
-        }
-
         return row;
     }
 
@@ -1191,88 +1291,6 @@ public sealed class SettingsPaneView : NSView
         var v = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
         v.HeightAnchor.ConstraintEqualTo(h).Active = true;
         return v;
-    }
-
-    // ── 主机密钥表 ─────────────────────────────────────────────
-
-    private sealed class HostKeySource : NSTableViewDelegate
-    {
-        private readonly NSTableView _table;
-        private readonly System.Collections.ObjectModel.ObservableCollection<HostKeyItemViewModel> _items;
-        private readonly Action<HostKeyItemViewModel?> _onSelect;
-
-        public HostKeySource(
-            NSTableView table,
-            System.Collections.ObjectModel.ObservableCollection<HostKeyItemViewModel> items,
-            Action<HostKeyItemViewModel?> onSelect)
-        {
-            _table = table;
-            _items = items;
-            _onSelect = onSelect;
-            _table.DataSource = new RowCount(this);
-            _table.Delegate = this;
-            _items.CollectionChanged += (_, _) =>
-                NSApplication.SharedApplication.BeginInvokeOnMainThread(_table.ReloadData);
-            _table.ReloadData();
-        }
-
-        public override void SelectionDidChange(Foundation.NSNotification notification)
-        {
-            var r = (int)_table.SelectedRow;
-            _onSelect(r >= 0 && r < _items.Count ? _items[r] : null);
-        }
-
-        public override NSView GetViewForItem(NSTableView tableView, NSTableColumn? tableColumn, nint row)
-        {
-            var item = _items[(int)row];
-            const string id = "hk";
-            if (tableView.MakeView(id, this) is not NSTableCellView cell)
-            {
-                var title = new NSTextField
-                {
-                    Identifier = "t", Bordered = false, Editable = false, Selectable = false,
-                    DrawsBackground = false, Font = NSFont.SystemFontOfSize(13),
-                    TranslatesAutoresizingMaskIntoConstraints = false,
-                };
-                var sub = new NSTextField
-                {
-                    Identifier = "s", Bordered = false, Editable = false, Selectable = false,
-                    DrawsBackground = false, Font = NSFont.SystemFontOfSize(11),
-                    TextColor = NSColor.SecondaryLabel,
-                    TranslatesAutoresizingMaskIntoConstraints = false,
-                    LineBreakMode = NSLineBreakMode.TruncatingMiddle,
-                };
-                var st = new NSStackView
-                {
-                    Orientation = NSUserInterfaceLayoutOrientation.Vertical,
-                    Alignment = NSLayoutAttribute.Leading,
-                    Spacing = 1,
-                    TranslatesAutoresizingMaskIntoConstraints = false,
-                };
-                st.AddArrangedSubview(title);
-                st.AddArrangedSubview(sub);
-                cell = new NSTableCellView { Identifier = id };
-                cell.AddSubview(st);
-                cell.TextField = title;
-                NSLayoutConstraint.ActivateConstraints(new[]
-                {
-                    st.LeadingAnchor.ConstraintEqualTo(cell.LeadingAnchor, 6),
-                    st.TrailingAnchor.ConstraintEqualTo(cell.TrailingAnchor, -6),
-                    st.CenterYAnchor.ConstraintEqualTo(cell.CenterYAnchor),
-                });
-            }
-
-            ((NSTextField)cell.Subviews[0].Subviews[0]).StringValue = item.Host;
-            ((NSTextField)cell.Subviews[0].Subviews[1]).StringValue = $"{item.Algorithm}  {item.Fingerprint}";
-            return cell;
-        }
-
-        private sealed class RowCount : NSTableViewDataSource
-        {
-            private readonly HostKeySource _o;
-            public RowCount(HostKeySource o) => _o = o;
-            public override nint GetRowCount(NSTableView tableView) => _o._items.Count;
-        }
     }
 
 }

@@ -713,9 +713,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         }
 
         var confirmed = await _dialogs.ConfirmAsync(
-            "移除主机密钥",
-            $"确定要移除 {item.Host} 的已信任密钥吗？\n\n下次连接该主机时会重新提示确认指纹。",
-            "移除",
+            "删除主机密钥",
+            $"确定要删除 {item.Host} 的已信任密钥吗？\n\n下次连接该主机时会重新提示确认指纹。",
+            "删除",
             isDanger: true);
 
         if (!confirmed)
@@ -725,7 +725,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
         await _hostKeys.DeleteAsync(item.HostName, item.Port);
         await LoadHostKeysAsync();
-        StatusMessage = $"已移除 {item.Host} 的主机密钥。";
+        StatusMessage = $"已删除 {item.Host} 的主机密钥。";
     }
 
     // ── 数据目录 ──────────────────────────────────────────────────
