@@ -366,7 +366,59 @@ public sealed class AppsCloudClient(
     private static async Task<CloudApiException> ApiError(HttpResponseMessage response)
     {
         var body = await response.Content.ReadAsStringAsync();
-        return new CloudApiException((int)response.StatusCode, Truncate(body, 300));
+        return new CloudApiException(
+            (int)response.StatusCode, ReadProblemMessage(body) ?? Truncate(body, 200));
+    }
+
+    /// <summary>
+    /// 从 RFC 7807 ProblemDetails 里取一句人读的说明：优先第一条字段校验错误，其次 <c>detail</c>，
+    /// 再次 <c>title</c>。解析不出则返回 null，由调用方回退到截断的原文。
+    /// </summary>
+    private static string? ReadProblemMessage(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            if (doc.RootElement.TryGetProperty("errors", out var errors)
+                && errors.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var field in errors.EnumerateObject())
+                {
+                    if (field.Value.ValueKind == JsonValueKind.Array
+                        && field.Value.GetArrayLength() > 0
+                        && field.Value[0].GetString() is { Length: > 0 } message)
+                    {
+                        return message;
+                    }
+                }
+            }
+
+            foreach (var key in (ReadOnlySpan<string>)["detail", "title"])
+            {
+                if (doc.RootElement.TryGetProperty(key, out var value)
+                    && value.ValueKind == JsonValueKind.String
+                    && value.GetString() is { Length: > 0 } text)
+                {
+                    return text;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // 不是 JSON —— 交回调用方按原文处理。
+        }
+
+        return null;
     }
 
     private static string Truncate(string value, int max) =>

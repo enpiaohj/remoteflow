@@ -110,3 +110,10 @@ public sealed class CloudApiException(int statusCode, string message)
 {
     public int StatusCode { get; } = statusCode;
 }
+
+/// <summary>
+/// 登录 / 首次开户失败，<see cref="Exception.Message"/> 是可直接展示给用户的中文说明
+/// （凭据错误、密码太短、需重试等）。UI 直接呈现 Message，不必再翻译。
+/// </summary>
+public sealed class CloudSignInException(string message, Exception? inner = null)
+    : Exception(message, inner);

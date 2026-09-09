@@ -71,6 +71,7 @@ public sealed class CloudSyncViewModelTests
         _sync.RecoveryKeyToReturn = "WORD WORD WORD";
         var vm = NewViewModel();
         vm.Email = "me@example.com";
+        vm.Password = "cloud-passw0rd";
         await vm.ConnectCommand.ExecuteAsync(null);
 
         await vm.CreateVaultCommand.ExecuteAsync(null);
@@ -89,6 +90,7 @@ public sealed class CloudSyncViewModelTests
 
         _sync.SignInResult = CloudUnlockState.Ready;
         vm.Email = "me@example.com";
+        vm.Password = "cloud-passw0rd";
         await vm.ConnectCommand.ExecuteAsync(null);
 
         Assert.True(vm.SyncNowCommand.CanExecute(null));
@@ -104,6 +106,7 @@ public sealed class CloudSyncViewModelTests
         _sync.Pending.Add(new CloudPendingDevice(deviceId, "pc-b", "Bob PC", "windows", [1], DateTimeOffset.UtcNow));
         var vm = NewViewModel();
         vm.Email = "me@example.com";
+        vm.Password = "cloud-passw0rd";
         await vm.ConnectCommand.ExecuteAsync(null);
         Assert.Single(vm.PendingDevices);
 
@@ -124,6 +127,7 @@ public sealed class CloudSyncViewModelTests
             DateTimeOffset.UtcNow, ConflictResolution.Unresolved));
         var vm = NewViewModel();
         vm.Email = "me@example.com";
+        vm.Password = "cloud-passw0rd";
         await vm.ConnectCommand.ExecuteAsync(null);
 
         await vm.KeepLocalCommand.ExecuteAsync(vm.Conflicts[0]);
@@ -137,6 +141,7 @@ public sealed class CloudSyncViewModelTests
         _sync.SignInResult = CloudUnlockState.Ready;
         var vm = NewViewModel();
         vm.Email = "me@example.com";
+        vm.Password = "cloud-passw0rd";
         await vm.ConnectCommand.ExecuteAsync(null);
 
         _dialogs.ConfirmResult = false;
@@ -152,9 +157,10 @@ public sealed class CloudSyncViewModelTests
     [Fact]
     public async Task A_failed_connect_surfaces_the_error_message()
     {
-        _sync.ThrowOnSignIn = new InvalidOperationException("邮箱或密码错误");
+        _sync.ThrowOnSignIn = new CloudSignInException("邮箱或密码错误");
         var vm = NewViewModel();
         vm.Email = "me@example.com";
+        vm.Password = "irrelevant";
 
         await vm.ConnectCommand.ExecuteAsync(null);
 

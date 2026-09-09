@@ -102,9 +102,17 @@ public sealed partial class CloudSyncViewModel(
     [RelayCommand]
     private Task ConnectAsync() => RunAsync(async () =>
     {
-        if (string.IsNullOrWhiteSpace(ServerUrl) || string.IsNullOrWhiteSpace(Email))
+        if (string.IsNullOrWhiteSpace(ServerUrl)
+            || string.IsNullOrWhiteSpace(Email)
+            || string.IsNullOrEmpty(Password))
         {
-            ErrorMessage = "请填写服务地址和邮箱。";
+            ErrorMessage = "请填写服务地址、邮箱和密码。";
+            return;
+        }
+
+        if (!Email.Contains('@', StringComparison.Ordinal))
+        {
+            ErrorMessage = "邮箱格式不正确。";
             return;
         }
 
@@ -301,10 +309,14 @@ public sealed partial class CloudSyncViewModel(
             ResetToSignedOut();
             ErrorMessage = "登录已失效，请重新登录 AppsCloud。";
         }
+        catch (OperationCanceledException)
+        {
+            // 应用退出 / 用户离开面板，静默。
+        }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Cloud Sync 操作失败");
-            ErrorMessage = ex.Message;
+            logger.LogWarning(ex, "Cloud Sync 操作失败");
+            ErrorMessage = Describe(ex);
         }
         finally
         {
@@ -312,6 +324,20 @@ public sealed partial class CloudSyncViewModel(
             RaiseCommandStates();
         }
     }
+
+    /// <summary>把异常翻成一句面向用户的中文；技术细节只进日志。</summary>
+    private static string Describe(Exception ex) => ex switch
+    {
+        CloudSignInException => ex.Message,
+        CloudApiException { StatusCode: 401 } => "邮箱或密码不正确。",
+        CloudApiException { StatusCode: 403 } => "本设备暂无访问权，请在已授权设备上批准，或用 Recovery Key 恢复。",
+        CloudApiException { StatusCode: 409 } => "该邮箱已注册，请用原密码登录。",
+        CloudApiException { StatusCode: >= 500 } => "AppsCloud 服务暂时不可用，请稍后再试。",
+        CloudApiException api => api.Message,
+        HttpRequestException => "无法连接 AppsCloud 服务，请检查网络和服务地址。",
+        TaskCanceledException => "连接 AppsCloud 超时，请检查网络和服务地址。",
+        _ => "操作失败：" + ex.Message,
+    };
 
     private void RaiseCommandStates()
     {

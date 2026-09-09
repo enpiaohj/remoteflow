@@ -43,8 +43,9 @@ public sealed class CloudSyncFacadeTests : IDisposable
 
         // 同一邮箱、错误密码：账号已存在，按凭据错误处理，不得静默改写。
         var bad = NewDevice(baseUrl);
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        var err = await Assert.ThrowsAsync<CloudSignInException>(
             () => bad.Sync.SignInAsync(baseUrl, email, "Wrong-Passw0rd!"));
+        Assert.Equal("邮箱或密码不正确。", err.Message);
 
         await device.Sync.SignOutAsync(wipeLocalCloudData: true);
     }

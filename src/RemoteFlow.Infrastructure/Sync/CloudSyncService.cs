@@ -139,11 +139,15 @@ public sealed class CloudSyncService(
 
     // ── 内部 ────────────────────────────────────────────────────
 
+    /// <summary>创建账号时 AppsCloud 要求的最短密码长度（与服务端 RegisterRequest 对齐）。</summary>
+    private const int MinNewAccountPasswordLength = 12;
+
     /// <summary>
     /// 登录；若该邮箱在 AppsCloud 尚无账号（首次使用），自动创建后再登录。
     /// 设计文档「注册 / 登录」为同一步：新部署或换服务地址时用户无需先去别处开户。
     /// 账号已存在但密码不符时按凭据错误处理，绝不覆盖既有账号。
     /// </summary>
+    /// <exception cref="CloudSignInException">凭据错误、或需要用户修正后重试的可读失败。</exception>
     private async Task LoginOrRegisterAsync(
         string email, string password, CloudDeviceInfo device, CancellationToken ct)
     {
@@ -152,9 +156,17 @@ public sealed class CloudSyncService(
             await client.LoginAsync(email, password, device, ct);
             return;
         }
-        catch (CloudApiException ex) when (ex.StatusCode == 401)
+        catch (CloudApiException ex) when (ex.StatusCode is 401)
         {
-            logger.LogInformation("AppsCloud 登录返回 401，按首次使用尝试创建账号");
+            logger.LogInformation("AppsCloud 登录被拒（401），按首次使用尝试创建账号");
+        }
+
+        if (password.Length < MinNewAccountPasswordLength)
+        {
+            // 账号不存在才会走到这里；密码太短则注册必失败，直接给准话。
+            throw new CloudSignInException(
+                $"该邮箱在 AppsCloud 尚无账号。若要创建，密码至少需 {MinNewAccountPasswordLength} 位；"
+                + "若账号已存在，请检查密码是否输错。");
         }
 
         CloudRegisterOutcome outcome;
@@ -162,17 +174,25 @@ public sealed class CloudSyncService(
         {
             outcome = await client.RegisterAsync(email, password, ct);
         }
-        catch (CloudApiException ex) when (ex.StatusCode == 400)
+        catch (CloudApiException ex) when (ex.StatusCode is 400)
         {
-            throw new InvalidOperationException("首次使用需创建 AppsCloud 账号，密码至少 12 位。", ex);
+            throw new CloudSignInException("创建 AppsCloud 账号失败：" + ex.Message, ex);
         }
 
         if (outcome == CloudRegisterOutcome.AlreadyExists)
         {
-            throw new InvalidOperationException("邮箱或密码不正确。");
+            throw new CloudSignInException("邮箱或密码不正确。");
         }
 
-        await client.LoginAsync(email, password, device, ct);
+        try
+        {
+            await client.LoginAsync(email, password, device, ct);
+        }
+        catch (CloudApiException ex)
+        {
+            throw new CloudSignInException("账号已创建，但随后登录失败，请重试。", ex);
+        }
+
         logger.LogInformation("已创建 AppsCloud 账号并登录");
     }
 
