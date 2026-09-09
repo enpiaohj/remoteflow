@@ -116,7 +116,7 @@ public sealed class AppsCloudClient(
         var dto = await ReadAsync<VaultStatusDto>(response, ct);
         return new CloudVaultStatus(
             dto.Exists, dto.CurrentKeyVersion, dto.HasPasswordEnvelope, dto.HasRecoveryEnvelope,
-            dto.RequireDeviceApproval, dto.ThisDeviceApproved);
+            dto.RequireDeviceApproval, dto.ThisDeviceApproved, dto.VaultId);
     }
 
     public async Task<bool> BootstrapVaultAsync(
@@ -424,7 +424,7 @@ public sealed class AppsCloudClient(
     private sealed record TokenDto(string AccessToken, string RefreshToken, DateTimeOffset ExpiresAt);
     private sealed record VaultStatusDto(
         bool Exists, int? CurrentKeyVersion, bool HasPasswordEnvelope, bool HasRecoveryEnvelope,
-        bool RequireDeviceApproval, bool ThisDeviceApproved);
+        bool RequireDeviceApproval, bool ThisDeviceApproved, Guid? VaultId);
     private sealed record VaultEnvelopeDto(
         string Kind, int KeyVersion, string Algorithm, string WrappedKey, string Nonce, string Salt, int Iterations);
     private sealed record PendingDeviceDto(

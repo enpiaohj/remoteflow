@@ -6,31 +6,30 @@ namespace RemoteFlow.Infrastructure.Security;
 /// <summary>
 /// <see cref="IVaultKeyStore"/> 直接复用 <see cref="ICredentialVault"/> 的平台密钥库保护
 /// （Windows DPAPI / macOS Keychain），无需再写平台专属实现。
-/// 设备私钥与 VMK 以 base64 字符串形式存入，与连接 Secret 同一保险库文件、同样受保护。
+/// VMK 以 <c>base64(vmk)|vaultTag</c> 形式存入，与连接 Secret 同一保险库文件、同样受保护。
 /// </summary>
 public sealed class CredentialVaultKeyStore(ICredentialVault vault) : IVaultKeyStore
 {
-    private const string DeviceKeyReference = "cloud:device-private-key";
     private const string MasterKeyReference = "cloud:vault-master-key";
 
-    public async Task<byte[]?> GetDevicePrivateKeyAsync(CancellationToken ct = default) =>
-        Decode(await vault.RetrieveSecretAsync(DeviceKeyReference, ct));
-
-    public Task SetDevicePrivateKeyAsync(byte[] pkcs8PrivateKey, CancellationToken ct = default) =>
-        vault.StoreSecretAsync(DeviceKeyReference, Convert.ToBase64String(pkcs8PrivateKey), ct);
-
-    public async Task<byte[]?> GetCachedMasterKeyAsync(CancellationToken ct = default) =>
-        Decode(await vault.RetrieveSecretAsync(MasterKeyReference, ct));
-
-    public Task SetCachedMasterKeyAsync(byte[] masterKey, CancellationToken ct = default) =>
-        vault.StoreSecretAsync(MasterKeyReference, Convert.ToBase64String(masterKey), ct);
-
-    public async Task ClearAsync(CancellationToken ct = default)
+    public async Task<CachedMasterKey?> GetCachedMasterKeyAsync(CancellationToken ct = default)
     {
-        await vault.DeleteSecretAsync(DeviceKeyReference, ct);
-        await vault.DeleteSecretAsync(MasterKeyReference, ct);
+        var raw = await vault.RetrieveSecretAsync(MasterKeyReference, ct);
+        if (string.IsNullOrEmpty(raw))
+        {
+            return null;
+        }
+
+        var sep = raw.IndexOf('|');
+        // sep < 0：旧格式（无 tag），当作陈旧缓存——返回空 tag，让 VaultId 校验必然失败后清除。
+        return sep < 0
+            ? new CachedMasterKey(Convert.FromBase64String(raw), string.Empty)
+            : new CachedMasterKey(Convert.FromBase64String(raw[..sep]), raw[(sep + 1)..]);
     }
 
-    private static byte[]? Decode(string? value) =>
-        string.IsNullOrEmpty(value) ? null : Convert.FromBase64String(value);
+    public Task SetCachedMasterKeyAsync(byte[] masterKey, string vaultTag, CancellationToken ct = default) =>
+        vault.StoreSecretAsync(MasterKeyReference, Convert.ToBase64String(masterKey) + "|" + vaultTag, ct);
+
+    public Task ClearAsync(CancellationToken ct = default) =>
+        vault.DeleteSecretAsync(MasterKeyReference, ct);
 }

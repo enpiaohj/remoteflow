@@ -35,19 +35,40 @@ public sealed class VaultMasterKeyService(
     public async Task<VaultUnlockResult> TryUnlockAsync(string? password, CancellationToken ct = default)
     {
         var cached = await keyStore.GetCachedMasterKeyAsync(ct);
-        if (cached is not null)
+
+        CloudVaultStatus status;
+        try
         {
-            try
+            status = await client.GetVaultStatusAsync(ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            // 离线：无法校验缓存归属，只能信任本地缓存（若有）。
+            if (cached is not null)
             {
-                return Unlocked(cached);
+                try { return Unlocked(cached.MasterKey); }
+                finally { CryptographicOperations.ZeroMemory(cached.MasterKey); }
             }
-            finally
-            {
-                CryptographicOperations.ZeroMemory(cached);
-            }
+
+            throw;
         }
 
-        var status = await client.GetVaultStatusAsync(ct);
+        var currentTag = status is { Exists: true, VaultId: { } id } ? id.ToString() : null;
+
+        if (cached is not null)
+        {
+            if (currentTag is not null && currentTag == cached.VaultTag)
+            {
+                try { return Unlocked(cached.MasterKey); }
+                finally { CryptographicOperations.ZeroMemory(cached.MasterKey); }
+            }
+
+            // 缓存属于另一个 Vault（已重建 / 已删除 / 切换了账号）——清掉，重新走解锁流程。
+            CryptographicOperations.ZeroMemory(cached.MasterKey);
+            await keyStore.ClearAsync(ct);
+            logger.LogInformation("本地缓存的 VMK 与当前 Vault 不符（Vault 已重建或切换账号），已清除");
+        }
+
         if (!status.Exists)
         {
             return new VaultUnlockResult(VaultUnlockState.NeedsBootstrap, null);
@@ -73,7 +94,7 @@ public sealed class VaultMasterKeyService(
         var masterKey = VaultCryptography.UnwrapWithSecret(password, envelope);
         try
         {
-            await keyStore.SetCachedMasterKeyAsync(masterKey, ct);
+            await CacheAsync(masterKey, currentTag, ct);
             logger.LogInformation("Vault 已通过口令解锁");
             return Unlocked(masterKey);
         }
@@ -99,7 +120,7 @@ public sealed class VaultMasterKeyService(
                 throw new InvalidOperationException("Vault already exists for this account; unlock instead.");
             }
 
-            await keyStore.SetCachedMasterKeyAsync(masterKey, ct);
+            await CacheAsync(masterKey, await CurrentVaultTagAsync(ct), ct);
             logger.LogInformation("Vault 已初始化（本设备为首设备）");
             return (Session(masterKey), recoveryKey);
         }
@@ -118,7 +139,7 @@ public sealed class VaultMasterKeyService(
         var masterKey = recoveryKeys.RecoverMasterKey(recoveryKeyInput, recoveryEnvelope);
         try
         {
-            await keyStore.SetCachedMasterKeyAsync(masterKey, ct);
+            await CacheAsync(masterKey, await CurrentVaultTagAsync(ct), ct);
             logger.LogInformation("Vault 已通过 Recovery Key 恢复");
             return Session(masterKey);
         }
@@ -148,6 +169,16 @@ public sealed class VaultMasterKeyService(
 
     /// <summary>退出云账号 / 清除此设备云数据。</summary>
     public Task ForgetAsync(CancellationToken ct = default) => keyStore.ClearAsync(ct);
+
+    /// <summary>把 VMK 连同所属 Vault 标识写入缓存。<paramref name="vaultTag"/> 为 null 时不缓存。</summary>
+    private Task CacheAsync(byte[] masterKey, string? vaultTag, CancellationToken ct) =>
+        vaultTag is null ? Task.CompletedTask : keyStore.SetCachedMasterKeyAsync(masterKey, vaultTag, ct);
+
+    private async Task<string?> CurrentVaultTagAsync(CancellationToken ct)
+    {
+        var status = await client.GetVaultStatusAsync(ct);
+        return status is { Exists: true, VaultId: { } id } ? id.ToString() : null;
+    }
 
     private static VaultUnlockResult Unlocked(ReadOnlySpan<byte> masterKey) =>
         new(VaultUnlockState.Unlocked, new VaultSession(masterKey));

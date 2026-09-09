@@ -5,34 +5,25 @@ namespace RemoteFlow.IntegrationTests.Cloud;
 /// <summary>测试用内存版 <see cref="IVaultKeyStore"/>。平台真实实现（DPAPI / Keychain）由其专属测试覆盖。</summary>
 public sealed class InMemoryVaultKeyStore : IVaultKeyStore
 {
-    private byte[]? _devicePrivateKey;
-    private byte[]? _cachedMasterKey;
+    private CachedMasterKey? _cached;
 
-    public int SetPrivateKeyCalls { get; private set; }
+    public int ClearCalls { get; private set; }
 
-    public Task<byte[]?> GetDevicePrivateKeyAsync(CancellationToken ct = default) =>
-        Task.FromResult(_devicePrivateKey?.ToArray());
+    public Task<CachedMasterKey?> GetCachedMasterKeyAsync(CancellationToken ct = default) =>
+        Task.FromResult(_cached is null
+            ? null
+            : new CachedMasterKey(_cached.MasterKey.ToArray(), _cached.VaultTag));
 
-    public Task SetDevicePrivateKeyAsync(byte[] pkcs8PrivateKey, CancellationToken ct = default)
+    public Task SetCachedMasterKeyAsync(byte[] masterKey, string vaultTag, CancellationToken ct = default)
     {
-        _devicePrivateKey = pkcs8PrivateKey.ToArray();
-        SetPrivateKeyCalls++;
-        return Task.CompletedTask;
-    }
-
-    public Task<byte[]?> GetCachedMasterKeyAsync(CancellationToken ct = default) =>
-        Task.FromResult(_cachedMasterKey?.ToArray());
-
-    public Task SetCachedMasterKeyAsync(byte[] masterKey, CancellationToken ct = default)
-    {
-        _cachedMasterKey = masterKey.ToArray();
+        _cached = new CachedMasterKey(masterKey.ToArray(), vaultTag);
         return Task.CompletedTask;
     }
 
     public Task ClearAsync(CancellationToken ct = default)
     {
-        _devicePrivateKey = null;
-        _cachedMasterKey = null;
+        _cached = null;
+        ClearCalls++;
         return Task.CompletedTask;
     }
 }

@@ -23,7 +23,8 @@ public sealed record CloudVaultStatus(
     bool HasPasswordEnvelope,
     bool HasRecoveryEnvelope,
     bool RequireDeviceApproval,
-    bool ThisDeviceApproved);
+    bool ThisDeviceApproved,
+    Guid? VaultId);
 
 /// <summary>「新设备需批准」开启时，一台待批准的设备。</summary>
 public sealed record CloudPendingDevice(
