@@ -7,6 +7,47 @@
 
 ---
 
+## [0.10.0] — 2026-09-09
+
+云同步（Cloud Sync）落地。Windows(WPF) 与 macOS(AppKit) 同一版本同步发布：
+本条目记 Windows 侧，macOS 侧见 [`releases/macos-v0.4.0/CHANGELOG.md`](releases/macos-v0.4.0/CHANGELOG.md)（同一功能、AppKit 界面）。
+
+### 架构
+- 新增端到端加密同步栈（共享层，双端共用）：
+  - `RemoteFlow.Core.Cloud` —— 契约、`RecoveryKey`（RFC 4648 Base32）、`CloudEndpoint` / `CloudSyncGate` / `CloudSignInException`。
+  - `RemoteFlow.Infrastructure.Security` —— `VaultCryptography`（ECDH-P256 + HKDF-SHA256 + AES-256-GCM）、设备信封 / Recovery 信封 / 载荷加密，`VaultMasterKeyService`（解锁 / 初始化 / 恢复 / 批准设备）。
+  - `RemoteFlow.Infrastructure.Sync` —— `AppsCloudClient`（REST + Token 生命周期）、`SqliteSyncStore`（Outbox + 游标 + 冲突 + 内容哈希）、`SyncCoordinator`（Reconcile → Push → Pull）、`ConflictService`（检测非合并：保留本机 / 使用云端）、5 个实体源（连接 / 分组 / 标签 / 凭据元数据 / 凭据 Secret）、`OutboxSyncChangeTracker`、`CloudSyncAutoRunner`（后台周期同步）。
+  - `CloudSyncService` —— UI 唯一入口门面；`CloudSyncViewModel` —— 面板状态机（共享）。
+- 本地 SQLite 迁移 `user_version` 4 → 5：4 张同步表 + `sync_entity_state.content_hash`。向后兼容，旧库自动升级。
+- 依赖后端 AppsCloud（独立仓库）的 G3 E2EE Vault + G4 Sync 服务；服务端只搬运密文，看不到任何明文 / VMK / Recovery Key。
+
+### 新增
+- 设置页新增「云同步」分页：登录 AppsCloud、初始化 / 恢复加密 Vault、手动同步、批准新设备、解决冲突、退出与清除本机云数据；一次性 Recovery Key 横幅。
+- 默认服务地址 `https://sync.appscloud.cn/`，面板中默认锁定；连自建 / 内网 AppsCloud 时勾选「使用自定义服务地址」解锁。
+- 首次登录若邮箱在 AppsCloud 尚无账号，自动创建后登录（设计文档「注册 / 登录」为同一步）；账号已存在但密码不符按凭据错误处理，绝不覆盖。
+- 本地优先不变：未登录 / 云端不可达时连接、会话、Secret 读取均正常，改动在 Outbox 累积。
+
+### 变更
+- 登录 / 同步失败的提示改为人读中文：`AppsCloudClient` 解析 RFC 7807（字段校验 / detail / title），`CloudSyncViewModel.Describe` 按类型与状态码分类（401 / 403 / 409 / 5xx / 网络 / 超时）。
+- 设置页（WPF + AppKit）首次显示时拉取一次已恢复的云会话状态。
+
+### 修复
+- `CloudSyncAutoRunner.Dispose` 幂等：`_disposed` 守卫 + 吞 `ObjectDisposedException`，避免 `App.OnExit` 与容器 `DisposeAsync` 双重释放崩溃。
+
+### 未包含
+- 首次同步的对象统计确认对话框（「将同步 N 条」）—— 后续版本。
+- `AppSettings` 的 User / Device / Session 作用域区分 —— 后续版本。
+- Key Rotation（后端 G3.2）客户端接入。
+
+### 验证
+- 构建：`dotnet build RemoteFlow.slnx -c Release` 0 错误。
+- 测试：`dotnet test -c Release` —— IntegrationTests 154、Core.Tests 42、IntegrationTests.Windows 9 全绿（含对真机 AppsCloud 测试环境的 `CloudRoundTripTests` / `CloudSyncFacadeTests` 端到端）；IntegrationTests.Mac 10 项在 Windows 上 skip。
+- CI（push `main`）：ubuntu / windows / **macos** 三 job 全绿 —— AppKit「云同步」分页在 macOS 编译通过。
+- publish：`dotnet publish src/RemoteFlow.App -c Release -r win-x64` 单文件启动正常（运行 12s 无异常退出）。
+- 未执行：完整 UI 手动走查、实机 RDP / SSH / VNC 会话、多台真实设备的同步 / 冲突 / 恢复演练；`sync.appscloud.cn` 正式部署尚未上线（端到端验证跑在测试环境）。
+
+详见 [`releases/v0.10.0/CHANGELOG.md`](releases/v0.10.0/CHANGELOG.md)。
+
 ## [0.9.0] — 2026-09-09
 
 Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在本次范围内。
