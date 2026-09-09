@@ -48,5 +48,9 @@ DMG 拖入「应用程序」；首次启动右键「打开」，或
 
 由 `.github/workflows/release-macos.yml` 在 `macos-v0.5.2` tag 推送后构建并上传到 GitHub Release：
 
-- `RemoteFlow-v0.5.2-macos-arm64.dmg` —— Apple Silicon，ad-hoc 签名 —— Size / SHA-256：见发布后补录
-- `RemoteFlow-v0.5.2-macos-x64.dmg` —— Intel（arm64 runner 交叉编译），ad-hoc 签名 —— Size / SHA-256：见发布后补录
+- `RemoteFlow-v0.5.2-macos-arm64.dmg` —— Apple Silicon，ad-hoc 签名
+  - Size：57,314,800 bytes
+  - SHA-256：`1FCF92BA9F419A205FCE6F071D28F39C932CC414500F23A96F966816E59F86D5`
+- `RemoteFlow-v0.5.2-macos-x64.dmg` —— Intel（arm64 runner 交叉编译），ad-hoc 签名
+  - Size：60,014,360 bytes
+  - SHA-256：`5830211A4D88CC45F5DF3B49FB3C1F9094D6E9733D538F8239E8ED01E1A6F980`

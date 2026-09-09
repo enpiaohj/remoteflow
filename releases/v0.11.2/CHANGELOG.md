@@ -78,8 +78,12 @@ macOS 侧同批走 `macos-v0.5.2`，详见 [`releases/macos-v0.5.2/CHANGELOG.md`
 
 由 `.github/workflows/release-windows.yml` 在 `v0.11.2` tag 推送后构建并上传到 GitHub Release：
 
-- `RemoteFlow-v0.11.2-win-x64.exe` —— Size / SHA-256：见发布后补录
-- `RemoteFlow-v0.11.2-win-x64.zip`（含 `Assets/Terminal/`）—— Size / SHA-256：见发布后补录
+- `RemoteFlow-v0.11.2-win-x64.exe`
+  - Size：74,844,755 bytes
+  - SHA-256：`EA32E20DA6C98E0186548AD9886F05E92D9083FE28E52DB740A0E3F39C6CE24A`
+- `RemoteFlow-v0.11.2-win-x64.zip`（含 `Assets/Terminal/`）
+  - Size：69,371,735 bytes
+  - SHA-256：`DE674836A3144673070146990656AA69C8E5777A95210D46C4D07DBB38A3EE36`
 
 ## Git
 
