@@ -728,6 +728,32 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         StatusMessage = $"已删除 {item.Host} 的主机密钥。";
     }
 
+    [RelayCommand]
+    private async Task ClearHostKeysAsync()
+    {
+        var count = TrustedHostKeys.Count;
+        if (count == 0)
+        {
+            return;
+        }
+
+        var confirmed = await _dialogs.ConfirmAsync(
+            "清空已信任的主机",
+            $"确定要删除全部 {count} 条已信任的主机密钥吗？\n\n"
+            + "此操作不可撤销。之后再连接这些主机时，都会重新提示确认指纹。",
+            "全部删除",
+            isDanger: true);
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        await _hostKeys.ClearAsync();
+        await LoadHostKeysAsync();
+        StatusMessage = $"已清空 {count} 条已信任的主机密钥。";
+    }
+
     // ── 数据目录 ──────────────────────────────────────────────────
 
     /// <summary>在资源管理器中打开数据目录，便于用户自行备份。</summary>

@@ -276,6 +276,14 @@ public sealed class SqliteHostKeyRepository(RemoteFlowDatabase database) : IHost
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task ClearAsync(CancellationToken ct = default)
+    {
+        await using var connection = database.OpenConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM ssh_host_keys;";
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     private static SshHostKeyRecord Map(SqliteDataReader reader) => new()
     {
         HostKey = reader.GetString(0),

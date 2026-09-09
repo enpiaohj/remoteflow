@@ -1083,6 +1083,37 @@ public sealed class SettingsPaneView : NSView
 
     private NSView BuildSecurity()
     {
+        // 小节标题行：「已信任的主机 · N」在左，「全部删除…」在最右（无条目时隐藏）。
+        var titleLabel = new NSTextField
+        {
+            Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
+            Font = NSFont.SystemFontOfSize(11, NSFontWeight.Semibold),
+            TextColor = NSColor.SecondaryLabel,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        var clearAll = RowButton("全部删除…", () => _ = _vm.ClearHostKeysCommand.ExecuteAsync(null));
+        clearAll.TranslatesAutoresizingMaskIntoConstraints = false;
+
+        var header = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        header.AddSubview(titleLabel);
+        header.AddSubview(clearAll);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            titleLabel.LeadingAnchor.ConstraintEqualTo(header.LeadingAnchor, 2),
+            titleLabel.CenterYAnchor.ConstraintEqualTo(header.CenterYAnchor),
+            clearAll.TrailingAnchor.ConstraintEqualTo(header.TrailingAnchor),
+            clearAll.TopAnchor.ConstraintEqualTo(header.TopAnchor),
+            clearAll.BottomAnchor.ConstraintEqualTo(header.BottomAnchor),
+            titleLabel.TrailingAnchor.ConstraintLessThanOrEqualTo(clearAll.LeadingAnchor, -8),
+        });
+
+        void SyncHeader()
+        {
+            var n = _vm.TrustedHostKeys.Count;
+            titleLabel.StringValue = n > 0 ? $"已信任的主机 · {n}" : "已信任的主机";
+            clearAll.Hidden = n == 0;
+        }
+
         // 分组内容随「已信任主机」列表变化重建（条目少，直接重建整组，不用表格）。
         var groupHost = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
         NSView? current = null;
@@ -1106,13 +1137,18 @@ public sealed class SettingsPaneView : NSView
             });
         }
 
+        SyncHeader();
         Rebuild();
         _vm.TrustedHostKeys.CollectionChanged += (_, _) =>
-            NSApplication.SharedApplication.BeginInvokeOnMainThread(Rebuild);
+            NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
+            {
+                SyncHeader();
+                Rebuild();
+            });
 
         return Page(PageColumn(
-            SectionLabel("已信任的主机"),
-            Gap(7),
+            header,
+            Gap(6),
             groupHost,
             Gap(9),
             Footnote("首次连接时记录主机密钥 / 证书指纹。指纹发生变化会中止连接并强警告，"

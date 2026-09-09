@@ -236,6 +236,29 @@ public sealed class SqliteRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task SSH主机密钥可一次清空()
+    {
+        var repo = new SqliteHostKeyRepository(_database);
+        foreach (var host in new[] { "10.0.0.1", "10.0.0.2", "10.0.0.3" })
+        {
+            await repo.SaveAsync(new SshHostKeyRecord
+            {
+                HostKey = SshHostKeyRecord.BuildHostKey(host, 22),
+                KeyAlgorithm = "ssh-ed25519",
+                Fingerprint = "FP-" + host,
+                TrustedAt = DateTimeOffset.Now
+            });
+        }
+
+        Assert.Equal(3, (await repo.GetAllAsync()).Count);
+
+        await repo.ClearAsync();
+
+        Assert.Empty(await repo.GetAllAsync());
+        Assert.Null(await repo.GetAsync("10.0.0.2", 22));
+    }
+
+    [Fact]
     public void 残留的坏SHM文件不阻断启动_自动清理后恢复()
     {
         // 已初始化的库正常关掉，模拟上一实例被强杀：写一个和主库不一致的坏 -shm。

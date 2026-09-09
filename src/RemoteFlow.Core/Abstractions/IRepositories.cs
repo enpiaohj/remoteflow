@@ -83,4 +83,7 @@ public interface IHostKeyRepository
     Task<IReadOnlyList<SshHostKeyRecord>> GetAllAsync(CancellationToken ct = default);
     Task SaveAsync(SshHostKeyRecord record, CancellationToken ct = default);
     Task DeleteAsync(string host, int port, CancellationToken ct = default);
+
+    /// <summary>清空全部已信任的 Host Key。</summary>
+    Task ClearAsync(CancellationToken ct = default);
 }
