@@ -164,14 +164,32 @@ public sealed class SyncCoordinator(
                 case SyncPushStatus.Applied or SyncPushStatus.Duplicate:
                     await store.SetServerVersionAsync(entry.EntityType, entry.EntityId, result.Version ?? baseVersion, ct);
                     await store.SetContentHashAsync(entry.EntityType, entry.EntityId, ContentHash(plaintext), ct);
+                    await store.SetConflictStateAsync(entry.EntityType, entry.EntityId, false, ct);
                     await store.DeleteIfUnchangedAsync(entry.Id, entry.Sequence, ct);
                     pushed++;
                     break;
 
                 case SyncPushStatus.Conflict:
-                    await conflictService.RecordAsync(entry.EntityType, entry.EntityId, localPayload, result.Server, ct);
+                    // 元数据类冲突按 LWW 自动解决（本地为「最后一笔」则顶上去重推，否则采纳云端）——
+                    // 不再打断用户；密码 / 私钥（credential-secret）与无法比较的仍走对话框。
+                    var lww = await ResolvePushConflictLwwAsync(
+                        context, source, entry.EntityType, entry.EntityId, plaintext, result.Server, ct);
+                    if (lww == ConflictLww.RemoteWins)
+                    {
+                        // 本地改动是较早的一笔，已被云端覆盖（视为本轮已同步，不再需要用户操作）。
+                        pushed++;
+                    }
+                    else if (lww != ConflictLww.LocalWins)
+                    {
+                        await conflictService.RecordAsync(entry.EntityType, entry.EntityId, localPayload, result.Server, ct);
+                        conflicts++;
+                    }
+                    else
+                    {
+                        pushed++; // 本地较新，已重推成功
+                    }
+
                     await store.DeleteIfUnchangedAsync(entry.Id, entry.Sequence, ct);
-                    conflicts++;
                     break;
             }
         }
@@ -299,6 +317,23 @@ public sealed class SyncCoordinator(
 
         if (await store.HasPendingAsync(change.EntityType, change.EntityId, ct))
         {
+            // 本地有待推改动、远端也改了——元数据类按 LWW 自动解决：谁更晚听谁的。
+            if (!change.Deleted)
+            {
+                var lww = await ResolvePullConflictLwwAsync(context, source, change, ct);
+                if (lww == ConflictLww.RemoteWins)
+                {
+                    return PullOutcome.Applied; // 本地是较早一笔，已被云端覆盖（Outbox 已清）
+                }
+
+                if (lww == ConflictLww.LocalWins)
+                {
+                    // 本地是最后一笔——保留本地与 Outbox，下一次 Push 会用 push 侧 LWW 顶上去。
+                    return PullOutcome.Skipped;
+                }
+            }
+
+            // 密码冲突 / 删除冲突 / 无法比较：交给用户选择。
             await RecordPullConflictAsync(context, source, change, ct);
             return PullOutcome.Conflict;
         }
@@ -327,6 +362,174 @@ public sealed class SyncCoordinator(
             : await source.GetPlaintextAsync(change.EntityType, change.EntityId, ct);
         await store.SetContentHashAsync(change.EntityType, change.EntityId, ContentHash(persisted), ct);
         return PullOutcome.Applied;
+    }
+
+    private enum ConflictLww { CannotResolve, LocalWins, RemoteWins }
+
+    /// <summary>Push 冲突的 LWW：本地较新 → 以服务端当前版本为基线重推（本地赢）；否则采纳云端快照。</summary>
+    private async Task<ConflictLww> ResolvePushConflictLwwAsync(
+        SyncContext context,
+        ISyncEntitySource source,
+        string entityType,
+        string entityId,
+        byte[]? localPlain,
+        SyncServerEntity? server,
+        CancellationToken ct)
+    {
+        // 删除类 / 无本地明文：无法比较，走对话框。
+        if (localPlain is null || server is null || server.Ciphertext is null)
+        {
+            return ConflictLww.CannotResolve;
+        }
+
+        var localAt = source.ReadContentModifiedAt(localPlain, source.SchemaVersion);
+        if (localAt is null)
+        {
+            return ConflictLww.CannotResolve;
+        }
+
+        byte[]? serverBytes;
+        try
+        {
+            serverBytes = context.Session.Decrypt(
+                Context(context, entityType, entityId, server.SchemaVersion, server.KeyVersion),
+                new EncryptedPayload(server.Ciphertext, server.Nonce!, server.KeyVersion, server.SchemaVersion));
+        }
+        catch (CryptographicException)
+        {
+            return ConflictLww.CannotResolve;
+        }
+
+        var serverAt = source.ReadContentModifiedAt(serverBytes, server.SchemaVersion);
+        if (serverAt is null)
+        {
+            return ConflictLww.CannotResolve;
+        }
+
+        // 本地是「最后一笔」→ 在服务端当前版本上重推（覆盖），幂等用全新 OperationId。
+        if (localAt > serverAt)
+        {
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                var localPayload = context.Session.Encrypt(
+                    Context(context, entityType, entityId, source.SchemaVersion), localPlain);
+                var op = SyncPushOperation.Upsert(
+                    Guid.NewGuid().ToString("N"), entityType, entityId,
+                    server.Version, localPayload);
+                SyncPushOperationResult retry;
+                try
+                {
+                    retry = (await client.PushAsync([op], ct)).Results[0];
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+                {
+                    return ConflictLww.CannotResolve;
+                }
+
+                if (retry.Status is SyncPushStatus.Applied or SyncPushStatus.Duplicate)
+                {
+                    await store.SetServerVersionAsync(entityType, entityId, retry.Version ?? server.Version, ct);
+                    await store.SetConflictStateAsync(entityType, entityId, false, ct);
+                    await store.SetContentHashAsync(entityType, entityId, ContentHash(localPlain), ct);
+                    logger.LogInformation("LWW：本地较新，连接已覆盖（{Type}/{Id}）", entityType, entityId);
+                    return ConflictLww.LocalWins;
+                }
+
+                // 重推又被拒：又有更新的写入抢先——以其快照为新的服务端状态继续（下一轮采纳）。
+                if (retry.Server is null || retry.Server.Ciphertext is null)
+                {
+                    return ConflictLww.CannotResolve;
+                }
+
+                server = retry.Server;
+                try
+                {
+                    serverBytes = context.Session.Decrypt(
+                        Context(context, entityType, entityId, server.SchemaVersion, server.KeyVersion),
+                        new EncryptedPayload(server.Ciphertext, server.Nonce!, server.KeyVersion, server.SchemaVersion));
+                }
+                catch (CryptographicException)
+                {
+                    return ConflictLww.CannotResolve;
+                }
+            }
+        }
+
+        // 云端较新（或重推竞态输掉）——采纳云端。
+        try
+        {
+            await source.ApplyAsync(entityType, entityId, serverBytes, deleted: false, server.SchemaVersion, ct);
+        }
+        catch (SqliteException)
+        {
+            return ConflictLww.CannotResolve;
+        }
+
+        await store.SetServerVersionAsync(entityType, entityId, server.Version, ct);
+        await store.SetConflictStateAsync(entityType, entityId, false, ct);
+        var persisted = await source.GetPlaintextAsync(entityType, entityId, ct);
+        await store.SetContentHashAsync(entityType, entityId, ContentHash(persisted), ct);
+        logger.LogInformation("LWW：云端较新，本地较早改动已被覆盖（{Type}/{Id}）", entityType, entityId);
+        return ConflictLww.RemoteWins;
+    }
+
+    /// <summary>Pull 撞上本地待推改动时的 LWW：谁更晚听谁的。</summary>
+    private async Task<ConflictLww> ResolvePullConflictLwwAsync(
+        SyncContext context, ISyncEntitySource source, SyncPulledChange change, CancellationToken ct)
+    {
+        byte[]? remoteBytes;
+        try
+        {
+            remoteBytes = context.Session.Decrypt(
+                Context(context, change.EntityType, change.EntityId, change.SchemaVersion, change.KeyVersion),
+                new EncryptedPayload(change.Ciphertext!, change.Nonce!, change.KeyVersion, change.SchemaVersion));
+        }
+        catch (CryptographicException)
+        {
+            return ConflictLww.CannotResolve;
+        }
+
+        var remoteAt = source.ReadContentModifiedAt(remoteBytes, change.SchemaVersion);
+        if (remoteAt is null)
+        {
+            return ConflictLww.CannotResolve;
+        }
+
+        var localPlain = await source.GetPlaintextAsync(change.EntityType, change.EntityId, ct);
+        if (localPlain is null)
+        {
+            return ConflictLww.CannotResolve; // 本地是待删除——不静默，交给用户。
+        }
+
+        var localAt = source.ReadContentModifiedAt(localPlain, source.SchemaVersion);
+        if (localAt is null)
+        {
+            return ConflictLww.CannotResolve;
+        }
+
+        if (localAt > remoteAt)
+        {
+            return ConflictLww.LocalWins;
+        }
+
+        // 云端较新 → 采纳远端、清掉本地待推（本地较早一笔被覆盖）。
+        try
+        {
+            await source.ApplyAsync(
+                change.EntityType, change.EntityId, remoteBytes, deleted: false, change.SchemaVersion, ct);
+        }
+        catch (SqliteException)
+        {
+            return ConflictLww.CannotResolve;
+        }
+
+        await store.DeleteEntityAsync(change.EntityType, change.EntityId, ct);
+        await store.SetServerVersionAsync(change.EntityType, change.EntityId, change.Version, ct);
+        await store.SetConflictStateAsync(change.EntityType, change.EntityId, false, ct);
+        var persisted = await source.GetPlaintextAsync(change.EntityType, change.EntityId, ct);
+        await store.SetContentHashAsync(change.EntityType, change.EntityId, ContentHash(persisted), ct);
+        logger.LogInformation("LWW：云端较新，本地较早改动已被覆盖（{Type}/{Id}）", change.EntityType, change.EntityId);
+        return ConflictLww.RemoteWins;
     }
 
     /// <summary>

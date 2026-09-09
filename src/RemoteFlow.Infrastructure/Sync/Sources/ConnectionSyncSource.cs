@@ -44,4 +44,11 @@ public sealed class ConnectionSyncSource(IConnectionRepository connections) : IS
             await connections.UpdateAsync(profile, ct);
         }
     }
+
+    /// <summary>连接冲突的 LWW 依据：内容更新时间的「最后一笔」为准。</summary>
+    public DateTimeOffset? ReadContentModifiedAt(byte[] plaintext, int schemaVersion)
+    {
+        var (_, profile) = SyncSerializer.Deserialize<ConnectionProfile>(plaintext);
+        return profile.UpdatedAt;
+    }
 }

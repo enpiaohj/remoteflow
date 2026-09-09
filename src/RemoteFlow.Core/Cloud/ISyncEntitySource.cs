@@ -33,4 +33,10 @@ public interface ISyncEntitySource
         bool deleted,
         int schemaVersion,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// 从 Payload 读出「内容最后修改时间」，供 Last-Writer-Wins 冲突自动解决用。
+    /// 不支持（返回 null）的实体在冲突时仍走用户选择对话框。
+    /// </summary>
+    DateTimeOffset? ReadContentModifiedAt(byte[] plaintext, int schemaVersion) => null;
 }

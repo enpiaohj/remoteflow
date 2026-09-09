@@ -52,6 +52,13 @@ public sealed class CredentialSyncSource(ICredentialRepository credentials) : IS
         }
     }
 
+    /// <summary>凭据元数据冲突的 LWW 依据：内容更新时间的「最后一笔」为准。</summary>
+    public DateTimeOffset? ReadContentModifiedAt(byte[] plaintext, int schemaVersion)
+    {
+        var (_, metadata) = SyncSerializer.Deserialize<CredentialMetadata>(plaintext);
+        return metadata.UpdatedAt;
+    }
+
     /// <summary>credential 同步 Payload：不含任何本机绑定的 Secret 引用。</summary>
     public sealed record CredentialMetadata(
         string Name,
