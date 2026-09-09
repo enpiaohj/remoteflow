@@ -48,26 +48,39 @@ public sealed class SyncCoordinator(
                 (pulled, pullConflicts, cursor, var pullStatus) = await PullAsync(context, cursor, ct);
                 status = Worse(status, pullStatus);
             }
+
+            if (pushConflicts + pullConflicts > 0 && status == SyncStatus.Synced)
+            {
+                status = SyncStatus.Conflicted;
+            }
         }
         catch (CloudAuthRequiredException)
         {
             status = SyncStatus.AuthRequired;
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             logger.LogWarning(ex, "同步网络失败，转入离线");
             status = SyncStatus.Offline;
         }
-
-        if (pushConflicts + pullConflicts > 0 && status == SyncStatus.Synced)
+        catch (OperationCanceledException)
         {
-            status = SyncStatus.Conflicted;
+            throw;
         }
-
-        var completedAt = _clock.GetUtcNow();
-        await store.SetStatusAsync(
-            context.AppId, status, attemptAt: null,
-            successAt: status is SyncStatus.Synced or SyncStatus.Conflicted ? completedAt : null, ct);
+        catch (Exception ex)
+        {
+            // 兜底：任何未预期异常都不能让状态永远停在 Syncing。
+            logger.LogError(ex, "同步循环异常，标记为出错，下个周期重试");
+            status = SyncStatus.Error;
+        }
+        finally
+        {
+            var completedAt = _clock.GetUtcNow();
+            await store.SetStatusAsync(
+                context.AppId, status, attemptAt: null,
+                successAt: status is SyncStatus.Synced or SyncStatus.Conflicted ? completedAt : null,
+                CancellationToken.None);
+        }
 
         return new SyncRunResult(pushed, pushConflicts, pulled, pullConflicts, cursor, status);
     }
