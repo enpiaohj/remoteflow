@@ -15,6 +15,7 @@ using RemoteFlow.Infrastructure;
 using RemoteFlow.Infrastructure.Data;
 using RemoteFlow.Infrastructure.Logging;
 using RemoteFlow.Infrastructure.Security;
+using RemoteFlow.Infrastructure.Sync;
 using RemoteFlow.Infrastructure.Settings;
 using RemoteFlow.Protocol.Rdp;
 using RemoteFlow.Protocol.Ssh;
@@ -244,6 +245,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<ConnectionsPageViewModel>();
         services.AddSingleton<CredentialsPageViewModel>();
         services.AddSingleton<SettingsPageViewModel>();
+        services.AddSingleton<CloudSyncViewModel>();
         services.AddSingleton<MainViewModel>();
 
         services.AddSingleton<MainWindow>();
@@ -357,6 +359,9 @@ public partial class App : System.Windows.Application
         _tray.Initialize();
 
         window.Show();
+
+        // 云同步：恢复会话并按周期后台同步（未启用云同步时内部直接空转）。
+        Services.GetRequiredService<CloudSyncAutoRunner>().Start(TimeSpan.FromMinutes(3));
     }
 
     /// <summary>
@@ -412,6 +417,7 @@ public partial class App : System.Windows.Application
             // 2) 释放共享资源：托盘 → 主视图模型 → 共享 WebView2 环境。
             //    WebView2：会话清理时各 SSH 终端视图已各自 Dispose 并 Release，
             //    这里禁止后续获取并丢弃环境引用；浏览器进程由 WebView2 运行时自行退出，不按进程名强杀。
+            _services?.GetService<CloudSyncAutoRunner>()?.Dispose();
             _tray?.Dispose();
             _services?.GetService<MainViewModel>()?.Dispose();
             SharedWebView2Environment.Instance.Shutdown();

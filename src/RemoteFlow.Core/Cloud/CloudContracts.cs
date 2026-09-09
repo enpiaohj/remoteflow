@@ -28,7 +28,8 @@ public sealed record CloudPendingDevice(
     string ClientDeviceId,
     string DisplayName,
     string Platform,
-    byte[] PublicKey);
+    byte[] PublicKey,
+    DateTimeOffset LastSeenAt);
 
 public enum SyncPushOperationType
 {

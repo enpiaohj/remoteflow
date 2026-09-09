@@ -23,6 +23,7 @@ public enum SettingsTab
     Ssh,
     Vnc,
     Security,
+    Cloud,
     Data
 }
 
@@ -124,8 +125,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         CredentialBackupService credentialBackup,
         LocalBackupService localBackup,
         GroupService groupService,
+        CloudSyncViewModel cloudSync,
         ILogger<SettingsPageViewModel> logger)
     {
+        Cloud = cloudSync;
         _settings = settings;
         _store = store;
         _themeService = theme;
@@ -154,6 +157,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
             }
         };
     }
+
+    /// <summary>「Cloud Sync」子面板。</summary>
+    public CloudSyncViewModel Cloud { get; }
 
     /// <summary>导入 / 导出 / 备份改动了本地数据，外部需要据此刷新连接与凭据列表。</summary>
     public event EventHandler? DataChanged;

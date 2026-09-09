@@ -11,6 +11,7 @@ using RemoteFlow.Infrastructure;
 using RemoteFlow.Infrastructure.Data;
 using RemoteFlow.Infrastructure.Logging;
 using RemoteFlow.Infrastructure.Security;
+using RemoteFlow.Infrastructure.Sync;
 using RemoteFlow.Infrastructure.Settings;
 using RemoteFlow.Presentation.Host;
 using RemoteFlow.Presentation.Services;
@@ -53,6 +54,7 @@ public sealed class AppDelegate : NSApplicationDelegate
             NSApplication.SharedApplication.ActivateIgnoringOtherApps(true);
 
             SeedTagsInBackground(_services);
+            _services.GetRequiredService<CloudSyncAutoRunner>().Start(TimeSpan.FromMinutes(3));
         }
         catch (Exception ex)
         {
@@ -78,6 +80,7 @@ public sealed class AppDelegate : NSApplicationDelegate
             // 退出清理尽力而为。
         }
 
+        _services?.GetService<CloudSyncAutoRunner>()?.Dispose();
         LoggingSetup.Shutdown();
     }
 
@@ -247,6 +250,7 @@ public sealed class AppDelegate : NSApplicationDelegate
         services.AddSingleton<ConnectionsPageViewModel>();
         services.AddSingleton<CredentialsPageViewModel>();
         services.AddSingleton<SettingsPageViewModel>();
+        services.AddSingleton<CloudSyncViewModel>();
         services.AddSingleton<MainViewModel>();
 
         return services.BuildServiceProvider();

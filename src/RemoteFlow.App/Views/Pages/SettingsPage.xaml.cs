@@ -1,4 +1,6 @@
+using System.Windows;
 using System.Windows.Controls;
+using RemoteFlow.Presentation.ViewModels;
 
 namespace RemoteFlow.App.Views.Pages;
 
@@ -8,4 +10,13 @@ namespace RemoteFlow.App.Views.Pages;
 public partial class SettingsPage : UserControl
 {
     public SettingsPage() => InitializeComponent();
+
+    // PasswordBox.Password 不支持绑定；登录框的密码在这里单向推给 ViewModel。
+    private void CloudPasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if ((DataContext as SettingsPageViewModel)?.Cloud is { } cloud && sender is PasswordBox box)
+        {
+            cloud.Password = box.Password;
+        }
+    }
 }

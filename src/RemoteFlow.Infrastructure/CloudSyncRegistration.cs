@@ -41,6 +41,7 @@ public static class CloudSyncRegistration
 
         services.AddSingleton<ISyncChangeTracker, OutboxSyncChangeTracker>();
         services.AddSingleton<ICloudSyncService, CloudSyncService>();
+        services.AddSingleton<CloudSyncAutoRunner>();
 
         return services;
     }

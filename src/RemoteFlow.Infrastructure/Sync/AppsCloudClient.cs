@@ -150,7 +150,7 @@ public sealed class AppsCloudClient(
         response.EnsureSuccessStatusCode();
         var dtos = await ReadAsync<List<PendingDeviceDto>>(response, ct);
         return dtos.ConvertAll(x => new CloudPendingDevice(
-            x.DeviceId, x.ClientDeviceId, x.DisplayName, x.Platform, B64(x.PublicKey)));
+            x.DeviceId, x.ClientDeviceId, x.DisplayName, x.Platform, B64(x.PublicKey), x.LastSeenAt));
     }
 
     public async Task AddDeviceEnvelopeAsync(
@@ -383,7 +383,8 @@ public sealed class AppsCloudClient(
     private sealed record RecoveryEnvelopeDto(
         int KeyVersion, string Algorithm, string WrappedKey, string Nonce, string Salt);
     private sealed record PendingDeviceDto(
-        Guid DeviceId, string ClientDeviceId, string DisplayName, string Platform, string PublicKey);
+        Guid DeviceId, string ClientDeviceId, string DisplayName, string Platform, string PublicKey,
+        DateTimeOffset LastSeenAt);
     private sealed record PushResponseDto(long StreamRevision, List<PushResultDto> Results);
     private sealed record PushResultDto(
         string OperationId, string Status, string EntityType, string EntityId,

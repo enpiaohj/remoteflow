@@ -15,6 +15,7 @@
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
         <conv:EnumToVisibilityConverter x:Key="EnumToVisibility" />
+        <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
         <conv:InverseBoolConverter x:Key="InverseBool" />
 
         <!-- 设置项：左侧标题与说明，右侧控件 -->
@@ -124,6 +125,8 @@
                              IsChecked="{Binding ActiveTab, Converter={StaticResource EnumToBool}, ConverterParameter=Vnc, Mode=TwoWay}" />
                 <RadioButton Style="{StaticResource Settings.Tab}" Content="安全"
                              IsChecked="{Binding ActiveTab, Converter={StaticResource EnumToBool}, ConverterParameter=Security, Mode=TwoWay}" />
+                <RadioButton Style="{StaticResource Settings.Tab}" Content="云同步"
+                             IsChecked="{Binding ActiveTab, Converter={StaticResource EnumToBool}, ConverterParameter=Cloud, Mode=TwoWay}" />
                 <RadioButton Style="{StaticResource Settings.Tab}" Content="数据与备份"
                              IsChecked="{Binding ActiveTab, Converter={StaticResource EnumToBool}, ConverterParameter=Data, Mode=TwoWay}" />
             </StackPanel>
@@ -695,6 +698,180 @@
                             </ItemsControl>
                         </StackPanel>
                     </Border>
+                </StackPanel>
+
+                <!-- ── 云同步 ── -->
+                <StackPanel DataContext="{Binding Cloud}"
+                            Visibility="{Binding DataContext.ActiveTab, RelativeSource={RelativeSource AncestorType=UserControl},
+                                         Converter={StaticResource EnumToVisibility}, ConverterParameter=Cloud}">
+
+                    <!-- Recovery Key 一次性展示 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,12"
+                            Visibility="{Binding NewRecoveryKey, Converter={StaticResource NullToVisibility}}">
+                        <StackPanel>
+                            <TextBlock Text="请立即保存 Recovery Key" Style="{StaticResource Text.SectionTitle}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,10"
+                                       Text="它只显示这一次。丢失所有已授权设备且没有它，将无法恢复云端数据。" />
+                            <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="{StaticResource Radius.Medium}" Padding="14,12">
+                                <TextBlock Text="{Binding NewRecoveryKey}" FontFamily="{StaticResource MonoFont}"
+                                           FontSize="14" TextWrapping="Wrap" />
+                            </Border>
+                            <Button Content="我已妥善保存" Style="{StaticResource Button.Primary}" HorizontalAlignment="Left"
+                                    Margin="0,12,0,0" Command="{Binding AcknowledgeRecoveryKeyCommand}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 未登录 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20"
+                            Visibility="{Binding State, Converter={StaticResource EnumToVisibility}, ConverterParameter=SignedOut}">
+                        <StackPanel>
+                            <TextBlock Text="登录 AppsCloud" Style="{StaticResource Text.SectionTitle}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,14"
+                                       Text="登录后，连接、分组、标签、凭据与密码将端到端加密同步；服务端看不到明文。本地优先不变——未登录也能完整使用。" />
+
+                            <TextBlock Text="服务地址" Style="{StaticResource Text.FieldLabel}" />
+                            <TextBox Style="{StaticResource Input.TextBox}" Margin="0,4,0,10"
+                                     Text="{Binding ServerUrl, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Text="邮箱" Style="{StaticResource Text.FieldLabel}" />
+                            <TextBox Style="{StaticResource Input.TextBox}" Margin="0,4,0,10"
+                                     Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Text="密码" Style="{StaticResource Text.FieldLabel}" />
+                            <PasswordBox x:Name="CloudPasswordBox" Style="{StaticResource Input.PasswordBox}" Margin="0,4,0,4"
+                                         PasswordChanged="CloudPasswordBox_PasswordChanged" />
+
+                            <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource Status.Danger}"
+                                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                       Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibility}}" />
+
+                            <Button Content="登录并启用同步" Style="{StaticResource Button.Primary}" HorizontalAlignment="Left"
+                                    Margin="0,14,0,0" Command="{Binding ConnectCommand}"
+                                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 需要初始化 Vault -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20"
+                            Visibility="{Binding State, Converter={StaticResource EnumToVisibility}, ConverterParameter=NeedsVaultSetup}">
+                        <StackPanel>
+                            <TextBlock Text="初始化加密 Vault" Style="{StaticResource Text.SectionTitle}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,14"
+                                       Text="本设备是这个账号的第一台设备。将在本机生成加密主密钥与 Recovery Key（只显示一次）。" />
+                            <Button Content="生成 Vault" Style="{StaticResource Button.Primary}" HorizontalAlignment="Left"
+                                    Command="{Binding CreateVaultCommand}"
+                                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 等待批准 / Recovery -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20"
+                            Visibility="{Binding State, Converter={StaticResource EnumToVisibility}, ConverterParameter=NeedsApproval}">
+                        <StackPanel>
+                            <TextBlock Text="这台设备还需要获得 Vault 访问权" Style="{StaticResource Text.SectionTitle}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,14"
+                                       Text="在另一台已登录的设备上「设置 → 云同步」里批准本机，或在下方输入 Recovery Key 恢复。" />
+                            <TextBlock Text="Recovery Key" Style="{StaticResource Text.FieldLabel}" />
+                            <TextBox Style="{StaticResource Input.TextBox}" Margin="0,4,0,4"
+                                     Text="{Binding RecoveryKeyInput, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource Status.Danger}"
+                                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                       Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibility}}" />
+                            <Button Content="用 Recovery Key 恢复" Style="{StaticResource Button.Primary}" HorizontalAlignment="Left"
+                                    Margin="0,12,0,0" Command="{Binding RestoreWithRecoveryKeyCommand}"
+                                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 已就绪 -->
+                    <StackPanel Visibility="{Binding State, Converter={StaticResource EnumToVisibility}, ConverterParameter=Ready}">
+                        <Border Style="{StaticResource Surface.Card}" Padding="24,20">
+                            <StackPanel>
+                                <TextBlock Text="同步状态" Style="{StaticResource Text.SectionTitle}" />
+                                <TextBlock Text="{Binding StatusLine}" Style="{StaticResource Text.Body}" Margin="0,6,0,2" />
+                                <TextBlock Style="{StaticResource Text.Caption}"
+                                           Text="{Binding PendingChangeCount, StringFormat='{}{0} 项本地改动待上传'}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                    <Button Content="立即同步" Style="{StaticResource Button.Primary}"
+                                            Command="{Binding SyncNowCommand}" />
+                                    <Button Content="刷新" Style="{StaticResource Button.Secondary}" Margin="8,0,0,0"
+                                            Command="{Binding RefreshCommand}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 待批准设备 -->
+                        <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,12,0,0"
+                                Visibility="{Binding PendingDevices.Count, Converter={StaticResource CountToVisibility}}">
+                            <StackPanel>
+                                <TextBlock Text="待批准的设备" Style="{StaticResource Text.SectionTitle}" />
+                                <ItemsControl ItemsSource="{Binding PendingDevices}" Margin="0,8,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:CloudDeviceRow}">
+                                            <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="{StaticResource Radius.Medium}"
+                                                    Padding="12,10" Margin="0,0,0,6">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" />
+                                                        <TextBlock Text="{Binding Platform}" Style="{StaticResource Text.Caption}" />
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1" Content="批准" Style="{StaticResource Button.Primary}"
+                                                            Command="{Binding DataContext.ApproveDeviceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 冲突 -->
+                        <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,12,0,0"
+                                Visibility="{Binding Conflicts.Count, Converter={StaticResource CountToVisibility}}">
+                            <StackPanel>
+                                <TextBlock Text="需要处理的同步冲突" Style="{StaticResource Text.SectionTitle}" />
+                                <ItemsControl ItemsSource="{Binding Conflicts}" Margin="0,8,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:CloudConflictRow}">
+                                            <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="{StaticResource Radius.Medium}"
+                                                    Padding="12,10" Margin="0,0,0,6">
+                                                <StackPanel>
+                                                    <TextBlock Style="{StaticResource Text.Body}">
+                                                        <Run Text="{Binding EntityType, Mode=OneWay}" />
+                                                        <Run Text="{Binding EntityId, Mode=OneWay}" FontFamily="{StaticResource MonoFont}" FontSize="12" />
+                                                    </TextBlock>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                        <Button Content="保留本机" Style="{StaticResource Button.Secondary}"
+                                                                Command="{Binding DataContext.KeepLocalCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}" />
+                                                        <Button Content="使用云端" Style="{StaticResource Button.Secondary}" Margin="8,0,0,0"
+                                                                Command="{Binding DataContext.UseRemoteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 账号 -->
+                        <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,12,0,0">
+                            <StackPanel>
+                                <TextBlock Text="账号" Style="{StaticResource Text.SectionTitle}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                    <Button Content="退出云账号" Style="{StaticResource Button.Secondary}"
+                                            Command="{Binding DisconnectCommand}" />
+                                    <Button Content="清除此设备云数据" Style="{StaticResource Button.Danger}" Margin="8,0,0,0"
+                                            Command="{Binding DisconnectAndWipeCommand}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- ── 数据与备份 ── -->

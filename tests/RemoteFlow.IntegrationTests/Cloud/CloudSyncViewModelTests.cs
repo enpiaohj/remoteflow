@@ -1,0 +1,175 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using RemoteFlow.Core.Cloud;
+using RemoteFlow.Core.Models;
+using RemoteFlow.Core.Sessions;
+using RemoteFlow.Presentation.Services;
+using RemoteFlow.Presentation.ViewModels;
+using Xunit;
+
+namespace RemoteFlow.IntegrationTests.Cloud;
+
+public sealed class CloudSyncViewModelTests
+{
+    private readonly FakeCloudSyncService _sync = new();
+    private readonly StubDialogService _dialogs = new();
+    private readonly AppSettings _settings = new() { CloudBaseUrl = "https://host/appscloud/" };
+
+    private CloudSyncViewModel NewViewModel() =>
+        new(_sync, _dialogs, _settings, NullLogger<CloudSyncViewModel>.Instance);
+
+    [Fact]
+    public void Server_url_prefills_from_settings()
+    {
+        Assert.Equal("https://host/appscloud/", NewViewModel().ServerUrl);
+    }
+
+    [Fact]
+    public async Task Initialize_resuming_a_ready_session_lands_in_ready_and_refreshes()
+    {
+        _sync.ResumeResult = CloudUnlockState.Ready;
+        _sync.PendingOutbox = 4;
+        var vm = NewViewModel();
+
+        await vm.InitializeAsync();
+
+        Assert.Equal(CloudSyncUiState.Ready, vm.State);
+        Assert.Equal(4, vm.PendingChangeCount);
+        Assert.False(vm.CanEditConnectionFields);
+    }
+
+    [Fact]
+    public async Task Connect_that_needs_bootstrap_moves_to_vault_setup_and_clears_password()
+    {
+        _sync.SignInResult = CloudUnlockState.NeedsBootstrap;
+        var vm = NewViewModel();
+        vm.Email = "me@example.com";
+        vm.Password = "secret";
+
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        Assert.Equal(CloudSyncUiState.NeedsVaultSetup, vm.State);
+        Assert.Equal(string.Empty, vm.Password);
+    }
+
+    [Fact]
+    public async Task Create_vault_surfaces_the_recovery_key_until_acknowledged()
+    {
+        _sync.RecoveryKeyToReturn = "WORD WORD WORD";
+        var vm = NewViewModel();
+        vm.Email = "me@example.com";
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        await vm.CreateVaultCommand.ExecuteAsync(null);
+        Assert.Equal("WORD WORD WORD", vm.NewRecoveryKey);
+        Assert.Equal(CloudSyncUiState.Ready, vm.State);
+
+        vm.AcknowledgeRecoveryKeyCommand.Execute(null);
+        Assert.Null(vm.NewRecoveryKey);
+    }
+
+    [Fact]
+    public async Task Sync_now_is_only_available_when_ready()
+    {
+        var vm = NewViewModel();
+        Assert.False(vm.SyncNowCommand.CanExecute(null));
+
+        _sync.SignInResult = CloudUnlockState.Ready;
+        vm.Email = "me@example.com";
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        Assert.True(vm.SyncNowCommand.CanExecute(null));
+        await vm.SyncNowCommand.ExecuteAsync(null);
+        Assert.Equal(1, _sync.SyncNowCalls);
+    }
+
+    [Fact]
+    public async Task Approving_a_pending_device_calls_through_and_refreshes_the_list()
+    {
+        _sync.SignInResult = CloudUnlockState.Ready;
+        var deviceId = Guid.NewGuid();
+        _sync.Pending.Add(new CloudPendingDevice(deviceId, "pc-b", "Bob PC", "windows", [1], DateTimeOffset.UtcNow));
+        var vm = NewViewModel();
+        vm.Email = "me@example.com";
+        await vm.ConnectCommand.ExecuteAsync(null);
+        Assert.Single(vm.PendingDevices);
+
+        await vm.ApproveDeviceCommand.ExecuteAsync(vm.PendingDevices[0]);
+
+        Assert.Equal(deviceId, _sync.ApprovedDeviceId);
+        Assert.Empty(vm.PendingDevices);
+    }
+
+    [Fact]
+    public async Task Resolving_a_conflict_keep_local_calls_through()
+    {
+        _sync.SignInResult = CloudUnlockState.Ready;
+        var id = Guid.NewGuid();
+        _sync.ConflictList.Add(new SyncConflictRecord(
+            id, "connection", "c-1", null,
+            new SyncServerEntity("connection", "c-1", 2, 0, 1, 1, false, null, null),
+            DateTimeOffset.UtcNow, ConflictResolution.Unresolved));
+        var vm = NewViewModel();
+        vm.Email = "me@example.com";
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        await vm.KeepLocalCommand.ExecuteAsync(vm.Conflicts[0]);
+
+        Assert.Equal((id, ConflictResolution.KeepLocal), _sync.ResolvedConflict);
+    }
+
+    [Fact]
+    public async Task Disconnect_and_wipe_needs_a_danger_confirmation()
+    {
+        _sync.SignInResult = CloudUnlockState.Ready;
+        var vm = NewViewModel();
+        vm.Email = "me@example.com";
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        _dialogs.ConfirmResult = false;
+        await vm.DisconnectAndWipeCommand.ExecuteAsync(null);
+        Assert.Null(_sync.SignedOutWipe);
+
+        _dialogs.ConfirmResult = true;
+        await vm.DisconnectAndWipeCommand.ExecuteAsync(null);
+        Assert.True(_sync.SignedOutWipe);
+        Assert.Equal(CloudSyncUiState.SignedOut, vm.State);
+    }
+
+    [Fact]
+    public async Task A_failed_connect_surfaces_the_error_message()
+    {
+        _sync.ThrowOnSignIn = new InvalidOperationException("邮箱或密码错误");
+        var vm = NewViewModel();
+        vm.Email = "me@example.com";
+
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        Assert.Equal("邮箱或密码错误", vm.ErrorMessage);
+        Assert.Equal(CloudSyncUiState.SignedOut, vm.State);
+    }
+
+    private sealed class StubDialogService : IDialogService
+    {
+        public bool ConfirmResult { get; set; } = true;
+
+        public Task<bool> ConfirmAsync(string title, string message, string confirmText = "确定", bool isDanger = false) =>
+            Task.FromResult(ConfirmResult);
+
+        public Task ShowMessageAsync(string title, string message, DialogKind kind = DialogKind.Info) =>
+            Task.CompletedTask;
+
+        public Task<ConnectionEditorResult?> EditConnectionAsync(ConnectionProfile? e, ProtocolType? p = null) => Task.FromResult<ConnectionEditorResult?>(null);
+        public Task<CredentialEditorResult?> EditCredentialAsync(Credential? e) => Task.FromResult<CredentialEditorResult?>(null);
+        public Task<string?> EditGroupNameAsync(GroupNamePrompt prompt) => Task.FromResult<string?>(null);
+        public Task<DefaultGroupOption?> PickDefaultGroupAsync(string n, IReadOnlyList<DefaultGroupOption> o) => Task.FromResult<DefaultGroupOption?>(null);
+        public Task<TagEditorResult?> EditTagAsync(TagEditorPrompt prompt) => Task.FromResult<TagEditorResult?>(null);
+        public Task<IReadOnlyList<Tag>> ManageTagsAsync() => Task.FromResult<IReadOnlyList<Tag>>([]);
+        public Task<bool> ConfirmHostKeyAsync(SshHostKeyVerificationContext context) => Task.FromResult(false);
+        public Task<string?> PromptPasswordAsync(string title, string message, bool confirm) => Task.FromResult<string?>(null);
+        public string? PickFileToOpen(string title, string filter) => null;
+        public string? PickFileToSave(string title, string filter, string defaultFileName) => null;
+        public string? PickFolder(string title) => null;
+        public Task ShowAboutAsync() => Task.CompletedTask;
+        public Task ShowConnectionTestAsync(ConnectionProfile profile) => Task.CompletedTask;
+    }
+}
