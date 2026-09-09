@@ -7,6 +7,42 @@
 
 ---
 
+## [0.12.0] — 2026-09-10
+
+多设备一致性的两个结构改进。Windows 与 macOS 同步发布，macOS 侧见
+[`releases/macos-v0.6.0/CHANGELOG.md`](releases/macos-v0.6.0/CHANGELOG.md)。
+
+### 新增
+- **「清除本地数据并从云端恢复」**（云同步 → 账号卡片，双端）：以云端为权威的兜底。
+  清空本机全部连接 / 凭据及密码 / 分组 / 标签 / 连接历史与同步状态（保留云会话与设备身份），
+  然后从云端完整拉回。与「清除此设备云数据」（保留本地、清同步状态）语义相反。
+  - `LocalDataWiper` 事务执行；凭据 Secret 先经平台密钥库（DPAPI / Keychain）删除；
+    系统「未分组」保留、SSH 主机密钥不受影响。
+  - 用途：本机数据混乱 / 与另一台重复 / 想以另一台的云端数据为准时一键对齐。
+
+### 变更（冲突处理）
+- **元数据冲突 Last-Writer-Wins 自动解决**：同一条 connection / credential 在两台设备都被改过时，
+  按内容更新时间（`UpdatedAt`）的**最后一笔**自动收敛，不再每次弹「保留本机 / 使用云端」：
+  - 本地较新 → 以服务端当前版本为基线重推覆盖；重推竞态再失败则采纳最新快照。
+  - 云端较新 → 采纳云端、丢弃本地较早一笔，清掉待推。
+  - 密码 / 私钥（credential-secret）**仍弹窗**，绝不静默覆盖；组 / 标签（尚无内容时间戳）、
+    删除冲突、无法解密的也仍走对话框（保守回退）。
+
+### 说明
+- 两台机器在启用云同步前各自手工建过同名服务器，会产生**不同 ID 的重复条目**——这类
+  「一条服务器两套 ID」的合并（首次加入按 host+port+protocol+name 认领云端 ID）尚未实现，
+  是下一步。当前可用「清除本地数据并从云端恢复」以某一台为准收敛，或用 LWW 让同 ID 的
+  并发修改自动取最新。
+
+### 验证
+- `dotnet build RemoteFlow.slnx -c Release` 0 错误；`dotnet test -c Release` —— Core.Tests 42、
+  IntegrationTests 164（新增 `SyncLwwTests` 3 项 + `SyncRestoreFromCloudTests` + VM restore 测试）、
+  IntegrationTests.Windows 9 全绿；IntegrationTests.Mac 在 Windows 上 skip。
+- 端到端 `CloudRoundTripTests` / `CloudSyncFacadeTests` 对 `https://sync.appscloud.cn/` 3/3 通过。
+- 未执行：完整 UI 手动走查、两台物理机的同步演练。
+
+详见 [`releases/v0.12.0/CHANGELOG.md`](releases/v0.12.0/CHANGELOG.md)。
+
 ## [0.11.3] — 2026-09-10
 
 修复「两台设备都显示已同步、连接数却不一致」。Windows 与 macOS 同步发布，macOS 侧见
@@ -342,6 +378,7 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
+[0.12.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.12.0
 [0.11.3]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.3
 [0.11.2]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.2
 [0.11.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.1
