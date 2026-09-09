@@ -646,16 +646,9 @@
                             Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Security}">
                     <Border Style="{StaticResource Surface.Card}" Padding="24,20">
                         <StackPanel>
-                            <Grid>
-                                <TextBlock Text="已信任的 SSH 主机密钥" Style="{StaticResource Text.Body}" VerticalAlignment="Center" />
-                                <Button HorizontalAlignment="Right" Style="{StaticResource Button.Secondary}"
-                                        Content="全部删除…"
-                                        Foreground="{DynamicResource Status.Danger}"
-                                        Command="{Binding ClearHostKeysCommand}"
-                                        Visibility="{Binding TrustedHostKeys.Count, Converter={StaticResource CountToVisibility}}" />
-                            </Grid>
+                            <TextBlock Text="已信任的 SSH 主机密钥" Style="{StaticResource Text.Body}" />
                             <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,10"
-                                       Text="首次连接时记录指纹；若某台主机的指纹发生变化，连接会被中止并明确警告。删除记录后下次连接将重新确认。" />
+                                       Text="首次连接时记录指纹；若某台主机的指纹发生变化，连接会被中止并明确警告。移除记录后下次连接将重新确认。" />
 
                             <TextBlock Margin="0,4,0,0" Text="暂无已信任的主机密钥。">
                                 <TextBlock.Style>
@@ -691,7 +684,7 @@
                                                 <Button Grid.Column="1" Style="{StaticResource Button.Icon}"
                                                         Width="30" Height="30" FontSize="13"
                                                         Content="{StaticResource Icon.Delete}"
-                                                        ToolTip="删除该主机密钥"
+                                                        ToolTip="移除该主机密钥"
                                                         Foreground="{DynamicResource Status.Danger}"
                                                         Command="{Binding DataContext.RemoveHostKeyCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />

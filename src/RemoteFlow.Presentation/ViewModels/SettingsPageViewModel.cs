@@ -704,6 +704,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         DataChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>主机密钥的动作动词：macOS 用「删除」，Windows 沿用既有的「移除」，两端文案各自稳定。</summary>
+    private static string HostKeyVerb => OperatingSystem.IsMacOS() ? "删除" : "移除";
+
     [RelayCommand]
     private async Task RemoveHostKeyAsync(HostKeyItemViewModel? item)
     {
@@ -713,9 +716,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         }
 
         var confirmed = await _dialogs.ConfirmAsync(
-            "删除主机密钥",
-            $"确定要删除 {item.Host} 的已信任密钥吗？\n\n下次连接该主机时会重新提示确认指纹。",
-            "删除",
+            $"{HostKeyVerb}主机密钥",
+            $"确定要{HostKeyVerb} {item.Host} 的已信任密钥吗？\n\n下次连接该主机时会重新提示确认指纹。",
+            HostKeyVerb,
             isDanger: true);
 
         if (!confirmed)
@@ -725,9 +728,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
         await _hostKeys.DeleteAsync(item.HostName, item.Port);
         await LoadHostKeysAsync();
-        StatusMessage = $"已删除 {item.Host} 的主机密钥。";
+        StatusMessage = $"已{HostKeyVerb} {item.Host} 的主机密钥。";
     }
 
+    /// <summary>清空全部已信任主机。目前仅 macOS 设置页有入口。</summary>
     [RelayCommand]
     private async Task ClearHostKeysAsync()
     {
@@ -739,9 +743,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
         var confirmed = await _dialogs.ConfirmAsync(
             "清空已信任的主机",
-            $"确定要删除全部 {count} 条已信任的主机密钥吗？\n\n"
+            $"确定要{HostKeyVerb}全部 {count} 条已信任的主机密钥吗？\n\n"
             + "此操作不可撤销。之后再连接这些主机时，都会重新提示确认指纹。",
-            "全部删除",
+            $"全部{HostKeyVerb}",
             isDanger: true);
 
         if (!confirmed)
@@ -993,7 +997,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
             await _dialogs.ShowMessageAsync(
                 "备份完成",
                 $"已把连接数据库、凭据保险库与设置复制到：\n{result.BackupDirectory}\n\n" +
-                "凭据密文按本机加密保存，换电脑或换系统账户后通常无法直接解密；跨设备迁移凭据请用「导出 .rfbackup」。",
+                (OperatingSystem.IsMacOS()
+                    ? "凭据密文按本机加密保存，换电脑或换系统账户后通常无法直接解密；跨设备迁移凭据请用「导出 .rfbackup」。"
+                    : "vault.dat（凭据密文）只能在当前 Windows 账户下解密，换账户或换机器需要用「导出 .rfbackup」迁移凭据。"),
                 DialogKind.Success);
         }
         catch (Exception ex)
