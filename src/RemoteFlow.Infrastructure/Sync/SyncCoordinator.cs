@@ -1,0 +1,258 @@
+using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
+using RemoteFlow.Core.Cloud;
+
+namespace RemoteFlow.Infrastructure.Sync;
+
+/// <summary>调用一次同步循环需要的、随解锁状态变化的上下文。</summary>
+public sealed record SyncContext(Guid UserId, string AppId, int KeyVersion, IVaultSession Session);
+
+/// <summary>
+/// Push / Pull 状态机。一次 <see cref="RunOnceAsync"/>：先推完到期 Outbox，再从游标拉取并落地。
+/// Push 409 与「本地有未推变更时拉到远端改动」都记为冲突（<see cref="ConflictService"/> 处理），
+/// 不做无限自动覆盖。解密失败即停止且不推进游标（协议设计 §17）。
+/// </summary>
+public sealed class SyncCoordinator(
+    ICloudClient client,
+    SqliteSyncStore store,
+    IEnumerable<ISyncEntitySource> sources,
+    ConflictService conflictService,
+    ILogger<SyncCoordinator> logger,
+    SyncOptions? options = null,
+    TimeProvider? timeProvider = null)
+{
+    private readonly SyncOptions _options = options ?? new SyncOptions();
+    private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
+    private readonly IReadOnlyList<ISyncEntitySource> _sources = [.. sources];
+
+    public async Task<SyncRunResult> RunOnceAsync(SyncContext context, CancellationToken ct = default)
+    {
+        var now = _clock.GetUtcNow();
+        await store.SetStatusAsync(context.AppId, SyncStatus.Syncing, attemptAt: now, successAt: null, ct);
+
+        int pushed = 0, pushConflicts = 0, pulled = 0, pullConflicts = 0;
+        var status = SyncStatus.Synced;
+        long cursor = (await store.GetStateAsync(context.AppId, ct)).Cursor;
+
+        try
+        {
+            (pushed, pushConflicts, status) = await PushAsync(context, now, ct);
+
+            if (status is SyncStatus.Synced or SyncStatus.Conflicted)
+            {
+                (pulled, pullConflicts, cursor, var pullStatus) = await PullAsync(context, cursor, ct);
+                status = Worse(status, pullStatus);
+            }
+        }
+        catch (CloudAuthRequiredException)
+        {
+            status = SyncStatus.AuthRequired;
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "同步网络失败，转入离线");
+            status = SyncStatus.Offline;
+        }
+
+        if (pushConflicts + pullConflicts > 0 && status == SyncStatus.Synced)
+        {
+            status = SyncStatus.Conflicted;
+        }
+
+        var completedAt = _clock.GetUtcNow();
+        await store.SetStatusAsync(
+            context.AppId, status, attemptAt: null,
+            successAt: status is SyncStatus.Synced or SyncStatus.Conflicted ? completedAt : null, ct);
+
+        return new SyncRunResult(pushed, pushConflicts, pulled, pullConflicts, cursor, status);
+    }
+
+    // ── Push ────────────────────────────────────────────────────
+
+    private async Task<(int Pushed, int Conflicts, SyncStatus Status)> PushAsync(
+        SyncContext context, DateTimeOffset now, CancellationToken ct)
+    {
+        var due = await store.GetDueEntriesAsync(now, _options.PushBatchSize, ct);
+        int pushed = 0, conflicts = 0;
+
+        foreach (var entry in due)
+        {
+            ct.ThrowIfCancellationRequested();
+            var source = FindSource(entry.EntityType);
+            if (source is null)
+            {
+                logger.LogWarning("跳过未知实体类型的 Outbox 条目：{Type}", entry.EntityType);
+                await store.DeleteIfUnchangedAsync(entry.Id, entry.Sequence, ct);
+                continue;
+            }
+
+            var baseVersion = await store.GetServerVersionAsync(entry.EntityType, entry.EntityId, ct);
+            var plaintext = entry.OperationType == OutboxOperationType.Delete
+                ? null
+                : await source.GetPlaintextAsync(entry.EntityType, entry.EntityId, ct);
+            var isDelete = entry.OperationType == OutboxOperationType.Delete || plaintext is null;
+
+            EncryptedPayload? localPayload = null;
+            SyncPushOperation operation;
+            if (isDelete)
+            {
+                operation = SyncPushOperation.Delete(
+                    entry.OperationId, entry.EntityType, entry.EntityId, baseVersion,
+                    context.KeyVersion, source.SchemaVersion);
+            }
+            else
+            {
+                localPayload = context.Session.Encrypt(
+                    Context(context, entry.EntityType, entry.EntityId, source.SchemaVersion), plaintext!);
+                operation = SyncPushOperation.Upsert(
+                    entry.OperationId, entry.EntityType, entry.EntityId, baseVersion, localPayload);
+            }
+
+            SyncPushOperationResult result;
+            try
+            {
+                result = (await client.PushAsync([operation], ct)).Results[0];
+            }
+            catch (CloudApiException ex) when (ex.StatusCode == 409)
+            {
+                logger.LogError("Push 被拒（{Detail}）——Vault 可能未初始化，停止本轮 Push", ex.Message);
+                return (pushed, conflicts, SyncStatus.Error);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                await ScheduleRetryAsync(entry, ex.Message, ct);
+                return (pushed, conflicts, SyncStatus.Offline);
+            }
+
+            switch (result.Status)
+            {
+                case SyncPushStatus.Applied or SyncPushStatus.Duplicate:
+                    await store.SetServerVersionAsync(entry.EntityType, entry.EntityId, result.Version ?? baseVersion, ct);
+                    await store.DeleteIfUnchangedAsync(entry.Id, entry.Sequence, ct);
+                    pushed++;
+                    break;
+
+                case SyncPushStatus.Conflict:
+                    await conflictService.RecordAsync(entry.EntityType, entry.EntityId, localPayload, result.Server, ct);
+                    await store.DeleteIfUnchangedAsync(entry.Id, entry.Sequence, ct);
+                    conflicts++;
+                    break;
+            }
+        }
+
+        return (pushed, conflicts, conflicts > 0 ? SyncStatus.Conflicted : SyncStatus.Synced);
+    }
+
+    private async Task ScheduleRetryAsync(OutboxEntry entry, string error, CancellationToken ct)
+    {
+        var index = Math.Min(entry.RetryCount, _options.RetryBackoff.Count - 1);
+        var next = _clock.GetUtcNow() + _options.RetryBackoff[index];
+        await store.MarkRetryAsync(entry.Id, entry.RetryCount + 1, next, error, ct);
+    }
+
+    // ── Pull ────────────────────────────────────────────────────
+
+    private async Task<(int Pulled, int Conflicts, long Cursor, SyncStatus Status)> PullAsync(
+        SyncContext context, long cursor, CancellationToken ct)
+    {
+        int pulled = 0, conflicts = 0;
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            var page = await client.PullAsync(cursor, _options.PullBatchSize, ct);
+
+            foreach (var change in page.Changes)
+            {
+                var source = FindSource(change.EntityType);
+                if (source is null)
+                {
+                    continue;
+                }
+
+                if (await store.IsConflictedAsync(change.EntityType, change.EntityId, ct))
+                {
+                    // 该实体已处于冲突态（多为本轮 Push 刚记的），不落地远端改动，等用户解决。
+                    continue;
+                }
+
+                if (await store.HasPendingAsync(change.EntityType, change.EntityId, ct))
+                {
+                    await RecordPullConflictAsync(context, source, change, ct);
+                    conflicts++;
+                    continue;
+                }
+
+                try
+                {
+                    await ApplyChangeAsync(context, source, change, ct);
+                }
+                catch (CryptographicException ex)
+                {
+                    logger.LogError(ex, "拉取的实体解密失败：{Type}/{Id}——停止，不推进游标", change.EntityType, change.EntityId);
+                    return (pulled, conflicts, cursor, SyncStatus.Error);
+                }
+
+                await store.SetServerVersionAsync(change.EntityType, change.EntityId, change.Version, ct);
+                pulled++;
+            }
+
+            cursor = page.NextCursor;
+            await store.SetCursorAsync(context.AppId, cursor, ct);
+            if (!page.HasMore)
+            {
+                break;
+            }
+        }
+
+        return (pulled, conflicts, cursor, conflicts > 0 ? SyncStatus.Conflicted : SyncStatus.Synced);
+    }
+
+    private async Task ApplyChangeAsync(
+        SyncContext context, ISyncEntitySource source, SyncPulledChange change, CancellationToken ct)
+    {
+        if (change.Deleted)
+        {
+            await source.ApplyAsync(change.EntityType, change.EntityId, plaintext: null, deleted: true, ct);
+            return;
+        }
+
+        var plaintext = context.Session.Decrypt(
+            Context(context, change.EntityType, change.EntityId, change.SchemaVersion, change.KeyVersion),
+            new EncryptedPayload(change.Ciphertext!, change.Nonce!, change.KeyVersion, change.SchemaVersion));
+        await source.ApplyAsync(change.EntityType, change.EntityId, plaintext, deleted: false, ct);
+    }
+
+    private async Task RecordPullConflictAsync(
+        SyncContext context, ISyncEntitySource source, SyncPulledChange change, CancellationToken ct)
+    {
+        var localPlain = await source.GetPlaintextAsync(change.EntityType, change.EntityId, ct);
+        EncryptedPayload? local = localPlain is null
+            ? null
+            : context.Session.Encrypt(
+                Context(context, change.EntityType, change.EntityId, source.SchemaVersion), localPlain);
+
+        var remote = new SyncServerEntity(
+            change.EntityType, change.EntityId, change.Version, change.Revision,
+            change.KeyVersion, change.SchemaVersion, change.Deleted, change.Ciphertext, change.Nonce);
+
+        await conflictService.RecordAsync(change.EntityType, change.EntityId, local, remote, ct);
+        await store.DeleteEntityAsync(change.EntityType, change.EntityId, ct);
+        await store.SetServerVersionAsync(change.EntityType, change.EntityId, change.Version, ct);
+    }
+
+    // ── 辅助 ────────────────────────────────────────────────────
+
+    private ISyncEntitySource? FindSource(string entityType) =>
+        _sources.FirstOrDefault(s => s.Handles(entityType));
+
+    private static PayloadContext Context(
+        SyncContext context, string entityType, string entityId, int schemaVersion, int? keyVersion = null) =>
+        new(context.UserId, context.AppId, entityType, entityId, schemaVersion, keyVersion ?? context.KeyVersion);
+
+    private static SyncStatus Worse(SyncStatus a, SyncStatus b)
+    {
+        SyncStatus[] order = [SyncStatus.Synced, SyncStatus.Conflicted, SyncStatus.Offline, SyncStatus.Error, SyncStatus.AuthRequired];
+        return Array.IndexOf(order, b) > Array.IndexOf(order, a) ? b : a;
+    }
+}

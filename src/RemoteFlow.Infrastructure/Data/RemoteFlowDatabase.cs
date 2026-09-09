@@ -17,7 +17,7 @@ namespace RemoteFlow.Infrastructure.Data;
 public sealed class RemoteFlowDatabase
 {
     /// <summary>当前 Schema 版本。新增迁移时递增，并在 <see cref="Migrations"/> 中追加脚本。</summary>
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     private readonly string _connectionString;
     private readonly ILogger<RemoteFlowDatabase> _logger;
@@ -308,6 +308,65 @@ public sealed class RemoteFlowDatabase
         [3] = """
         ALTER TABLE connection_groups ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE connection_groups ADD COLUMN is_protected INTEGER NOT NULL DEFAULT 0;
+        """,
+
+        // v4：Cloud Sync 本地表（协议设计 §2）。仅在启用云同步后写入；未登录用户这些表保持为空，
+        // 不影响本地优先体验。Outbox 不存 Secret / 明文。
+        [4] = """
+        CREATE TABLE sync_outbox (
+            id             TEXT PRIMARY KEY NOT NULL,
+            entity_type    TEXT NOT NULL,
+            entity_id      TEXT NOT NULL,
+            operation_type INTEGER NOT NULL,
+            operation_id   TEXT NOT NULL,
+            base_version   INTEGER NOT NULL DEFAULT 0,
+            sequence       INTEGER NOT NULL,
+            created_at     TEXT NOT NULL,
+            retry_count    INTEGER NOT NULL DEFAULT 0,
+            next_retry_at  TEXT NULL,
+            last_error     TEXT NOT NULL DEFAULT ''
+        );
+
+        CREATE UNIQUE INDEX idx_sync_outbox_entity ON sync_outbox(entity_type, entity_id);
+        CREATE INDEX idx_sync_outbox_due ON sync_outbox(next_retry_at);
+
+        CREATE TABLE sync_state (
+            app_id                   TEXT PRIMARY KEY NOT NULL,
+            cursor                   INTEGER NOT NULL DEFAULT 0,
+            last_successful_sync_at  TEXT NULL,
+            last_attempt_at          TEXT NULL,
+            status                   TEXT NOT NULL DEFAULT 'Idle'
+        );
+
+        CREATE TABLE sync_entity_state (
+            entity_type          TEXT NOT NULL,
+            entity_id            TEXT NOT NULL,
+            server_version       INTEGER NOT NULL DEFAULT 0,
+            last_local_change_at TEXT NULL,
+            conflict_state       INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (entity_type, entity_id)
+        );
+
+        CREATE TABLE sync_conflict (
+            id                    TEXT PRIMARY KEY NOT NULL,
+            entity_type           TEXT NOT NULL,
+            entity_id             TEXT NOT NULL,
+            local_ciphertext      BLOB NULL,
+            local_nonce           BLOB NULL,
+            local_key_version     INTEGER NOT NULL DEFAULT 0,
+            local_schema_version  INTEGER NOT NULL DEFAULT 0,
+            remote_ciphertext     BLOB NULL,
+            remote_nonce          BLOB NULL,
+            remote_version        INTEGER NOT NULL DEFAULT 0,
+            remote_key_version    INTEGER NOT NULL DEFAULT 0,
+            remote_schema_version INTEGER NOT NULL DEFAULT 0,
+            remote_deleted        INTEGER NOT NULL DEFAULT 0,
+            detected_at           TEXT NOT NULL,
+            resolved_at           TEXT NULL,
+            resolution            INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX idx_sync_conflict_open ON sync_conflict(resolved_at);
         """
     };
 }
