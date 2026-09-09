@@ -7,6 +7,39 @@
 
 ---
 
+## [0.11.1] — 2026-09-09
+
+修复 v0.11.0 的一个云同步阻塞性缺陷。Windows 与 macOS 同步发布，macOS 侧见
+[`releases/macos-v0.5.1/CHANGELOG.md`](releases/macos-v0.5.1/CHANGELOG.md)。
+
+### 修复
+- **第二台设备一直「同步出错，将自动重试」，重开也不恢复**：VMK（Vault 主密钥）
+  本地缓存是单一全局槽、不区分账号 / Vault。当 Vault 被重建（如从 v0.10.0 升级后
+  重新初始化）或切换过账号时，`VaultMasterKeyService.TryUnlockAsync` 会无条件复用
+  旧 VMK → 每次拉取的密文都解密失败 → `SyncStatus.Error`，且缓存不失效，重启也一样。
+  - 现在缓存 VMK 时附带其所属 Vault 的标识（`CloudVaultStatus.VaultId`，需 AppsCloud
+    ≥ 0.11.1）。解锁时先取 `/vault/status` 比对：不一致就清掉旧缓存、回到「输入主口令」，
+    一致才复用。离线（拿不到 status）时仍信任本地缓存，不影响离线解锁。
+  - 覆盖 bootstrap / Recovery Key 恢复 / 口令解锁三条路径。
+
+### 变更
+- 服务端 `GET /api/v1/vault/status` 响应新增 `vaultId` 字段（AppsCloud 0.11.1）。
+- 移除 `IVaultKeyStore` 中口令派生模型不再使用的设备私钥方法。
+
+### 验证
+- `dotnet build RemoteFlow.slnx -c Release` 0 错误；`dotnet test -c Release` ——
+  Core.Tests 42、IntegrationTests 158（+4 `VaultMasterKeyServiceTests`：陈旧缓存失效 /
+  归属校验 / 离线回退 / 打 tag）、IntegrationTests.Windows 9 全绿。
+- 端到端 `CloudRoundTripTests` / `CloudSyncFacadeTests` 对已升级的 `https://sync.appscloud.cn/`
+  （AppsCloud 0.11.1）3/3 通过。
+- 未执行：完整 UI 手动走查、实机会话回归、两台物理机的同步演练。
+
+### 升级说明
+- 已卡在「同步出错」的设备：升级到本版后会自动检测到缓存陈旧，提示重新输入主口令即可恢复；
+  或手动「云同步 → 清除此设备云数据」后重新登录。
+
+详见 [`releases/v0.11.1/CHANGELOG.md`](releases/v0.11.1/CHANGELOG.md)。
+
 ## [0.11.0] — 2026-09-09
 
 端到端加密模型改为**口令派生**（Bitwarden 式），并补齐云同步的账号 / 使用体验。
@@ -239,6 +272,7 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
+[0.11.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.1
 [0.11.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.0
 [0.10.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.10.0
 [0.9.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.9.0
