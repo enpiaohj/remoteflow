@@ -62,8 +62,12 @@
 
 由 `.github/workflows/release-windows.yml` 在 `v0.11.1` tag 推送后构建并上传到 GitHub Release：
 
-- `RemoteFlow-v0.11.1-win-x64.exe` —— Size / SHA-256：见发布后补录
-- `RemoteFlow-v0.11.1-win-x64.zip`（含 `Assets/Terminal/`）—— Size / SHA-256：见发布后补录
+- `RemoteFlow-v0.11.1-win-x64.exe`
+  - Size：74,843,694 bytes
+  - SHA-256：`595F97B264140124D2A1BFD38941CFD7AFEAA3303E447F38601B13EA7896E50D`
+- `RemoteFlow-v0.11.1-win-x64.zip`（含 `Assets/Terminal/`）
+  - Size：69,370,758 bytes
+  - SHA-256：`684F3EA9333CBF8ECFCEA98D9CB1A81454065AD50F31F31243ACFE34E93DEC33`
 
 ## Git
 
