@@ -30,7 +30,8 @@ public sealed class CloudSyncViewModelTests
     [Fact]
     public void Without_a_configured_url_the_field_is_editable()
     {
-        var vm = new CloudSyncViewModel(_sync, _dialogs, new AppSettings(), NullLogger<CloudSyncViewModel>.Instance);
+        var vm = new CloudSyncViewModel(
+            _sync, _dialogs, new AppSettings { CloudBaseUrl = string.Empty }, NullLogger<CloudSyncViewModel>.Instance);
 
         Assert.True(vm.ServerUrlEditable);
         Assert.False(vm.HasConfiguredServerUrl);

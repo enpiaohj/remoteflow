@@ -129,8 +129,11 @@ public sealed class AppSettings
     public int HistoryRetentionDays { get; set; }
 
     // ── 云同步 ────────────────────────────────────────────
-    /// <summary>AppsCloud 服务地址（含 PathBase，末尾带斜杠），例：<c>https://host/appscloud/</c>。留空表示未配置。</summary>
-    public string CloudBaseUrl { get; set; } = string.Empty;
+    /// <summary>
+    /// AppsCloud 服务地址（含 PathBase，末尾带斜杠）。默认预配置为当前测试环境；
+    /// 正式打包时按部署改这个默认值。已配置时 UI 锁定该字段，特殊情况由用户解锁。
+    /// </summary>
+    public string CloudBaseUrl { get; set; } = "http://192.0.2.20:18081/appscloud/";
 
     /// <summary>是否已启用云同步（登录过 AppsCloud 且本地保留会话）。</summary>
     public bool CloudSyncEnabled { get; set; }
