@@ -7,6 +7,54 @@
 
 ---
 
+## [0.11.0] — 2026-09-09
+
+端到端加密模型改为**口令派生**（Bitwarden 式），并补齐云同步的账号 / 使用体验。
+Windows(WPF) 与 macOS(AppKit) 同版本同步发布：本条目记 Windows 侧，macOS 侧见
+[`releases/macos-v0.5.0/CHANGELOG.md`](releases/macos-v0.5.0/CHANGELOG.md)（同一功能、AppKit 界面）。
+
+### 架构
+- **VMK 加密改为口令派生**（共享层）：主密钥（VMK）改由 `PBKDF2-SHA256(主口令, salt, 600k 迭代)` 派生的 KEK 用 AES-256-GCM 包装。
+  另一台设备**只需邮箱 + 主口令**即可解锁，不再需要「设备批准」或 Recovery Key 走通。
+  Recovery Key 回归本职——只在忘记主口令时恢复访问权。
+- **客户端派生认证密钥**：登录 / 注册 / 改口令时发给 AppsCloud 的是 `PBKDF2-SHA256(主口令, "RemoteFlow/auth/v1:"+邮箱, 600k)`（Base64），
+  服务端再 hash 一层——**服务端全程拿不到主口令明文**。
+- 统一信封类型 `VaultKeyEnvelope`（`Kind` = password / recovery），移除设备 ECDH 密钥对与 `DeviceKeyService`。
+- **设备批准降为可选**：账号可开「新设备需批准」开关（默认关）——开启后，新设备即使主口令正确也要一台已登录设备批准才能同步。
+- 依赖 AppsCloud 后端 G3.2（口令 Vault + `POST /api/v1/auth/change-password` + `DeviceVaultAccess`）。服务端 migration `PasswordVault`；旧「设备信封」数据不可迁移，需重新初始化 Vault。
+
+### 新增
+- 设置页「云同步」：**注册入口**（登录 / 注册模式切换，注册时二次确认口令 + ≥12 位提示 + 可选「新设备需批准」）。
+- **更改主口令**入口（改认证密钥 + 重新包装口令信封，其它设备需用新口令重新登录）。
+- **重置 Recovery Key** 入口。
+- Recovery Key 一次性展示：**「复制」/「另存为文件」**按钮，且必须先复制或另存才能点「我已妥善保存」。
+- 「补输主口令」卡片：本机已登录但无缓存 VMK 时，输入主口令解锁（旁附 Recovery Key 恢复）。
+- 记住上次登录邮箱（`AppSettings.CloudEmail`）。
+- 手动同步后显示条数摘要（「上传 N · 下载 M」）。
+- 服务地址字段默认只读，**左键三击进入可编辑**（无界面提示，属刻意隐藏的高级操作）。
+
+### 变更
+- 登录不再「首次自动注册」——改为明确的注册入口；登录失败按凭据错误提示，引导去注册。
+- `CloudSyncViewModel.Describe`：补 `CryptographicException`（主口令 / Recovery Key 不正确）等分类。
+
+### 修复
+- **同步循环卡在「同步中」**：`SyncCoordinator.RunOnceAsync` 加兜底 `catch` + `finally`，任何异常都会把状态落到 Error / Offline 并可重试，不再永久停在 Syncing。
+- **「刷新后看到好多冲突」**：首次同步（游标 0 且无待推变更）先拉一轮，认领服务端既有实体的版本 / 内容哈希，避免对账把本地既有条目全部当「新建」推上去逐条撞冲突。已有真实待推变更时不做这步，走正常 Push→冲突。
+
+### 未包含
+- 多重身份验证（MFA）—— 后续版本。
+- 首次同步的对象统计确认对话框（「将同步 N 条」）。
+- Key Rotation（后端 G3.2）客户端接入。
+
+### 验证
+- 构建：`dotnet build RemoteFlow.slnx -c Release` 0 错误。
+- 测试：`dotnet test -c Release` —— IntegrationTests 154、Core.Tests 42、IntegrationTests.Windows 9 全绿；IntegrationTests.Mac 在 Windows 上 skip。
+- 端到端：`CloudRoundTripTests` / `CloudSyncFacadeTests` 对**已上线的 `https://sync.appscloud.cn/`**（AppsCloud 0.11）跑通口令 / 批准 / Recovery Key 三条解锁路径 + 干净设备只用邮箱 + 口令恢复全部数据。
+- publish：`dotnet publish src/RemoteFlow.App -c Release -r win-x64` 单文件启动正常（运行 12s 无异常退出）。
+- 未执行：完整 UI 手动走查、实机 RDP / SSH / VNC 会话、多台真实设备的同步 / 冲突 / 恢复演练。
+
+详见 [`releases/v0.11.0/CHANGELOG.md`](releases/v0.11.0/CHANGELOG.md)。
+
 ## [0.10.0] — 2026-09-09
 
 云同步（Cloud Sync）落地。Windows(WPF) 与 macOS(AppKit) 同一版本同步发布：
@@ -191,6 +239,8 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
+[0.11.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.0
+[0.10.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.10.0
 [0.9.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.9.0
 [0.8.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.8.1
 [0.8.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.8.0
