@@ -378,6 +378,10 @@ public sealed class SettingsPaneView : NSView
                 TranslatesAutoresizingMaskIntoConstraints = false,
             };
             subLabel.SetContentCompressionResistancePriority(200, NSLayoutConstraintOrientation.Horizontal);
+            if (monoSub)
+            {
+                subLabel.ToolTip = sub; // 中截 / 换行后仍能悬停看全（也可选中复制）
+            }
 
             var stack = new NSStackView
             {
@@ -918,17 +922,152 @@ public sealed class SettingsPaneView : NSView
         return Page(
             Card("终端", "apple.terminal",
                 "终端类型与编码要和服务端匹配，否则会出现乱码或按键错位。"
-                + "字体填 Web 字体族名（逗号分隔），首个可用的生效。",
+                + "字体填字体族名（逗号分隔），首个本机可用的生效。",
                 Row("终端类型", term),
                 Row("字符编码", enc),
                 Row("终端主题", theme),
                 Row("终端字体", fontFamily),
-                Row("字号", size)),
+                Row("字号", size),
+                Gap(2),
+                Muted("实时预览（近似）"),
+                TerminalPreview()),
             Card("连接与粘贴", "arrow.left.arrow.right",
                 "保活间隔用于在空闲时维持连接；粘贴确认能避免把多行内容误当命令一次性执行。",
                 Row("保活间隔（秒）", keepAlive),
                 Check("粘贴多行文本前确认", _vm.SshConfirmMultilinePaste, v => _vm.SshConfirmMultilinePaste = v),
                 Check("粘贴大量文本时警告", _vm.SshWarnLargePaste, v => _vm.SshWarnLargePaste = v)));
+    }
+
+    /// <summary>
+    /// 「终端外观」近似预览：背景 / 前景随所选主题（VM 的 <c>TerminalPreview*</c>）刷新，
+    /// 字体与字号跟随「终端字体 / 字号」，下方 16 格 ANSI 色带。不承载真实终端。
+    /// </summary>
+    private NSView TerminalPreview()
+    {
+        var box = new NSView { WantsLayer = true, TranslatesAutoresizingMaskIntoConstraints = false };
+        box.Layer!.CornerRadius = 8;
+        box.Layer.BorderWidth = 1;
+
+        NSTextField SampleLine(string text) => new()
+        {
+            StringValue = text,
+            Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
+            LineBreakMode = NSLineBreakMode.Clipping,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+
+        var line1 = SampleLine("user@remote ~ $ ls -la");
+        var line2 = SampleLine("drwxr-xr-x  5 root  staff  160  RemoteFlow");
+        line2.AlphaValue = 0.82f;
+
+        var swatchRow = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Spacing = 2,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        var swatches = new NSView[16];
+        for (var i = 0; i < swatches.Length; i++)
+        {
+            var s = new NSView { WantsLayer = true, TranslatesAutoresizingMaskIntoConstraints = false };
+            s.Layer!.CornerRadius = 2;
+            s.Layer.BorderWidth = 1;
+            s.Layer.BorderColor = NSColor.White.ColorWithAlphaComponent(0.22f).CGColor;
+            s.WidthAnchor.ConstraintEqualTo(13).Active = true;
+            s.HeightAnchor.ConstraintEqualTo(13).Active = true;
+            swatches[i] = s;
+            swatchRow.AddArrangedSubview(s);
+        }
+
+        var col = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 4,
+            EdgeInsets = new NSEdgeInsets(12, 14, 12, 14),
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        col.AddArrangedSubview(line1);
+        col.AddArrangedSubview(line2);
+        col.SetCustomSpacing(10, line2);
+        col.AddArrangedSubview(swatchRow);
+
+        box.AddSubview(col);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            col.LeadingAnchor.ConstraintEqualTo(box.LeadingAnchor),
+            col.TrailingAnchor.ConstraintEqualTo(box.TrailingAnchor),
+            col.TopAnchor.ConstraintEqualTo(box.TopAnchor),
+            col.BottomAnchor.ConstraintEqualTo(box.BottomAnchor),
+        });
+
+        void Apply()
+        {
+            var bg = ColorFromHex(_vm.TerminalPreviewBackground);
+            var fg = ColorFromHex(_vm.TerminalPreviewForeground);
+            var font = ResolveTerminalFont(_vm.SshFontFamily, _vm.SshFontSize);
+
+            box.Layer!.BackgroundColor = bg.CGColor;
+            box.Layer.BorderColor = fg.ColorWithAlphaComponent(0.18f).CGColor;
+
+            foreach (var l in new[] { line1, line2 })
+            {
+                l.TextColor = fg;
+                l.Font = font;
+            }
+
+            var colors = _vm.TerminalPreviewColors;
+            for (var i = 0; i < swatches.Length; i++)
+            {
+                swatches[i].Layer!.BackgroundColor =
+                    (i < colors.Count ? ColorFromHex(colors[i].Hex) : NSColor.Clear).CGColor;
+            }
+        }
+
+        Apply();
+        _vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(SettingsPageViewModel.TerminalPreviewBackground)
+                or nameof(SettingsPageViewModel.TerminalPreviewForeground)
+                or nameof(SettingsPageViewModel.TerminalPreviewColors)
+                or nameof(SettingsPageViewModel.SshFontFamily)
+                or nameof(SettingsPageViewModel.SshFontSize))
+            {
+                NSApplication.SharedApplication.BeginInvokeOnMainThread(Apply);
+            }
+        };
+        return box;
+    }
+
+    private static NSFont ResolveTerminalFont(string? family, int size)
+    {
+        nfloat pt = size > 0 ? size : 13;
+        foreach (var raw in (family ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var name = raw.Trim().Trim('\'', '"').Trim();
+            if (name.Length > 0 && NSFont.FromFontName(name, pt) is { } f)
+            {
+                return f;
+            }
+        }
+
+        return NSFont.MonospacedSystemFont(pt, NSFontWeight.Regular);
+    }
+
+    private static NSColor ColorFromHex(string? hex)
+    {
+        var h = (hex ?? string.Empty).Trim().TrimStart('#');
+        if ((h.Length == 6 || h.Length == 8)
+            && uint.TryParse(h, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out var v))
+        {
+            var (r, g, b, a) = h.Length == 8
+                ? ((v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
+                : ((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF, 0xFFu);
+            return NSColor.FromSrgb(r / 255f, g / 255f, b / 255f, a / 255f);
+        }
+
+        return NSColor.Black;
     }
 
     // ── VNC ─────────────────────────────────────────────────────
@@ -1003,7 +1142,8 @@ public sealed class SettingsPaneView : NSView
         trail.AddArrangedSubview(algo);
         trail.AddArrangedSubview(remove);
 
-        return ListRow(item.Host, item.Fingerprint, trail, monoSub: true, wrapSub: true);
+        // 指纹单行中截（悬停 / 选中看全），整行两行高，和设计稿一致。
+        return ListRow(item.Host, item.Fingerprint, trail, monoSub: true);
     }
 
     // ── 数据与备份 ──────────────────────────────────────────────
