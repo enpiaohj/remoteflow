@@ -43,6 +43,15 @@ public sealed partial class CloudSyncViewModel(
     [ObservableProperty]
     private string _serverUrl = settings.CloudBaseUrl;
 
+    /// <summary>
+    /// 服务地址是否可编辑。默认：仅当没有预配置地址（开发 / 未打包）时可改；
+    /// 已配置时锁定，特殊情况由用户勾选「使用自定义服务地址」解锁。
+    /// </summary>
+    [ObservableProperty]
+    private bool _serverUrlEditable = string.IsNullOrWhiteSpace(settings.CloudBaseUrl);
+
+    public bool HasConfiguredServerUrl { get; } = !string.IsNullOrWhiteSpace(settings.CloudBaseUrl);
+
     [ObservableProperty]
     private string _email = string.Empty;
 

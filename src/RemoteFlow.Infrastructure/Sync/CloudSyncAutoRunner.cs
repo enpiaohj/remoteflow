@@ -11,6 +11,7 @@ public sealed class CloudSyncAutoRunner(ICloudSyncService sync, ILogger<CloudSyn
 {
     private readonly CancellationTokenSource _cts = new();
     private Task? _loop;
+    private bool _disposed;
 
     public void Start(TimeSpan interval)
     {
@@ -60,7 +61,21 @@ public sealed class CloudSyncAutoRunner(ICloudSyncService sync, ILogger<CloudSyn
 
     public void Dispose()
     {
-        _cts.Cancel();
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        try
+        {
+            _cts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 已释放，忽略。
+        }
+
         _cts.Dispose();
     }
 }

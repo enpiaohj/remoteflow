@@ -18,9 +18,22 @@ public sealed class CloudSyncViewModelTests
         new(_sync, _dialogs, _settings, NullLogger<CloudSyncViewModel>.Instance);
 
     [Fact]
-    public void Server_url_prefills_from_settings()
+    public void A_configured_server_url_prefills_and_locks_the_field()
     {
-        Assert.Equal("https://host/appscloud/", NewViewModel().ServerUrl);
+        var vm = NewViewModel();
+
+        Assert.Equal("https://host/appscloud/", vm.ServerUrl);
+        Assert.False(vm.ServerUrlEditable);
+        Assert.True(vm.HasConfiguredServerUrl);
+    }
+
+    [Fact]
+    public void Without_a_configured_url_the_field_is_editable()
+    {
+        var vm = new CloudSyncViewModel(_sync, _dialogs, new AppSettings(), NullLogger<CloudSyncViewModel>.Instance);
+
+        Assert.True(vm.ServerUrlEditable);
+        Assert.False(vm.HasConfiguredServerUrl);
     }
 
     [Fact]
