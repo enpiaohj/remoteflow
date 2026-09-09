@@ -32,6 +32,12 @@ internal static class Palette
     /// <summary>卡片 / 列表等内容表面。浅色下纯白，深色下比底衬亮一档。</summary>
     public static NSColor CardSurface(NSView v) => IsDark(v) ? Rgb(0x252528) : Rgb(0xFFFFFF);
 
+    /// <summary>内嵌说明底纹：比卡片更内敛的一块淡填充（设置页的「数据安全提示」这类）。
+    /// 浅色下比页面底衬再沉一点，深色下比卡片再亮一点，和卡片、底衬都能拉开。</summary>
+    public static NSColor InsetFill(NSView v) => IsDark(v)
+        ? NSColor.White.ColorWithAlphaComponent(0.05f)
+        : NSColor.Black.ColorWithAlphaComponent(0.04f);
+
     /// <summary>发丝线：卡片描边、分隔线。层次主要靠它，而不是靠明度差。</summary>
     public static NSColor Hairline(NSView v) => IsDark(v)
         ? NSColor.White.ColorWithAlphaComponent(0.10f)
