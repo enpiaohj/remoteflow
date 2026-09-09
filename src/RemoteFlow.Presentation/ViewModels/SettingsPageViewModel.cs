@@ -967,7 +967,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
             await _dialogs.ShowMessageAsync(
                 "备份完成",
                 $"已把连接数据库、凭据保险库与设置复制到：\n{result.BackupDirectory}\n\n" +
-                "vault.dat（凭据密文）只能在当前 Windows 账户下解密，换账户或换机器需要用「导出 .rfbackup」迁移凭据。",
+                "凭据密文按本机加密保存，换电脑或换系统账户后通常无法直接解密；跨设备迁移凭据请用「导出 .rfbackup」。",
                 DialogKind.Success);
         }
         catch (Exception ex)

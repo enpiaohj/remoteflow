@@ -13,8 +13,8 @@ public sealed record LocalBackupResult(string BackupDirectory, IReadOnlyList<str
 /// 用户选定目录下的带时间戳子目录。
 /// <para>
 /// 一致性：复制数据库前先执行 <c>wal_checkpoint(TRUNCATE)</c>，把 WAL 中已提交的改动
-/// 落回主库文件，避免只复制到半截数据。<c>vault.dat</c> 只能在同一 Windows 账户下解密，
-/// 这一点由界面文案提示用户。
+/// 落回主库文件，避免只复制到半截数据。凭据保险库按本机加密，换机器 / 换账户通常无法直接解密，
+/// 这一点由界面文案提示用户（跨设备迁移走「导出 .rfbackup」）。
 /// </para>
 /// </summary>
 public sealed class LocalBackupService(

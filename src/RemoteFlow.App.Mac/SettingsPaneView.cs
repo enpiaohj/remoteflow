@@ -340,6 +340,62 @@ public sealed class SettingsPaneView : NSView
         var landing = Popup(new[] { "首页", "我的连接", "收藏", "最近连接", "凭据" }, (int)_vm.DefaultLandingPage,
             i => _vm.DefaultLandingPage = (LandingPage)i);
 
+        var concurrency = IntField(_vm.MaxConcurrentSessions, v => _vm.MaxConcurrentSessions = v);
+
+        var language = Popup(new[] { "简体中文" }, 0, _ => { });
+        language.Enabled = false; // 目前仅简体中文；保留控件以对齐 Windows 版，i18n 落地后接 _vm.LanguageOptions。
+
+        // ── 日期与时间 ──────────────────────────────────────────
+        var dateFmt = Popup(
+            _vm.DateFormatOptions.Select(o => o.Label),
+            Math.Max(0, _vm.DateFormatOptions.ToList().FindIndex(o => o.Value == _vm.SelectedDateFormat.Value)),
+            i => _vm.SelectedDateFormat = _vm.DateFormatOptions[i]);
+
+        var timeFmt = Popup(
+            _vm.TimeFormatOptions.Select(o => o.Label),
+            Math.Max(0, _vm.TimeFormatOptions.ToList().FindIndex(o => o.Value == _vm.SelectedTimeFormat.Value)),
+            i => _vm.SelectedTimeFormat = _vm.TimeFormatOptions[i]);
+
+        // 首页时间行：下拉项即当前日期/时间格式下的真实样例。改日期或 12/24 小时后
+        // VM 会重建 HomeDateLineOptions，这里跟着重填。
+        var homeLine = new NSPopUpButton(new CGRect(0, 0, 260, 24), pullsDown: false)
+        {
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        void RebuildHomeLine()
+        {
+            homeLine.RemoveAllItems();
+            foreach (var o in _vm.HomeDateLineOptions)
+            {
+                homeLine.AddItem(o.Sample);
+            }
+
+            var idx = _vm.HomeDateLineOptions.ToList().FindIndex(o => o.Value == _vm.SelectedHomeDateLine.Value);
+            if (idx >= 0)
+            {
+                homeLine.SelectItem(idx);
+            }
+        }
+
+        RebuildHomeLine();
+        homeLine.Activated += (_, _) =>
+        {
+            var i = (int)homeLine.IndexOfSelectedItem;
+            if (i >= 0 && i < _vm.HomeDateLineOptions.Count)
+            {
+                _vm.SelectedHomeDateLine = _vm.HomeDateLineOptions[i];
+            }
+        };
+
+        _vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(SettingsPageViewModel.HomeDateLineOptions)
+                or nameof(SettingsPageViewModel.SelectedHomeDateLine))
+            {
+                NSApplication.SharedApplication.BeginInvokeOnMainThread(RebuildHomeLine);
+            }
+        };
+
         // ── 分组：保护默认分组 ──────────────────────────────────
         var protect = new NSButton { Title = _vm.DefaultGroupSwitchLabel, TranslatesAutoresizingMaskIntoConstraints = false };
         protect.SetButtonType(NSButtonType.Switch);
@@ -370,11 +426,22 @@ public sealed class SettingsPaneView : NSView
 
         return Page(
             Card("外观与行为", "paintbrush",
-                "主题会应用到所有页面；默认页面决定每次启动后先落在哪儿。",
+                "主题会应用到所有页面；默认页面决定每次启动后先落在哪儿；"
+                + "并发会话上限用于在异常情况下防止无限重复建立连接。",
                 Row("主题", theme),
                 Row("默认页面", landing),
+                Row("并发会话上限", concurrency),
                 Check("登录时自动启动 RemoteFlow", _vm.LaunchOnStartup, v => _vm.LaunchOnStartup = v),
                 Check("关闭窗口时最小化到菜单栏而非退出", _vm.MinimizeToTrayOnClose, v => _vm.MinimizeToTrayOnClose = v)),
+            Card("日期与时间", "calendar",
+                "日期格式用于首页完整日期、创建时间等；时间格式用于列表与历史；"
+                + "「首页时间行」决定首页标题下方那行的详略程度，下拉项即当前格式下的真实样例。",
+                Row("日期格式", dateFmt),
+                Row("时间格式", timeFmt),
+                Row("首页时间行", homeLine)),
+            Card("语言", "globe",
+                "目前仅提供简体中文，后续版本开放更多语言。",
+                Row("界面语言", language)),
             Card("分组", "folder",
                 "默认分组是新建连接的落点。开启保护可以防止它被误删或误改，日常整理时更安心。",
                 protect,
@@ -414,12 +481,16 @@ public sealed class SettingsPaneView : NSView
 
         var keepAlive = IntField(_vm.SshKeepAliveSeconds, v => _vm.SshKeepAliveSeconds = v);
 
+        var fontFamily = TextField(_vm.SshFontFamily, v => _vm.SshFontFamily = v);
+
         return Page(
             Card("终端", "apple.terminal",
-                "终端类型与编码要和服务端匹配，否则会出现乱码或按键错位。",
+                "终端类型与编码要和服务端匹配，否则会出现乱码或按键错位。"
+                + "字体填 Web 字体族名（逗号分隔），首个可用的生效。",
                 Row("终端类型", term),
                 Row("字符编码", enc),
                 Row("终端主题", theme),
+                Row("终端字体", fontFamily),
                 Row("字号", size)),
             Card("连接与粘贴", "arrow.left.arrow.right",
                 "保活间隔用于在空闲时维持连接；粘贴确认能避免把多行内容误当命令一次性执行。",
@@ -519,14 +590,15 @@ public sealed class SettingsPaneView : NSView
         var importCsv = NSButton.CreateButton("导入连接列表…", () => _ = _vm.ImportConnectionsCsvCommand.ExecuteAsync(null));
         importCsv.BezelStyle = NSBezelStyle.Rounded;
 
-        var csvRow = new NSStackView
-        {
-            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
-            Spacing = 8,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        };
-        csvRow.AddArrangedSubview(exportCsv);
-        csvRow.AddArrangedSubview(importCsv);
+        var csvRow = ButtonRow(exportCsv, importCsv);
+
+        var exportVault = NSButton.CreateButton("导出凭据…（.rfbackup）", () => _ = _vm.ExportCredentialsCommand.ExecuteAsync(null));
+        exportVault.BezelStyle = NSBezelStyle.Rounded;
+        var importVault = NSButton.CreateButton("导入凭据…", () => _ = _vm.ImportCredentialsCommand.ExecuteAsync(null));
+        importVault.BezelStyle = NSBezelStyle.Rounded;
+
+        var backupAll = NSButton.CreateButton("完整备份到…", () => _ = _vm.BackupDataCommand.ExecuteAsync(null));
+        backupAll.BezelStyle = NSBezelStyle.Rounded;
 
         return Page(
             SectionLabel("数据目录"),
@@ -536,6 +608,12 @@ public sealed class SettingsPaneView : NSView
             Gap(8),
             SectionLabel("连接列表（不含任何密码 / 私钥）"),
             csvRow,
+            Gap(8),
+            SectionLabel("凭据备份（口令加密的 .rfbackup，含密码 / 私钥，请离线保管）"),
+            ButtonRow(exportVault, importVault),
+            Gap(8),
+            SectionLabel("完整备份（连接库 + 凭据保险库 + 设置，复制到指定目录）"),
+            ButtonRow(backupAll),
             Gap(8),
             Muted($"版本 {_vm.AppVersion}"));
     }
@@ -643,6 +721,24 @@ public sealed class SettingsPaneView : NSView
         return row;
     }
 
+    /// <summary>一行左对齐的按钮组（导出 / 导入 / 备份等成组操作）。</summary>
+    private static NSView ButtonRow(params NSButton[] buttons)
+    {
+        var row = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Spacing = 8,
+            Alignment = NSLayoutAttribute.CenterY,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        foreach (var b in buttons)
+        {
+            row.AddArrangedSubview(b);
+        }
+
+        return row;
+    }
+
     private static NSButton Check(string title, bool initial, Action<bool> onChange)
     {
         var b = new NSButton { Title = title, TranslatesAutoresizingMaskIntoConstraints = false };
@@ -689,6 +785,21 @@ public sealed class SettingsPaneView : NSView
                 onChange(v);
             }
         };
+        return f;
+    }
+
+    private static NSTextField TextField(string value, Action<string> onChange)
+    {
+        var f = new NSTextField
+        {
+            StringValue = value ?? string.Empty,
+            Bordered = true,
+            Bezeled = true,
+            Font = NSFont.SystemFontOfSize(13),
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        f.WidthAnchor.ConstraintEqualTo(260).Active = true;
+        f.Changed += (_, _) => onChange(f.StringValue);
         return f;
     }
 

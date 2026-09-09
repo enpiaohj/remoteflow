@@ -24,6 +24,10 @@ public sealed class DetailView : NSView
     private bool _wiredDetailVm;
     private bool _showingDetail;
 
+    // 首页日期行的秒级刷新：仅当「设置 → 首页时间行」含时间时启用，离开首页即停。
+    private NSTimer? _homeClockTimer;
+    private NSTextField? _homeDateLine;
+
     public DetailView()
     {
         TranslatesAutoresizingMaskIntoConstraints = false;
@@ -125,8 +129,32 @@ public sealed class DetailView : NSView
 
     public void ShowHome(HomePageViewModel vm)
     {
-        SafeSwap(() => BuildHome(vm), "首页");
+        SwapHome(vm);
         _ = ReloadHomeAsync(vm);
+    }
+
+    /// <summary>构建首页并（按需）重启日期行秒级刷新。Swap 已把上一个计时器清掉。</summary>
+    private void SwapHome(HomePageViewModel vm)
+    {
+        SafeSwap(() => BuildHome(vm), "首页");
+        StartHomeClock();
+    }
+
+    private void StartHomeClock()
+    {
+        _homeClockTimer?.Invalidate();
+        _homeClockTimer = null;
+
+        if (_homeVm is not { ShowHomeClock: true } vm || _homeDateLine is not { } label)
+        {
+            return;
+        }
+
+        _homeClockTimer = NSTimer.CreateRepeatingScheduledTimer(TimeSpan.FromSeconds(1), _ =>
+        {
+            vm.RefreshClock();
+            label.StringValue = vm.DateLine ?? string.Empty;
+        });
     }
 
     private async Task ReloadHomeAsync(HomePageViewModel vm)
@@ -140,7 +168,7 @@ public sealed class DetailView : NSView
             // 首页数据加载失败不阻塞界面。
         }
 
-        NSApplication.SharedApplication.BeginInvokeOnMainThread(() => SafeSwap(() => BuildHome(vm), "首页"));
+        NSApplication.SharedApplication.BeginInvokeOnMainThread(() => SwapHome(vm));
     }
 
     /// <summary>构造视图时若抛异常，退化为错误占位并把异常写日志，而不是让 ObjC 回调静默吞掉、页面空白。</summary>
@@ -718,17 +746,12 @@ public sealed class DetailView : NSView
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
 
-        // 问候 + 日期 + 时钟 + 统计
+        // 问候 + 日期 + 统计
         col.AddArrangedSubview(Big(string.IsNullOrEmpty(vm.Greeting) ? "欢迎" : vm.Greeting, 28));
         col.AddArrangedSubview(Gap(3));
-        col.AddArrangedSubview(Styled(vm.DateLine ?? "", 13, NSFontWeight.Regular, NSColor.TertiaryLabel));
-        if (vm.HasClockLine)
-        {
-            col.AddArrangedSubview(Gap(2));
-            var clock = Styled(vm.ClockLine ?? "", 12, NSFontWeight.Regular, NSColor.SecondaryLabel);
-            clock.Font = NSFont.MonospacedSystemFont(12, NSFontWeight.Regular);
-            col.AddArrangedSubview(clock);
-        }
+        // 日期行详略由「设置 → 首页时间行」决定；含时间时由 StartHomeClock 秒级刷新。
+        _homeDateLine = Styled(vm.DateLine ?? "", 13, NSFontWeight.Regular, NSColor.TertiaryLabel);
+        col.AddArrangedSubview(_homeDateLine);
         col.AddArrangedSubview(Gap(7));
         col.AddArrangedSubview(Muted($"{vm.TotalConnections} 个连接  ·  {vm.ConnectedSessions} 个会话已连接", 12));
         col.AddArrangedSubview(Gap(22));
@@ -1508,6 +1531,9 @@ public sealed class DetailView : NSView
     private void Swap(NSView content)
     {
         _showingDetail = false;
+        // 离开当前页面即停掉首页时钟；_homeDateLine 交给下一次 BuildHome 覆盖。
+        _homeClockTimer?.Invalidate();
+        _homeClockTimer = null;
         foreach (var v in _container.Subviews.ToArray())
         {
             v.RemoveFromSuperview();
