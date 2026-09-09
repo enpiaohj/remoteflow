@@ -9,7 +9,28 @@ namespace RemoteFlow.App.Views.Pages;
 /// </summary>
 public partial class SettingsPage : UserControl
 {
-    public SettingsPage() => InitializeComponent();
+    private bool _cloudInitialized;
+
+    public SettingsPage()
+    {
+        InitializeComponent();
+        Loaded += OnLoaded;
+    }
+
+    // 首次显示时拉取一次已恢复的云会话状态，让面板反映后台 AutoRunner 的登录结果。
+    private async void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_cloudInitialized)
+        {
+            return;
+        }
+
+        _cloudInitialized = true;
+        if (DataContext is SettingsPageViewModel vm)
+        {
+            await vm.Cloud.InitializeAsync();
+        }
+    }
 
     // PasswordBox.Password 不支持绑定；登录框的密码在这里单向推给 ViewModel。
     private void CloudPasswordBox_PasswordChanged(object sender, RoutedEventArgs e)

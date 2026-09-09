@@ -9,26 +9,14 @@ namespace RemoteFlow.App.Mac.Binding;
 /// <para>
 /// AppKit 无绑定引擎。这里订阅 <see cref="INotifyPropertyChanged"/>，属性变化时刷新控件；
 /// 双向绑定另挂控件的 action 回写 VM。返回 <see cref="IDisposable"/> 供视图释放时退订。
+/// 属性变更回调统一切回主线程 —— VM 的异步命令续体不保证在 UI 线程上。
 /// </para>
 /// </summary>
 public static class Binder
 {
     /// <summary>把 VM 的字符串属性单向绑到 <see cref="NSTextField.StringValue"/>。</summary>
     public static IDisposable Text(NSTextField field, ObservableObject vm, string property, Func<string> getter)
-    {
-        void Refresh() => field.StringValue = getter() ?? string.Empty;
-
-        Refresh();
-        PropertyChangedEventHandler handler = (_, e) =>
-        {
-            if (e.PropertyName == property || string.IsNullOrEmpty(e.PropertyName))
-            {
-                field.StringValue = getter() ?? string.Empty;
-            }
-        };
-        vm.PropertyChanged += handler;
-        return new Unsub(() => vm.PropertyChanged -= handler);
-    }
+        => On(vm, property, () => field.StringValue = getter() ?? string.Empty);
 
     /// <summary>双向：VM 字符串属性 ↔ 可编辑 <see cref="NSTextField"/>。</summary>
     public static IDisposable TwoWayText(
@@ -41,15 +29,20 @@ public static class Binder
 
     /// <summary>把 VM 的布尔属性单向绑到控件可见性（隐藏 = 折叠）。</summary>
     public static IDisposable Visible(NSView view, ObservableObject vm, string property, Func<bool> getter)
-    {
-        void Refresh() => view.Hidden = !getter();
+        => On(vm, property, () => view.Hidden = !getter());
 
-        Refresh();
+    /// <summary>
+    /// 通用：<paramref name="property"/>（或整体刷新）变化时执行 <paramref name="apply"/>。
+    /// 立即同步执行一次；后续变更回调切回主线程。
+    /// </summary>
+    public static IDisposable On(ObservableObject vm, string property, Action apply)
+    {
+        apply();
         PropertyChangedEventHandler handler = (_, e) =>
         {
             if (e.PropertyName == property || string.IsNullOrEmpty(e.PropertyName))
             {
-                view.Hidden = !getter();
+                NSApplication.SharedApplication.BeginInvokeOnMainThread(apply);
             }
         };
         vm.PropertyChanged += handler;

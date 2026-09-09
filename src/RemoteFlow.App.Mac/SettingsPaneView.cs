@@ -1,5 +1,8 @@
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using AppKit;
 using CoreGraphics;
+using RemoteFlow.App.Mac.Binding;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Presentation.ViewModels;
 
@@ -23,6 +26,7 @@ public sealed class SettingsPaneView : NSView
         ("SSH", "terminal"),
         ("VNC", "rectangle.on.rectangle"),
         ("安全", "lock.shield"),
+        ("云同步", "arrow.triangle.2.circlepath"),
         ("数据与备份", "externaldrive"),
     };
 
@@ -45,6 +49,7 @@ public sealed class SettingsPaneView : NSView
             new Lazy<NSView>(BuildSsh),
             new Lazy<NSView>(BuildVnc),
             new Lazy<NSView>(BuildSecurity),
+            new Lazy<NSView>(BuildCloud),
             new Lazy<NSView>(BuildData),
         };
 
@@ -1328,6 +1333,336 @@ public sealed class SettingsPaneView : NSView
         };
         return host;
     }
+
+    // ── 云同步 ──────────────────────────────────────────────────
+
+    private NSView BuildCloud()
+    {
+        var c = _vm.Cloud;
+
+        var page = Page(
+            CloudRecoveryBanner(c),
+            CloudSignInCard(c),
+            CloudVaultSetupCard(c),
+            CloudApprovalCard(c),
+            CloudStatusCard(c),
+            CloudPendingDevicesCard(c),
+            CloudConflictsCard(c),
+            CloudAccountCard(c));
+
+        // 首次展开该分页时拉取一次已恢复的会话状态。_pages 是 Lazy，只会跑一次。
+        _ = c.InitializeAsync();
+        return page;
+    }
+
+    private static NSView CloudRecoveryBanner(CloudSyncViewModel c)
+    {
+        var mono = new NSTextField
+        {
+            Bordered = false, Editable = false, Selectable = true, DrawsBackground = false,
+            Font = NSFont.UserFixedPitchFontOfSize(13),
+            TextColor = NSColor.Label,
+            LineBreakMode = NSLineBreakMode.ByWordWrapping,
+            PreferredMaxLayoutWidth = 520,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        Binder.Text(mono, c, nameof(c.NewRecoveryKey), () => c.NewRecoveryKey ?? string.Empty);
+
+        var ack = NSButton.CreateButton("我已妥善保存", () => c.AcknowledgeRecoveryKeyCommand.Execute(null));
+        ack.BezelStyle = NSBezelStyle.Rounded;
+
+        var card = Card("请立即保存 Recovery Key", "key.horizontal",
+            "它只显示这一次。丢失所有已授权设备且没有它，将无法恢复云端数据。",
+            mono, ack);
+
+        Binder.On(c, nameof(c.NewRecoveryKey), () => card.Hidden = string.IsNullOrEmpty(c.NewRecoveryKey));
+        return card;
+    }
+
+    private static NSView CloudSignInCard(CloudSyncViewModel c)
+    {
+        var server = CloudField(c, nameof(c.ServerUrl), () => c.ServerUrl, v => c.ServerUrl = v);
+        Binder.On(c, nameof(c.ServerUrlEditable), () => server.Editable = c.ServerUrlEditable);
+
+        var custom = new NSButton
+        {
+            Title = "使用自定义服务地址（一般无需修改）",
+            TranslatesAutoresizingMaskIntoConstraints = false,
+            Hidden = !c.HasConfiguredServerUrl,
+        };
+        custom.SetButtonType(NSButtonType.Switch);
+        custom.Activated += (_, _) => c.ServerUrlEditable = custom.State == NSCellStateValue.On;
+        Binder.On(c, nameof(c.ServerUrlEditable),
+            () => custom.State = c.ServerUrlEditable ? NSCellStateValue.On : NSCellStateValue.Off);
+
+        var email = CloudField(c, nameof(c.Email), () => c.Email, v => c.Email = v);
+
+        var pwd = new NSSecureTextField
+        {
+            Bezeled = true, Bordered = true, Font = NSFont.SystemFontOfSize(13),
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        pwd.WidthAnchor.ConstraintEqualTo(480).Active = true;
+        Binder.Text(pwd, c, nameof(c.Password), () => c.Password);
+        pwd.Changed += (_, _) => c.Password = pwd.StringValue;
+
+        var connect = NSButton.CreateButton("登录并启用同步", () => c.ConnectCommand.Execute(null));
+        connect.BezelStyle = NSBezelStyle.Rounded;
+        Binder.On(c, nameof(c.IsBusy), () => connect.Enabled = !c.IsBusy);
+
+        var card = Card("登录 AppsCloud", "person.badge.key",
+            "登录后，连接、分组、标签、凭据与密码将端到端加密同步；服务端看不到明文。"
+            + "本地优先不变 —— 未登录也能完整使用。",
+            SectionLabel("服务地址"), server, custom,
+            SectionLabel("邮箱"), email,
+            SectionLabel("密码"), pwd,
+            CloudErrorLabel(c), connect);
+
+        GateByState(c, card, s => s == CloudSyncUiState.SignedOut);
+        return card;
+    }
+
+    private static NSView CloudVaultSetupCard(CloudSyncViewModel c)
+    {
+        var create = NSButton.CreateButton("生成 Vault", () => c.CreateVaultCommand.Execute(null));
+        create.BezelStyle = NSBezelStyle.Rounded;
+        Binder.On(c, nameof(c.IsBusy), () => create.Enabled = !c.IsBusy);
+
+        var card = Card("初始化加密 Vault", "lock.rectangle.stack",
+            "本设备是这个账号的第一台设备。将在本机生成加密主密钥与 Recovery Key（只显示一次）。",
+            create);
+
+        GateByState(c, card, s => s == CloudSyncUiState.NeedsVaultSetup);
+        return card;
+    }
+
+    private static NSView CloudApprovalCard(CloudSyncViewModel c)
+    {
+        var rk = CloudField(c, nameof(c.RecoveryKeyInput), () => c.RecoveryKeyInput, v => c.RecoveryKeyInput = v);
+
+        var restore = NSButton.CreateButton("用 Recovery Key 恢复", () => c.RestoreWithRecoveryKeyCommand.Execute(null));
+        restore.BezelStyle = NSBezelStyle.Rounded;
+        Binder.On(c, nameof(c.IsBusy), () => restore.Enabled = !c.IsBusy);
+
+        var card = Card("这台设备还需要获得 Vault 访问权", "person.badge.clock",
+            "在另一台已登录的设备上「设置 → 云同步」里批准本机，或在下方输入 Recovery Key 恢复。",
+            SectionLabel("Recovery Key"), rk, CloudErrorLabel(c), restore);
+
+        GateByState(c, card, s => s == CloudSyncUiState.NeedsApproval);
+        return card;
+    }
+
+    private static NSView CloudStatusCard(CloudSyncViewModel c)
+    {
+        var status = PlainLabel(string.Empty, 13, NSColor.Label);
+        Binder.Text(status, c, nameof(c.StatusLine), () => c.StatusLine);
+
+        var pending = PlainLabel(string.Empty, 11, NSColor.SecondaryLabel);
+        Binder.Text(pending, c, nameof(c.PendingChangeCount), () => $"{c.PendingChangeCount} 项本地改动待上传");
+
+        var sync = NSButton.CreateButton("立即同步", () => c.SyncNowCommand.Execute(null));
+        var refresh = NSButton.CreateButton("刷新", () => c.RefreshCommand.Execute(null));
+        sync.BezelStyle = NSBezelStyle.Rounded;
+        refresh.BezelStyle = NSBezelStyle.Rounded;
+
+        void SyncCommandStates()
+        {
+            sync.Enabled = c.SyncNowCommand.CanExecute(null);
+            refresh.Enabled = c.RefreshCommand.CanExecute(null);
+        }
+
+        Binder.On(c, nameof(c.State), SyncCommandStates);
+        Binder.On(c, nameof(c.IsBusy), SyncCommandStates);
+
+        var card = Card("同步状态", "arrow.triangle.2.circlepath",
+            "本地优先：改动先写本地，再由后台按加密流上传；也可在此手动触发。",
+            status, pending, HStack(8, sync, refresh));
+
+        GateByState(c, card, s => s == CloudSyncUiState.Ready);
+        return card;
+    }
+
+    private static NSView CloudPendingDevicesCard(CloudSyncViewModel c)
+    {
+        var list = CloudRowList(c.PendingDevices, d =>
+        {
+            var info = VStack(1,
+                PlainLabel(d.Name, 13, NSColor.Label),
+                PlainLabel(d.Platform, 11, NSColor.SecondaryLabel));
+            var approve = NSButton.CreateButton("批准", () => c.ApproveDeviceCommand.Execute(d));
+            approve.BezelStyle = NSBezelStyle.Rounded;
+            return HStack(10, info, approve);
+        });
+
+        var card = Card("待批准的设备", "checkmark.seal",
+            "用此账号在其他设备上登录后，需要在这里批准它，才允许它参与同步。",
+            list);
+
+        GateCountByState(c, card, c.PendingDevices, () => c.PendingDevices.Count);
+        return card;
+    }
+
+    private static NSView CloudConflictsCard(CloudSyncViewModel c)
+    {
+        var list = CloudRowList(c.Conflicts, cf =>
+        {
+            var keep = NSButton.CreateButton("保留本机", () => c.KeepLocalCommand.Execute(cf));
+            var use = NSButton.CreateButton("使用云端", () => c.UseRemoteCommand.Execute(cf));
+            keep.BezelStyle = NSBezelStyle.Rounded;
+            use.BezelStyle = NSBezelStyle.Rounded;
+            return VStack(6,
+                PlainLabel($"{cf.EntityType}  {cf.EntityId}", 13, NSColor.Label),
+                HStack(8, keep, use));
+        });
+
+        var card = Card("需要处理的同步冲突", "exclamationmark.triangle",
+            "同一条目在多台设备上都改过。选择保留哪一份，另一份会被覆盖。",
+            list);
+
+        GateCountByState(c, card, c.Conflicts, () => c.Conflicts.Count);
+        return card;
+    }
+
+    private static NSView CloudAccountCard(CloudSyncViewModel c)
+    {
+        var signOut = NSButton.CreateButton("退出云账号", () => c.DisconnectCommand.Execute(null));
+        var wipe = NSButton.CreateButton("清除此设备云数据", () => c.DisconnectAndWipeCommand.Execute(null));
+        signOut.BezelStyle = NSBezelStyle.Rounded;
+        wipe.BezelStyle = NSBezelStyle.Rounded;
+
+        var card = Card("账号", "person.crop.circle",
+            "退出仅撤销本机登录并停止同步，本地连接与凭据保留。"
+            + "清除云数据还会清掉本机的同步状态与 Vault 密钥缓存，下次需重新登录并批准 / 恢复。",
+            HStack(8, signOut, wipe));
+
+        GateByState(c, card, s => s == CloudSyncUiState.Ready);
+        return card;
+    }
+
+    // ── 云同步 · 小helper ──────────────────────────────────────
+
+    private static NSTextField CloudField(
+        CloudSyncViewModel c, string property, Func<string> getter, Action<string> setter)
+    {
+        var f = new NSTextField
+        {
+            Bezeled = true, Bordered = true, Font = NSFont.SystemFontOfSize(13),
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        f.WidthAnchor.ConstraintEqualTo(480).Active = true;
+        Binder.TwoWayText(f, c, property, getter, setter);
+        return f;
+    }
+
+    private static NSTextField CloudErrorLabel(CloudSyncViewModel c)
+    {
+        var l = new NSTextField
+        {
+            Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
+            Font = NSFont.SystemFontOfSize(11),
+            TextColor = NSColor.SystemRed,
+            LineBreakMode = NSLineBreakMode.ByWordWrapping,
+            PreferredMaxLayoutWidth = 520,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        Binder.Text(l, c, nameof(c.ErrorMessage), () => c.ErrorMessage ?? string.Empty);
+        Binder.On(c, nameof(c.ErrorMessage), () => l.Hidden = string.IsNullOrEmpty(c.ErrorMessage));
+        return l;
+    }
+
+    /// <summary>把整张卡片的可见性绑到 <see cref="CloudSyncViewModel.State"/>。</summary>
+    private static void GateByState(CloudSyncViewModel c, NSView view, Func<CloudSyncUiState, bool> show)
+        => Binder.On(c, nameof(c.State), () => view.Hidden = !show(c.State));
+
+    /// <summary>仅在「已就绪」且集合非空时显示（对齐 WPF 的 CountToVisibility）。</summary>
+    private static void GateCountByState(
+        CloudSyncViewModel c, NSView view, INotifyCollectionChanged collection, Func<int> count)
+    {
+        void Update() => view.Hidden = !(c.State == CloudSyncUiState.Ready && count() > 0);
+
+        Update();
+        c.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(c.State) || string.IsNullOrEmpty(e.PropertyName))
+            {
+                NSApplication.SharedApplication.BeginInvokeOnMainThread(Update);
+            }
+        };
+        collection.CollectionChanged += (_, _) =>
+            NSApplication.SharedApplication.BeginInvokeOnMainThread(Update);
+    }
+
+    /// <summary>可观察集合 → 纵向堆叠的行视图；集合变化时整体重建（主线程）。</summary>
+    private static NSView CloudRowList<TRow>(ObservableCollection<TRow> items, Func<TRow, NSView> makeRow)
+    {
+        var col = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 6,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+
+        void Rebuild()
+        {
+            foreach (var v in col.ArrangedSubviews.ToArray())
+            {
+                col.RemoveArrangedSubview(v);
+                v.RemoveFromSuperview();
+            }
+
+            foreach (var item in items)
+            {
+                col.AddArrangedSubview(makeRow(item));
+            }
+        }
+
+        Rebuild();
+        items.CollectionChanged += (_, _) =>
+            NSApplication.SharedApplication.BeginInvokeOnMainThread(Rebuild);
+        return col;
+    }
+
+    private static NSStackView HStack(nfloat spacing, params NSView[] views)
+    {
+        var s = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
+            Spacing = spacing,
+            Alignment = NSLayoutAttribute.CenterY,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        foreach (var v in views)
+        {
+            s.AddArrangedSubview(v);
+        }
+        return s;
+    }
+
+    private static NSStackView VStack(nfloat spacing, params NSView[] views)
+    {
+        var s = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Spacing = spacing,
+            Alignment = NSLayoutAttribute.Leading,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        foreach (var v in views)
+        {
+            s.AddArrangedSubview(v);
+        }
+        return s;
+    }
+
+    private static NSTextField PlainLabel(string text, nfloat size, NSColor color) => new()
+    {
+        StringValue = text,
+        Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
+        Font = NSFont.SystemFontOfSize(size),
+        TextColor = color,
+        TranslatesAutoresizingMaskIntoConstraints = false,
+    };
 
     // ── 版式辅助 ────────────────────────────────────────────────
 
