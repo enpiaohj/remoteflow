@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using RemoteFlow.Presentation.ViewModels;
 
 namespace RemoteFlow.App.Views.Pages;
@@ -32,12 +33,43 @@ public partial class SettingsPage : UserControl
         }
     }
 
-    // PasswordBox.Password 不支持绑定；登录框的密码在这里单向推给 ViewModel。
+    private CloudSyncViewModel? Cloud => (DataContext as SettingsPageViewModel)?.Cloud;
+
+    // PasswordBox.Password 不支持绑定；这里把各口令框单向推给 ViewModel。
     private void CloudPasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
     {
-        if ((DataContext as SettingsPageViewModel)?.Cloud is { } cloud && sender is PasswordBox box)
+        if (Cloud is { } cloud && sender is PasswordBox box)
         {
             cloud.Password = box.Password;
+        }
+    }
+
+    private void CloudPasswordConfirmBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (Cloud is { } cloud && sender is PasswordBox box)
+        {
+            cloud.PasswordConfirm = box.Password;
+        }
+    }
+
+    private void CloudUnlockPasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (Cloud is { } cloud && sender is PasswordBox box)
+        {
+            cloud.UnlockPassword = box.Password;
+        }
+    }
+
+    // 服务地址默认只读；左键三击进入可编辑（无界面提示，属刻意隐藏的高级操作）。
+    private void CloudServerUrlBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount >= 3 && Cloud is { } cloud && sender is TextBox box)
+        {
+            cloud.UnlockServerUrlField();
+            box.IsReadOnly = false;
+            box.Focus();
+            box.SelectAll();
+            e.Handled = true;
         }
     }
 }

@@ -21,7 +21,17 @@ public sealed record CloudVaultStatus(
     bool Exists,
     int? CurrentKeyVersion,
     bool HasPasswordEnvelope,
-    bool HasRecoveryEnvelope);
+    bool HasRecoveryEnvelope,
+    bool RequireDeviceApproval,
+    bool ThisDeviceApproved);
+
+/// <summary>「新设备需批准」开启时，一台待批准的设备。</summary>
+public sealed record CloudPendingDevice(
+    Guid DeviceId,
+    string ClientDeviceId,
+    string DisplayName,
+    string Platform,
+    DateTimeOffset LastSeenAt);
 
 public enum SyncPushOperationType
 {

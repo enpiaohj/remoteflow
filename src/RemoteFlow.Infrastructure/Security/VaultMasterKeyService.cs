@@ -14,6 +14,9 @@ public enum VaultUnlockState
 
     /// <summary>Vault 存在但本地没有缓存 VMK 且未提供口令，需要用户输入口令（或用 Recovery Key 恢复）。</summary>
     NeedsPassword,
+
+    /// <summary>Vault 开启「新设备需批准」，本设备尚未获批准——等已有设备批准，或用 Recovery Key 恢复。</summary>
+    NeedsApproval,
 }
 
 public sealed record VaultUnlockResult(VaultUnlockState State, IVaultSession? Session);
@@ -50,6 +53,11 @@ public sealed class VaultMasterKeyService(
             return new VaultUnlockResult(VaultUnlockState.NeedsBootstrap, null);
         }
 
+        if (status.RequireDeviceApproval && !status.ThisDeviceApproved)
+        {
+            return new VaultUnlockResult(VaultUnlockState.NeedsApproval, null);
+        }
+
         if (string.IsNullOrEmpty(password))
         {
             return new VaultUnlockResult(VaultUnlockState.NeedsPassword, null);
@@ -77,7 +85,7 @@ public sealed class VaultMasterKeyService(
 
     /// <summary>首设备初始化 Vault。返回会话与一次性展示的 Recovery Key。</summary>
     public async Task<(IVaultSession Session, RecoveryKey RecoveryKey)> BootstrapAsync(
-        string password, CancellationToken ct = default)
+        string password, bool requireDeviceApproval, CancellationToken ct = default)
     {
         var masterKey = VaultCryptography.NewMasterKey();
         try
@@ -86,7 +94,7 @@ public sealed class VaultMasterKeyService(
                 VaultEnvelopeKinds.Password, password, masterKey);
             var (recoveryKey, recoveryEnvelope) = recoveryKeys.Create(masterKey);
 
-            if (!await client.BootstrapVaultAsync(passwordEnvelope, recoveryEnvelope, ct))
+            if (!await client.BootstrapVaultAsync(passwordEnvelope, recoveryEnvelope, requireDeviceApproval, ct))
             {
                 throw new InvalidOperationException("Vault already exists for this account; unlock instead.");
             }

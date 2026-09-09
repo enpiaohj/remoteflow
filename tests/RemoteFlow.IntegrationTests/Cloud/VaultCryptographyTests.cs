@@ -12,65 +12,81 @@ public sealed class VaultCryptographyTests
         new(Guid.Parse("11111111-1111-1111-1111-111111111111"), "com.appscloud.remoteflow",
             entityType, entityId, SchemaVersion: 1, KeyVersion: 1);
 
+    // ── 认证密钥 ────────────────────────────────────────────────
+
     [Fact]
-    public void Device_envelope_round_trips_the_master_key_for_the_same_device()
+    public void Auth_key_is_deterministic_for_the_same_password_and_email()
     {
-        var (privateKey, publicKey) = VaultCryptography.NewDeviceKeyPair();
-        var master = VaultCryptography.NewMasterKey();
+        var a = VaultCryptography.DeriveAuthKey("cloud-passw0rd", "Me@Example.com");
+        var b = VaultCryptography.DeriveAuthKey("cloud-passw0rd", "me@example.com  ");
 
-        var envelope = VaultCryptography.WrapForDevice(publicKey, master);
-        var recovered = VaultCryptography.UnwrapFromDevice(privateKey, envelope);
-
-        Assert.Equal(master, recovered);
-        Assert.Equal(VaultAlgorithms.DeviceEnvelope, envelope.Algorithm);
+        Assert.Equal(a, b); // 邮箱大小写与空白已规范化
+        Assert.Equal(32, Convert.FromBase64String(a).Length);
     }
 
     [Fact]
-    public void Approved_device_unwraps_an_envelope_wrapped_by_another_device()
+    public void Auth_key_differs_by_password_and_by_email()
     {
-        var (bPrivate, bPublic) = VaultCryptography.NewDeviceKeyPair();
-        var master = VaultCryptography.NewMasterKey();
+        var baseKey = VaultCryptography.DeriveAuthKey("cloud-passw0rd", "me@example.com");
 
-        // 设备 A 用设备 B 的公钥包装 VMK（批准流程）
-        var envelope = VaultCryptography.WrapForDevice(bPublic, master);
-        var recovered = VaultCryptography.UnwrapFromDevice(bPrivate, envelope);
-
-        Assert.Equal(master, recovered);
+        Assert.NotEqual(baseKey, VaultCryptography.DeriveAuthKey("cloud-passw0rE", "me@example.com"));
+        Assert.NotEqual(baseKey, VaultCryptography.DeriveAuthKey("cloud-passw0rd", "you@example.com"));
     }
 
-    [Fact]
-    public void A_different_device_key_cannot_unwrap_the_envelope()
-    {
-        var (_, targetPublic) = VaultCryptography.NewDeviceKeyPair();
-        var (otherPrivate, _) = VaultCryptography.NewDeviceKeyPair();
-        var envelope = VaultCryptography.WrapForDevice(targetPublic, VaultCryptography.NewMasterKey());
+    // ── 口令 / Recovery 信封 ────────────────────────────────────
 
-        Assert.ThrowsAny<CryptographicException>(
-            () => VaultCryptography.UnwrapFromDevice(otherPrivate, envelope));
+    [Fact]
+    public void Password_envelope_round_trips_the_master_key()
+    {
+        var master = VaultCryptography.NewMasterKey();
+
+        var envelope = VaultCryptography.WrapWithSecret(VaultEnvelopeKinds.Password, "master-passw0rd", master);
+        var recovered = VaultCryptography.UnwrapWithSecret("master-passw0rd", envelope);
+
+        Assert.Equal(master, recovered);
+        Assert.Equal(VaultEnvelopeKinds.Password, envelope.Kind);
+        Assert.Equal(VaultAlgorithms.SecretEnvelope, envelope.Algorithm);
+        Assert.Equal(VaultCryptography.Pbkdf2Iterations, envelope.Iterations);
+        Assert.NotEmpty(envelope.Salt);
     }
 
     [Fact]
     public void Recovery_envelope_round_trips_the_master_key()
     {
         var master = VaultCryptography.NewMasterKey();
-        var recoveryKey = RandomNumberGenerator.GetBytes(32);
+        var recoveryKey = RecoveryKey.Generate().ToDisplayString();
 
-        var envelope = VaultCryptography.WrapForRecovery(recoveryKey, master);
-        var recovered = VaultCryptography.UnwrapFromRecovery(recoveryKey, envelope);
+        var envelope = VaultCryptography.WrapWithSecret(VaultEnvelopeKinds.Recovery, recoveryKey, master);
+        var recovered = VaultCryptography.UnwrapWithSecret(recoveryKey, envelope);
 
         Assert.Equal(master, recovered);
-        Assert.Equal(VaultAlgorithms.RecoveryEnvelope, envelope.Algorithm);
+        Assert.Equal(VaultEnvelopeKinds.Recovery, envelope.Kind);
     }
 
     [Fact]
-    public void A_wrong_recovery_key_cannot_unwrap()
+    public void A_wrong_secret_cannot_unwrap_the_envelope()
     {
-        var envelope = VaultCryptography.WrapForRecovery(
-            RandomNumberGenerator.GetBytes(32), VaultCryptography.NewMasterKey());
+        var envelope = VaultCryptography.WrapWithSecret(
+            VaultEnvelopeKinds.Password, "the-real-passw0rd", VaultCryptography.NewMasterKey());
 
         Assert.ThrowsAny<CryptographicException>(
-            () => VaultCryptography.UnwrapFromRecovery(RandomNumberGenerator.GetBytes(32), envelope));
+            () => VaultCryptography.UnwrapWithSecret("a-different-passw0rd", envelope));
     }
+
+    [Fact]
+    public void Each_wrap_uses_a_fresh_salt_and_nonce()
+    {
+        var master = VaultCryptography.NewMasterKey();
+
+        var a = VaultCryptography.WrapWithSecret(VaultEnvelopeKinds.Password, "pw", master);
+        var b = VaultCryptography.WrapWithSecret(VaultEnvelopeKinds.Password, "pw", master);
+
+        Assert.NotEqual(a.Salt, b.Salt);
+        Assert.NotEqual(a.Nonce, b.Nonce);
+        Assert.NotEqual(a.WrappedKey, b.WrappedKey);
+    }
+
+    // ── 载荷 ────────────────────────────────────────────────────
 
     [Fact]
     public void Payload_round_trips_when_the_context_matches()

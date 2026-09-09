@@ -28,13 +28,22 @@ public interface ICloudClient
 
     /// <summary>首设备初始化：上传口令信封 + Recovery 信封。已存在时返回 false。</summary>
     Task<bool> BootstrapVaultAsync(
-        VaultKeyEnvelope passwordEnvelope, VaultKeyEnvelope recoveryEnvelope, CancellationToken ct = default);
+        VaultKeyEnvelope passwordEnvelope, VaultKeyEnvelope recoveryEnvelope,
+        bool requireDeviceApproval, CancellationToken ct = default);
 
-    /// <summary>取指定类型（password / recovery）的信封。无 Vault / 无该信封返回 null。</summary>
+    /// <summary>取指定类型（password / recovery）的信封。无 Vault / 无该信封返回 null。开启批准且本设备未批准时 password 抛 403。</summary>
     Task<VaultKeyEnvelope?> GetVaultEnvelopeAsync(string kind, CancellationToken ct = default);
 
     /// <summary>覆盖指定类型的信封（改口令 / 重置 Recovery Key）。</summary>
     Task PutVaultEnvelopeAsync(VaultKeyEnvelope envelope, CancellationToken ct = default);
+
+    /// <summary>切换「新设备需批准」（本设备须已批准）。</summary>
+    Task SetRequireApprovalAsync(bool enabled, CancellationToken ct = default);
+
+    /// <summary>待批准设备列表（本设备须已批准）。</summary>
+    Task<IReadOnlyList<CloudPendingDevice>> GetPendingDevicesAsync(CancellationToken ct = default);
+
+    Task ApproveDeviceAsync(Guid targetDeviceId, CancellationToken ct = default);
 
     // ── Sync ────────────────────────────────────────────────────
 

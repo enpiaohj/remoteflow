@@ -15,6 +15,7 @@ namespace RemoteFlow.IntegrationTests.Cloud;
 /// <summary>
 /// 「完成定义」验证（安全设计 §15）：一台干净 RemoteFlow 通过 <see cref="ICloudSyncService"/>
 /// 恢复到完整连接 + 凭据 + Secret，并能解析出可连接的凭据；对真实 AppsCloud（G3/G4）执行。
+/// 口令派生模型：第二台设备只需账号 + 主口令即可解锁。
 /// </summary>
 public sealed class CloudSyncFacadeTests : IDisposable
 {
@@ -30,39 +31,44 @@ public sealed class CloudSyncFacadeTests : IDisposable
     }
 
     [RequiresAppsCloudFact]
-    public async Task Sign_in_with_an_unregistered_email_creates_the_account_and_proceeds_to_bootstrap()
+    public async Task Sign_in_is_login_only_and_reports_bad_credentials_clearly()
     {
         var baseUrl = Environment.GetEnvironmentVariable("APPSCLOUD_BASE_URL")!;
         var email = $"rf-signup-{Guid.NewGuid():N}@example.com";
-        const string password = "Signup-Passw0rd!";
+        const string password = "Signup-Master-Passw0rd!";
 
         var device = NewDevice(baseUrl);
 
-        // 未在别处开户，直接 SignInAsync：应自动注册后登录，落到「需初始化 Vault」。
+        // 未开户直接登录：应报凭据错误（不再静默自动注册）。
+        await Assert.ThrowsAsync<CloudSignInException>(
+            () => device.Sync.SignInAsync(baseUrl, email, password));
+
+        // 注册后再登录：落到「需初始化 Vault」。
+        Assert.Equal(CloudRegisterOutcome.Created, await device.Client.RegisterAsync(email, password));
         Assert.Equal(CloudUnlockState.NeedsBootstrap, await device.Sync.SignInAsync(baseUrl, email, password));
 
-        // 同一邮箱、错误密码：账号已存在，按凭据错误处理，不得静默改写。
+        // 已存在账号 + 错误口令：按凭据错误处理，不得静默改写。
         var bad = NewDevice(baseUrl);
         var err = await Assert.ThrowsAsync<CloudSignInException>(
             () => bad.Sync.SignInAsync(baseUrl, email, "Wrong-Passw0rd!"));
-        Assert.Equal("邮箱或密码不正确。", err.Message);
+        Assert.Contains("不正确", err.Message);
 
         await device.Sync.SignOutAsync(wipeLocalCloudData: true);
     }
 
     [RequiresAppsCloudFact]
-    public async Task A_fresh_device_recovers_connections_credentials_and_secrets_via_the_facade()
+    public async Task A_fresh_device_recovers_everything_with_just_email_and_password()
     {
         var baseUrl = Environment.GetEnvironmentVariable("APPSCLOUD_BASE_URL")!;
         var email = $"rf-facade-{Guid.NewGuid():N}@example.com";
-        const string password = "Facade-Passw0rd!";
+        const string password = "Facade-Master-Passw0rd!";
         const string rdpPassword = "S3cr3t-RDP!";
 
-        // ── 设备 A：登录 + bootstrap + 造数据 + 同步 ─────────────
+        // ── 设备 A：注册 + 登录 + bootstrap + 造数据 + 同步 ──────
         var alice = NewDevice(baseUrl);
         await alice.Client.RegisterAsync(email, password);
         Assert.Equal(CloudUnlockState.NeedsBootstrap, await alice.Sync.SignInAsync(baseUrl, email, password));
-        var recoveryKey = await alice.Sync.BootstrapVaultAsync();
+        _ = await alice.Sync.BootstrapVaultAsync();
 
         var credential = await alice.Credentials.CreateAsync(
             new Credential { Name = "DomainAdmin", Type = CredentialType.WindowsDomain, Username = "admin", Domain = "CORP" },
@@ -77,10 +83,9 @@ public sealed class CloudSyncFacadeTests : IDisposable
         Assert.Equal(SyncStatus.Synced, pushResult.Status);
         Assert.True(pushResult.Pushed >= 3); // connection + credential + credential-secret
 
-        // ── 设备 B：干净 → 登录 → Recovery Key → 同步 ───────────
+        // ── 设备 B：干净 → 只用邮箱 + 主口令登录即解锁 → 同步 ────
         var bob = NewDevice(baseUrl);
-        Assert.Equal(CloudUnlockState.NeedsApproval, await bob.Sync.SignInAsync(baseUrl, email, password));
-        await bob.Sync.RecoverVaultAsync(recoveryKey);
+        Assert.Equal(CloudUnlockState.Ready, await bob.Sync.SignInAsync(baseUrl, email, password));
 
         var pullResult = await bob.Sync.SyncNowAsync();
         Assert.Equal(SyncStatus.Synced, pullResult.Status);
@@ -118,9 +123,8 @@ public sealed class CloudSyncFacadeTests : IDisposable
         var http = new HttpClient(new SocketsHttpHandler { UseProxy = false });
         var client = new AppsCloudClient(http, endpoint, tokenStore, NullLogger<AppsCloudClient>.Instance);
 
-        var deviceKeys = new DeviceKeyService(keyStore);
         var vaultKeys = new VaultMasterKeyService(
-            client, keyStore, deviceKeys, new RecoveryKeyService(), NullLogger<VaultMasterKeyService>.Instance);
+            client, keyStore, new RecoveryKeyService(), NullLogger<VaultMasterKeyService>.Instance);
 
         var database = new RemoteFlowDatabase(workspace.DatabasePath, NullLogger<RemoteFlowDatabase>.Instance);
         database.Initialize();
@@ -147,7 +151,7 @@ public sealed class CloudSyncFacadeTests : IDisposable
         var settings = settingsStore.Load();
 
         var sync = new CloudSyncService(
-            client, tokenStore, endpoint, gate, vaultKeys, deviceKeys, coordinator, conflicts,
+            client, tokenStore, endpoint, gate, vaultKeys, coordinator, conflicts,
             store, settings, settingsStore, NullLogger<CloudSyncService>.Instance);
 
         var tracker = new OutboxSyncChangeTracker(store, gate, NullLogger<OutboxSyncChangeTracker>.Instance);

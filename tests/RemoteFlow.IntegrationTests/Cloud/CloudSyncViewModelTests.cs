@@ -28,6 +28,16 @@ public sealed class CloudSyncViewModelTests
     }
 
     [Fact]
+    public void Triple_click_unlocks_the_server_url_field()
+    {
+        var vm = NewViewModel();
+
+        vm.UnlockServerUrlField();
+
+        Assert.True(vm.ServerUrlEditable);
+    }
+
+    [Fact]
     public void Without_a_configured_url_the_field_is_editable()
     {
         var vm = new CloudSyncViewModel(
@@ -35,6 +45,18 @@ public sealed class CloudSyncViewModelTests
 
         Assert.True(vm.ServerUrlEditable);
         Assert.False(vm.HasConfiguredServerUrl);
+    }
+
+    [Fact]
+    public void Toggling_auth_mode_switches_the_submit_label()
+    {
+        var vm = NewViewModel();
+        Assert.False(vm.IsRegisterMode);
+
+        vm.ToggleAuthModeCommand.Execute(null);
+
+        Assert.True(vm.IsRegisterMode);
+        Assert.Equal("创建账号并启用同步", vm.SubmitLabel);
     }
 
     [Fact]
@@ -57,7 +79,7 @@ public sealed class CloudSyncViewModelTests
         _sync.SignInResult = CloudUnlockState.NeedsBootstrap;
         var vm = NewViewModel();
         vm.Email = "me@example.com";
-        vm.Password = "secret";
+        vm.Password = "cloud-passw0rd";
 
         await vm.ConnectCommand.ExecuteAsync(null);
 
@@ -66,7 +88,31 @@ public sealed class CloudSyncViewModelTests
     }
 
     [Fact]
-    public async Task Create_vault_surfaces_the_recovery_key_until_acknowledged()
+    public async Task Register_requires_a_matching_twelve_char_password()
+    {
+        var vm = NewViewModel();
+        vm.ToggleAuthModeCommand.Execute(null);
+        vm.Email = "me@example.com";
+        vm.Password = "short";
+        vm.PasswordConfirm = "short";
+
+        await vm.ConnectCommand.ExecuteAsync(null);
+        Assert.Equal(CloudSyncUiState.SignedOut, vm.State);
+        Assert.NotNull(vm.ErrorMessage);
+
+        vm.Password = "long-enough-passw0rd";
+        vm.PasswordConfirm = "different-passw0rd!!";
+        await vm.ConnectCommand.ExecuteAsync(null);
+        Assert.Equal(CloudSyncUiState.SignedOut, vm.State);
+
+        vm.Password = "long-enough-passw0rd";
+        vm.PasswordConfirm = "long-enough-passw0rd";
+        await vm.ConnectCommand.ExecuteAsync(null);
+        Assert.Equal(CloudSyncUiState.NeedsVaultSetup, vm.State);
+    }
+
+    [Fact]
+    public async Task Create_vault_surfaces_the_recovery_key_until_saved_and_acknowledged()
     {
         _sync.RecoveryKeyToReturn = "WORD WORD WORD";
         var vm = NewViewModel();
@@ -76,19 +122,26 @@ public sealed class CloudSyncViewModelTests
 
         await vm.CreateVaultCommand.ExecuteAsync(null);
         Assert.Equal("WORD WORD WORD", vm.NewRecoveryKey);
+        Assert.True(vm.HasNewRecoveryKey);
         Assert.Equal(CloudSyncUiState.Ready, vm.State);
+        Assert.False(vm.AcknowledgeRecoveryKeyCommand.CanExecute(null));
+
+        await vm.CopyRecoveryKeyCommand.ExecuteAsync(null);
+        Assert.Equal("WORD WORD WORD", _dialogs.LastClipboardText);
+        Assert.True(vm.AcknowledgeRecoveryKeyCommand.CanExecute(null));
 
         vm.AcknowledgeRecoveryKeyCommand.Execute(null);
         Assert.Null(vm.NewRecoveryKey);
     }
 
     [Fact]
-    public async Task Sync_now_is_only_available_when_ready()
+    public async Task Sync_now_reports_a_count_summary_and_is_only_available_when_ready()
     {
         var vm = NewViewModel();
         Assert.False(vm.SyncNowCommand.CanExecute(null));
 
         _sync.SignInResult = CloudUnlockState.Ready;
+        _sync.NextRun = new SyncRunResult(3, 0, 5, 0, 10, SyncStatus.Synced);
         vm.Email = "me@example.com";
         vm.Password = "cloud-passw0rd";
         await vm.ConnectCommand.ExecuteAsync(null);
@@ -96,14 +149,46 @@ public sealed class CloudSyncViewModelTests
         Assert.True(vm.SyncNowCommand.CanExecute(null));
         await vm.SyncNowCommand.ExecuteAsync(null);
         Assert.Equal(1, _sync.SyncNowCalls);
+        Assert.Equal("上传 3 · 下载 5", vm.LastSyncSummary);
+    }
+
+    [Fact]
+    public async Task Changing_the_require_approval_toggle_calls_through()
+    {
+        _sync.SignInResult = CloudUnlockState.Ready;
+        var vm = NewViewModel();
+        vm.Email = "me@example.com";
+        vm.Password = "cloud-passw0rd";
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        vm.RequireApproval = true;
+
+        Assert.Equal(true, _sync.RequireApprovalSetTo);
+    }
+
+    [Fact]
+    public async Task Changing_the_master_password_prompts_twice_and_calls_through()
+    {
+        _sync.SignInResult = CloudUnlockState.Ready;
+        _dialogs.PasswordResponses.Enqueue("current-passw0rd");
+        _dialogs.PasswordResponses.Enqueue("brand-new-passw0rd");
+        var vm = NewViewModel();
+        vm.Email = "me@example.com";
+        vm.Password = "cloud-passw0rd";
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        await vm.ChangePasswordCommand.ExecuteAsync(null);
+
+        Assert.Equal(("current-passw0rd", "brand-new-passw0rd"), _sync.ChangedPassword);
     }
 
     [Fact]
     public async Task Approving_a_pending_device_calls_through_and_refreshes_the_list()
     {
         _sync.SignInResult = CloudUnlockState.Ready;
+        _sync.RequireApproval = true;
         var deviceId = Guid.NewGuid();
-        _sync.Pending.Add(new CloudPendingDevice(deviceId, "pc-b", "Bob PC", "windows", [1], DateTimeOffset.UtcNow));
+        _sync.Pending.Add(new CloudPendingDevice(deviceId, "pc-b", "Bob PC", "windows", DateTimeOffset.UtcNow));
         var vm = NewViewModel();
         vm.Email = "me@example.com";
         vm.Password = "cloud-passw0rd";
@@ -171,12 +256,20 @@ public sealed class CloudSyncViewModelTests
     private sealed class StubDialogService : IDialogService
     {
         public bool ConfirmResult { get; set; } = true;
+        public string? LastClipboardText { get; private set; }
+        public Queue<string?> PasswordResponses { get; } = new();
 
         public Task<bool> ConfirmAsync(string title, string message, string confirmText = "确定", bool isDanger = false) =>
             Task.FromResult(ConfirmResult);
 
         public Task ShowMessageAsync(string title, string message, DialogKind kind = DialogKind.Info) =>
             Task.CompletedTask;
+
+        public Task CopyToClipboardAsync(string text)
+        {
+            LastClipboardText = text;
+            return Task.CompletedTask;
+        }
 
         public Task<ConnectionEditorResult?> EditConnectionAsync(ConnectionProfile? e, ProtocolType? p = null) => Task.FromResult<ConnectionEditorResult?>(null);
         public Task<CredentialEditorResult?> EditCredentialAsync(Credential? e) => Task.FromResult<CredentialEditorResult?>(null);
@@ -185,7 +278,8 @@ public sealed class CloudSyncViewModelTests
         public Task<TagEditorResult?> EditTagAsync(TagEditorPrompt prompt) => Task.FromResult<TagEditorResult?>(null);
         public Task<IReadOnlyList<Tag>> ManageTagsAsync() => Task.FromResult<IReadOnlyList<Tag>>([]);
         public Task<bool> ConfirmHostKeyAsync(SshHostKeyVerificationContext context) => Task.FromResult(false);
-        public Task<string?> PromptPasswordAsync(string title, string message, bool confirm) => Task.FromResult<string?>(null);
+        public Task<string?> PromptPasswordAsync(string title, string message, bool confirm) =>
+            Task.FromResult(PasswordResponses.Count > 0 ? PasswordResponses.Dequeue() : null);
         public string? PickFileToOpen(string title, string filter) => null;
         public string? PickFileToSave(string title, string filter, string defaultFileName) => null;
         public string? PickFolder(string title) => null;

@@ -131,14 +131,30 @@ public sealed class CloudSyncService(
         return await UnlockAsync(ct);
     }
 
-    public async Task<string> BootstrapVaultAsync(CancellationToken ct = default)
+    public async Task<string> BootstrapVaultAsync(
+        bool requireDeviceApproval = false, CancellationToken ct = default)
     {
         var password = _pendingPassword
             ?? throw new InvalidOperationException("请先登录。");
-        var (session, recoveryKey) = await vaultKeys.BootstrapAsync(password, ct);
+        var (session, recoveryKey) = await vaultKeys.BootstrapAsync(password, requireDeviceApproval, ct);
         AdoptSession(session, keyVersion: 1);
         return recoveryKey.ToDisplayString();
     }
+
+    public async Task<bool> GetRequireApprovalAsync(CancellationToken ct = default) =>
+        (await client.GetVaultStatusAsync(ct)).RequireDeviceApproval;
+
+    public Task SetRequireApprovalAsync(bool enabled, CancellationToken ct = default) =>
+        client.SetRequireApprovalAsync(enabled, ct);
+
+    public Task<IReadOnlyList<CloudPendingDevice>> GetPendingDevicesAsync(CancellationToken ct = default) =>
+        client.GetPendingDevicesAsync(ct);
+
+    public Task ApproveDeviceAsync(Guid deviceId, CancellationToken ct = default) =>
+        client.ApproveDeviceAsync(deviceId, ct);
+
+    /// <summary>本设备刚被批准后，重新解锁（此时应能拿到口令信封）。</summary>
+    public Task<CloudUnlockState> RetryUnlockAsync(CancellationToken ct = default) => UnlockAsync(ct);
 
     public async Task RecoverVaultAsync(string recoveryKey, CancellationToken ct = default)
     {
@@ -224,6 +240,9 @@ public sealed class CloudSyncService(
 
             case VaultUnlockState.NeedsBootstrap:
                 return CloudUnlockState.NeedsBootstrap;
+
+            case VaultUnlockState.NeedsApproval:
+                return CloudUnlockState.NeedsApproval;
 
             default:
                 return CloudUnlockState.NeedsPassword;

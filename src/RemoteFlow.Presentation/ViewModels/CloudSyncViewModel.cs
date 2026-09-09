@@ -13,19 +13,27 @@ public enum CloudSyncUiState
 {
     SignedOut,
     NeedsVaultSetup,
+    NeedsPassword,
     NeedsApproval,
     Ready,
 }
 
-/// <summary>设备批准列表的一行。</summary>
+/// <summary>登录卡片的模式：登录已有账号 / 注册新账号。</summary>
+public enum CloudAuthMode
+{
+    SignIn,
+    Register,
+}
+
+/// <summary>待批准设备列表的一行。</summary>
 public sealed record CloudDeviceRow(Guid DeviceId, string Name, string Platform, DateTimeOffset LastSeenAt);
 
 /// <summary>冲突列表的一行。</summary>
 public sealed record CloudConflictRow(Guid Id, string EntityType, string EntityId, DateTimeOffset DetectedAt);
 
 /// <summary>
-/// 「设置 → Cloud Sync」面板。登录 AppsCloud、初始化 / 恢复 Vault、手动同步、
-/// 批准新设备、解决冲突、退出。View 只做绑定与呈现。
+/// 「设置 → 云同步」面板。口令派生模型：新设备默认只需账号 + 主口令；
+/// 账号可另开「新设备需批准」加一道设备信任因素。View 只做绑定与呈现。
 /// </summary>
 public sealed partial class CloudSyncViewModel(
     ICloudSyncService sync,
@@ -41,11 +49,20 @@ public sealed partial class CloudSyncViewModel(
     private CloudSyncUiState _state = CloudSyncUiState.SignedOut;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRegisterMode))]
+    [NotifyPropertyChangedFor(nameof(SubmitLabel))]
+    private CloudAuthMode _authMode = CloudAuthMode.SignIn;
+
+    public bool IsRegisterMode => AuthMode == CloudAuthMode.Register;
+
+    public string SubmitLabel => IsRegisterMode ? "创建账号并启用同步" : "登录并启用同步";
+
+    [ObservableProperty]
     private string _serverUrl = settings.CloudBaseUrl;
 
     /// <summary>
-    /// 服务地址是否可编辑。默认：仅当没有预配置地址（开发 / 未打包）时可改；
-    /// 已配置时锁定，特殊情况由用户勾选「使用自定义服务地址」解锁。
+    /// 服务地址是否可编辑。默认锁定（已内置正式地址）；用户在字段上三击可解锁，界面不作提示。
+    /// 没有预配置地址（开发 / 未打包）时默认就可编辑。
     /// </summary>
     [ObservableProperty]
     private bool _serverUrlEditable = string.IsNullOrWhiteSpace(settings.CloudBaseUrl);
@@ -53,17 +70,35 @@ public sealed partial class CloudSyncViewModel(
     public bool HasConfiguredServerUrl { get; } = !string.IsNullOrWhiteSpace(settings.CloudBaseUrl);
 
     [ObservableProperty]
-    private string _email = string.Empty;
+    private string _email = settings.CloudEmail;
 
     [ObservableProperty]
     private string _password = string.Empty;
 
     [ObservableProperty]
+    private string _passwordConfirm = string.Empty;
+
+    /// <summary>注册时可勾选「本账号新设备需批准」。</summary>
+    [ObservableProperty]
+    private bool _registerRequireApproval;
+
+    [ObservableProperty]
     private string _recoveryKeyInput = string.Empty;
 
-    /// <summary>bootstrap 后一次性展示的 Recovery Key（分组字符串）。用户确认已保存后清空。</summary>
     [ObservableProperty]
+    private string _unlockPassword = string.Empty;
+
+    /// <summary>bootstrap / 重置后一次性展示的 Recovery Key（分组字符串）。用户确认已保存后清空。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasNewRecoveryKey))]
     private string? _newRecoveryKey;
+
+    public bool HasNewRecoveryKey => !string.IsNullOrEmpty(NewRecoveryKey);
+
+    /// <summary>用户已复制或另存 Recovery Key —— 解锁「我已妥善保存」按钮。</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(AcknowledgeRecoveryKeyCommand))]
+    private bool _recoveryKeySecured;
 
     [ObservableProperty]
     private string _statusLine = "未登录";
@@ -77,8 +112,19 @@ public sealed partial class CloudSyncViewModel(
     [ObservableProperty]
     private int _conflictCount;
 
+    /// <summary>上次手动同步的条数摘要，如「上传 3 · 下载 5」。</summary>
+    [ObservableProperty]
+    private string? _lastSyncSummary;
+
+    /// <summary>本账号「新设备需批准」当前是否开启。</summary>
+    [ObservableProperty]
+    private bool _requireApproval;
+
     [ObservableProperty]
     private string? _errorMessage;
+
+    [ObservableProperty]
+    private string? _infoMessage;
 
     public ObservableCollection<CloudDeviceRow> PendingDevices { get; } = [];
 
@@ -99,33 +145,93 @@ public sealed partial class CloudSyncViewModel(
         });
     }
 
+    /// <summary>View 在服务地址字段上三击时调用——解锁编辑，界面不作提示。</summary>
+    public void UnlockServerUrlField() => ServerUrlEditable = true;
+
+    [RelayCommand]
+    private void ToggleAuthMode()
+    {
+        AuthMode = IsRegisterMode ? CloudAuthMode.SignIn : CloudAuthMode.Register;
+        ErrorMessage = null;
+        InfoMessage = null;
+    }
+
     [RelayCommand]
     private Task ConnectAsync() => RunAsync(async () =>
     {
-        if (string.IsNullOrWhiteSpace(ServerUrl)
-            || string.IsNullOrWhiteSpace(Email)
-            || string.IsNullOrEmpty(Password))
+        var url = ServerUrl.Trim();
+        var email = Email.Trim();
+        if (url.Length == 0 || email.Length == 0 || Password.Length == 0)
         {
-            ErrorMessage = "请填写服务地址、邮箱和密码。";
+            ErrorMessage = "请填写服务地址、邮箱和主口令。";
             return;
         }
 
-        if (!Email.Contains('@', StringComparison.Ordinal))
+        if (!email.Contains('@', StringComparison.Ordinal))
         {
             ErrorMessage = "邮箱格式不正确。";
             return;
         }
 
-        var unlock = await sync.SignInAsync(ServerUrl.Trim(), Email.Trim(), Password);
+        if (IsRegisterMode)
+        {
+            if (Password.Length < 12)
+            {
+                ErrorMessage = "主口令至少 12 位。它是解密数据的唯一凭据，请用强口令并牢记。";
+                return;
+            }
+
+            if (Password != PasswordConfirm)
+            {
+                ErrorMessage = "两次输入的口令不一致。";
+                return;
+            }
+        }
+
+        var unlock = IsRegisterMode
+            ? await sync.RegisterAsync(url, email, Password)
+            : await sync.SignInAsync(url, email, Password);
+
         Password = string.Empty;
+        PasswordConfirm = string.Empty;
         ApplyUnlockState(unlock);
         await RefreshInternalAsync();
     });
 
     [RelayCommand]
+    private Task UnlockAsync() => RunAsync(async () =>
+    {
+        if (UnlockPassword.Length == 0)
+        {
+            ErrorMessage = "请输入主口令。";
+            return;
+        }
+
+        var unlock = await sync.UnlockWithPasswordAsync(UnlockPassword);
+        UnlockPassword = string.Empty;
+        ApplyUnlockState(unlock);
+        await RefreshInternalAsync();
+    });
+
+    [RelayCommand]
+    private Task RetryUnlockAsync() => RunAsync(async () =>
+    {
+        var unlock = await sync.RetryUnlockAsync();
+        ApplyUnlockState(unlock);
+        if (State == CloudSyncUiState.NeedsApproval)
+        {
+            InfoMessage = "本设备还没有被批准。请在一台已登录的设备上打开「云同步」批准本机。";
+        }
+        else
+        {
+            await RefreshInternalAsync();
+        }
+    });
+
+    [RelayCommand]
     private Task CreateVaultAsync() => RunAsync(async () =>
     {
-        NewRecoveryKey = await sync.BootstrapVaultAsync();
+        ShowNewRecoveryKey(await sync.BootstrapVaultAsync(RegisterRequireApproval));
         ApplyUnlockState(CloudUnlockState.Ready);
         await RefreshInternalAsync();
     });
@@ -142,26 +248,147 @@ public sealed partial class CloudSyncViewModel(
         await sync.RecoverVaultAsync(RecoveryKeyInput.Trim());
         RecoveryKeyInput = string.Empty;
         ApplyUnlockState(CloudUnlockState.Ready);
+        InfoMessage = "已用 Recovery Key 恢复。建议在「更改主口令」里设置一个记得住的新口令。";
         await RefreshInternalAsync();
     });
 
     [RelayCommand]
-    private void AcknowledgeRecoveryKey() => NewRecoveryKey = null;
+    private Task CopyRecoveryKeyAsync() => RunAsync(async () =>
+    {
+        if (NewRecoveryKey is { } key)
+        {
+            await dialogs.CopyToClipboardAsync(key);
+            RecoveryKeySecured = true;
+            InfoMessage = "Recovery Key 已复制到剪贴板，请立即粘贴到安全的地方。";
+        }
+    });
+
+    [RelayCommand]
+    private void SaveRecoveryKey()
+    {
+        if (NewRecoveryKey is not { } key)
+        {
+            return;
+        }
+
+        var path = dialogs.PickFileToSave("保存 Recovery Key", "文本文件|*.txt", "RemoteFlow-RecoveryKey.txt");
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            File.WriteAllText(
+                path,
+                "RemoteFlow 云同步 Recovery Key —— 忘记主口令时用它恢复访问权。\r\n"
+                + "请离线妥善保管，任何持有此 Key 的人都能解密你的同步数据。\r\n\r\n"
+                + key + "\r\n");
+            RecoveryKeySecured = true;
+            InfoMessage = "Recovery Key 已保存到文件。";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ErrorMessage = "保存失败：" + ex.Message;
+        }
+    }
+
+    private bool CanAcknowledgeRecoveryKey() => RecoveryKeySecured;
+
+    [RelayCommand(CanExecute = nameof(CanAcknowledgeRecoveryKey))]
+    private void AcknowledgeRecoveryKey()
+    {
+        NewRecoveryKey = null;
+        RecoveryKeySecured = false;
+        InfoMessage = null;
+    }
 
     [RelayCommand(CanExecute = nameof(IsReady))]
     private Task SyncNowAsync() => RunAsync(async () =>
     {
         var result = await sync.SyncNowAsync();
+        var conflicts = result.PushConflicts + result.PullConflicts;
+        LastSyncSummary = $"上传 {result.Pushed} · 下载 {result.Pulled}"
+            + (conflicts > 0 ? $" · 冲突 {conflicts}" : string.Empty);
         logger.LogInformation("手动同步：{Status}", result.Status);
         await RefreshInternalAsync();
         if (result.Status == SyncStatus.AuthRequired)
         {
-            State = CloudSyncUiState.SignedOut;
+            ResetToSignedOut();
+            ErrorMessage = "登录已过期，请重新登录。";
         }
     });
 
     [RelayCommand(CanExecute = nameof(IsReady))]
     private Task RefreshAsync() => RunAsync(RefreshInternalAsync);
+
+    [RelayCommand(CanExecute = nameof(IsReady))]
+    private Task ChangePasswordAsync() => RunAsync(async () =>
+    {
+        var current = await dialogs.PromptPasswordAsync("更改主口令", "输入当前主口令", confirm: false);
+        if (string.IsNullOrEmpty(current))
+        {
+            return;
+        }
+
+        var next = await dialogs.PromptPasswordAsync("更改主口令", "设置新主口令（至少 12 位）", confirm: true);
+        if (string.IsNullOrEmpty(next))
+        {
+            return;
+        }
+
+        if (next.Length < 12)
+        {
+            ErrorMessage = "新主口令至少 12 位。";
+            return;
+        }
+
+        await sync.ChangePasswordAsync(current, next);
+        InfoMessage = "主口令已更改。其它设备需要用新口令重新登录。";
+    });
+
+    [RelayCommand(CanExecute = nameof(IsReady))]
+    private Task ResetRecoveryKeyAsync() => RunAsync(async () =>
+    {
+        if (!await dialogs.ConfirmAsync(
+                "重置 Recovery Key",
+                "将生成一把新的 Recovery Key，旧的立即失效。新 Key 只显示一次，请务必保存。", "生成新的"))
+        {
+            return;
+        }
+
+        ShowNewRecoveryKey(await sync.ResetRecoveryKeyAsync());
+    });
+
+    [RelayCommand(CanExecute = nameof(IsReady))]
+    private Task ApproveDeviceAsync(CloudDeviceRow? device) => RunAsync(async () =>
+    {
+        if (device is null)
+        {
+            return;
+        }
+
+        await sync.ApproveDeviceAsync(device.DeviceId);
+        await RefreshInternalAsync();
+        await dialogs.ShowMessageAsync("已批准", $"设备「{device.Name}」现在可以同步了。", DialogKind.Success);
+    });
+
+    partial void OnRequireApprovalChanged(bool value)
+    {
+        if (_suppressRequireApprovalCallback || State != CloudSyncUiState.Ready)
+        {
+            return;
+        }
+
+        _ = RunAsync(async () =>
+        {
+            await sync.SetRequireApprovalAsync(value);
+            InfoMessage = value
+                ? "已开启：新设备登录后需在已有设备上批准才能同步。"
+                : "已关闭：新设备只需主口令即可同步。";
+            await RefreshInternalAsync();
+        });
+    }
 
     [RelayCommand]
     private Task DisconnectAsync() => RunAsync(async () =>
@@ -181,7 +408,7 @@ public sealed partial class CloudSyncViewModel(
         if (!await dialogs.ConfirmAsync(
                 "清除此设备云数据",
                 "将退出登录并清除本机的同步状态与 Vault 密钥缓存。本地连接与凭据不受影响，"
-                + "但下次需要重新登录并批准 / 恢复。",
+                + "但下次需要重新登录。",
                 confirmText: "清除并退出", isDanger: true))
         {
             return;
@@ -189,19 +416,6 @@ public sealed partial class CloudSyncViewModel(
 
         await sync.SignOutAsync(wipeLocalCloudData: true);
         ResetToSignedOut();
-    });
-
-    [RelayCommand(CanExecute = nameof(IsReady))]
-    private Task ApproveDeviceAsync(CloudDeviceRow? device) => RunAsync(async () =>
-    {
-        if (device is null)
-        {
-            return;
-        }
-
-        await sync.ApproveDeviceAsync(device.DeviceId);
-        await RefreshInternalAsync();
-        await dialogs.ShowMessageAsync("已批准", $"设备「{device.Name}」现在可以同步了。", DialogKind.Success);
     });
 
     [RelayCommand(CanExecute = nameof(IsReady))]
@@ -223,7 +437,16 @@ public sealed partial class CloudSyncViewModel(
 
     // ── 内部 ────────────────────────────────────────────────────
 
+    private bool _suppressRequireApprovalCallback;
+
     private bool IsReady => State == CloudSyncUiState.Ready && !IsBusy;
+
+    private void ShowNewRecoveryKey(string key)
+    {
+        NewRecoveryKey = key;
+        RecoveryKeySecured = false;
+        InfoMessage = null;
+    }
 
     private async Task RefreshInternalAsync()
     {
@@ -235,13 +458,19 @@ public sealed partial class CloudSyncViewModel(
         var snapshot = await sync.GetStateAsync();
         LastSyncedAt = snapshot.LastSuccessfulSyncAt;
         PendingChangeCount = await sync.GetPendingOutboxCountAsync();
-        StatusLine = DescribeStatus(snapshot.Status);
+
+        _suppressRequireApprovalCallback = true;
+        RequireApproval = await sync.GetRequireApprovalAsync();
+        _suppressRequireApprovalCallback = false;
 
         PendingDevices.Clear();
-        foreach (var device in await sync.GetPendingDevicesAsync())
+        if (RequireApproval)
         {
-            PendingDevices.Add(new CloudDeviceRow(
-                device.DeviceId, device.DisplayName, device.Platform, device.LastSeenAt));
+            foreach (var device in await sync.GetPendingDevicesAsync())
+            {
+                PendingDevices.Add(new CloudDeviceRow(
+                    device.DeviceId, device.DisplayName, device.Platform, device.LastSeenAt));
+            }
         }
 
         Conflicts.Clear();
@@ -252,6 +481,7 @@ public sealed partial class CloudSyncViewModel(
         }
 
         ConflictCount = Conflicts.Count;
+        StatusLine = DescribeStatus(snapshot.Status);
     }
 
     private string DescribeStatus(SyncStatus status) => status switch
@@ -261,8 +491,8 @@ public sealed partial class CloudSyncViewModel(
         SyncStatus.Conflicted => $"存在 {Conflicts.Count} 个冲突待处理",
         SyncStatus.Offline => "离线，稍后自动重试",
         SyncStatus.AuthRequired => "登录已过期，请重新登录",
-        SyncStatus.Error => "同步出错，详见日志",
-        _ => "空闲",
+        SyncStatus.Error => "上次同步出错，将自动重试",
+        _ => PendingChangeCount > 0 ? $"{PendingChangeCount} 项待上传" : "空闲",
     };
 
     private void ApplyUnlockState(CloudUnlockState unlock)
@@ -272,7 +502,8 @@ public sealed partial class CloudSyncViewModel(
         {
             CloudUnlockState.Ready => CloudSyncUiState.Ready,
             CloudUnlockState.NeedsBootstrap => CloudSyncUiState.NeedsVaultSetup,
-            _ => CloudSyncUiState.NeedsApproval,
+            CloudUnlockState.NeedsApproval => CloudSyncUiState.NeedsApproval,
+            _ => CloudSyncUiState.NeedsPassword,
         };
         RaiseCommandStates();
     }
@@ -280,11 +511,15 @@ public sealed partial class CloudSyncViewModel(
     private void ResetToSignedOut()
     {
         State = CloudSyncUiState.SignedOut;
+        AuthMode = CloudAuthMode.SignIn;
         StatusLine = "未登录";
         PendingChangeCount = 0;
         ConflictCount = 0;
         LastSyncedAt = null;
+        LastSyncSummary = null;
         NewRecoveryKey = null;
+        RecoveryKeySecured = false;
+        InfoMessage = null;
         PendingDevices.Clear();
         Conflicts.Clear();
         RaiseCommandStates();
@@ -329,9 +564,10 @@ public sealed partial class CloudSyncViewModel(
     private static string Describe(Exception ex) => ex switch
     {
         CloudSignInException => ex.Message,
-        CloudApiException { StatusCode: 401 } => "邮箱或密码不正确。",
-        CloudApiException { StatusCode: 403 } => "本设备暂无访问权，请在已授权设备上批准，或用 Recovery Key 恢复。",
-        CloudApiException { StatusCode: 409 } => "该邮箱已注册，请用原密码登录。",
+        System.Security.Cryptography.CryptographicException => "主口令或 Recovery Key 不正确。",
+        CloudApiException { StatusCode: 401 } => "主口令不正确。",
+        CloudApiException { StatusCode: 403 } => "本设备暂无访问权，请在已登录的设备上批准，或用 Recovery Key 恢复。",
+        CloudApiException { StatusCode: 409 } => "该邮箱已注册，请改用「登录」。",
         CloudApiException { StatusCode: >= 500 } => "AppsCloud 服务暂时不可用，请稍后再试。",
         CloudApiException api => api.Message,
         HttpRequestException => "无法连接 AppsCloud 服务，请检查网络和服务地址。",
@@ -343,6 +579,8 @@ public sealed partial class CloudSyncViewModel(
     {
         SyncNowCommand.NotifyCanExecuteChanged();
         RefreshCommand.NotifyCanExecuteChanged();
+        ChangePasswordCommand.NotifyCanExecuteChanged();
+        ResetRecoveryKeyCommand.NotifyCanExecuteChanged();
         ApproveDeviceCommand.NotifyCanExecuteChanged();
         KeepLocalCommand.NotifyCanExecuteChanged();
         UseRemoteCommand.NotifyCanExecuteChanged();

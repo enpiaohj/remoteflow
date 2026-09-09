@@ -114,16 +114,20 @@ public sealed class AppsCloudClient(
         using var response = await SendAsync(HttpMethod.Get, "api/v1/vault/status", null, authenticated: true, ct);
         response.EnsureSuccessStatusCode();
         var dto = await ReadAsync<VaultStatusDto>(response, ct);
-        return new CloudVaultStatus(dto.Exists, dto.CurrentKeyVersion, dto.HasPasswordEnvelope, dto.HasRecoveryEnvelope);
+        return new CloudVaultStatus(
+            dto.Exists, dto.CurrentKeyVersion, dto.HasPasswordEnvelope, dto.HasRecoveryEnvelope,
+            dto.RequireDeviceApproval, dto.ThisDeviceApproved);
     }
 
     public async Task<bool> BootstrapVaultAsync(
-        VaultKeyEnvelope passwordEnvelope, VaultKeyEnvelope recoveryEnvelope, CancellationToken ct = default)
+        VaultKeyEnvelope passwordEnvelope, VaultKeyEnvelope recoveryEnvelope,
+        bool requireDeviceApproval, CancellationToken ct = default)
     {
         using var response = await SendAsync(HttpMethod.Post, "api/v1/vault/bootstrap", new
         {
             passwordEnvelope = ToWire(passwordEnvelope),
             recoveryEnvelope = ToWire(recoveryEnvelope),
+            requireDeviceApproval,
         }, authenticated: true, ct);
         return response.StatusCode switch
         {
@@ -131,6 +135,37 @@ public sealed class AppsCloudClient(
             HttpStatusCode.Conflict => false,
             _ => throw await ApiError(response),
         };
+    }
+
+    public async Task SetRequireApprovalAsync(bool enabled, CancellationToken ct = default)
+    {
+        using var response = await SendAsync(
+            HttpMethod.Put, "api/v1/vault/require-approval", new { enabled }, authenticated: true, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await ApiError(response);
+        }
+    }
+
+    public async Task<IReadOnlyList<CloudPendingDevice>> GetPendingDevicesAsync(CancellationToken ct = default)
+    {
+        using var response = await SendAsync(
+            HttpMethod.Get, "api/v1/vault/pending-devices", null, authenticated: true, ct);
+        response.EnsureSuccessStatusCode();
+        var dtos = await ReadAsync<List<PendingDeviceDto>>(response, ct);
+        return dtos.ConvertAll(x => new CloudPendingDevice(
+            x.DeviceId, x.ClientDeviceId, x.DisplayName, x.Platform, x.LastSeenAt));
+    }
+
+    public async Task ApproveDeviceAsync(Guid targetDeviceId, CancellationToken ct = default)
+    {
+        using var response = await SendAsync(
+            HttpMethod.Post, "api/v1/vault/approve-device", new { deviceId = targetDeviceId },
+            authenticated: true, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await ApiError(response);
+        }
     }
 
     public async Task<VaultKeyEnvelope?> GetVaultEnvelopeAsync(string kind, CancellationToken ct = default)
@@ -388,9 +423,12 @@ public sealed class AppsCloudClient(
 
     private sealed record TokenDto(string AccessToken, string RefreshToken, DateTimeOffset ExpiresAt);
     private sealed record VaultStatusDto(
-        bool Exists, int? CurrentKeyVersion, bool HasPasswordEnvelope, bool HasRecoveryEnvelope);
+        bool Exists, int? CurrentKeyVersion, bool HasPasswordEnvelope, bool HasRecoveryEnvelope,
+        bool RequireDeviceApproval, bool ThisDeviceApproved);
     private sealed record VaultEnvelopeDto(
         string Kind, int KeyVersion, string Algorithm, string WrappedKey, string Nonce, string Salt, int Iterations);
+    private sealed record PendingDeviceDto(
+        Guid DeviceId, string ClientDeviceId, string DisplayName, string Platform, DateTimeOffset LastSeenAt);
     private sealed record PushResponseDto(long StreamRevision, List<PushResultDto> Results);
     private sealed record PushResultDto(
         string OperationId, string Status, string EntityType, string EntityId,

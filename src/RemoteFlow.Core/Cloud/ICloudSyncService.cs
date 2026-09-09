@@ -10,6 +10,9 @@ public enum CloudUnlockState
 
     /// <summary>Vault 存在但本地无缓存 VMK，需要用户补输主口令（或用 Recovery Key 恢复）。</summary>
     NeedsPassword,
+
+    /// <summary>Vault 开启「新设备需批准」，本设备待批准——等已有设备批准，或用 Recovery Key 恢复。</summary>
+    NeedsApproval,
 }
 
 public sealed record CloudAccountInfo(bool SignedIn, Guid UserId, string Email, CloudUnlockState UnlockState);
@@ -39,7 +42,20 @@ public interface ICloudSyncService
     Task<CloudUnlockState> UnlockWithPasswordAsync(string password, CancellationToken ct = default);
 
     /// <summary>首设备初始化 Vault，返回一次性展示的 Recovery Key（分组字符串）。</summary>
-    Task<string> BootstrapVaultAsync(CancellationToken ct = default);
+    Task<string> BootstrapVaultAsync(bool requireDeviceApproval = false, CancellationToken ct = default);
+
+    /// <summary>本设备被批准后重试解锁。</summary>
+    Task<CloudUnlockState> RetryUnlockAsync(CancellationToken ct = default);
+
+    // ── 设备批准（可选安全层）──────────────────────────────────
+
+    Task<bool> GetRequireApprovalAsync(CancellationToken ct = default);
+
+    Task SetRequireApprovalAsync(bool enabled, CancellationToken ct = default);
+
+    Task<IReadOnlyList<CloudPendingDevice>> GetPendingDevicesAsync(CancellationToken ct = default);
+
+    Task ApproveDeviceAsync(Guid deviceId, CancellationToken ct = default);
 
     /// <summary>忘记口令时用 Recovery Key 恢复 Vault 访问权。</summary>
     Task RecoverVaultAsync(string recoveryKey, CancellationToken ct = default);

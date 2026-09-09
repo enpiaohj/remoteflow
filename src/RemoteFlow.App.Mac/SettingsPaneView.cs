@@ -1344,10 +1344,12 @@ public sealed class SettingsPaneView : NSView
             CloudRecoveryBanner(c),
             CloudSignInCard(c),
             CloudVaultSetupCard(c),
+            CloudNeedsPasswordCard(c),
             CloudApprovalCard(c),
             CloudStatusCard(c),
             CloudPendingDevicesCard(c),
             CloudConflictsCard(c),
+            CloudSecurityCard(c),
             CloudAccountCard(c));
 
         // 首次展开该分页时拉取一次已恢复的会话状态。_pages 是 Lazy，只会跑一次。
@@ -1368,14 +1370,24 @@ public sealed class SettingsPaneView : NSView
         };
         Binder.Text(mono, c, nameof(c.NewRecoveryKey), () => c.NewRecoveryKey ?? string.Empty);
 
+        var copy = NSButton.CreateButton("复制", () => c.CopyRecoveryKeyCommand.Execute(null));
+        var save = NSButton.CreateButton("另存为文件…", () => c.SaveRecoveryKeyCommand.Execute(null));
         var ack = NSButton.CreateButton("我已妥善保存", () => c.AcknowledgeRecoveryKeyCommand.Execute(null));
+        copy.BezelStyle = NSBezelStyle.Rounded;
+        save.BezelStyle = NSBezelStyle.Rounded;
         ack.BezelStyle = NSBezelStyle.Rounded;
 
-        var card = Card("请立即保存 Recovery Key", "key.horizontal",
-            "它只显示这一次。丢失所有已授权设备且没有它，将无法恢复云端数据。",
-            mono, ack);
+        var info = PlainLabel(string.Empty, 11, NSColor.SystemGreen);
+        info.LineBreakMode = NSLineBreakMode.ByWordWrapping;
+        info.PreferredMaxLayoutWidth = 520;
+        Binder.Text(info, c, nameof(c.InfoMessage), () => c.InfoMessage ?? string.Empty);
+        Binder.On(c, nameof(c.InfoMessage), () => info.Hidden = string.IsNullOrEmpty(c.InfoMessage));
 
-        Binder.On(c, nameof(c.NewRecoveryKey), () => card.Hidden = string.IsNullOrEmpty(c.NewRecoveryKey));
+        var card = Card("请立即保存 Recovery Key", "key.horizontal",
+            "忘记主口令时用它恢复访问权。它只显示这一次，请复制或另存到安全的地方。",
+            mono, HStack(8, copy, save), info, ack);
+
+        Binder.On(c, nameof(c.HasNewRecoveryKey), () => card.Hidden = !c.HasNewRecoveryKey);
         return card;
     }
 
@@ -1383,40 +1395,54 @@ public sealed class SettingsPaneView : NSView
     {
         var server = CloudField(c, nameof(c.ServerUrl), () => c.ServerUrl, v => c.ServerUrl = v);
         Binder.On(c, nameof(c.ServerUrlEditable), () => server.Editable = c.ServerUrlEditable);
-
-        var custom = new NSButton
-        {
-            Title = "使用自定义服务地址（一般无需修改）",
-            TranslatesAutoresizingMaskIntoConstraints = false,
-            Hidden = !c.HasConfiguredServerUrl,
-        };
-        custom.SetButtonType(NSButtonType.Switch);
-        custom.Activated += (_, _) => c.ServerUrlEditable = custom.State == NSCellStateValue.On;
-        Binder.On(c, nameof(c.ServerUrlEditable),
-            () => custom.State = c.ServerUrlEditable ? NSCellStateValue.On : NSCellStateValue.Off);
+        // 服务地址默认只读；三击字段进入可编辑（无界面提示，属刻意隐藏的高级操作）。
+        var triple = new NSClickGestureRecognizer(() => c.UnlockServerUrlField()) { NumberOfClicksRequired = 3 };
+        server.AddGestureRecognizer(triple);
 
         var email = CloudField(c, nameof(c.Email), () => c.Email, v => c.Email = v);
 
-        var pwd = new NSSecureTextField
-        {
-            Bezeled = true, Bordered = true, Font = NSFont.SystemFontOfSize(13),
-            TranslatesAutoresizingMaskIntoConstraints = false,
-        };
-        pwd.WidthAnchor.ConstraintEqualTo(480).Active = true;
-        Binder.Text(pwd, c, nameof(c.Password), () => c.Password);
-        pwd.Changed += (_, _) => c.Password = pwd.StringValue;
+        var pwd = CloudSecureField(c, nameof(c.Password), () => c.Password, v => c.Password = v);
+        var confirm = CloudSecureField(
+            c, nameof(c.PasswordConfirm), () => c.PasswordConfirm, v => c.PasswordConfirm = v);
+        var confirmLabel = SectionLabel("确认主口令（至少 12 位）");
 
-        var connect = NSButton.CreateButton("登录并启用同步", () => c.ConnectCommand.Execute(null));
+        var approval = new NSButton
+        {
+            Title = "新设备登录需在已有设备上批准", TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        approval.SetButtonType(NSButtonType.Switch);
+        approval.Activated += (_, _) => c.RegisterRequireApproval = approval.State == NSCellStateValue.On;
+        Binder.On(c, nameof(c.RegisterRequireApproval),
+            () => approval.State = c.RegisterRequireApproval ? NSCellStateValue.On : NSCellStateValue.Off);
+
+        void ApplyMode()
+        {
+            var reg = c.IsRegisterMode;
+            confirmLabel.Hidden = !reg;
+            confirm.Hidden = !reg;
+            approval.Hidden = !reg;
+        }
+
+        Binder.On(c, nameof(c.IsRegisterMode), ApplyMode);
+
+        var connect = NSButton.CreateButton(c.SubmitLabel, () => c.ConnectCommand.Execute(null));
         connect.BezelStyle = NSBezelStyle.Rounded;
+        Binder.On(c, nameof(c.SubmitLabel), () => connect.Title = c.SubmitLabel);
         Binder.On(c, nameof(c.IsBusy), () => connect.Enabled = !c.IsBusy);
+
+        var toggle = NSButton.CreateButton("切换登录 / 注册", () => c.ToggleAuthModeCommand.Execute(null));
+        toggle.BezelStyle = NSBezelStyle.Rounded;
+        Binder.On(c, nameof(c.IsRegisterMode),
+            () => toggle.Title = c.IsRegisterMode ? "用已有账号登录" : "没有账号？注册");
 
         var card = Card("登录 AppsCloud", "person.badge.key",
             "登录后，连接、分组、标签、凭据与密码将端到端加密同步；服务端看不到明文。"
             + "本地优先不变 —— 未登录也能完整使用。",
-            SectionLabel("服务地址"), server, custom,
+            SectionLabel("服务地址"), server,
             SectionLabel("邮箱"), email,
-            SectionLabel("密码"), pwd,
-            CloudErrorLabel(c), connect);
+            SectionLabel("主口令"), pwd,
+            confirmLabel, confirm, approval,
+            CloudErrorLabel(c), HStack(8, connect, toggle));
 
         GateByState(c, card, s => s == CloudSyncUiState.SignedOut);
         return card;
@@ -1436,8 +1462,40 @@ public sealed class SettingsPaneView : NSView
         return card;
     }
 
+    private static NSView CloudNeedsPasswordCard(CloudSyncViewModel c)
+    {
+        var pwd = CloudSecureField(c, nameof(c.UnlockPassword), () => c.UnlockPassword, v => c.UnlockPassword = v);
+
+        var unlock = NSButton.CreateButton("解锁", () => c.UnlockCommand.Execute(null));
+        unlock.BezelStyle = NSBezelStyle.Rounded;
+        Binder.On(c, nameof(c.IsBusy), () => unlock.Enabled = !c.IsBusy);
+
+        var rk = CloudField(c, nameof(c.RecoveryKeyInput), () => c.RecoveryKeyInput, v => c.RecoveryKeyInput = v);
+        var restore = NSButton.CreateButton("用 Recovery Key 恢复", () => c.RestoreWithRecoveryKeyCommand.Execute(null));
+        restore.BezelStyle = NSBezelStyle.Rounded;
+        Binder.On(c, nameof(c.IsBusy), () => restore.Enabled = !c.IsBusy);
+
+        var card = Card("输入主口令解锁", "lock.open",
+            "本机已登录，需要主口令解开加密数据。忘记了？用下方的 Recovery Key 恢复。",
+            SectionLabel("主口令"), pwd, CloudErrorLabel(c), unlock,
+            SectionLabel("Recovery Key（忘记主口令时）"), rk, restore);
+
+        GateByState(c, card, s => s == CloudSyncUiState.NeedsPassword);
+        return card;
+    }
+
     private static NSView CloudApprovalCard(CloudSyncViewModel c)
     {
+        var retry = NSButton.CreateButton("我已被批准，重试", () => c.RetryUnlockCommand.Execute(null));
+        retry.BezelStyle = NSBezelStyle.Rounded;
+        Binder.On(c, nameof(c.IsBusy), () => retry.Enabled = !c.IsBusy);
+
+        var info = PlainLabel(string.Empty, 11, NSColor.SecondaryLabel);
+        info.LineBreakMode = NSLineBreakMode.ByWordWrapping;
+        info.PreferredMaxLayoutWidth = 520;
+        Binder.Text(info, c, nameof(c.InfoMessage), () => c.InfoMessage ?? string.Empty);
+        Binder.On(c, nameof(c.InfoMessage), () => info.Hidden = string.IsNullOrEmpty(c.InfoMessage));
+
         var rk = CloudField(c, nameof(c.RecoveryKeyInput), () => c.RecoveryKeyInput, v => c.RecoveryKeyInput = v);
 
         var restore = NSButton.CreateButton("用 Recovery Key 恢复", () => c.RestoreWithRecoveryKeyCommand.Execute(null));
@@ -1445,7 +1503,8 @@ public sealed class SettingsPaneView : NSView
         Binder.On(c, nameof(c.IsBusy), () => restore.Enabled = !c.IsBusy);
 
         var card = Card("这台设备还需要获得 Vault 访问权", "person.badge.clock",
-            "在另一台已登录的设备上「设置 → 云同步」里批准本机，或在下方输入 Recovery Key 恢复。",
+            "本账号开启了「新设备需批准」。在另一台已登录的设备上批准本机，然后点「我已被批准」；或用 Recovery Key 恢复。",
+            retry, info,
             SectionLabel("Recovery Key"), rk, CloudErrorLabel(c), restore);
 
         GateByState(c, card, s => s == CloudSyncUiState.NeedsApproval);
@@ -1459,6 +1518,17 @@ public sealed class SettingsPaneView : NSView
 
         var pending = PlainLabel(string.Empty, 11, NSColor.SecondaryLabel);
         Binder.Text(pending, c, nameof(c.PendingChangeCount), () => $"{c.PendingChangeCount} 项本地改动待上传");
+
+        var summary = PlainLabel(string.Empty, 11, NSColor.SecondaryLabel);
+        Binder.Text(summary, c, nameof(c.LastSyncSummary), () =>
+            string.IsNullOrEmpty(c.LastSyncSummary) ? string.Empty : $"上次同步：{c.LastSyncSummary}");
+        Binder.On(c, nameof(c.LastSyncSummary), () => summary.Hidden = string.IsNullOrEmpty(c.LastSyncSummary));
+
+        var info = PlainLabel(string.Empty, 11, NSColor.SystemGreen);
+        info.LineBreakMode = NSLineBreakMode.ByWordWrapping;
+        info.PreferredMaxLayoutWidth = 520;
+        Binder.Text(info, c, nameof(c.InfoMessage), () => c.InfoMessage ?? string.Empty);
+        Binder.On(c, nameof(c.InfoMessage), () => info.Hidden = string.IsNullOrEmpty(c.InfoMessage));
 
         var sync = NSButton.CreateButton("立即同步", () => c.SyncNowCommand.Execute(null));
         var refresh = NSButton.CreateButton("刷新", () => c.RefreshCommand.Execute(null));
@@ -1476,7 +1546,7 @@ public sealed class SettingsPaneView : NSView
 
         var card = Card("同步状态", "arrow.triangle.2.circlepath",
             "本地优先：改动先写本地，再由后台按加密流上传；也可在此手动触发。",
-            status, pending, HStack(8, sync, refresh));
+            status, pending, summary, info, CloudErrorLabel(c), HStack(8, sync, refresh));
 
         GateByState(c, card, s => s == CloudSyncUiState.Ready);
         return card;
@@ -1523,6 +1593,31 @@ public sealed class SettingsPaneView : NSView
         return card;
     }
 
+    private static NSView CloudSecurityCard(CloudSyncViewModel c)
+    {
+        var approval = new NSButton
+        {
+            Title = "新设备登录需在已有设备上批准", TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        approval.SetButtonType(NSButtonType.Switch);
+        approval.Activated += (_, _) => c.RequireApproval = approval.State == NSCellStateValue.On;
+        Binder.On(c, nameof(c.RequireApproval),
+            () => approval.State = c.RequireApproval ? NSCellStateValue.On : NSCellStateValue.Off);
+        Binder.On(c, nameof(c.IsBusy), () => approval.Enabled = !c.IsBusy);
+
+        var changePwd = NSButton.CreateButton("更改主口令", () => c.ChangePasswordCommand.Execute(null));
+        var resetRk = NSButton.CreateButton("重置 Recovery Key", () => c.ResetRecoveryKeyCommand.Execute(null));
+        changePwd.BezelStyle = NSBezelStyle.Rounded;
+        resetRk.BezelStyle = NSBezelStyle.Rounded;
+
+        var card = Card("安全", "lock.shield",
+            "开启「新设备需批准」后，即使输入正确主口令，新设备也要等一台已登录设备批准才能同步。",
+            approval, HStack(8, changePwd, resetRk));
+
+        GateByState(c, card, s => s == CloudSyncUiState.Ready);
+        return card;
+    }
+
     private static NSView CloudAccountCard(CloudSyncViewModel c)
     {
         var signOut = NSButton.CreateButton("退出云账号", () => c.DisconnectCommand.Execute(null));
@@ -1532,7 +1627,7 @@ public sealed class SettingsPaneView : NSView
 
         var card = Card("账号", "person.crop.circle",
             "退出仅撤销本机登录并停止同步，本地连接与凭据保留。"
-            + "清除云数据还会清掉本机的同步状态与 Vault 密钥缓存，下次需重新登录并批准 / 恢复。",
+            + "清除云数据还会清掉本机的同步状态与 Vault 密钥缓存，下次需重新登录。",
             HStack(8, signOut, wipe));
 
         GateByState(c, card, s => s == CloudSyncUiState.Ready);
@@ -1540,6 +1635,20 @@ public sealed class SettingsPaneView : NSView
     }
 
     // ── 云同步 · 小helper ──────────────────────────────────────
+
+    private static NSSecureTextField CloudSecureField(
+        CloudSyncViewModel c, string property, Func<string> getter, Action<string> setter)
+    {
+        var f = new NSSecureTextField
+        {
+            Bezeled = true, Bordered = true, Font = NSFont.SystemFontOfSize(13),
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        f.WidthAnchor.ConstraintEqualTo(480).Active = true;
+        Binder.Text(f, c, property, getter);
+        f.Changed += (_, _) => setter(f.StringValue);
+        return f;
+    }
 
     private static NSTextField CloudField(
         CloudSyncViewModel c, string property, Func<string> getter, Action<string> setter)

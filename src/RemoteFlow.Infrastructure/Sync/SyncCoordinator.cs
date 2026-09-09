@@ -36,16 +36,32 @@ public sealed class SyncCoordinator(
 
         try
         {
-            if (_options.ReconcileBeforePush)
+            // 首次同步（游标为 0 且尚无待推变更）：先拉一轮把已有 Vault 的数据落地 / 认领版本，
+            // 否则接下来的对账会把本地既有条目全部当作「新建」推上去，与服务端既有实体逐条撞冲突
+            //（「刷新后看到好多冲突」的成因）。已有待推变更时不做这步——那是用户的真实改动，
+            // 走正常 Push 流程，该冲突就冲突。
+            if (cursor == 0 && await store.PendingCountAsync(ct) == 0)
+            {
+                (pulled, pullConflicts, cursor, var seedStatus) = await PullAsync(context, cursor, ct);
+                status = Worse(status, seedStatus);
+            }
+
+            if (_options.ReconcileBeforePush && status is SyncStatus.Synced or SyncStatus.Conflicted)
             {
                 await ReconcileAsync(context, ct);
             }
 
-            (pushed, pushConflicts, status) = await PushAsync(context, now, ct);
+            if (status is SyncStatus.Synced or SyncStatus.Conflicted)
+            {
+                (pushed, pushConflicts, var pushStatus) = await PushAsync(context, now, ct);
+                status = Worse(status, pushStatus);
+            }
 
             if (status is SyncStatus.Synced or SyncStatus.Conflicted)
             {
-                (pulled, pullConflicts, cursor, var pullStatus) = await PullAsync(context, cursor, ct);
+                (int p2, int c2, cursor, var pullStatus) = await PullAsync(context, cursor, ct);
+                pulled += p2;
+                pullConflicts += c2;
                 status = Worse(status, pullStatus);
             }
 

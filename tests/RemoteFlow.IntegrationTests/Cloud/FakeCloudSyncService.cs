@@ -7,15 +7,23 @@ public sealed class FakeCloudSyncService : ICloudSyncService
 {
     public CloudUnlockState? ResumeResult { get; set; }
     public CloudUnlockState SignInResult { get; set; } = CloudUnlockState.Ready;
+    public CloudUnlockState RegisterResult { get; set; } = CloudUnlockState.NeedsBootstrap;
+    public CloudUnlockState UnlockResult { get; set; } = CloudUnlockState.Ready;
+    public CloudUnlockState RetryResult { get; set; } = CloudUnlockState.Ready;
     public string RecoveryKeyToReturn { get; set; } = "AAAA BBBB CCCC";
     public SyncRunResult NextRun { get; set; } = new(0, 0, 0, 0, 0, SyncStatus.Synced);
     public SyncStateSnapshot StateSnapshot { get; set; } = new(0, null, null, SyncStatus.Synced);
     public int PendingOutbox { get; set; }
+    public bool RequireApproval { get; set; }
     public List<CloudPendingDevice> Pending { get; } = [];
     public List<SyncConflictRecord> ConflictList { get; } = [];
 
     public int SyncNowCalls { get; private set; }
     public Guid? ApprovedDeviceId { get; private set; }
+    public bool? RequireApprovalSetTo { get; private set; }
+    public (string Current, string New)? ChangedPassword { get; private set; }
+    public int ResetRecoveryKeyCalls { get; private set; }
+    public bool BootstrapRequireApproval { get; private set; }
     public (Guid Id, ConflictResolution Resolution)? ResolvedConflict { get; private set; }
     public bool? SignedOutWipe { get; private set; }
     public Exception? ThrowOnSignIn { get; set; }
@@ -35,6 +43,18 @@ public sealed class FakeCloudSyncService : ICloudSyncService
         return Task.FromResult(SignInResult);
     }
 
+    public Task<CloudUnlockState> RegisterAsync(string baseUrl, string email, string password, CancellationToken ct = default)
+    {
+        if (ThrowOnSignIn is not null)
+        {
+            throw ThrowOnSignIn;
+        }
+
+        IsSignedIn = true;
+        Apply(RegisterResult);
+        return Task.FromResult(RegisterResult);
+    }
+
     public Task<CloudUnlockState?> TryResumeAsync(CancellationToken ct = default)
     {
         if (ResumeResult is { } r)
@@ -46,16 +66,51 @@ public sealed class FakeCloudSyncService : ICloudSyncService
         return Task.FromResult(ResumeResult);
     }
 
-    public Task<string> BootstrapVaultAsync(CancellationToken ct = default)
+    public Task<CloudUnlockState> UnlockWithPasswordAsync(string password, CancellationToken ct = default)
     {
+        Apply(UnlockResult);
+        return Task.FromResult(UnlockResult);
+    }
+
+    public Task<string> BootstrapVaultAsync(bool requireDeviceApproval = false, CancellationToken ct = default)
+    {
+        BootstrapRequireApproval = requireDeviceApproval;
+        RequireApproval = requireDeviceApproval;
         Apply(CloudUnlockState.Ready);
         return Task.FromResult(RecoveryKeyToReturn);
+    }
+
+    public Task<CloudUnlockState> RetryUnlockAsync(CancellationToken ct = default)
+    {
+        Apply(RetryResult);
+        return Task.FromResult(RetryResult);
+    }
+
+    public Task<bool> GetRequireApprovalAsync(CancellationToken ct = default) => Task.FromResult(RequireApproval);
+
+    public Task SetRequireApprovalAsync(bool enabled, CancellationToken ct = default)
+    {
+        RequireApprovalSetTo = enabled;
+        RequireApproval = enabled;
+        return Task.CompletedTask;
     }
 
     public Task RecoverVaultAsync(string recoveryKey, CancellationToken ct = default)
     {
         Apply(CloudUnlockState.Ready);
         return Task.CompletedTask;
+    }
+
+    public Task ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken ct = default)
+    {
+        ChangedPassword = (currentPassword, newPassword);
+        return Task.CompletedTask;
+    }
+
+    public Task<string> ResetRecoveryKeyAsync(CancellationToken ct = default)
+    {
+        ResetRecoveryKeyCalls++;
+        return Task.FromResult(RecoveryKeyToReturn);
     }
 
     public Task<SyncRunResult> SyncNowAsync(CancellationToken ct = default)
