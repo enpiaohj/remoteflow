@@ -1,0 +1,251 @@
+# 更新日志
+
+本文件记录 RemoteFlow 的版本变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
+版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
+
+每个正式版本的完整变更详情见 `releases/v<X.Y.Z>/CHANGELOG.md`。
+
+---
+
+## [0.11.0] — 2026-09-09
+
+端到端加密模型改为**口令派生**（Bitwarden 式），并补齐云同步的账号 / 使用体验。
+Windows(WPF) 与 macOS(AppKit) 同版本同步发布：本条目记 Windows 侧，macOS 侧见
+[`releases/macos-v0.5.0/CHANGELOG.md`](releases/macos-v0.5.0/CHANGELOG.md)（同一功能、AppKit 界面）。
+
+### 架构
+- **VMK 加密改为口令派生**（共享层）：主密钥（VMK）改由 `PBKDF2-SHA256(主口令, salt, 600k 迭代)` 派生的 KEK 用 AES-256-GCM 包装。
+  另一台设备**只需邮箱 + 主口令**即可解锁，不再需要「设备批准」或 Recovery Key 走通。
+  Recovery Key 回归本职——只在忘记主口令时恢复访问权。
+- **客户端派生认证密钥**：登录 / 注册 / 改口令时发给 AppsCloud 的是 `PBKDF2-SHA256(主口令, "RemoteFlow/auth/v1:"+邮箱, 600k)`（Base64），
+  服务端再 hash 一层——**服务端全程拿不到主口令明文**。
+- 统一信封类型 `VaultKeyEnvelope`（`Kind` = password / recovery），移除设备 ECDH 密钥对与 `DeviceKeyService`。
+- **设备批准降为可选**：账号可开「新设备需批准」开关（默认关）——开启后，新设备即使主口令正确也要一台已登录设备批准才能同步。
+- 依赖 AppsCloud 后端 G3.2（口令 Vault + `POST /api/v1/auth/change-password` + `DeviceVaultAccess`）。服务端 migration `PasswordVault`；旧「设备信封」数据不可迁移，需重新初始化 Vault。
+
+### 新增
+- 设置页「云同步」：**注册入口**（登录 / 注册模式切换，注册时二次确认口令 + ≥12 位提示 + 可选「新设备需批准」）。
+- **更改主口令**入口（改认证密钥 + 重新包装口令信封，其它设备需用新口令重新登录）。
+- **重置 Recovery Key** 入口。
+- Recovery Key 一次性展示：**「复制」/「另存为文件」**按钮，且必须先复制或另存才能点「我已妥善保存」。
+- 「补输主口令」卡片：本机已登录但无缓存 VMK 时，输入主口令解锁（旁附 Recovery Key 恢复）。
+- 记住上次登录邮箱（`AppSettings.CloudEmail`）。
+- 手动同步后显示条数摘要（「上传 N · 下载 M」）。
+- 服务地址字段默认只读，**左键三击进入可编辑**（无界面提示，属刻意隐藏的高级操作）。
+
+### 变更
+- 登录不再「首次自动注册」——改为明确的注册入口；登录失败按凭据错误提示，引导去注册。
+- `CloudSyncViewModel.Describe`：补 `CryptographicException`（主口令 / Recovery Key 不正确）等分类。
+
+### 修复
+- **同步循环卡在「同步中」**：`SyncCoordinator.RunOnceAsync` 加兜底 `catch` + `finally`，任何异常都会把状态落到 Error / Offline 并可重试，不再永久停在 Syncing。
+- **「刷新后看到好多冲突」**：首次同步（游标 0 且无待推变更）先拉一轮，认领服务端既有实体的版本 / 内容哈希，避免对账把本地既有条目全部当「新建」推上去逐条撞冲突。已有真实待推变更时不做这步，走正常 Push→冲突。
+
+### 未包含
+- 多重身份验证（MFA）—— 后续版本。
+- 首次同步的对象统计确认对话框（「将同步 N 条」）。
+- Key Rotation（后端 G3.2）客户端接入。
+
+### 验证
+- 构建：`dotnet build RemoteFlow.slnx -c Release` 0 错误。
+- 测试：`dotnet test -c Release` —— IntegrationTests 154、Core.Tests 42、IntegrationTests.Windows 9 全绿；IntegrationTests.Mac 在 Windows 上 skip。
+- 端到端：`CloudRoundTripTests` / `CloudSyncFacadeTests` 对**已上线的 `https://sync.appscloud.cn/`**（AppsCloud 0.11）跑通口令 / 批准 / Recovery Key 三条解锁路径 + 干净设备只用邮箱 + 口令恢复全部数据。
+- publish：`dotnet publish src/RemoteFlow.App -c Release -r win-x64` 单文件启动正常（运行 12s 无异常退出）。
+- 未执行：完整 UI 手动走查、实机 RDP / SSH / VNC 会话、多台真实设备的同步 / 冲突 / 恢复演练。
+
+详见 [`releases/v0.11.0/CHANGELOG.md`](releases/v0.11.0/CHANGELOG.md)。
+
+## [0.10.0] — 2026-09-09
+
+云同步（Cloud Sync）落地。Windows(WPF) 与 macOS(AppKit) 同一版本同步发布：
+本条目记 Windows 侧，macOS 侧见 [`releases/macos-v0.4.0/CHANGELOG.md`](releases/macos-v0.4.0/CHANGELOG.md)（同一功能、AppKit 界面）。
+
+### 架构
+- 新增端到端加密同步栈（共享层，双端共用）：
+  - `RemoteFlow.Core.Cloud` —— 契约、`RecoveryKey`（RFC 4648 Base32）、`CloudEndpoint` / `CloudSyncGate` / `CloudSignInException`。
+  - `RemoteFlow.Infrastructure.Security` —— `VaultCryptography`（ECDH-P256 + HKDF-SHA256 + AES-256-GCM）、设备信封 / Recovery 信封 / 载荷加密，`VaultMasterKeyService`（解锁 / 初始化 / 恢复 / 批准设备）。
+  - `RemoteFlow.Infrastructure.Sync` —— `AppsCloudClient`（REST + Token 生命周期）、`SqliteSyncStore`（Outbox + 游标 + 冲突 + 内容哈希）、`SyncCoordinator`（Reconcile → Push → Pull）、`ConflictService`（检测非合并：保留本机 / 使用云端）、5 个实体源（连接 / 分组 / 标签 / 凭据元数据 / 凭据 Secret）、`OutboxSyncChangeTracker`、`CloudSyncAutoRunner`（后台周期同步）。
+  - `CloudSyncService` —— UI 唯一入口门面；`CloudSyncViewModel` —— 面板状态机（共享）。
+- 本地 SQLite 迁移 `user_version` 4 → 5：4 张同步表 + `sync_entity_state.content_hash`。向后兼容，旧库自动升级。
+- 依赖后端 AppsCloud（独立仓库）的 G3 E2EE Vault + G4 Sync 服务；服务端只搬运密文，看不到任何明文 / VMK / Recovery Key。
+
+### 新增
+- 设置页新增「云同步」分页：登录 AppsCloud、初始化 / 恢复加密 Vault、手动同步、批准新设备、解决冲突、退出与清除本机云数据；一次性 Recovery Key 横幅。
+- 默认服务地址 `https://sync.appscloud.cn/`，面板中默认锁定；连自建 / 内网 AppsCloud 时勾选「使用自定义服务地址」解锁。
+- 首次登录若邮箱在 AppsCloud 尚无账号，自动创建后登录（设计文档「注册 / 登录」为同一步）；账号已存在但密码不符按凭据错误处理，绝不覆盖。
+- 本地优先不变：未登录 / 云端不可达时连接、会话、Secret 读取均正常，改动在 Outbox 累积。
+
+### 变更
+- 登录 / 同步失败的提示改为人读中文：`AppsCloudClient` 解析 RFC 7807（字段校验 / detail / title），`CloudSyncViewModel.Describe` 按类型与状态码分类（401 / 403 / 409 / 5xx / 网络 / 超时）。
+- 设置页（WPF + AppKit）首次显示时拉取一次已恢复的云会话状态。
+
+### 修复
+- `CloudSyncAutoRunner.Dispose` 幂等：`_disposed` 守卫 + 吞 `ObjectDisposedException`，避免 `App.OnExit` 与容器 `DisposeAsync` 双重释放崩溃。
+
+### 未包含
+- 首次同步的对象统计确认对话框（「将同步 N 条」）—— 后续版本。
+- `AppSettings` 的 User / Device / Session 作用域区分 —— 后续版本。
+- Key Rotation（后端 G3.2）客户端接入。
+
+### 验证
+- 构建：`dotnet build RemoteFlow.slnx -c Release` 0 错误。
+- 测试：`dotnet test -c Release` —— IntegrationTests 154、Core.Tests 42、IntegrationTests.Windows 9 全绿（含对真机 AppsCloud 测试环境的 `CloudRoundTripTests` / `CloudSyncFacadeTests` 端到端）；IntegrationTests.Mac 10 项在 Windows 上 skip。
+- CI（push `main`）：ubuntu / windows / **macos** 三 job 全绿 —— AppKit「云同步」分页在 macOS 编译通过。
+- publish：`dotnet publish src/RemoteFlow.App -c Release -r win-x64` 单文件启动正常（运行 12s 无异常退出）。
+- 未执行：完整 UI 手动走查、实机 RDP / SSH / VNC 会话、多台真实设备的同步 / 冲突 / 恢复演练；`sync.appscloud.cn` 正式部署尚未上线（端到端验证跑在测试环境）。
+
+详见 [`releases/v0.10.0/CHANGELOG.md`](releases/v0.10.0/CHANGELOG.md)。
+
+## [0.9.0] — 2026-09-09
+
+Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在本次范围内。
+
+### 架构
+- 抽出平台无关的 `RemoteFlow.Presentation` 工程：ViewModel 与视图无关服务（格式化、探测、对话框抽象、终端资产）下沉，Windows(WPF) 与 macOS(AppKit) 双端共用。
+- 新增 GitHub Actions：每次 push / PR 在 Ubuntu 跑共享测试、Windows / macOS 各验构建与平台专属测试；打 `v*` tag 自动构建 win-x64 单文件并挂 GitHub Release 草稿。
+
+### 新增
+- 会话状态灯：连接列表、首页最近连接、收藏行的图标右下角，连接中琥珀、已连接绿，空闲不显示。
+- 悬停就地连接：「我的连接」列表行、首页收藏行悬停浮出「连接」按钮；首页最近连接大卡悬停显「连接 →」提示。
+- 详情面板「协议」字段改用协议色徽章，与列表 / 首页统一。
+- SSH 终端启用 xterm.js WebGL 渲染器（共享层带入）。
+- VNC 画质旋钮：内网高画质 + 低压缩（共享层带入）。
+
+### 变更
+- 全屏胶囊工具条默认停留 2.5s → 3s；常驻条 / 全屏药丸状态入口只有状态图标可点，主机 IP 不再是点击热区。
+- 首页问候区收紧（无会话时隐藏「0 个会话已连接」、间距与卡片高度下调）；凭据列表「保险库」列瘦身、孤儿凭据警示色。
+- 分组：老用户升级也新建「我的设备」，不再借用现有分组顶默认。
+- 设置页「首页时间显示」5 控件（显示时间 / 秒 / 星期 / 周数 / 顺序）合并为「首页时间行」一个下拉即预览（只日期 / 日期+时间 / 日期+星期+时间 / 完整）。`AppSettings` 相应字段收敛为 `HomeDateLine`，老配置缺字段回退默认、向后兼容。
+
+### 修复
+- 多会话全屏下切换会话后胶囊工具条丢失；关闭会话后回到常驻条（切换会话保持全屏）。
+- 双击常驻条状态入口会把窗口最小化。
+- Windows VNC 会话看不到远端光标（共享层无条件挂 `CursorHandler` 后的回归）——WPF 侧改为按热点把光标套成画面指针。
+- SSH 中文输入法快速输入掉字（keyCode=229）+ 出向批量泵（共享层带入）。
+- 稳定性打磨：堵住 async void 崩溃口、错误提示说人话（共享层带入）。
+
+### 跨平台协调项
+- 「首页时间显示」合并（上）从共享 `HomePageViewModel` 删除了 `ClockLine` / `HasClockLine`；macOS 的 `DetailView.cs` 消费这两个成员，**本版发布后 macOS CI 构建会失败，直到 macOS 平台同步改视图**。Windows 版本不受影响。
+
+详见 [`releases/v0.9.0/CHANGELOG.md`](releases/v0.9.0/CHANGELOG.md)。
+
+## [0.8.1] — 2026-09-07
+
+### 修复
+- 会话全屏在“非标准最大化”下溢出：从最大化窗口进全屏时，无边框窗口残留 WindowChrome 的约 8px 溢出矩形——上沿被顶出屏幕、底部露出本机任务栏，且顶沿胶囊工具条无法唤出。改为按物理像素定位到当前显示器完整边界（`SetWindowPos` → `rcMonitor`），并在被 WPF 重排时 snap 回；顶沿唤出判定带一并放宽做兜底。
+
+详见 [`releases/v0.8.1/CHANGELOG.md`](releases/v0.8.1/CHANGELOG.md)。
+
+## [0.8.0] — 2026-09-06
+
+### 新增 / 变更
+- 会话常驻条与全屏药丸新增统一的连接状态入口和连接质量详情；RDP、SSH、VNC 均可查看连接状态、会话时长、重连次数与质量指标，并可重新检测。
+- RDP 工具条新增“启动任务管理器”，通过 mstsc ActiveX 官方远端语义动作执行，并保留协议级 `Ctrl+Shift+Esc` 回退。
+
+### 修复
+- 发送 RDP 安全组合键或启动远端任务管理器前，自动恢复宿主窗口与 ActiveX 输入焦点，避免工具条夺焦后动作无响应、误作用于本机或退出应用全屏。
+
+详见 [`releases/v0.8.0/CHANGELOG.md`](releases/v0.8.0/CHANGELOG.md)。
+
+## [0.7.0] — 2026-09-06
+
+### 新增 / 变更
+- 协议功能增强：RDP 高级设置收口（显示/本地资源/连接与安全/体验 Section、分辨率预设、多显示器↔启动全屏联动、麦克风与连接质量真实映射）；SSH 终端主题与实时预览、粘贴安全、清屏、搜索输出；VNC 剪贴板远端→本机接收。
+- 托盘右键结构化菜单：打开/隐藏、新建连接（预选协议）、最近连接、活动会话 + 断开全部、设置、开机启动（双向同步）、正式退出。
+- 会话 Tab「关闭右侧会话」。
+
+详见 [`releases/v0.7.0/CHANGELOG.md`](releases/v0.7.0/CHANGELOG.md)。
+
+## [0.6.0] — 2026-09-06
+
+### 新增 / 变更
+- Session 生命周期统一与资源清理（RemoteSessionBase/Tracker、统一关闭编排、RDP/SSH/VNC 清理加固、WebView2 共享环境、有序退出与崩溃标记）。
+- 会话实时状态同步（SessionManager 唯一状态源、聚合通知、首页/列表/详情/托盘实时、右键 连接/切换/断开）。
+- 首页时间显示与顺序预设、已连接口径、托盘与会话切换、右键菜单分组、复制自动命名、统一「测试连接」对话框。
+
+详见 [`releases/v0.6.0/CHANGELOG.md`](releases/v0.6.0/CHANGELOG.md)。
+
+## [0.5.0] — 2026-09-05
+
+### 新增 / 变更
+- 默认分组保护与规则（分组 is_default/is_protected、schema v3、删除默认选新默认、设为默认分组、删光不复活）。
+- VNC 输入发送链路修复与会话三档缩放。
+
+详见 [`releases/v0.5.0/CHANGELOG.md`](releases/v0.5.0/CHANGELOG.md)。
+
+## [0.4.0] — 2026-09-05
+
+### 新增 / 变更
+- 统一连接链路与首页收藏连接；我的连接多选批量；凭据批量与筛选；右侧详情分区完善；首页密度与统计；图标全应用统一；导航键盘可达性。
+
+详见 [`releases/v0.4.0/CHANGELOG.md`](releases/v0.4.0/CHANGELOG.md)。
+
+## [0.3.2] — 2026-09-05
+
+### 修复
+- 单文件发布包缺失终端资源导致 SSH 无法连接——SSH 终端资源（xterm.js 前端）
+  现随 exe 内嵌并在运行时释放，不再依赖 exe 旁存在 `Assets/Terminal/`。
+  已实机验证。
+
+详见 [`releases/v0.3.2/CHANGELOG.md`](releases/v0.3.2/CHANGELOG.md)。
+
+## [0.3.1] — 2026-09-05
+
+### 修复
+- SSH 主机密钥信任弹窗仍会被残留鼠标输入瞬间关闭——无边框窗口的拖动处理器
+  未被输入宽限期覆盖，现已一并纳入，并为 `DragMove()` 增加防御性异常处理。
+  已实机验证。
+
+详见 [`releases/v0.3.1/CHANGELOG.md`](releases/v0.3.1/CHANGELOG.md)。
+
+## [0.1.1] — 2026-09-04
+
+### 修复
+- SSH 主机密钥确认对话框被握手超时吞掉——弹窗改到握手中止后的异步流程里，
+  用户接受则记录指纹并自动重试；指纹变化仍是强警告。
+- 连接 CSV 导入不去重——以名称 + 主机 + 端口 + 协议为身份，重复导入不再产生副本。
+
+详见 [`releases/v0.1.1/CHANGELOG.md`](releases/v0.1.1/CHANGELOG.md)。
+
+## [0.1.0] — 2026-09-04
+
+首个正式版本（Unified Connection MVP）。先把「连接」这件事做扎实。
+
+> 开发期间曾迭代打过内部标签（v0.1.0 早版、v0.1.1），均未推送、未对外分发，
+> 已合并为单一的正式首版 v0.1.0。
+
+### 新增
+- 连接资产管理：CRUD、多级分组、跨分组标签、收藏、连接历史。
+- 全局搜索：按名称 / Host/IP / 分组 / 标签 / 备注即时过滤，相关度排序。
+- 连接列表行 / 凭据列表行 / 会话 Tab 均有右键菜单。
+- 多协议会话：RDP（系统 ActiveX）、SSH（SSH.NET + xterm.js/WebView2）、
+  VNC（纯托管 RFB）；统一 Tab 外壳、多会话并行、切 Tab 不断开、断线内部重连。
+- 会话工具条：非全屏为顶部常驻长条，全屏为可拖动 / 可固定 / 自动隐藏的悬浮药丸
+  （独立 Popup，盖在 RDP 原生画面之上，贴齐屏幕上边缘，首次进全屏给一次性提示）。
+- 会话全屏：按显示器完整边界铺满、无溢出；`F11` / `Esc` 经低级键盘钩子响应。
+- Credential Vault：密码 / 私钥经 Windows DPAPI 加密单独存储，连接库只存引用键；
+  凭据编辑框与备份口令框均可「眼睛」显隐，明文不进 ViewModel。
+- 连接 CSV 导入 / 导出（不含 Secret）。
+- 凭据加密备份 `.rfbackup`：口令加密的凭据导入 / 导出，AES-256-GCM + PBKDF2 600k 迭代；
+  明文密钥只在内存、绝不落盘；导入按名称跳过已存在。
+- 启动 DB 自愈：残留的 `-wal` / `-shm` 与主库不一致且无人占用时自动清理重开。
+- 页面数据加载失败改为顶部可重试横幅，不再静默。
+- 深浅双主题、系统托盘、响应式窗口、单实例、i18n 基础设施。
+
+### 已知问题
+- RDP 证书对话框是系统 `mstsc` 的，「不再询问」在 Windows 层持久化。
+- 单文件 exe 的 SSH 终端需同目录 `Assets/Terminal/`，用 `.zip` 包。
+- SSH / VNC 未做真实设备深度联调，人工测试清单已随快照归档。
+
+详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
+
+[0.11.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.0
+[0.10.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.10.0
+[0.9.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.9.0
+[0.8.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.8.1
+[0.8.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.8.0
+[0.3.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.3.1
+[0.3.2]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.3.2
+[0.3.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.3.1
+[0.1.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.1.1
+[0.1.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.1.0
