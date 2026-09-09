@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using RemoteFlow.Core.Abstractions;
+using RemoteFlow.Core.Cloud;
 using RemoteFlow.Core.Models;
 
 namespace RemoteFlow.Application.Services;
@@ -11,8 +12,11 @@ namespace RemoteFlow.Application.Services;
 public sealed class CredentialService(
     ICredentialRepository repository,
     ICredentialVault vault,
-    ILogger<CredentialService> logger)
+    ILogger<CredentialService> logger,
+    ISyncChangeTracker? syncTracker = null)
 {
+    private readonly ISyncChangeTracker _sync = syncTracker ?? NoOpSyncChangeTracker.Instance;
+
     public Task<IReadOnlyList<Credential>> GetAllAsync(CancellationToken ct = default)
         => repository.GetAllAsync(ct);
 
@@ -43,6 +47,7 @@ public sealed class CredentialService(
         credential.UpdatedAt = credential.CreatedAt;
 
         await repository.AddAsync(credential, ct);
+        await _sync.TrackUpsertAsync(SyncEntityTypes.Credential, credential.Id.ToString(), ct);
         logger.LogInformation("已新建凭据 {CredentialName}（类型 {Type}）", credential.Name, credential.Type);
 
         return credential;
@@ -71,6 +76,7 @@ public sealed class CredentialService(
         }
 
         await repository.UpdateAsync(credential, ct);
+        await _sync.TrackUpsertAsync(SyncEntityTypes.Credential, credential.Id.ToString(), ct);
         logger.LogInformation("已更新凭据 {CredentialName}", credential.Name);
     }
 
@@ -94,6 +100,7 @@ public sealed class CredentialService(
         }
 
         await repository.DeleteAsync(id, ct);
+        await _sync.TrackDeleteAsync(SyncEntityTypes.Credential, id.ToString(), ct);
         logger.LogInformation("已删除凭据 {CredentialName}", credential.Name);
     }
 

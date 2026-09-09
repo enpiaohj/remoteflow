@@ -36,6 +36,11 @@ public sealed class SyncCoordinator(
 
         try
         {
+            if (_options.ReconcileBeforePush)
+            {
+                await ReconcileAsync(context, ct);
+            }
+
             (pushed, pushConflicts, status) = await PushAsync(context, now, ct);
 
             if (status is SyncStatus.Synced or SyncStatus.Conflicted)
@@ -128,6 +133,7 @@ public sealed class SyncCoordinator(
             {
                 case SyncPushStatus.Applied or SyncPushStatus.Duplicate:
                     await store.SetServerVersionAsync(entry.EntityType, entry.EntityId, result.Version ?? baseVersion, ct);
+                    await store.SetContentHashAsync(entry.EntityType, entry.EntityId, ContentHash(plaintext), ct);
                     await store.DeleteIfUnchangedAsync(entry.Id, entry.Sequence, ct);
                     pushed++;
                     break;
@@ -170,6 +176,12 @@ public sealed class SyncCoordinator(
                     continue;
                 }
 
+                if (change.Version <= await store.GetServerVersionAsync(change.EntityType, change.EntityId, ct))
+                {
+                    // 已持有该版本（多为本设备自己刚 Push 的改动回声），无需再落地。
+                    continue;
+                }
+
                 if (await store.IsConflictedAsync(change.EntityType, change.EntityId, ct))
                 {
                     // 该实体已处于冲突态（多为本轮 Push 刚记的），不落地远端改动，等用户解决。
@@ -183,9 +195,10 @@ public sealed class SyncCoordinator(
                     continue;
                 }
 
+                byte[]? applied;
                 try
                 {
-                    await ApplyChangeAsync(context, source, change, ct);
+                    applied = await ApplyChangeAsync(context, source, change, ct);
                 }
                 catch (CryptographicException ex)
                 {
@@ -194,6 +207,8 @@ public sealed class SyncCoordinator(
                 }
 
                 await store.SetServerVersionAsync(change.EntityType, change.EntityId, change.Version, ct);
+                await store.SetContentHashAsync(
+                    change.EntityType, change.EntityId, ContentHash(applied), ct);
                 pulled++;
             }
 
@@ -208,19 +223,22 @@ public sealed class SyncCoordinator(
         return (pulled, conflicts, cursor, conflicts > 0 ? SyncStatus.Conflicted : SyncStatus.Synced);
     }
 
-    private async Task ApplyChangeAsync(
+    private async Task<byte[]?> ApplyChangeAsync(
         SyncContext context, ISyncEntitySource source, SyncPulledChange change, CancellationToken ct)
     {
         if (change.Deleted)
         {
-            await source.ApplyAsync(change.EntityType, change.EntityId, plaintext: null, deleted: true, ct);
-            return;
+            await source.ApplyAsync(
+                change.EntityType, change.EntityId, plaintext: null, deleted: true, change.SchemaVersion, ct);
+            return null;
         }
 
         var plaintext = context.Session.Decrypt(
             Context(context, change.EntityType, change.EntityId, change.SchemaVersion, change.KeyVersion),
             new EncryptedPayload(change.Ciphertext!, change.Nonce!, change.KeyVersion, change.SchemaVersion));
-        await source.ApplyAsync(change.EntityType, change.EntityId, plaintext, deleted: false, ct);
+        await source.ApplyAsync(
+            change.EntityType, change.EntityId, plaintext, deleted: false, change.SchemaVersion, ct);
+        return plaintext;
     }
 
     private async Task RecordPullConflictAsync(
@@ -242,6 +260,62 @@ public sealed class SyncCoordinator(
     }
 
     // ── 辅助 ────────────────────────────────────────────────────
+
+    // ── 对账（崩溃后补偿）────────────────────────────────────────
+
+    /// <summary>
+    /// 比对每个 source 的当前本地实体与已同步内容哈希，把漂移（业务写已提交但 Outbox
+    /// 未入队、或本地删除未登记）补进 Outbox。best-effort 变更追踪的崩溃安全兜底（协议 §3）。
+    /// </summary>
+    public async Task ReconcileAsync(SyncContext context, CancellationToken ct = default)
+    {
+        foreach (var source in _sources)
+        {
+            foreach (var entityType in source.EntityTypes)
+            {
+                var localIds = await source.ListEntityIdsAsync(entityType, ct);
+                var localSet = new HashSet<string>(localIds);
+
+                foreach (var id in localIds)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (await store.HasPendingAsync(entityType, id, ct)
+                        || await store.IsConflictedAsync(entityType, id, ct))
+                    {
+                        continue;
+                    }
+
+                    var plaintext = await source.GetPlaintextAsync(entityType, id, ct);
+                    if (plaintext is null)
+                    {
+                        continue;
+                    }
+
+                    if (ContentHash(plaintext) != await store.GetContentHashAsync(entityType, id, ct))
+                    {
+                        var baseVersion = await store.GetServerVersionAsync(entityType, id, ct);
+                        await store.EnqueueAsync(entityType, id, OutboxOperationType.Upsert, baseVersion, ct);
+                    }
+                }
+
+                foreach (var knownId in await store.GetSyncedEntityIdsAsync(entityType, ct))
+                {
+                    if (localSet.Contains(knownId)
+                        || await store.HasPendingAsync(entityType, knownId, ct)
+                        || await store.IsConflictedAsync(entityType, knownId, ct))
+                    {
+                        continue;
+                    }
+
+                    var baseVersion = await store.GetServerVersionAsync(entityType, knownId, ct);
+                    await store.EnqueueAsync(entityType, knownId, OutboxOperationType.Delete, baseVersion, ct);
+                }
+            }
+        }
+    }
+
+    private static string ContentHash(byte[]? plaintext) =>
+        plaintext is null ? string.Empty : Convert.ToHexString(SHA256.HashData(plaintext));
 
     private ISyncEntitySource? FindSource(string entityType) =>
         _sources.FirstOrDefault(s => s.Handles(entityType));

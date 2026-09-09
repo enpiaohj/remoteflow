@@ -22,7 +22,15 @@ public interface ISyncEntitySource
     /// <summary>取本地当前明文（稳定序列化 + SchemaVersion）。实体已在本地删除时返回 null。</summary>
     Task<byte[]?> GetPlaintextAsync(string entityType, string entityId, CancellationToken ct = default);
 
-    /// <summary>把拉取到的变更应用到本地。<paramref name="deleted"/> 为真时 <paramref name="plaintext"/> 为 null（Tombstone）。</summary>
+    /// <summary>
+    /// 把拉取到的变更应用到本地。<paramref name="deleted"/> 为真时 <paramref name="plaintext"/> 为 null（Tombstone）。
+    /// <paramref name="schemaVersion"/> 是该 Payload 的 Schema 版本，低于当前版本时由实现自行迁移。
+    /// </summary>
     Task ApplyAsync(
-        string entityType, string entityId, byte[]? plaintext, bool deleted, CancellationToken ct = default);
+        string entityType,
+        string entityId,
+        byte[]? plaintext,
+        bool deleted,
+        int schemaVersion,
+        CancellationToken ct = default);
 }

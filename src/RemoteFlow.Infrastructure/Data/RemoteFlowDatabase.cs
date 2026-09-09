@@ -17,7 +17,7 @@ namespace RemoteFlow.Infrastructure.Data;
 public sealed class RemoteFlowDatabase
 {
     /// <summary>当前 Schema 版本。新增迁移时递增，并在 <see cref="Migrations"/> 中追加脚本。</summary>
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     private readonly string _connectionString;
     private readonly ILogger<RemoteFlowDatabase> _logger;
@@ -367,6 +367,11 @@ public sealed class RemoteFlowDatabase
         );
 
         CREATE INDEX idx_sync_conflict_open ON sync_conflict(resolved_at);
+        """,
+
+        // v5：sync_entity_state 增加 content_hash，用于崩溃后对账（业务写已提交但 Outbox 未入队时补登记）。
+        [5] = """
+        ALTER TABLE sync_entity_state ADD COLUMN content_hash TEXT NOT NULL DEFAULT '';
         """
     };
 }

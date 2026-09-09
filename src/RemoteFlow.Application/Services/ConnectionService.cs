@@ -1,4 +1,5 @@
 using RemoteFlow.Core.Abstractions;
+using RemoteFlow.Core.Cloud;
 using RemoteFlow.Core.Models;
 
 namespace RemoteFlow.Application.Services;
@@ -10,8 +11,11 @@ namespace RemoteFlow.Application.Services;
 public sealed class ConnectionService(
     IConnectionRepository connections,
     IGroupRepository groups,
-    ITagRepository tags)
+    ITagRepository tags,
+    ISyncChangeTracker? syncTracker = null)
 {
+    private readonly ISyncChangeTracker _sync = syncTracker ?? NoOpSyncChangeTracker.Instance;
+
     public Task<IReadOnlyList<ConnectionProfile>> GetAllAsync(CancellationToken ct = default)
         => connections.GetAllAsync(ct);
 
@@ -32,6 +36,7 @@ public sealed class ConnectionService(
         profile.UpdatedAt = profile.CreatedAt;
 
         await connections.AddAsync(profile, ct);
+        await _sync.TrackUpsertAsync(SyncEntityTypes.Connection, profile.Id.ToString(), ct);
         return profile;
     }
 
@@ -39,10 +44,14 @@ public sealed class ConnectionService(
     {
         Validate(profile);
         await connections.UpdateAsync(profile, ct);
+        await _sync.TrackUpsertAsync(SyncEntityTypes.Connection, profile.Id.ToString(), ct);
     }
 
-    public Task DeleteAsync(Guid id, CancellationToken ct = default)
-        => connections.DeleteAsync(id, ct);
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        await connections.DeleteAsync(id, ct);
+        await _sync.TrackDeleteAsync(SyncEntityTypes.Connection, id.ToString(), ct);
+    }
 
     /// <summary>复制一个连接。副本名称自动追加「- 副本」，不继承收藏状态与连接历史。</summary>
     public async Task<ConnectionProfile> DuplicateAsync(Guid id, CancellationToken ct = default)
@@ -52,6 +61,7 @@ public sealed class ConnectionService(
 
         var copy = source.Clone($"{source.Name} - 副本");
         await connections.AddAsync(copy, ct);
+        await _sync.TrackUpsertAsync(SyncEntityTypes.Connection, copy.Id.ToString(), ct);
         return copy;
     }
 
@@ -65,6 +75,7 @@ public sealed class ConnectionService(
 
         profile.Favorite = favorite;
         await connections.UpdateAsync(profile, ct);
+        await _sync.TrackUpsertAsync(SyncEntityTypes.Connection, profile.Id.ToString(), ct);
     }
 
     /// <summary>
@@ -105,6 +116,7 @@ public sealed class ConnectionService(
         };
 
         await tags.AddAsync(tag, ct);
+        await _sync.TrackUpsertAsync(SyncEntityTypes.Tag, tag.Id.ToString(), ct);
         return tag;
     }
 
@@ -129,11 +141,15 @@ public sealed class ConnectionService(
         tag.Color = ValidateColor(color);
         tag.Description = (description ?? string.Empty).Trim();
         await tags.UpdateAsync(tag, ct);
+        await _sync.TrackUpsertAsync(SyncEntityTypes.Tag, tag.Id.ToString(), ct);
     }
 
     /// <summary>删除标签：连接上的引用由外键 CASCADE 一并清理，连接本身不受影响。</summary>
-    public Task DeleteTagAsync(Guid id, CancellationToken ct = default)
-        => tags.DeleteAsync(id, ct);
+    public async Task DeleteTagAsync(Guid id, CancellationToken ct = default)
+    {
+        await tags.DeleteAsync(id, ct);
+        await _sync.TrackDeleteAsync(SyncEntityTypes.Tag, id.ToString(), ct);
+    }
 
     private static string ValidateColor(string color)
     {

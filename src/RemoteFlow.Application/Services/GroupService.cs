@@ -1,4 +1,5 @@
 using RemoteFlow.Core.Abstractions;
+using RemoteFlow.Core.Cloud;
 using RemoteFlow.Core.Models;
 
 namespace RemoteFlow.Application.Services;
@@ -18,10 +19,16 @@ public sealed class GroupTreeNode
 /// 不可重命名、不可移动；新连接未指定分组、或删除普通分组时组内连接都归入这里。
 /// </para>
 /// </summary>
-public sealed class GroupService(IGroupRepository groups, IConnectionRepository connections)
+public sealed class GroupService(
+    IGroupRepository groups, IConnectionRepository connections, ISyncChangeTracker? syncTracker = null)
 {
+    private readonly ISyncChangeTracker _sync = syncTracker ?? NoOpSyncChangeTracker.Instance;
+
     /// <summary>首次启动时自动创建的默认用户分组名。</summary>
     public const string DefaultGroupName = "我的设备";
+
+    private Task TrackGroupAsync(Guid id, CancellationToken ct) =>
+        _sync.TrackUpsertAsync(SyncEntityTypes.Group, id.ToString(), ct);
 
     public Task<IReadOnlyList<ConnectionGroup>> GetAllAsync(CancellationToken ct = default)
         => groups.GetAllAsync(ct);
@@ -160,6 +167,7 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
 
         var group = new ConnectionGroup { Name = trimmed, ParentId = parentId, SortOrder = nextOrder };
         await groups.AddAsync(group, ct);
+        await TrackGroupAsync(group.Id, ct);
         return group;
     }
 
@@ -192,6 +200,7 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
 
         group.Name = trimmed;
         await groups.UpdateAsync(group, ct);
+        await TrackGroupAsync(group.Id, ct);
     }
 
     /// <summary>删除分组：组内连接 → 未分组，子分组 → 被删除分组的父级（§16）。</summary>
@@ -213,6 +222,7 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
 
         // 「未分组」以 group_id = null 表示；传 null 让仓储把组内连接置空。
         await groups.DeleteAsync(id, moveConnectionsTo: null, ct);
+        await _sync.TrackDeleteAsync(SyncEntityTypes.Group, id.ToString(), ct);
     }
 
     /// <summary>把分组移动到新的父级（null = 根级）。</summary>
@@ -257,6 +267,7 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
 
         group.ParentId = newParentId;
         await groups.UpdateAsync(group, ct);
+        await TrackGroupAsync(group.Id, ct);
     }
 
     /// <summary>把连接移动到指定分组（null / 未分组 都归入「未分组」）。</summary>
@@ -268,6 +279,7 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
         profile.GroupId = groupId == ConnectionGroup.UngroupedId ? null : groupId;
         profile.UpdatedAt = DateTimeOffset.Now;
         await connections.UpdateAsync(profile, ct);
+        await _sync.TrackUpsertAsync(SyncEntityTypes.Connection, profile.Id.ToString(), ct);
     }
 
     /// <summary>更新同级排序值（拖拽排序落库）。</summary>
@@ -282,6 +294,7 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
 
         group.SortOrder = sortOrder;
         await groups.UpdateAsync(group, ct);
+        await TrackGroupAsync(group.Id, ct);
     }
 
     /// <summary>返回默认新建连接分组（is_default=true 的非系统组）；无则 null。</summary>
@@ -316,11 +329,13 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
             currentDefault.IsDefault = false;
             currentDefault.IsProtected = false;
             await groups.UpdateAsync(currentDefault, ct);
+            await TrackGroupAsync(currentDefault.Id, ct);
         }
 
         target.IsDefault = true;
         target.IsProtected = false;
         await groups.UpdateAsync(target, ct);
+        await TrackGroupAsync(target.Id, ct);
     }
 
     /// <summary>开 / 关当前默认分组的保护。无默认组时无操作。</summary>
@@ -335,6 +350,7 @@ public sealed class GroupService(IGroupRepository groups, IConnectionRepository 
 
         currentDefault.IsProtected = isProtected;
         await groups.UpdateAsync(currentDefault, ct);
+        await TrackGroupAsync(currentDefault.Id, ct);
     }
 
     private static bool HasSiblingNamed(IEnumerable<ConnectionGroup> all, Guid? parentId, string name, Guid? excludeId)

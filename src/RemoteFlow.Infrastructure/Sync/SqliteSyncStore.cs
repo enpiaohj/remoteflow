@@ -241,6 +241,52 @@ public sealed class SqliteSyncStore(RemoteFlowDatabase database)
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<string> GetContentHashAsync(string entityType, string entityId, CancellationToken ct = default)
+    {
+        await using var connection = database.OpenConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT content_hash FROM sync_entity_state WHERE entity_type = $type AND entity_id = $eid;";
+        command.Parameters.AddWithValue("$type", entityType);
+        command.Parameters.AddWithValue("$eid", entityId);
+        return (await command.ExecuteScalarAsync(ct)) as string ?? string.Empty;
+    }
+
+    public async Task SetContentHashAsync(
+        string entityType, string entityId, string contentHash, CancellationToken ct = default)
+    {
+        await using var connection = database.OpenConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO sync_entity_state (entity_type, entity_id, content_hash)
+            VALUES ($type, $eid, $hash)
+            ON CONFLICT(entity_type, entity_id) DO UPDATE SET content_hash = excluded.content_hash;
+            """;
+        command.Parameters.AddWithValue("$type", entityType);
+        command.Parameters.AddWithValue("$eid", entityId);
+        command.Parameters.AddWithValue("$hash", contentHash);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>已经至少同步过一次（server_version &gt; 0）的实体 Id——对账时用来发现本地删除。</summary>
+    public async Task<IReadOnlyList<string>> GetSyncedEntityIdsAsync(string entityType, CancellationToken ct = default)
+    {
+        await using var connection = database.OpenConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT entity_id FROM sync_entity_state WHERE entity_type = $type AND server_version > 0;";
+        command.Parameters.AddWithValue("$type", entityType);
+
+        var ids = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            ids.Add(reader.GetString(0));
+        }
+
+        return ids;
+    }
+
     public async Task<bool> IsConflictedAsync(string entityType, string entityId, CancellationToken ct = default)
     {
         await using var connection = database.OpenConnection();

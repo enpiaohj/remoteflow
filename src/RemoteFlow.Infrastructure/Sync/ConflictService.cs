@@ -76,7 +76,8 @@ public sealed class ConflictService(
 
         if (conflict.Remote.Deleted)
         {
-            await source.ApplyAsync(conflict.EntityType, conflict.EntityId, null, deleted: true, ct);
+            await source.ApplyAsync(
+                conflict.EntityType, conflict.EntityId, null, deleted: true, conflict.Remote.SchemaVersion, ct);
         }
         else
         {
@@ -87,7 +88,9 @@ public sealed class ConflictService(
                 new EncryptedPayload(
                     conflict.Remote.Ciphertext!, conflict.Remote.Nonce!,
                     conflict.Remote.KeyVersion, conflict.Remote.SchemaVersion));
-            await source.ApplyAsync(conflict.EntityType, conflict.EntityId, plaintext, deleted: false, ct);
+            await source.ApplyAsync(
+                conflict.EntityType, conflict.EntityId, plaintext, deleted: false,
+                conflict.Remote.SchemaVersion, ct);
         }
 
         await store.SetServerVersionAsync(conflict.EntityType, conflict.EntityId, conflict.Remote.Version, ct);

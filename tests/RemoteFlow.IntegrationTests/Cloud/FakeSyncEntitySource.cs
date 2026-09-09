@@ -28,7 +28,8 @@ public sealed class FakeSyncEntitySource(string entityType) : ISyncEntitySource
     public Task<byte[]?> GetPlaintextAsync(string type, string id, CancellationToken ct = default) =>
         Task.FromResult(_local.TryGetValue(id, out var text) ? Encoding.UTF8.GetBytes(text) : null);
 
-    public Task ApplyAsync(string type, string id, byte[]? plaintext, bool deleted, CancellationToken ct = default)
+    public Task ApplyAsync(
+        string type, string id, byte[]? plaintext, bool deleted, int schemaVersion, CancellationToken ct = default)
     {
         var text = plaintext is null ? null : Encoding.UTF8.GetString(plaintext);
         if (deleted)

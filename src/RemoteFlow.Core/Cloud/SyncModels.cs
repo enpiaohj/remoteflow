@@ -71,6 +71,9 @@ public sealed record SyncOptions
     /// <summary>每次循环最多推送的 Outbox 条数。</summary>
     public int PushBatchSize { get; init; } = 200;
 
+    /// <summary>每次 RunOnce 前先做一次对账（把漂移补进 Outbox）。</summary>
+    public bool ReconcileBeforePush { get; init; } = true;
+
     /// <summary>瞬时失败的重试退避阶梯；超出末项后按末项周期重试。</summary>
     public IReadOnlyList<TimeSpan> RetryBackoff { get; init; } =
     [
