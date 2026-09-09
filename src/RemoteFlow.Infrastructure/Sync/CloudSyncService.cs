@@ -219,8 +219,9 @@ public sealed class CloudSyncService(
         {
             await vaultKeys.ForgetAsync(ct);
             await store.ResetAsync(ct);
-            settings.CloudDeviceId = string.Empty;
             settings.CloudEmail = string.Empty;
+            // CloudDeviceId 保留：它是这台机器的稳定标识，清空会让每次「清除并重新登录」
+            // 都在服务端注册一个新设备行，越积越多。撤销设备请在账号侧操作。
         }
 
         await settingsStore.SaveAsync(settings, ct);

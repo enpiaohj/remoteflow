@@ -55,8 +55,8 @@ public sealed class CredentialSecretSyncSource(ICredentialRepository credentials
     {
         var id = Guid.Parse(entityId);
         var credential = await credentials.GetByIdAsync(id, ct)
-            ?? throw new InvalidOperationException(
-                $"credential-secret 先于 credential 元数据到达（{id}）——同步顺序异常。");
+            ?? throw new SyncDependencyNotReadyException(
+                SyncEntityTypes.CredentialSecret, entityId, SyncEntityTypes.Credential);
 
         if (deleted)
         {

@@ -73,11 +73,12 @@ public sealed class CredentialSecretSyncSourceTests : IDisposable
     }
 
     [Fact]
-    public async Task Apply_before_the_credential_metadata_arrives_throws()
+    public async Task Apply_before_the_credential_metadata_arrives_defers()
     {
         var payload = System.Text.Encoding.UTF8.GetBytes("""{"Password":"x","PrivateKey":null}""");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        // 父 credential 尚未落地 —— 抛可延后的信号，由 SyncCoordinator 整轮拉完再重试，不使整轮失败。
+        await Assert.ThrowsAsync<SyncDependencyNotReadyException>(
             () => _source.ApplyAsync(SyncEntityTypes.CredentialSecret, Guid.NewGuid().ToString(), payload, false, 1));
     }
 }
