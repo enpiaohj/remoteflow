@@ -8,6 +8,16 @@
 
 > macOS 与 Windows 是相互独立的版本线，本版本号（0.3.0）不与 Windows 版对齐。
 
+> ## ⚠ 本版未发布（Release 草稿已删除）
+>
+> 本版当初走 GitHub Actions 通道，只建了 Release **草稿**、从未 Publish；此后
+> `macos-v0.4.0` 起改为直接发布，该草稿长期搁置。2026-09-10 经确认**删除该草稿 Release**
+> （tag `macos-v0.3.0` 保留，本地快照保留）。
+>
+> 注意：本版双架构 DMG **只存在于那个草稿里**，本地快照目录并无产物，故删除后
+> **已不可下载**。下面的「安装」章节保留作历史记录；需要可用版本请使用最新的 `macos-v*`。
+> 决策记录见 `docs/04-发布/2026-09-09-RemoteFlow双平台发布规范-v1.0.md` §5.6。
+
 ---
 
 ## 安装
@@ -110,5 +120,7 @@
 
 ## 产物
 
-- `RemoteFlow-v0.3.0-macos-arm64.dmg` —— Apple Silicon，约 55 MiB，ad-hoc 签名
-- `RemoteFlow-v0.3.0-macos-x64.dmg` —— Intel，约 57 MiB，ad-hoc 签名
+- **已不可得**。本版 DMG 当初只挂在 Release 草稿上，2026-09-10 随草稿一并删除（见顶部说明）。
+  当时构建的是：
+  - `RemoteFlow-v0.3.0-macos-arm64.dmg` —— Apple Silicon，约 55 MiB，ad-hoc 签名
+  - `RemoteFlow-v0.3.0-macos-x64.dmg` —— Intel，约 57 MiB，ad-hoc 签名
