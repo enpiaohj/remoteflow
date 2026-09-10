@@ -23,5 +23,9 @@
 
 ## 产物
 
-- `RemoteFlow-v0.7.4-macos-arm64.dmg` —— Size / SHA-256：见发布后补录
-- `RemoteFlow-v0.7.4-macos-x64.dmg` —— Size / SHA-256：见发布后补录
+- `RemoteFlow-v0.7.4-macos-arm64.dmg` —— Apple Silicon，ad-hoc 签名
+  - Size：57,366,092 bytes
+  - SHA-256：`939F1B38E77733CE0F622AEE0BDCEFE5A8C7A4E8114E5938DB57CFF72A645F12`
+- `RemoteFlow-v0.7.4-macos-x64.dmg` —— Intel，ad-hoc 签名
+  - Size：60,008,879 bytes
+  - SHA-256：`149F29D6558DE92827708FFCEB0603C0B3B07DBD933A8934370A53DB2B98898B`
