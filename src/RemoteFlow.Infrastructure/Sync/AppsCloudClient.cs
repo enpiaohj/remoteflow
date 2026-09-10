@@ -168,6 +168,43 @@ public sealed class AppsCloudClient(
         }
     }
 
+    /// <summary>上报本机基础系统信息（资产信息，非机密）。</summary>
+    public async Task PutSystemInfoAsync(Core.Diagnostics.SystemInfo info, CancellationToken ct = default)
+    {
+        using var response = await SendAsync(HttpMethod.Put, "api/v1/devices/system-info", new
+        {
+            hostName = info.HostName,
+            osName = info.OsName,
+            osVersion = info.OsVersion,
+            architecture = info.Architecture,
+            cpuModel = info.CpuModel,
+            cpuPhysicalCores = info.CpuPhysicalCores,
+            cpuLogicalCores = info.CpuLogicalCores,
+            cpuFrequencyMhz = info.CpuFrequencyMhz,
+            memoryTotalBytes = info.MemoryTotalBytes,
+            memoryAvailableBytes = info.MemoryAvailableBytes,
+            diskSummary = info.DiskSummary,
+            disks = info.Disks.Select(d => new
+            {
+                name = d.Name,
+                fileSystem = d.FileSystem,
+                totalBytes = d.TotalBytes,
+                freeBytes = d.FreeBytes,
+            }).ToList(),
+            primaryIpv4 = info.PrimaryIpv4,
+            currentUser = info.CurrentUser,
+            timeZone = info.TimeZone,
+            uptimeSeconds = info.UptimeSeconds,
+            screenSummary = info.ScreenSummary,
+            runtimeVersion = info.RuntimeVersion,
+            clientVersion = info.ClientVersion,
+        }, authenticated: true, ct);
+        if (!response.IsSuccessStatusCode && response.StatusCode != HttpStatusCode.NotFound)
+        {
+            throw await ApiError(response);
+        }
+    }
+
     public async Task<VaultKeyEnvelope?> GetVaultEnvelopeAsync(string kind, CancellationToken ct = default)
     {
         using var response = await SendAsync(

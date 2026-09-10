@@ -19,7 +19,8 @@ public sealed class CloudSyncService(
     AppSettings settings,
     JsonSettingsStore settingsStore,
     ILogger<CloudSyncService> logger,
-    LocalDataWiper? wiper = null) : ICloudSyncService
+    LocalDataWiper? wiper = null,
+    Core.Diagnostics.ISystemInfoCollector? systemInfo = null) : ICloudSyncService
 {
     private const string AppId = "com.appscloud.remoteflow";
 
@@ -75,6 +76,7 @@ public sealed class CloudSyncService(
         settings.CloudSyncEnabled = true;
         await settingsStore.SaveAsync(settings, ct);
 
+        await ReportSystemInfoAsync(ct);
         return await UnlockAsync(ct);
     }
 
@@ -122,6 +124,7 @@ public sealed class CloudSyncService(
         _userId = session.UserId;
         _email = settings.CloudEmail;
         IsSignedIn = true;
+        await ReportSystemInfoAsync(ct);
         return await UnlockAsync(ct);
     }
 
@@ -245,6 +248,26 @@ public sealed class CloudSyncService(
         // sync_state 已清空 → 游标归 0 → 本轮同步把云端作为权威完整拉取。
         await coordinator.RunOnceAsync(context, ct);
         logger.LogInformation("已清除本地数据并从云端恢复");
+    }
+
+    /// <summary>
+    /// 上报本机基础系统信息（资产信息，非机密）。尽力而为：失败只记日志，绝不影响登录 / 同步。
+    /// </summary>
+    private async Task ReportSystemInfoAsync(CancellationToken ct)
+    {
+        if (systemInfo is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await client.PutSystemInfoAsync(systemInfo.Collect(), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "上报系统信息失败（不影响登录 / 同步）");
+        }
     }
 
     // ── 内部 ────────────────────────────────────────────────────

@@ -331,4 +331,44 @@ public sealed class SqliteRepositoryTests : IDisposable
         Assert.True(loaded.IsDefault);
         Assert.True(loaded.IsProtected);
     }
+
+    private async Task<long> CountConnectionTagsAsync(Guid connectionId)
+    {
+        await using var connection = _database.OpenConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM connection_tags WHERE connection_id = $id;";
+        command.Parameters.AddWithValue("$id", connectionId.ToString());
+        return Convert.ToInt64(await command.ExecuteScalarAsync());
+    }
+
+    [Fact]
+    public async Task 删除连接会一并删除其历史与标签关联()
+    {
+        var connections = new SqliteConnectionRepository(_database);
+        var history = new SqliteHistoryRepository(_database);
+        var tags = new SqliteTagRepository(_database);
+
+        var tag = new Tag { Name = "prod" };
+        await tags.AddAsync(tag);
+        var connection = new ConnectionProfile { Name = "web-01", Host = "10.0.0.1", Port = 22, TagIds = [tag.Id] };
+        await connections.AddAsync(connection);
+        await history.AddAsync(new ConnectionHistoryEntry
+        {
+            ConnectionId = connection.Id,
+            ConnectionName = connection.Name,
+            Host = connection.Host,
+            Protocol = ProtocolType.Ssh,
+            StartedAt = DateTimeOffset.Now,
+            Result = ConnectionResult.Success,
+        });
+
+        Assert.Single(await history.GetByConnectionAsync(connection.Id, 10));
+
+        await connections.DeleteAsync(connection.Id);
+
+        // 连接、历史（最近活动）与其标签关联都不得残留。
+        Assert.Null(await connections.GetByIdAsync(connection.Id));
+        Assert.Empty(await history.GetByConnectionAsync(connection.Id, 10));
+        Assert.Equal(0, await CountConnectionTagsAsync(connection.Id));
+    }
 }

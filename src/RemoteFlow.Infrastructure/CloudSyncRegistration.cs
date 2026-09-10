@@ -27,6 +27,7 @@ public static class CloudSyncRegistration
 
         services.AddSingleton<RecoveryKeyService>();
         services.AddSingleton<VaultMasterKeyService>();
+        services.AddSingleton<Core.Diagnostics.ISystemInfoCollector, Diagnostics.SystemInfoCollector>();
 
         services.AddSingleton<SqliteSyncStore>();
         services.AddSingleton<ISyncEntitySource, ConnectionSyncSource>();

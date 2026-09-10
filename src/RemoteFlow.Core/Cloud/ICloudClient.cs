@@ -22,6 +22,9 @@ public interface ICloudClient
 
     Task<Guid> GetUserIdAsync(CancellationToken ct = default);
 
+    /// <summary>上报本机基础系统信息（资产信息，非机密）。设备须已登记且未撤销。</summary>
+    Task PutSystemInfoAsync(Diagnostics.SystemInfo info, CancellationToken ct = default);
+
     // ── Vault ───────────────────────────────────────────────────
 
     Task<CloudVaultStatus> GetVaultStatusAsync(CancellationToken ct = default);

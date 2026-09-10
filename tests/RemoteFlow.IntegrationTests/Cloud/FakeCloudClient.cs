@@ -34,6 +34,7 @@ public sealed class FakeCloudClient(InMemoryCloudServer server) : ICloudClient
 
     public Task<bool> HasSessionAsync(CancellationToken ct = default) => Task.FromResult(true);
     public Task<Guid> GetUserIdAsync(CancellationToken ct = default) => throw new NotImplementedException();
+    public Task PutSystemInfoAsync(RemoteFlow.Core.Diagnostics.SystemInfo i, CancellationToken ct = default) => Task.CompletedTask;
     public Task<CloudRegisterOutcome> RegisterAsync(string e, string p, CancellationToken ct = default) => throw new NotImplementedException();
     public Task LoginAsync(string e, string p, CloudDeviceInfo d, CancellationToken ct = default) => throw new NotImplementedException();
     public Task ChangePasswordAsync(string e, string c, string n, CancellationToken ct = default) => throw new NotImplementedException();

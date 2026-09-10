@@ -114,11 +114,29 @@ public sealed class SqliteConnectionRepository(RemoteFlowDatabase database) : IC
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
         await using var connection = database.OpenConnection();
-        await using var command = connection.CreateCommand();
-        // connection_tags 通过外键 ON DELETE CASCADE 自动清理。
-        command.CommandText = "DELETE FROM connections WHERE id = $id;";
-        command.Parameters.AddWithValue("$id", id.ToString());
-        await command.ExecuteNonQueryAsync(ct);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
+
+        // 关联记录必须一并清理，否则会留下孤儿：
+        //  - connection_tags 由外键 ON DELETE CASCADE 自动删；
+        //  - connection_history（最近活动 / 连接历史）没有外键，必须显式删，否则「最近活动」里
+        //    会残留已删除连接的历史条目。
+        await using (var deleteHistory = connection.CreateCommand())
+        {
+            deleteHistory.Transaction = transaction;
+            deleteHistory.CommandText = "DELETE FROM connection_history WHERE connection_id = $id;";
+            deleteHistory.Parameters.AddWithValue("$id", id.ToString());
+            await deleteHistory.ExecuteNonQueryAsync(ct);
+        }
+
+        await using (var deleteConnection = connection.CreateCommand())
+        {
+            deleteConnection.Transaction = transaction;
+            deleteConnection.CommandText = "DELETE FROM connections WHERE id = $id;";
+            deleteConnection.Parameters.AddWithValue("$id", id.ToString());
+            await deleteConnection.ExecuteNonQueryAsync(ct);
+        }
+
+        await transaction.CommitAsync(ct);
     }
 
     public async Task TouchLastConnectedAsync(Guid id, DateTimeOffset when, CancellationToken ct = default)
