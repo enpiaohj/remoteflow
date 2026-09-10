@@ -46,5 +46,9 @@ DMG 拖入「应用程序」；首次启动右键「打开」，或 `xattr -dr c
 
 ## 产物
 
-- `RemoteFlow-v0.7.0-macos-arm64.dmg` —— Apple Silicon，ad-hoc 签名 —— Size / SHA-256：见发布后补录
-- `RemoteFlow-v0.7.0-macos-x64.dmg` —— Intel（arm64 runner 交叉编译），ad-hoc 签名 —— Size / SHA-256：见发布后补录
+- `RemoteFlow-v0.7.0-macos-arm64.dmg` —— Apple Silicon，ad-hoc 签名
+  - Size：57,367,366 bytes
+  - SHA-256：`4F176C519D250E7C070813D984BE3BC92269F4DDFD4311C4EB9026390EBDAEA3`
+- `RemoteFlow-v0.7.0-macos-x64.dmg` —— Intel（arm64 runner 交叉编译），ad-hoc 签名
+  - Size：60,091,334 bytes
+  - SHA-256：`D911A380691397579BBAFB84AADA6E96B1C4F26174F2907A3068729BFA30772D`

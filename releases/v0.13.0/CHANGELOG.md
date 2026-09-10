@@ -41,8 +41,12 @@ macOS 侧同批走 `macos-v0.7.0`。
 
 ## Artifacts
 
-- `RemoteFlow-v0.13.0-win-x64.exe` —— Size / SHA-256：见发布后补录
-- `RemoteFlow-v0.13.0-win-x64.zip` —— Size / SHA-256：见发布后补录
+- `RemoteFlow-v0.13.0-win-x64.exe`
+  - Size：74,866,359 bytes
+  - SHA-256：`C28F89E5E4F23B76CE4CCC9CEE1BB605D578C3A421B92B1041C6531732A84106`
+- `RemoteFlow-v0.13.0-win-x64.zip`
+  - Size：69,392,924 bytes
+  - SHA-256：`B431825FE438F057FE4664E0EE3E7C7B4B82D2DD365F1AC614034BC880200BC8`
 
 ## Git
 
