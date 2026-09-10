@@ -208,7 +208,7 @@ pwsh scripts/release-local.ps1 -Version X.Y.Z -Publish   # 构建 + 创建并发
 # macOS（先跑过 seal-release-macos.sh 封版）
 scripts/release-local-macos.sh                           # 版本取 csproj，只构建
 scripts/release-local-macos.sh --publish                 # 构建 + 创建并发布 GitHub Release
-scripts/release-local-macos.sh 0.8.0 --backfill --publish # 补发旧版本（在该 tag 的源码树上构建）
+scripts/release-local-macos.sh X.Y.Z --backfill --publish # 补发旧版本（在该 tag 的源码树上构建）
 ```
 
 - 两个脚本都会：跑测试门禁 → 构建 → 产物拷进 `releases/<tag>/` → 算 SHA-256 / 大小 →
@@ -227,6 +227,9 @@ scripts/release-local-macos.sh 0.8.0 --backfill --publish # 补发旧版本（�
   需 Developer ID Application 证书，并在 macOS 侧设 `RF_SIGN_IDENTITY` + `RF_NOTARY_PROFILE`。
 - **补发旧版本**：macOS 用 `--backfill`（在 tag 的临时 worktree 里构建，保证产物对应快照源码；
   当前工作树若与该 tag 的构建路径有差异，非 backfill 模式会直接报错拒绝）。
+- **已决定不补发的版本**：`macos-v0.8.0` —— 封版时 Actions 计费故障导致无产物，
+  功能已由 `macos-v0.8.1` 覆盖，决定不补发（详见 `releases/macos-v0.8.0/CHANGELOG.md`）。
+  tag 保留但不对应 Release，这是有意为之，不是遗漏。
 
 #### ~~通道 B：GitHub Actions~~ —— 已弃用（2026-09-10）
 
