@@ -7,6 +7,29 @@
 
 ---
 
+## [0.13.1] — 2026-09-10
+
+同步删除语义收紧（安全修复）。Windows 与 macOS 同步发布，macOS 侧见
+[`releases/macos-v0.7.1/CHANGELOG.md`](releases/macos-v0.7.1/CHANGELOG.md)。
+
+### 修复
+- **删除不再从「本地不存在」推断传播**：对账（崩溃兜底）原本会把「云端有、本地已无」自动补成
+  `Delete` 推上云端 —— 一次误删（本地文件缺失、数据库被部分还原、程序异常）会被复制到云端
+  与所有设备，**不可逆**。
+  - 现在对账**不再补 Delete**，只记 Warning 供排查；删除的唯一传播途径是服务层删除时登记的
+    Outbox 墓碑（连接 / 凭据 / 分组 / 标签的删除都走这条路），仍受 LWW 与冲突保护。
+  - 「删除 vs 他人修改」的冲突依旧不自动裁决，留给用户在客户端选择「保留本机 / 使用云端」。
+  - 代价：极小概率下（删除瞬间崩溃、Outbox 未登记）云端会保留该条并在下次同步回到本地 ——
+    这比误删被扩散安全得多。
+
+### 验证
+- `dotnet build RemoteFlow.slnx -c Release` 0 错误；`dotnet test -c Release` —— Core.Tests 42、
+  IntegrationTests 168（含新增：对账不传播未登记的删除 / 显式登记的删除仍传播）、
+  IntegrationTests.Windows 9 全绿。
+- 未执行：完整 UI 手动走查、两台物理机的同步演练。
+
+详见 [`releases/v0.13.1/CHANGELOG.md`](releases/v0.13.1/CHANGELOG.md)。
+
 ## [0.13.0] — 2026-09-10
 
 客户端资产上报 + 冲突可读化 + 关联清理。Windows 与 macOS 同步发布，macOS 侧见
@@ -412,6 +435,7 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
+[0.13.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.1
 [0.13.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.0
 [0.12.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.12.0
 [0.11.3]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.3
