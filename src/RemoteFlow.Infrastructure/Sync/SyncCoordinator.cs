@@ -636,8 +636,13 @@ public sealed class SyncCoordinator(
                         continue;
                     }
 
-                    var baseVersion = await store.GetServerVersionAsync(entityType, knownId, ct);
-                    await store.EnqueueAsync(entityType, knownId, OutboxOperationType.Delete, baseVersion, ct);
+                    // 云端有、本地已无。**刻意不自动补 Delete**：删除是不可逆的破坏性操作，
+                    // 绝不能让「本地文件缺失 / 数据库被部分还原 / 程序异常」被推断成用户意图删除，
+                    // 否则一次误删会被传播到云端与所有设备。删除只能由显式记录的 Outbox 墓碑传播
+                    // （ConnectionService / CredentialService 等在删除时登记）。这里只告警，供排查。
+                    logger.LogWarning(
+                        "对账发现云端有、本地已无 {Type}/{Id} —— 按保守策略不自动删除（如需删除请在客户端执行删除操作）",
+                        entityType, knownId);
                 }
             }
         }

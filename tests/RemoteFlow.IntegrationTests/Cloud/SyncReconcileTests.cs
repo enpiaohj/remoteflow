@@ -84,7 +84,7 @@ public sealed class SyncReconcileTests : IDisposable
     }
 
     [Fact]
-    public async Task Reconcile_enqueues_a_delete_for_a_synced_entity_that_vanished_locally()
+    public async Task Reconcile_does_not_propagate_a_delete_that_was_not_recorded()
     {
         var coordinator = NewCoordinator();
         var profile = new ConnectionProfile { Name = "X", Host = "h", Port = 22, Protocol = ProtocolType.Ssh };
@@ -92,9 +92,29 @@ public sealed class SyncReconcileTests : IDisposable
         await _store.EnqueueAsync(SyncEntityTypes.Connection, profile.Id.ToString(), OutboxOperationType.Upsert, 0);
         await coordinator.RunOnceAsync(Context());
 
-        await _connections.DeleteAsync(profile.Id); // untracked local delete
+        // 模拟「本地莫名少了」：未登记 Outbox 的直接删除（误删 / 数据库异常 / 部分还原）。
+        await _connections.DeleteAsync(profile.Id);
 
         await coordinator.ReconcileAsync(Context());
+
+        // 保守策略：删除不可逆，绝不从「本地不存在」推断删除并传播到云端与其它设备。
+        Assert.Empty(await _store.GetDueEntriesAsync(DateTimeOffset.UtcNow, 10));
+    }
+
+    [Fact]
+    public async Task An_explicitly_recorded_delete_is_still_propagated()
+    {
+        var coordinator = NewCoordinator();
+        var profile = new ConnectionProfile { Name = "Y", Host = "h2", Port = 22, Protocol = ProtocolType.Ssh };
+        await _connections.AddAsync(profile);
+        await _store.EnqueueAsync(SyncEntityTypes.Connection, profile.Id.ToString(), OutboxOperationType.Upsert, 0);
+        await coordinator.RunOnceAsync(Context());
+
+        // 显式删除：业务表删除 + 登记 Outbox（服务层就是这么做的）—— 这才是删除的唯一传播途径。
+        await _connections.DeleteAsync(profile.Id);
+        await _store.EnqueueAsync(
+            SyncEntityTypes.Connection, profile.Id.ToString(), OutboxOperationType.Delete,
+            await _store.GetServerVersionAsync(SyncEntityTypes.Connection, profile.Id.ToString()));
 
         var entry = Assert.Single(await _store.GetDueEntriesAsync(DateTimeOffset.UtcNow, 10));
         Assert.Equal(OutboxOperationType.Delete, entry.OperationType);
