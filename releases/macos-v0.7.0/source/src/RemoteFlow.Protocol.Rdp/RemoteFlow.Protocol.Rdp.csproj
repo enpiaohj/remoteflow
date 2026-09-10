@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RemoteFlow.Protocol.Rdp —— RDP 协议适配层。
+    通过手写 AxHost 包装系统自带的 mstscax.dll（Microsoft RDP Client Control），
+    经 WindowsFormsHost 嵌入 WPF 会话 Tab，不自研 RDP 协议栈。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>RemoteFlow.Protocol.Rdp</RootNamespace>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RemoteFlow.Core\RemoteFlow.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+</Project>
