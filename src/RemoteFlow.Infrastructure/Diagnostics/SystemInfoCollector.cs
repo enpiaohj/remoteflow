@@ -3,6 +3,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using RemoteFlow.Core.Diagnostics;
 
 namespace RemoteFlow.Infrastructure.Diagnostics;
@@ -24,7 +25,7 @@ public sealed class SystemInfoCollector : ISystemInfoCollector
         {
             // 采集是尽力而为：任何异常都不应影响客户端主流程。
             return new SystemInfo(
-                SafeHostName(), SafeOsName(), SafeOsVersion(), RuntimeInformation.OSArchitecture.ToString(),
+                SafeHostName(), SafeOsName(), SafeOsVersion(), NormalizeArchitecture(),
                 string.Empty, 0, Environment.ProcessorCount, 0, 0, 0, string.Empty, [], string.Empty,
                 SafeUserName(), SafeTimeZone(), SafeUptime(), string.Empty,
                 RuntimeInformation.FrameworkDescription, ClientVersion());
@@ -42,7 +43,7 @@ public sealed class SystemInfoCollector : ISystemInfoCollector
             SafeHostName(),
             SafeOsName(),
             SafeOsVersion(),
-            RuntimeInformation.OSArchitecture.ToString(),
+            NormalizeArchitecture(),
             cpuModel,
             physicalCores,
             logicalCores,
@@ -64,23 +65,147 @@ public sealed class SystemInfoCollector : ISystemInfoCollector
 
     private static string SafeHostName() => Environment.MachineName;
 
+    /// <summary>架构规范化：X64 → x64（枚举的大写形式对用户不友好）。</summary>
+    private static string NormalizeArchitecture() => RuntimeInformation.OSArchitecture switch
+    {
+        Architecture.X64 => "x64",
+        Architecture.X86 => "x86",
+        Architecture.Arm64 => "arm64",
+        Architecture.Arm => "arm",
+        var other => other.ToString().ToLowerInvariant(),
+    };
+
     private static string SafeUserName() => Environment.UserName;
 
     private static string SafeTimeZone() => TimeZoneInfo.Local.Id;
 
     private static long SafeUptime() => Environment.TickCount64 / 1000;
 
-    private static string SafeOsName() =>
-        OperatingSystem.IsWindows() ? "Windows"
-        : OperatingSystem.IsMacOS() ? "macOS"
-        : OperatingSystem.IsLinux() ? "Linux"
-        : RuntimeInformation.OSDescription;
+    /// <summary>操作系统名称（含版本族与版本，如「Windows 11 专业版」/「macOS」/「Ubuntu 24.04」）。</summary>
+    private static string SafeOsName()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return WindowsOsName();
+        }
 
-    private static string SafeOsVersion() =>
-        OperatingSystem.IsWindows()
-            ? WindowsRegistryRead(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion", "DisplayVersion")
-              ?? Environment.OSVersion.Version.ToString()
-            : RuntimeInformation.OSDescription;
+        if (OperatingSystem.IsMacOS())
+        {
+            return "macOS";
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            // /etc/os-release 的 PRETTY_NAME 比内核描述可读得多（如 Ubuntu 24.04.1 LTS）。
+            try
+            {
+                foreach (var line in File.ReadLines("/etc/os-release"))
+                {
+                    if (line.StartsWith("PRETTY_NAME=", StringComparison.Ordinal))
+                    {
+                        return line["PRETTY_NAME=".Length..].Trim().Trim('"');
+                    }
+                }
+            }
+            catch (IOException)
+            {
+                // 退回简单名称。
+            }
+
+            return "Linux";
+        }
+
+        return RuntimeInformation.OSDescription;
+    }
+
+    /// <summary>操作系统版本（Windows：版本号 + 构建，如「25H2 (26200.6584)」）。</summary>
+    private static string SafeOsVersion()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            const string key = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
+            var display = WindowsRegistryRead(key, "DisplayVersion");
+            var build = WindowsRegistryRead(key, "CurrentBuild");
+            var revision = WindowsRegistryRead(key, "UBR");
+            // 版本串收成「25H2 (26200.9445)」：版本号 + 构建号（含修订）。
+            var buildText = build is { Length: > 0 }
+                ? $"({build}" + (revision is { Length: > 0 } ? $".{revision}" : string.Empty) + ")"
+                : string.Empty;
+
+            return string.Join(' ', new[] { display, buildText }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            var version = SysctlString("kern.osproductversion");
+            var build = SysctlString("kern.osversion");
+            return string.Join(' ', new[]
+            {
+                string.IsNullOrWhiteSpace(version) ? RuntimeInformation.OSDescription : version,
+                string.IsNullOrWhiteSpace(build) ? string.Empty : $"({build})",
+            }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        }
+
+        return RuntimeInformation.OSDescription;
+    }
+
+    /// <summary>
+    /// Windows 版本族 + 版本：<c>ProductName</c> 在 Win11 上仍可能写「Windows 10」，
+    /// 因此以构建号（≥22000 为 Windows 11）判定版本族；再按 ProductName 里的版本关键字映射中文。
+    /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static string WindowsOsName()
+    {
+        const string key = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
+        var productName = WindowsRegistryRead(key, "ProductName") ?? "Windows";
+        var editionId = WindowsRegistryRead(key, "EditionID") ?? string.Empty;
+        var build = int.TryParse(WindowsRegistryRead(key, "CurrentBuild"), out var parsed) ? parsed : 0;
+
+        if (productName.Contains("Server", StringComparison.OrdinalIgnoreCase)
+            || editionId.StartsWith("Server", StringComparison.OrdinalIgnoreCase))
+        {
+            return productName.Trim();      // 服务器版直接用官方名（如 Windows Server 2022 Datacenter）
+        }
+
+        // 版本族看构建号：Win11 的 ProductName 常仍写「Windows 10 Pro」，不能用它判族。
+        var family = build >= 22000 ? "Windows 11" : "Windows 10";
+        return string.IsNullOrEmpty(WindowsEdition(editionId, productName))
+            ? family
+            : $"{family} {WindowsEdition(editionId, productName)}";
+    }
+
+    /// <summary>
+    /// 版本（SKU）中文名：优先用 EditionID —— 它不随系统语言变（中文系统上 ProductName 是中文，
+    /// 英文系统上是英文，且 Win11 常误写 Windows 10），ProductName 只作兜底。
+    /// </summary>
+    private static string WindowsEdition(string id, string productName)
+    {
+        if (id.StartsWith("ProfessionalWorkstation", StringComparison.OrdinalIgnoreCase)) return "专业工作站版";
+        if (id.StartsWith("ProfessionalEducation", StringComparison.OrdinalIgnoreCase)
+            || id.StartsWith("ProfessionalEducationN", StringComparison.OrdinalIgnoreCase)) return "专业教育版";
+        if (id.StartsWith("Professional", StringComparison.OrdinalIgnoreCase)) return "专业版";
+        if (id.StartsWith("Education", StringComparison.OrdinalIgnoreCase)) return "教育版";
+        if (id.StartsWith("Enterprise", StringComparison.OrdinalIgnoreCase)) return "企业版";
+        if (id.StartsWith("Core", StringComparison.OrdinalIgnoreCase)) return "家庭版";
+        if (id.StartsWith("Starter", StringComparison.OrdinalIgnoreCase)) return "简易版";
+
+        // EditionID 拿不到时退回 ProductName（兼容英文与中文写法）。
+        return productName switch
+        {
+            var n when n.Contains("Professional Workstation", StringComparison.OrdinalIgnoreCase)
+                || n.Contains("专业工作站") => "专业工作站版",
+            var n when n.Contains("Professional", StringComparison.OrdinalIgnoreCase)
+                || n.Contains(" Pro", StringComparison.OrdinalIgnoreCase)
+                || n.Contains("专业版") => "专业版",
+            var n when n.Contains("Education", StringComparison.OrdinalIgnoreCase)
+                || n.Contains("教育版") => "教育版",
+            var n when n.Contains("Enterprise", StringComparison.OrdinalIgnoreCase)
+                || n.Contains("企业版") => "企业版",
+            var n when n.Contains("Home", StringComparison.OrdinalIgnoreCase)
+                || n.Contains("家庭") => "家庭版",
+            _ => string.Empty,
+        };
+    }
 
     private static string ClientVersion() =>
         Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
@@ -357,12 +482,13 @@ public sealed class SystemInfoCollector : ISystemInfoCollector
     private static extern int GetSystemMetrics(int index);
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    /// <summary>读注册表值并转成字符串（REG_DWORD / REG_SZ 都能读）。</summary>
     private static string? WindowsRegistryRead(string subKey, string valueName)
     {
         try
         {
             using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(subKey);
-            return key?.GetValue(valueName) as string;
+            return key?.GetValue(valueName)?.ToString();
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException)
         {
