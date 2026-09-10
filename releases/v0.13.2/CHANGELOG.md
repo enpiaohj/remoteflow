@@ -24,8 +24,12 @@
 
 ## Artifacts
 
-- `RemoteFlow-v0.13.2-win-x64.exe` —— Size / SHA-256：见发布后补录
-- `RemoteFlow-v0.13.2-win-x64.zip` —— Size / SHA-256：见发布后补录
+- `RemoteFlow-v0.13.2-win-x64.exe`
+  - Size：74,867,911 bytes
+  - SHA-256：`4FE965E880FBF5EFC5AA8340F0605B608FE271220DB0D4E3C8B8BA41545D59CA`
+- `RemoteFlow-v0.13.2-win-x64.zip`
+  - Size：69,394,652 bytes
+  - SHA-256：`FE056869FA27284D77F3680B07A8134F28BFB399F24571E7288917E9AAC4D9F7`
 
 ## Git
 
