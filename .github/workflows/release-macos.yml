@@ -12,12 +12,20 @@
 # 拦，仅供内部）：
 #   MACOS_CERT_P12_BASE64 / MACOS_CERT_PASSWORD        —— Developer ID Application 证书（.p12 base64）
 #   MACOS_NOTARY_APPLE_ID / MACOS_NOTARY_TEAM_ID / MACOS_NOTARY_PASSWORD  —— notarytool 凭据
+#
+# ⚠ 已弃用（2026-09-10）：账户计费问题导致 job 在启动前即被拒，GitHub Actions 不再作为
+#   发布路径。**macOS 发布改走本地**：scripts/release-local-macos.sh --publish
+#   （补发旧版本加 --backfill；详见 docs/04-发布 规范 §5.6 通道 A）。
+#   触发已停用，文件保留以便日后恢复。
 name: Release · macOS
 
+# on:
+#   push:
+#     tags: ["macos-v*"]
+#   workflow_dispatch:
 on:
   push:
-    tags: ["macos-v*"]
-  workflow_dispatch:
+    branches: ["__actions-disabled__"]   # 不存在的分支名 —— 永不触发
 
 permissions:
   contents: write

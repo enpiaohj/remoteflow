@@ -80,6 +80,6 @@ cat <<EOF
   git push origin main --follow-tags         # 推 release 提交 + tag
 $([ "$ALLOW_RETAG" = 1 ] && echo "  # tag 是移动的，若远端已有：git push origin main && git push origin $TAG --force")
 
-注：GitHub Actions 的 \`Release · macOS\` 仍保留在仓库里（push tag 会触发），但当前不作为
-发布主路径 —— 本地发布见 scripts/release-local-macos.sh。两条路径产出的产物名一致。
+注：GitHub Actions 已弃用（计费问题导致 job 被拒），\`.github/workflows/release-macos.yml\`
+的触发器已停用、push tag 不会再触发 —— 产物一律走 scripts/release-local-macos.sh。
 EOF

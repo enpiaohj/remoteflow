@@ -12,16 +12,14 @@
 
 `main` 是双平台统一树。**Windows 打 `vX.Y.Z` tag、macOS 打 `macos-vX.Y.Z` tag**。
 
-产物构建与发布有**两条并行通道**：
+产物构建与发布**只有一条路径：本地构建**（GitHub Actions 已弃用，见 §4）：
 
-- **本地发布（默认主路径）**：各平台在自己的机器上构建产物并创建 GitHub Release，
-  互不依赖、互不阻塞 —— Windows 用 `scripts/release-local.ps1`，macOS 用
-  `scripts/release-local-macos.sh`。本机架构那一份原生编译，另一份交叉编译（见 §5.6）。
-- **GitHub Actions（保留的备用通道）**：`release-windows.yml` / `release-macos.yml`
-  仍在仓库里，push tag 会触发并创建 **Release 草稿**。当 Actions 可用且希望省事时可以走它。
-
-两条通道产出的产物名一致（`RemoteFlow-vX.Y.Z-win-x64.exe` /
-`RemoteFlow-vX.Y.Z-macos-arm64.dmg` / `-x64.dmg`），互不冲突，可按当日情况任选其一。
+- **本地发布**：各平台在自己的机器上构建产物并创建 GitHub Release，互不依赖、互不阻塞 ——
+  Windows 用 `scripts/release-local.ps1`，macOS 用 `scripts/release-local-macos.sh`。
+  本机架构那一份原生编译，另一份交叉编译（见 §5.6）。
+  产物名：`RemoteFlow-vX.Y.Z-win-x64.exe` / `RemoteFlow-vX.Y.Z-macos-arm64.dmg` / `-x64.dmg`。
+- **GitHub Actions 已弃用**：`release-*.yml` 的触发器已停用，不再产生产物。
+  文件保留在仓库里，正文注释说明恢复方法（见 §4）。
 
 共享层（`RemoteFlow.Core` / `RemoteFlow.Presentation`）的改动**同时影响两端**，
 要么是加法，要么在同一个改动里把两端视图一起改到、两端都能编译。
@@ -86,25 +84,32 @@
 
 ---
 
-## 4. CI 门禁（安全网）
+## 4. 门禁（GitHub Actions 已弃用，改本地）
 
-`.github/workflows/ci.yml`：每次 push `main` / `feature/**` + 每个 PR：
-- Ubuntu 跑共享测试（`Core.Tests` + `IntegrationTests`）——主门禁；
-- Windows runner 验「能否构建 slnx + `IntegrationTests.Windows`」；
-- macOS runner 验「能否构建 `App.Mac` + `IntegrationTests.Mac`」。
+**现状：GitHub Actions 已弃用（2026-09-10）。** 账户计费问题导致所有 job 在启动前即被拒，
+`ci.yml` / `release-windows.yml` / `release-macos.yml` 的触发器已停用（文件保留，正文注释里有恢复方法）。
+因此 **`main` 目前没有自动门禁**——不再有「CI 两端都绿」这个信号可看。
 
-→ **`main` 因此永远不会「一端是坏的」**。fetch + rebase 拿到的基线可信。
-→ **合共享层改动前，先看目标分支的 CI 两端都绿。**
-
-**CI 不可用时（计费 / 配额 / 平台故障）的替代门禁**：在合共享层改动前，本地各跑一遍两端能编译：
+**替代门禁（合共享层改动前必须本地跑，两端都要能编译）**：
 
 ```
 dotnet build -c Release                                   # 共享层 + Windows 侧编译校验
-dotnet test  -c Release                                   # Core / Integration 全绿
-dotnet build src/RemoteFlow.App.Mac -c Release            # macOS 侧编译校验（mac 上跑）
+dotnet build src/RemoteFlow.App.Mac -c Release            # macOS 侧编译校验（在 mac 上跑）
+# 测试逐项目跑 —— 解决方案级 `dotnet test` 会拉起跑不了的 IntegrationTests.Windows
+dotnet test tests/RemoteFlow.Core.Tests              -c Release
+dotnet test tests/RemoteFlow.IntegrationTests        -c Release
+dotnet test tests/RemoteFlow.IntegrationTests.Windows -c Release   # 仅 Windows 机器
+dotnet test tests/RemoteFlow.IntegrationTests.Mac    -c Release    # 仅 macOS 机器
 ```
 
-CI 恢复后，其结论仍以 CI 为准；本地跑绿只是替代手段，**不得据此把「未执行」写成「已通过」**。
+判据同过去：**改 `Core` / `Presentation` = 同时影响两端**，加法优先；必须删改签名时，
+同一个改动里把 `App`(WPF) + `App.Mac`(AppKit) 一起改到，**两端本地编译都过**才算完成。
+
+**如实标注**：本地跑绿不等于 CI 跑绿，**不得据此把「未执行」写成「已通过」**；
+CHANGELOG 的 Verification 要写明是在哪台机器、跑了哪些项目、哪些没跑。
+
+**恢复 Actions 的条件**：账户计费恢复正常后，取消三个 workflow 里 `on:` 块的注释即可。
+在那之前 `releases/` 的产物一律走 §5.6 通道 A（本地发布）。
 
 ---
 
@@ -190,11 +195,10 @@ git push origin vX.Y.Z
 
 ### 5.6 构建产物 + 发布 Release
 
-两条通道产出的产物一致，按当日情况任选其一。**发布前必须确认源码快照 = 产物对应源码**：
-若 `seal` 之后源码又改过（尤其影响构建的 `src/` `native/` `scripts/`），必须重新封版再构建 ——
-不得「改完源码直接复制旧快照」。
+**发布前必须确认源码快照 = 产物对应源码**：若 `seal` 之后源码又改过（尤其影响构建的
+`src/` `native/` `scripts/`），必须重新封版再构建 —— 不得「改完源码直接复制旧快照」。
 
-#### 通道 A：本地发布（默认主路径，不依赖 Actions）
+#### 通道 A：本地发布（唯一路径）
 
 ```
 # Windows（需 pwsh；先跑过 seal-release.ps1 封版）
@@ -224,17 +228,19 @@ scripts/release-local-macos.sh 0.8.0 --backfill --publish # 补发旧版本（�
 - **补发旧版本**：macOS 用 `--backfill`（在 tag 的临时 worktree 里构建，保证产物对应快照源码；
   当前工作树若与该 tag 的构建路径有差异，非 backfill 模式会直接报错拒绝）。
 
-#### 通道 B：GitHub Actions（保留的备用通道）
+#### ~~通道 B：GitHub Actions~~ —— 已弃用（2026-09-10）
 
-- push tag 后 `release-windows.yml` / `release-macos.yml` 自动跑：build + test + 打包 +
-  `upload-artifact` + **创建 GitHub Release 草稿**（`draft: true`）。
+保留本节仅作历史参考与恢复指引。触发器已停用，`release-windows.yml` / `release-macos.yml`
+当前不会运行；本文件正文注释里有恢复方法。下面描述的是**恢复之后**的行为：
+
+- push tag 后自动跑：build + test + 打包 + `upload-artifact` + **创建 GitHub Release 草稿**（`draft: true`）。
 - `gh run list --workflow=release-macos.yml --limit 1` 看结果；`gh release view <tag>` 看草稿与产物。
 - **人工审核草稿**：产物名 / 大小对；Release body（`--notes-file releases/<tag>/CHANGELOG.md`）；
   确认后 `gh release edit <tag> --draft=false --latest`（或网页 Publish）。设 Latest 会自动取消其它版本的 Latest。
-- 注意：Actions 计费 / 配额异常时 job 会在启动前被拒（`The job was not started because recent
-  account payments have failed...`），此时改走通道 A。
+- 弃用原因：账户计费问题使 job 在启动前即被拒（`The job was not started because recent account
+  payments have failed...`），重跑、官方状态页恢复都无效（已实测），属账户侧而非平台侧。
 
-#### 产物的两个去处（两条通道都适用）
+#### 产物的两个去处
 
 1. **GitHub Release 页** = 用户下载渠道。
 2. **本地 `releases/<tag>/` 目录** = 磁盘上的不可变快照，用于快速回退 / 现场保留
@@ -291,11 +297,12 @@ Release **还是草稿、从未 Publish、产物未对外分发** 时，可视�
 目标：一个 `vX.Y.Z` tag → 一个 GitHub Release，同时挂 `win-x64.exe/.zip` + `macos-arm64.dmg`/`-x64.dmg`，
 一条版本线、一份 CHANGELOG。
 
-- 做法：合并 `release-windows.yml` + `release-macos.yml` 为一个 `release.yml`（win job + mac job +
-  「汇总成一个 Release」job），去掉 `macos-v` 前缀，`Directory.Build.props` + Mac csproj 版本对齐。
+- 原做法（基于 Actions）：合并 `release-windows.yml` + `release-macos.yml` 为一个 `release.yml`。
+  但 Actions 已弃用（§4），这条路目前不通；若日后本地双平台都要发，更现实的形态是
+  **一个版本号、两个平台各自本地构建、汇总到同一个 GitHub Release**（`gh release upload --clobber` 追加产物）。
 - **启用时机**：等 macOS 版到一个够稳的基线（多轮实机验证通过、迭代节奏放缓）。
   在那之前保持双线——锁步会让稳定的 Windows 被快速迭代的 macOS 卡住。
-- 统一发布**不能替代**分支纪律 + CI 门禁——那两条才是防「双端发散」的根本。
+- 统一发布**不能替代**分支纪律 + 本地门禁——那两条才是防「双端发散」的根本。
 
 ---
 

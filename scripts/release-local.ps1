@@ -1,10 +1,14 @@
 ﻿<#
 .SYNOPSIS
-  RemoteFlow Windows 版本地发布脚本 —— GitHub Actions 不可用（故障 / 配额 / 网络）时的兜底通道。
+  RemoteFlow Windows 版本地发布脚本 —— Windows 版**唯一**的发布路径。
 
 .DESCRIPTION
-  用与 .github/workflows/release-windows.yml 完全相同的命令构建 win-x64 单文件产物，
+  GitHub Actions 已弃用（账户计费问题使 job 在启动前即被拒），Windows 产物一律本地构建。
+  用与 .github/workflows/release-windows.yml 相同的命令构建 win-x64 单文件产物，
   打包 zip、算出 SHA-256、写回快照 CHANGELOG，并创建 / 发布 GitHub Release。
+
+  发布前请按规范 §5.2 手工启动产物 exe，确认能起能退（macOS 侧已由脚本强制做这一步，
+  Windows 侧暂未内建）。
 
   默认只构建与打包（产出到 releases/v<版本>/），加 -Publish 才动 GitHub。
 

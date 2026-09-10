@@ -4,15 +4,25 @@
 # 成本：ubuntu 1× / windows 2× / macOS 10× 计费分钟。
 #   共享测试（Core + Integration，约 136 条）跑在 ubuntu，是主门禁；
 #   两个平台 head 只验「能不能构建 + 平台专属集成测试」，不打包。
+#
+# ⚠ 已弃用（2026-09-10）：账户计费问题导致所有 job 在启动前即被拒
+#   （"The job was not started because recent account payments have failed..."），
+#   GitHub Actions 不再作为本项目的门禁。触发已停用，文件保留以便日后恢复。
+#   替代门禁见 docs/04-发布/2026-09-09-RemoteFlow双平台发布规范-v1.0.md §4：
+#   本地跑 dotnet build -c Release + 逐项目 dotnet test（含 App.Mac 编译校验）。
+#   要恢复：把下面的 on: 块换回注释里的原配置。
 name: CI
 
+# on:
+#   push:
+#     branches: [main, "feature/**"]
+#     paths-ignore: ["docs/**", "**/*.md", "releases/**"]
+#   pull_request:
+#     branches: [main]
+#   workflow_dispatch:
 on:
   push:
-    branches: [main, "feature/**"]
-    paths-ignore: ["docs/**", "**/*.md", "releases/**"]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
+    branches: ["__actions-disabled__"]   # 不存在的分支名 —— 永不触发
 
 concurrency:
   group: ci-${{ github.ref }}

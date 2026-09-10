@@ -30,7 +30,8 @@
 - `RemoteFlow.Core` / `RemoteFlow.Presentation` 保持平台无关，不引用 WPF/WinForms/AppKit/平台专属 API。
 - **UI 层极薄**：只做视图构造 + 平台互操作；逻辑一律下沉到 ViewModel。同一个 `if` 写在两个平台的 view code-behind 里 = 它该在 ViewModel。
 - **改 `Core` / `Presentation` = 同时影响两端**，按 API 变更对待：优先加法（旧的标 `[Obsolete]`）；
-  必须删除 / 改签名时，在同一改动里把 `App`(WPF) + `App.Mac`(AppKit) 的相关视图一起改到，**两端 CI 都绿**才合。
+  必须删除 / 改签名时，在同一改动里把 `App`(WPF) + `App.Mac`(AppKit) 的相关视图一起改到，**两端本地编译都过**才合
+  （GitHub Actions 已弃用，以本地门禁为准，见发布规范 §4）。
 - View 不操作协议实现；ViewModel 不保存 Secret；`SessionManager` 统一管理会话生命周期。
 - 数据库访问统一走 Repository，不散落 SQL。
 - 新增协议 = 新增一个 `IConnectionProvider` 实现 + 在组合根注册，不改动既有架构。
@@ -63,8 +64,10 @@
   macOS `scripts/release-local-macos.sh --publish`（补发旧版本加 `--backfill`）。两条命令都先要各自跑过封版脚本。
 - **发布前必须实机验证**：把产物当用户那样打开一次，确认能起能退。macOS 脚本已把它做成强制关卡
   （挂载宿主架构 DMG 启动 app，起不来即中止、不发布）；跳过的必须在 CHANGELOG 里写「未实机走查」。
-- `v*` / `macos-v*` tag 仍会触发 `release-windows.yml` / `release-macos.yml` 作为**备用通道**创建 Release 草稿；
-  Actions 计费 / 配额异常时 job 会在启动前被拒，此时走本地路径。
+- **GitHub Actions 已弃用**（2026-09-10）：账户计费问题使 job 在启动前即被拒，`ci.yml` /
+  `release-windows.yml` / `release-macos.yml` 的触发器已停用（文件保留，正文注释有恢复方法）。
+  `main` 目前没有自动门禁 —— 合共享层改动前本地跑 `dotnet build -c Release` +
+  `dotnet build src/RemoteFlow.App.Mac -c Release` + 逐项目 `dotnet test`（见发布规范 §4）。
 - **完整发布流程、分支纪律、共享层改动规则、草稿重来的授权边界、统一发布路线图见
   `docs/04-发布/2026-09-09-RemoteFlow双平台发布规范-v1.0.md`（发布相关以它为准）。**
 - `releases/` 内的大文件用 `.gitignore` 排除，改上传 GitHub Releases；`source/` 与 `CHANGELOG.md` 入库。

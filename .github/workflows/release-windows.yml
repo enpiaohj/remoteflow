@@ -2,12 +2,19 @@
 #
 # 版本以 Directory.Build.props 的 VersionPrefix 为准，tag 必须是 v<该版本>。
 # 代码签名：设了 WINDOWS_CERT_PFX_BASE64 + WINDOWS_CERT_PASSWORD 就用 signtool 签，否则不签。
+#
+# ⚠ 已弃用（2026-09-10）：账户计费问题导致 job 在启动前即被拒，GitHub Actions 不再作为
+#   发布路径。**Windows 发布改走本地**：pwsh scripts/release-local.ps1 -Version X.Y.Z -Publish
+#   （详见 docs/04-发布 规范 §5.6 通道 A）。触发已停用，文件保留以便日后恢复。
 name: Release · Windows
 
+# on:
+#   push:
+#     tags: ["v[0-9]*"]        # v0.8.0 之类；不匹配 macos-v*
+#   workflow_dispatch:
 on:
   push:
-    tags: ["v[0-9]*"]        # v0.8.0 之类；不匹配 macos-v*
-  workflow_dispatch:
+    branches: ["__actions-disabled__"]   # 不存在的分支名 —— 永不触发
 
 permissions:
   contents: write

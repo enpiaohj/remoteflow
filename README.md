@@ -96,7 +96,7 @@ RemoteFlow.slnx  （不含 RemoteFlow.App.Mac —— net10.0-macos 无法跨平�
 
 架构依赖方向始终为 `UI(App / App.Mac) → Presentation → Application → Core ← Infrastructure.* / Protocol.*`。
 UI 只做视图构造 + 平台互操作，逻辑一律下沉到 ViewModel；改动 `Core` / `Presentation`
-即同时影响两端，按 API 变更对待（加法优先，或在同一改动里把两端视图一起改到、两端 CI 都绿）。
+即同时影响两端，按 API 变更对待（加法优先，或在同一改动里把两端视图一起改到、两端本地编译都过）。
 协议 Provider 通过 `IConnectionProvider` 抽象注册，后续新增 SFTP / Web / PowerShell 只需追加一个实现。
 
 ---
