@@ -221,6 +221,50 @@ public sealed class SyncCoordinatorTests : IDisposable
             new EncryptedPayload(change.Ciphertext!, change.Nonce!, change.KeyVersion, change.SchemaVersion)));
     }
 
+    [Fact]
+    public async Task Deleting_a_record_that_was_never_pushed_is_silent_and_leaves_no_conflict()
+    {
+        var device = NewDevice();
+        device.Source.SetLocal("c-1", "never-uploaded");
+        await device.Store.EnqueueAsync(EntityType, "c-1", OutboxOperationType.Upsert, 0);
+        // 推送前又删掉：Outbox 合并成 Delete(base 0) —— 云端没有这条，不该产生冲突。
+        device.Source.RemoveLocal("c-1");
+        await device.Store.EnqueueAsync(EntityType, "c-1", OutboxOperationType.Delete, 0);
+
+        var result = await device.RunOnceAsync();
+
+        Assert.Equal(SyncStatus.Synced, result.Status);
+        Assert.Empty(await device.Conflicts.ListAsync());
+        Assert.Equal(0, await device.Store.PendingCountAsync());
+        Assert.Empty(_server.Pull(0, 100).Changes);
+    }
+
+    [Fact]
+    public async Task Deleting_a_synced_record_propagates_a_tombstone_to_other_devices()
+    {
+        var alice = NewDevice();
+        alice.Source.SetLocal("c-1", "doomed");
+        await alice.Store.EnqueueAsync(EntityType, "c-1", OutboxOperationType.Upsert, 0);
+        Assert.Equal(SyncStatus.Synced, (await alice.RunOnceAsync()).Status);
+
+        // 本地删除 → 下一次同步应以 Delete 传播。
+        alice.Source.RemoveLocal("c-1");
+        await alice.Store.EnqueueAsync(EntityType, "c-1", OutboxOperationType.Delete, await alice.Store.GetServerVersionAsync(EntityType, "c-1"));
+
+        var result = await alice.RunOnceAsync();
+
+        Assert.Equal(SyncStatus.Synced, result.Status);
+        Assert.Empty(await alice.Conflicts.ListAsync());
+        var change = Assert.Single(_server.Pull(0, 100).Changes);
+        Assert.True(change.Deleted);
+
+        // 另一台设备拉到墓碑 → 本地同样删除。
+        var bob = NewDevice();
+        await bob.RunOnceAsync();
+        Assert.Null(bob.Source.GetLocal("c-1"));
+        Assert.Contains(bob.Source.Applied, a => a is { Id: "c-1", Deleted: true });
+    }
+
     private Device NewDevice()
     {
         var workspace = new TempWorkspace();

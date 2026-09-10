@@ -127,6 +127,15 @@ public sealed class SyncCoordinator(
                 : await source.GetPlaintextAsync(entry.EntityType, entry.EntityId, ct);
             var isDelete = entry.OperationType == OutboxOperationType.Delete || plaintext is null;
 
+            // 「建了但从未上云」的记录又被本地删除：云端根本没有它，删除无需传播——
+            // 直接丢弃 Outbox 条目（否则会拿 baseVersion=0 的 Delete 去推，服务端无从匹配，
+            // 反而为一个云端不存在的实体记一条冲突）。
+            if (isDelete && baseVersion == 0)
+            {
+                await store.DeleteIfUnchangedAsync(entry.Id, entry.Sequence, ct);
+                continue;
+            }
+
             EncryptedPayload? localPayload = null;
             SyncPushOperation operation;
             if (isDelete)

@@ -27,6 +27,9 @@
 ### 修复
 - **删除连接未清理关联记录**：`connection_history`（最近活动）没有外键，删连接时残留孤儿条目。
   改为事务内先删历史再删连接（`connection_tags` 仍由外键级联）。
+- **从未上云又删除的记录不再产生假冲突**：创建后、推送前删除 → Outbox 合并为 `Delete(baseVersion=0)`，
+  云端没有该实体，旧逻辑会拿它去推并记一条冲突（对话框里出现一个云端根本不存在的东西）。
+  现在「Delete 且 baseVersion=0」直接丢弃 Outbox 条目 —— 删除无须传播。
 
 ### 验证
 - `dotnet build RemoteFlow.slnx -c Release` 0 错误；`dotnet test -c Release` —— Core.Tests 42、
