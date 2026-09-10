@@ -121,16 +121,37 @@ git log --oneline vX.Y.(Z-1)..HEAD          # 本版包含哪些提交，是否�
 - kill 本机残留的 `RemoteFlow.exe`。
 - 判定版本号（见 §1）。
 
-### 5.2 本地回归（不得跳过、不得编造结果）
+### 5.2 本地回归 + 实机验证（不得跳过、不得编造结果）
+
+**编译与测试**：
 
 ```
+# Windows
 dotnet build -c Release --nologo                    # 0 错误
 dotnet test  -c Release --nologo                    # Core / Integration / *.Windows 全绿；*.Mac skip 属正常
-dotnet publish src/RemoteFlow.App -c Release -r win-x64 --nologo -o <tmp>/publish
-<启动 publish 出的单文件 exe，确认能起能退>
+
+# macOS（逐项目跑，见 §5.6 —— 解决方案级 dotnet test 会拉起跑不了的 *.Windows）
+dotnet test tests/RemoteFlow.Core.Tests              -c Release
+dotnet test tests/RemoteFlow.IntegrationTests        -c Release
+dotnet test tests/RemoteFlow.IntegrationTests.Mac    -c Release
 ```
 
-未执行的验证（如实机 RDP / SSH / VNC 会话）**在 CHANGELOG 里如实写「未执行」**，不得写成「通过」。
+**实机验证（这一条最容易漏，必须做）**：光「编译通过 + 测试通过」不算数，还要**把产物当用户那样打开一次**，
+确认能起、能进主界面、能进设置，退出干净。
+
+```
+# Windows
+dotnet publish src/RemoteFlow.App -c Release -r win-x64 --nologo -o <tmp>/publish
+<启动 publish 出的单文件 exe，确认能起能退>
+
+# macOS —— 脚本已内置为强制关卡（见 §5.6 通道 A）
+scripts/release-local-macos.sh --publish     # 第 6 步会挂载宿主架构那份 DMG 启动 app，起不来即中止
+```
+
+- macOS 侧只验**宿主架构**那一份：另一份是交叉编译产物，本机根本跑不了 ——
+  CHANGELOG 的 Verification 要如实写「该架构未实机走查」。
+- **未执行的验证**（如 RDP / SSH / VNC 真实会话、另一架构的实机走查）**在 CHANGELOG 里如实写「未执行」**，
+  不得写成「通过」。
 
 ### 5.3 版本号 + 根 CHANGELOG
 
@@ -187,7 +208,13 @@ scripts/release-local-macos.sh 0.8.0 --backfill --publish # 补发旧版本（�
 ```
 
 - 两个脚本都会：跑测试门禁 → 构建 → 产物拷进 `releases/<tag>/` → 算 SHA-256 / 大小 →
-  回写该版本 CHANGELOG 的「产物」节 →（加 `--publish` / `-Publish`）建 Release（草稿 → 发布 → 设 Latest）。
+  回写该版本 CHANGELOG 的「产物」节 → **实机验证** →（加 `--publish` / `-Publish`）建 Release
+  （草稿 → 发布 → 设 Latest）。
+- **实机验证是发布前的强制关卡**：macOS 侧脚本会挂载宿主架构那份 DMG、直接启动 app 并观察数秒，
+  起不来就中止，**坏产物不会走到创建 Release 那一步**；`--skip-run-check` 仅供无 GUI 会话时使用，
+  用了就等于「未实机走查」，必须在 CHANGELOG 里写明。Windows 侧脚本暂未内建这一步，
+  按 §5.2 手工启动 publish 出的 exe 验证。
+- macOS 侧只验宿主架构那一份；交叉编译的另一份本机跑不了，CHANGELOG 要如实标注。
 - **macOS 的产物永远两份**：`-arm64.dmg` + `-x64.dmg`，分别打包，**不融合 universal**
   （融合后重签会破坏 CoreCLR VM 初始化）。宿主架构那份原生编译，另一份交叉编译 ——
   缺的 OpenSSL 由 `native/rdp/build-openssl.sh` 自动补（首次联网下载源码）。
@@ -234,6 +261,8 @@ Git Commit / Git Tag
 - Known Issues 里如实列**未实机验证**的项、**跨平台待协调**的项（如某个 P4 式合并 macOS 还没跟上）。
 - Verification 里写清 build / test 的真实数字，未跑的写「未执行」。
 - **本地构建发布时**，Verification 里还要写清：
+  - **实机启动验证的结果**：宿主架构那份 DMG 是否实际启动过、观察到什么
+    （如「挂载 x64 DMG 启动 app，存活 8s 无异常」）；跳过没做的就写「未实机走查」，不得含糊。
   - 构建机架构与「哪份原生 / 哪份交叉」——如「Intel 主机：x64 原生 + arm64 交叉编译」；
     交叉编出来的那份**无法在本机实机走查**，必须如实写「未实机走查」。
   - 签名类型（ad-hoc / Apple Development / Developer ID + 公证），以及未公证时

@@ -61,6 +61,8 @@
   - 每个版本内部（csproj / 关于页 / CHANGELOG / Tag / Release）保持一致；跨平台不要求一致。
 - **发布主路径是本地构建**（不依赖 GitHub Actions）：Windows `pwsh scripts/release-local.ps1 -Version X.Y.Z -Publish`，
   macOS `scripts/release-local-macos.sh --publish`（补发旧版本加 `--backfill`）。两条命令都先要各自跑过封版脚本。
+- **发布前必须实机验证**：把产物当用户那样打开一次，确认能起能退。macOS 脚本已把它做成强制关卡
+  （挂载宿主架构 DMG 启动 app，起不来即中止、不发布）；跳过的必须在 CHANGELOG 里写「未实机走查」。
 - `v*` / `macos-v*` tag 仍会触发 `release-windows.yml` / `release-macos.yml` 作为**备用通道**创建 Release 草稿；
   Actions 计费 / 配额异常时 job 会在启动前被拒，此时走本地路径。
 - **完整发布流程、分支纪律、共享层改动规则、草稿重来的授权边界、统一发布路线图见
