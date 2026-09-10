@@ -27,8 +27,17 @@
 
 ## Artifacts
 
-- `RemoteFlow-v0.14.0-win-x64.exe` —— Size / SHA-256：见发布后补录
-- `RemoteFlow-v0.14.0-win-x64.zip` —— Size / SHA-256：见发布后补录
+- `RemoteFlow-v0.14.0-win-x64.exe`
+  - Size：74,876,426 bytes
+  - SHA-256：`AD7221FE0D6006DC439277DD9776A404866B5AC1AEFB18633FBB3DCC3BDD2180`
+- `RemoteFlow-v0.14.0-win-x64.zip`
+  - Size：69,402,356 bytes
+  - SHA-256：`F4C610BF7D278E7760DE04B22BBE379DE911096A0A7958BD867EFF37E184301F`
+
+> 本次发布时 GitHub Actions 出现平台故障（所有 job 5–10 秒内失败、`steps` 为空、`runner_name` 为空，
+> 连 push `main` 的 CI 也如此），CI 无法产出产物。Windows 产物由**本地**以同一命令
+> （`dotnet publish src/RemoteFlow.App -c Release -r win-x64`）构建并手动上传；
+> macOS 的 DMG 需 macOS runner，等 Actions 恢复后由 `release-macos.yml` 重跑补发。
 
 ## Git
 
