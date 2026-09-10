@@ -7,6 +7,29 @@
 
 ---
 
+## [0.13.3] — 2026-09-10
+
+计数修正 + 危险操作防误触。Windows 与 macOS 同步发布，macOS 侧见
+[`releases/macos-v0.7.3/CHANGELOG.md`](releases/macos-v0.7.3/CHANGELOG.md)。
+
+### 修复
+- **「云端已存」把已删除的条目也算进去了**：统计取自 `sync_entity_state`（`server_version>0`），
+  而删除产生的**墓碑**仍留在表里 —— 例如标签实际只剩 3 个却显示 6。
+  现在「删除推送成功」与「墓碑落地」都会清掉该实体的状态行，统计只反映仍然存在的条目
+  （连接 / 凭据 / 密码 / 分组 / 标签）。
+
+### 变更（防误触）
+- **两个清除按钮移入独立的「危险操作」卡片并默认折叠**，需先在输入框手动键入「清除」
+  才启用按钮（双端一致）；卡片内分别写清「保留本地数据」与「以云端为准」的后果。
+  账号卡片只保留非破坏性的「退出云账号」。
+
+### 验证
+- `dotnet build RemoteFlow.slnx -c Release` 0 错误；`dotnet test -c Release` —— Core.Tests 42、
+  IntegrationTests 176、IntegrationTests.Windows 9 全绿（新增：墓碑不计入已同步条目）。
+- 未执行：完整 UI 手动走查、两台物理机的同步演练。
+
+详见 [`releases/v0.13.3/CHANGELOG.md`](releases/v0.13.3/CHANGELOG.md)。
+
 ## [0.13.2] — 2026-09-10
 
 修「永远显示已同步、却什么都不同步」与冲突看不懂。Windows 与 macOS 同步发布，macOS 侧见
@@ -459,6 +482,7 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
+[0.13.3]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.3
 [0.13.2]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.2
 [0.13.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.1
 [0.13.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.0
