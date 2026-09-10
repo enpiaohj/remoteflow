@@ -56,6 +56,23 @@ if [ ! -d "$SRC" ]; then
   git clone --depth 1 --branch "$FREERDP_TAG" https://github.com/FreeRDP/FreeRDP.git "$SRC"
 fi
 
+# 交叉编译专属开关：宿主 x86_64 → 目标 arm64 时有两个只存在于该方向的坑，
+# 都源于「按宿主取到的东西直接喂给 arm64 目标」。仅在宿主 x86_64 且目标是 arm64 时启用；
+# 宿主 arm64 反向交叉编 x64（CI 的做法）与原生构建都不受影响，保持原样。
+#   1) SIMD：DetectIntrinsicSupport.cmake 只看 CMAKE_SYSTEM_PROCESSOR（= 宿主），不看
+#      CMAKE_OSX_ARCHITECTURES。宿主命中 SSE_LIST → 给 sse/*.c 加 -msse3，目标是 arm64 →
+#      clang "unsupported option '-msse3'"（flag 校验在预处理前，那些文件虽有
+#      SSE_AVX_INTRINSICS_ENABLED 守卫也救不了）。NEON 在 arm64 是基线指令，关掉无影响。
+#   2) Opus：-DWITH_DSP_FFMPEG=OFF 后 FreeRDP 会去 find_package(Opus) 并在找到时默认打开
+#      WITH_OPUS；宿主 brew 的 libopus 是 x86_64，链进 arm64 dylib 会报一堆
+#      _opus_* undefined symbols。arm64 侧没有可用的 Opus，只能关掉（本客户端的音频通道
+#      本就未启用，WITH_MACAUDIO=OFF）。
+CROSS_FLAG=()
+if [ "$(uname -m)" = "x86_64" ] && [ "$OSX_ARCH" = "arm64" ]; then
+  echo "==> 宿主 x86_64 → 目标 arm64：关闭 SIMD 标记与 Opus 以规避 -msse3 / _opus_* 报错"
+  CROSS_FLAG=(-DWITH_SIMD=OFF -DWITH_OPUS=OFF)
+fi
+
 echo "==> 配置（通道内建；服务端 / 代理 / X11 / 音视频等一律关掉，只要客户端核心）"
 cmake -S "$SRC" -B "$BUILD" \
   -DCMAKE_BUILD_TYPE=Release \
@@ -83,7 +100,8 @@ cmake -S "$SRC" -B "$BUILD" \
   -DWITH_PULSE=OFF -DWITH_ALSA=OFF -DWITH_OSS=OFF -DWITH_MACAUDIO=OFF \
   -DWITH_KRB5=OFF -DWITH_AAD=OFF -DWITH_WEBVIEW=OFF \
   -DWITH_FUSE=OFF -DWITH_URIPARSER=OFF \
-  -DWITH_JSON_DISABLED=ON
+  -DWITH_JSON_DISABLED=ON \
+  ${CROSS_FLAG[@]+"${CROSS_FLAG[@]}"}
 
 echo "==> 编译 ${OSX_ARCH}（多核，耐心等几分钟）"
 cmake --build "$BUILD" --parallel "$(sysctl -n hw.ncpu)"
