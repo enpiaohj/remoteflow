@@ -247,6 +247,10 @@ public sealed class CloudSyncViewModelTests
         vm.Email = "me@example.com";
         vm.Password = "cloud-passw0rd";
         await vm.ConnectCommand.ExecuteAsync(null);
+
+        // 危险操作需先手动输入「清除」才启用（防误点）。
+        Assert.False(vm.RestoreFromCloudCommand.CanExecute(null));
+        vm.DangerPhrase = "清除";
         Assert.True(vm.RestoreFromCloudCommand.CanExecute(null));
 
         _dialogs.ConfirmResult = false;
@@ -256,6 +260,26 @@ public sealed class CloudSyncViewModelTests
         _dialogs.ConfirmResult = true;
         await vm.RestoreFromCloudCommand.ExecuteAsync(null);
         Assert.True(_sync.RestoredFromCloud);
+    }
+
+    [Fact]
+    public async Task Wipe_commands_stay_disabled_until_the_danger_phrase_is_typed()
+    {
+        _sync.SignInResult = CloudUnlockState.Ready;
+        var vm = NewViewModel();
+        vm.Email = "me@example.com";
+        vm.Password = "cloud-passw0rd";
+        await vm.ConnectCommand.ExecuteAsync(null);
+
+        Assert.False(vm.DisconnectAndWipeCommand.CanExecute(null));
+        Assert.False(vm.DangerArmed);
+
+        vm.DangerPhrase = "清";
+        Assert.False(vm.DisconnectAndWipeCommand.CanExecute(null));
+
+        vm.DangerPhrase = "清除";
+        Assert.True(vm.DangerArmed);
+        Assert.True(vm.DisconnectAndWipeCommand.CanExecute(null));
     }
 
     [Fact]
