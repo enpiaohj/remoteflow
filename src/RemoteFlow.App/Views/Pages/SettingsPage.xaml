@@ -861,6 +861,8 @@
                                 <TextBlock Style="{StaticResource Text.Caption}" Margin="0,4,0,0"
                                            Text="{Binding LastSyncSummary, StringFormat='上次同步：{0}'}"
                                            Visibility="{Binding LastSyncSummary, Converter={StaticResource NullToVisibility}}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,4,0,0"
+                                           Text="{Binding SyncedSummary, StringFormat='云端已存：{0}'}" />
                                 <TextBlock Text="{Binding InfoMessage}" Style="{StaticResource Text.Caption}"
                                            Foreground="{DynamicResource Status.Success}" TextWrapping="Wrap" Margin="0,4,0,0"
                                            Visibility="{Binding InfoMessage, Converter={StaticResource NullToVisibility}}" />
@@ -917,9 +919,11 @@
                                             <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="{StaticResource Radius.Medium}"
                                                     Padding="12,10" Margin="0,0,0,6">
                                                 <StackPanel>
-                                                    <TextBlock Style="{StaticResource Text.Body}">
-                                                        <Run Text="{Binding EntityType, Mode=OneWay}" />
-                                                        <Run Text="{Binding EntityId, Mode=OneWay}" FontFamily="{StaticResource MonoFont}" FontSize="12" />
+                                                    <TextBlock Text="{Binding Label, Mode=OneWay}" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                                                    <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0">
+                                                        <Run Text="{Binding Kind, Mode=OneWay}" />
+                                                        <Run Text="·" />
+                                                        <Run Text="{Binding EntityId, Mode=OneWay}" FontFamily="{StaticResource MonoFont}" FontSize="11" />
                                                     </TextBlock>
                                                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                                         <Button Content="保留本机" Style="{StaticResource Button.Secondary}"

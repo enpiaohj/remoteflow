@@ -1519,6 +1519,9 @@ public sealed class SettingsPaneView : NSView
         var pending = PlainLabel(string.Empty, 11, NSColor.SecondaryLabel);
         Binder.Text(pending, c, nameof(c.PendingChangeCount), () => $"{c.PendingChangeCount} 项本地改动待上传");
 
+        var synced = PlainLabel(string.Empty, 11, NSColor.SecondaryLabel);
+        Binder.Text(synced, c, nameof(c.SyncedSummary), () => $"云端已存：{c.SyncedSummary}");
+
         var summary = PlainLabel(string.Empty, 11, NSColor.SecondaryLabel);
         Binder.Text(summary, c, nameof(c.LastSyncSummary), () =>
             string.IsNullOrEmpty(c.LastSyncSummary) ? string.Empty : $"上次同步：{c.LastSyncSummary}");
@@ -1546,7 +1549,7 @@ public sealed class SettingsPaneView : NSView
 
         var card = Card("同步状态", "arrow.triangle.2.circlepath",
             "本地优先：改动先写本地，再由后台按加密流上传；也可在此手动触发。",
-            status, pending, summary, info, CloudErrorLabel(c), HStack(8, sync, refresh));
+            status, pending, summary, synced, info, CloudErrorLabel(c), HStack(8, sync, refresh));
 
         GateByState(c, card, s => s == CloudSyncUiState.Ready);
         return card;
@@ -1580,9 +1583,9 @@ public sealed class SettingsPaneView : NSView
             var use = NSButton.CreateButton("使用云端", () => c.UseRemoteCommand.Execute(cf));
             keep.BezelStyle = NSBezelStyle.Rounded;
             use.BezelStyle = NSBezelStyle.Rounded;
-            return VStack(6,
-                PlainLabel($"{cf.EntityType}  {cf.EntityId}", 13, NSColor.Label),
-                HStack(8, keep, use));
+            var title = PlainLabel(cf.Label, 13, NSColor.Label);
+            var sub = PlainLabel($"{cf.Kind} · {cf.EntityId}", 11, NSColor.SecondaryLabel);
+            return VStack(6, title, sub, HStack(8, keep, use));
         });
 
         var card = Card("需要处理的同步冲突", "exclamationmark.triangle",

@@ -17,6 +17,18 @@ public enum CloudUnlockState
 
 public sealed record CloudAccountInfo(bool SignedIn, Guid UserId, string Email, CloudUnlockState UnlockState);
 
+/// <summary>一条未决冲突的可读描述。<paramref name="Label"/> 是给用户看的实体名称。</summary>
+public sealed record CloudConflictInfo(
+    Guid Id,
+    string EntityType,
+    string EntityId,
+    string Label,
+    string Kind,
+    DateTimeOffset DetectedAt);
+
+/// <summary>某类实体「已同步到云端」的数量。</summary>
+public sealed record CloudSyncedCount(string EntityType, string Label, int Count);
+
 /// <summary>
 /// 云同步对 UI / ViewModel 的唯一入口。封装登录 / 注册、Vault 解锁 / 初始化 / 恢复、
 /// 改口令、手动同步、冲突解决与登出。口令派生模型：新设备只需账号 + 主口令。
@@ -73,9 +85,13 @@ public interface ICloudSyncService
 
     Task<int> GetPendingOutboxCountAsync(CancellationToken ct = default);
 
+    /// <summary>本机已同步到云端的实体数量，按实体类型汇总（连接 / 凭据 / 密码 / 分组 / 标签）。</summary>
+    Task<IReadOnlyList<CloudSyncedCount>> GetSyncedCountsAsync(CancellationToken ct = default);
+
     // ── 冲突 ────────────────────────────────────────────────────
 
-    Task<IReadOnlyList<SyncConflictRecord>> GetConflictsAsync(CancellationToken ct = default);
+    /// <summary>未决冲突（含可读标签，如「DC01（10.0.0.1）」，方便用户判断在问谁）。</summary>
+    Task<IReadOnlyList<CloudConflictInfo>> GetConflictsAsync(CancellationToken ct = default);
 
     Task ResolveConflictAsync(Guid conflictId, ConflictResolution resolution, CancellationToken ct = default);
 

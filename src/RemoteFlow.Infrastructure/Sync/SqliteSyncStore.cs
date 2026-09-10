@@ -287,6 +287,29 @@ public sealed class SqliteSyncStore(RemoteFlowDatabase database)
         return ids;
     }
 
+    /// <summary>已同步到云端的实体数量，按实体类型汇总（server_version &gt; 0 即视为已同步）。</summary>
+    public async Task<IReadOnlyList<(string EntityType, int Count)>> GetSyncedCountsAsync(CancellationToken ct = default)
+    {
+        await using var connection = database.OpenConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT entity_type, COUNT(*)
+            FROM sync_entity_state
+            WHERE server_version > 0
+            GROUP BY entity_type
+            ORDER BY entity_type;
+            """;
+
+        var counts = new List<(string, int)>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            counts.Add((reader.GetString(0), reader.GetInt32(1)));
+        }
+
+        return counts;
+    }
+
     public async Task<bool> IsConflictedAsync(string entityType, string entityId, CancellationToken ct = default)
     {
         await using var connection = database.OpenConnection();

@@ -28,8 +28,11 @@ public enum CloudAuthMode
 /// <summary>待批准设备列表的一行。</summary>
 public sealed record CloudDeviceRow(Guid DeviceId, string Name, string Platform, DateTimeOffset LastSeenAt);
 
-/// <summary>冲突列表的一行。</summary>
-public sealed record CloudConflictRow(Guid Id, string EntityType, string EntityId, DateTimeOffset DetectedAt);
+/// <summary>冲突列表的一行。<see cref="Label"/> 是给用户看的实体名称（连接名 / 凭据名…）。</summary>
+public sealed record CloudConflictRow(Guid Id, string EntityType, string EntityId, string Label, string Kind, DateTimeOffset DetectedAt);
+
+/// <summary>已同步条目统计的一行。</summary>
+public sealed record CloudSyncedCountRow(string Label, int Count);
 
 /// <summary>
 /// 「设置 → 云同步」面板。口令派生模型：新设备默认只需账号 + 主口令；
@@ -129,6 +132,13 @@ public sealed partial class CloudSyncViewModel(
     public ObservableCollection<CloudDeviceRow> PendingDevices { get; } = [];
 
     public ObservableCollection<CloudConflictRow> Conflicts { get; } = [];
+
+    /// <summary>已同步到云端的条目统计（连接 N · 凭据 N · …）。</summary>
+    public ObservableCollection<CloudSyncedCountRow> SyncedCounts { get; } = [];
+
+    /// <summary>已同步条目的一句话汇总，空表示还没有同步过。</summary>
+    [ObservableProperty]
+    private string _syncedSummary = string.Empty;
 
     public bool CanEditConnectionFields => State == CloudSyncUiState.SignedOut;
 
@@ -496,10 +506,21 @@ public sealed partial class CloudSyncViewModel(
         foreach (var conflict in await sync.GetConflictsAsync())
         {
             Conflicts.Add(new CloudConflictRow(
-                conflict.Id, conflict.EntityType, conflict.EntityId, conflict.DetectedAt));
+                conflict.Id, conflict.EntityType, conflict.EntityId,
+                conflict.Label, conflict.Kind, conflict.DetectedAt));
         }
 
         ConflictCount = Conflicts.Count;
+
+        SyncedCounts.Clear();
+        foreach (var count in await sync.GetSyncedCountsAsync())
+        {
+            SyncedCounts.Add(new CloudSyncedCountRow(count.Label, count.Count));
+        }
+
+        SyncedSummary = SyncedCounts.Count == 0
+            ? "尚未同步任何条目"
+            : string.Join(" · ", SyncedCounts.Select(c => $"{c.Label} {c.Count}"));
         StatusLine = DescribeStatus(snapshot.Status);
     }
 
@@ -541,6 +562,8 @@ public sealed partial class CloudSyncViewModel(
         InfoMessage = null;
         PendingDevices.Clear();
         Conflicts.Clear();
+        SyncedCounts.Clear();
+        SyncedSummary = string.Empty;
         RaiseCommandStates();
     }
 

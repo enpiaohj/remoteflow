@@ -134,8 +134,15 @@ public sealed class FakeCloudSyncService : ICloudSyncService
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<SyncConflictRecord>> GetConflictsAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<SyncConflictRecord>>(ConflictList);
+    public Task<IReadOnlyList<CloudConflictInfo>> GetConflictsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CloudConflictInfo>>(
+            [.. ConflictList.Select(c => new CloudConflictInfo(
+                c.Id, c.EntityType, c.EntityId, $"{c.EntityType} 标签", "连接", c.DetectedAt))]);
+
+    public IReadOnlyList<CloudSyncedCount> SyncedCounts { get; set; } = [];
+
+    public Task<IReadOnlyList<CloudSyncedCount>> GetSyncedCountsAsync(CancellationToken ct = default) =>
+        Task.FromResult(SyncedCounts);
 
     public Task ResolveConflictAsync(Guid conflictId, ConflictResolution resolution, CancellationToken ct = default)
     {

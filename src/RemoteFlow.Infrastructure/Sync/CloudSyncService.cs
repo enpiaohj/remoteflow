@@ -20,7 +20,8 @@ public sealed class CloudSyncService(
     JsonSettingsStore settingsStore,
     ILogger<CloudSyncService> logger,
     LocalDataWiper? wiper = null,
-    Core.Diagnostics.ISystemInfoCollector? systemInfo = null) : ICloudSyncService
+    Core.Diagnostics.ISystemInfoCollector? systemInfo = null,
+    SyncEntityLabeler? labeler = null) : ICloudSyncService
 {
     private const string AppId = "com.appscloud.remoteflow";
 
@@ -202,8 +203,46 @@ public sealed class CloudSyncService(
     public Task<int> GetPendingOutboxCountAsync(CancellationToken ct = default) =>
         store.PendingCountAsync(ct);
 
-    public Task<IReadOnlyList<SyncConflictRecord>> GetConflictsAsync(CancellationToken ct = default) =>
-        conflicts.ListAsync(ct);
+    public async Task<IReadOnlyList<CloudConflictInfo>> GetConflictsAsync(CancellationToken ct = default)
+    {
+        var records = await conflicts.ListAsync(ct);
+        var results = new List<CloudConflictInfo>(records.Count);
+        foreach (var record in records)
+        {
+            var label = labeler is null
+                ? record.EntityId
+                : await labeler.DescribeAsync(record.EntityType, record.EntityId, ct);
+            var kind = SyncEntityLabeler.TypeLabel(record.EntityType);
+            if (record.EntityType == SyncEntityTypes.CredentialSecret)
+            {
+                kind += "（两边都改了，需你选择）";
+            }
+
+            results.Add(new CloudConflictInfo(
+                record.Id, record.EntityType, record.EntityId, label, kind, record.DetectedAt));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<CloudSyncedCount>> GetSyncedCountsAsync(CancellationToken ct = default)
+    {
+        var counts = await store.GetSyncedCountsAsync(ct);
+        // 固定顺序输出，UI 展示稳定。
+        string[] order =
+        [
+            SyncEntityTypes.Connection, SyncEntityTypes.Credential, SyncEntityTypes.CredentialSecret,
+            SyncEntityTypes.Group, SyncEntityTypes.Tag,
+        ];
+        return
+        [
+            .. order
+                .Select(type => new CloudSyncedCount(
+                    type, SyncEntityLabeler.TypeLabel(type),
+                    counts.FirstOrDefault(c => c.EntityType == type).Count))
+                .Where(x => x.Count > 0)
+        ];
+    }
 
     public Task ResolveConflictAsync(
         Guid conflictId, ConflictResolution resolution, CancellationToken ct = default) =>
