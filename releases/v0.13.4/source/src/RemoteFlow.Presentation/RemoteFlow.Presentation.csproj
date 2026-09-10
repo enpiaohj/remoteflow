@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RemoteFlow.Presentation —— UI 无关的呈现层：ViewModel、宿主抽象、终端前端资产。
+    保持 net10.0 且不引用任何 UI 框架（WPF / Avalonia），
+    使 Windows 与 macOS 两端的 UI 工程共享同一份呈现逻辑。
+    对应 macOS 版技术方案 §6.5 / §6.6。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RemoteFlow.Presentation</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RemoteFlow.Core\RemoteFlow.Core.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Application\RemoteFlow.Application.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Infrastructure\RemoteFlow.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <!--
+    终端前端资产（xterm.js）既随普通 publish 落到输出目录，又嵌入本程序集。
+    嵌入副本由 TerminalAssetStore 在运行时释放到应用数据目录，确保单文件发布时
+    SSH 终端也能初始化；不能依赖可执行文件旁边恰好存在 Terminal/Assets。
+
+    资源逻辑名固定为 RemoteFlow.Presentation.Terminal.Assets.<文件名>，
+    与承载它的程序集绑定——此前绑在 RemoteFlow.App 上，是 macOS 侧无法复用的根因。
+  -->
+  <ItemGroup>
+    <Content Include="Terminal\Assets\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Terminal\Assets\%(Filename)%(Extension)</Link>
+    </Content>
+    <EmbeddedResource Include="Terminal\Assets\**\*">
+      <LogicalName>RemoteFlow.Presentation.Terminal.Assets.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>
