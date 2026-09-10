@@ -7,6 +7,37 @@
 
 ---
 
+## [0.13.0] — 2026-09-10
+
+客户端资产上报 + 冲突可读化 + 关联清理。Windows 与 macOS 同步发布，macOS 侧见
+[`releases/macos-v0.7.0/CHANGELOG.md`](releases/macos-v0.7.0/CHANGELOG.md)。
+
+### 新增
+- **上报本机基础系统信息（资产信息）**：登录 / 恢复会话后自动上报，
+  AppsCloud 管理台「设备」页与「用户详情」可见——主机名、操作系统(名称/版本/架构)、
+  CPU(型号/物理核/逻辑核/主频)、内存(总量/可用)、磁盘(卷明细 + 汇总)、主 IPv4、
+  当前用户、时区、运行时长、屏幕、客户端版本、.NET 运行时版本。
+  采集为尽力而为：任何失败都降级留空，绝不影响登录与同步。
+  - Windows 走注册表 + kernel32（`GlobalMemoryStatusEx` / `GetLogicalProcessorInformationEx` / `GetSystemMetrics`）；
+    macOS / Linux 走 `sysctl` 与 `/proc`。
+- **冲突列表显示可读名称**：不再只显示裸 GUID —— 连接显示「名称（host）」、凭据/分组/标签显示各自名称、
+  密码冲突显示「XX 的密码」并标注「两边都改了，需你选择」；实体已删除时明确标注。
+- **同步状态新增「云端已存」汇总**：连接 N · 凭据 N · 密码 N · 分组 N · 标签 N。
+
+### 修复
+- **删除连接未清理关联记录**：`connection_history`（最近活动）没有外键，删连接时残留孤儿条目。
+  改为事务内先删历史再删连接（`connection_tags` 仍由外键级联）。
+
+### 验证
+- `dotnet build RemoteFlow.slnx -c Release` 0 错误；`dotnet test -c Release` —— Core.Tests 42、
+  IntegrationTests 165、IntegrationTests.Windows 9 全绿；IntegrationTests.Mac 在 Windows 上 skip。
+- 端到端（对 `https://sync.appscloud.cn/`）：`ViewerParityFixtureTests`（为网页自查页造对照数据）、
+  `SystemInfoUploadTests`（登录后上报系统信息，Windows 上断言 CPU/内存/磁盘非空）、
+  `CloudSyncFacadeTests` 全通过；服务端 Devices 表核验到真实采集值。
+- 未执行：完整 UI 手动走查、两台物理机的同步演练。
+
+详见 [`releases/v0.13.0/CHANGELOG.md`](releases/v0.13.0/CHANGELOG.md)。
+
 ## [0.12.0] — 2026-09-10
 
 多设备一致性的两个结构改进。Windows 与 macOS 同步发布，macOS 侧见
@@ -378,6 +409,7 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
+[0.13.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.0
 [0.12.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.12.0
 [0.11.3]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.3
 [0.11.2]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.11.2
