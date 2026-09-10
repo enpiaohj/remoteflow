@@ -11,7 +11,7 @@
 | 仓库名 | `remoteflow`（lowercase-kebab-case） |
 | 可见性 | Private |
 | 默认分支 | `main` |
-| 本地目录 | `D:\AIProjects\RemoteFlow` |
+| 本地目录 | Windows：`D:\AIProjects\RemoteFlow` · macOS：`/Users/AIProjects/RemoteFlow` |
 | 设计基线文档 | `docs/01-产品设计/2026-09-03-RemoteFlow产品设计文档-v1.1.md` |
 
 ## 技术基线（不可随意更改）
@@ -59,7 +59,10 @@
   - Tag：Windows 沿用 `v<X.Y.Z>`（历史如此）；macOS 用 `macos-v<X.Y.Z>`。
   - Release Snapshot：`releases/v<X.Y.Z>/`（Windows）/ `releases/macos-v<X.Y.Z>/`（macOS）。
   - 每个版本内部（csproj / 关于页 / CHANGELOG / Tag / Release）保持一致；跨平台不要求一致。
-- 打 `v*` / `macos-v*` tag → 对应 workflow 自动 build/test/publish → **创建 GitHub Release 草稿**，人工审核后手动 Publish / 设 Latest。
+- **发布主路径是本地构建**（不依赖 GitHub Actions）：Windows `pwsh scripts/release-local.ps1 -Version X.Y.Z -Publish`，
+  macOS `scripts/release-local-macos.sh --publish`（补发旧版本加 `--backfill`）。两条命令都先要各自跑过封版脚本。
+- `v*` / `macos-v*` tag 仍会触发 `release-windows.yml` / `release-macos.yml` 作为**备用通道**创建 Release 草稿；
+  Actions 计费 / 配额异常时 job 会在启动前被拒，此时走本地路径。
 - **完整发布流程、分支纪律、共享层改动规则、草稿重来的授权边界、统一发布路线图见
   `docs/04-发布/2026-09-09-RemoteFlow双平台发布规范-v1.0.md`（发布相关以它为准）。**
 - `releases/` 内的大文件用 `.gitignore` 排除，改上传 GitHub Releases；`source/` 与 `CHANGELOG.md` 入库。

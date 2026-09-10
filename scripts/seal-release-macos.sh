@@ -5,9 +5,9 @@
 #   - 版本取自 src/RemoteFlow.App.Mac/RemoteFlow.App.Mac.csproj 的 <ApplicationDisplayVersion>
 #   - Tag 用 macos-v<X.Y.Z>（Windows 是 v<X.Y.Z>）
 #   - 快照目录 releases/macos-v<X.Y.Z>/
-#   - 不在本机跑完整 Release 回归：macOS 端的构建 / 打包 / DMG 由 GitHub Actions
-#     的 `Release · macOS` 流水线负责（push tag 触发）。本脚本只做「可追溯的源码快照
-#     + release 提交 + tag」这部分，构建产物走 GitHub Releases。
+#   - 只做「可追溯的源码快照 + release 提交 + tag」这部分；构建 / 打包 / DMG 由
+#     scripts/release-local-macos.sh 在本机完成（不再依赖 GitHub Actions）。
+#     两条命令的顺序是：先本脚本封版，再 release-local-macos.sh 出产物 + 建 Release。
 #
 # 用法：
 #   scripts/seal-release-macos.sh                 # 版本取自 csproj
@@ -76,9 +76,10 @@ echo "  $TAG -> $(git rev-parse --short "$TAG^{commit}")"
 cat <<EOF
 
 封版完成（本地）。接着：
-  git push origin main --follow-tags        # 推 release 提交 + tag
+  scripts/release-local-macos.sh --publish   # 本机构建 arm64 + x64 DMG 并创建 / 发布 Release
+  git push origin main --follow-tags         # 推 release 提交 + tag
 $([ "$ALLOW_RETAG" = 1 ] && echo "  # tag 是移动的，若远端已有：git push origin main && git push origin $TAG --force")
 
-push tag 会触发 GitHub Actions 的 \`Release · macOS\`：构建 arm64 → 打 DMG →
-（有 Secrets 则签名+公证）→ 生成 draft Release。之后去 Releases 页面确认并 Publish。
+注：GitHub Actions 的 \`Release · macOS\` 仍保留在仓库里（push tag 会触发），但当前不作为
+发布主路径 —— 本地发布见 scripts/release-local-macos.sh。两条路径产出的产物名一致。
 EOF

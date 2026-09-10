@@ -10,10 +10,21 @@
 
 ## 0. 一句话
 
-`main` 是双平台统一树。**Windows 打 `vX.Y.Z` tag、macOS 打 `macos-vX.Y.Z` tag**，
-各自的 GitHub Actions 自动构建产物并创建 **Release 草稿**；人工审核后手动发布。
+`main` 是双平台统一树。**Windows 打 `vX.Y.Z` tag、macOS 打 `macos-vX.Y.Z` tag**。
+
+产物构建与发布有**两条并行通道**：
+
+- **本地发布（默认主路径）**：各平台在自己的机器上构建产物并创建 GitHub Release，
+  互不依赖、互不阻塞 —— Windows 用 `scripts/release-local.ps1`，macOS 用
+  `scripts/release-local-macos.sh`。本机架构那一份原生编译，另一份交叉编译（见 §5.6）。
+- **GitHub Actions（保留的备用通道）**：`release-windows.yml` / `release-macos.yml`
+  仍在仓库里，push tag 会触发并创建 **Release 草稿**。当 Actions 可用且希望省事时可以走它。
+
+两条通道产出的产物名一致（`RemoteFlow-vX.Y.Z-win-x64.exe` /
+`RemoteFlow-vX.Y.Z-macos-arm64.dmg` / `-x64.dmg`），互不冲突，可按当日情况任选其一。
+
 共享层（`RemoteFlow.Core` / `RemoteFlow.Presentation`）的改动**同时影响两端**，
-要么是加法，要么在同一个改动里把两端视图一起改到、两端 CI 都绿。
+要么是加法，要么在同一个改动里把两端视图一起改到、两端都能编译。
 
 ---
 
@@ -23,7 +34,9 @@
 | --- | --- | --- |
 | 版本号来源 | `Directory.Build.props` 的 `<VersionPrefix>` | `src/RemoteFlow.App.Mac/RemoteFlow.App.Mac.csproj` 的 `<ApplicationDisplayVersion>`（`<ApplicationVersion>` 单调 +1） |
 | Tag | `vX.Y.Z`（如 `v0.9.0`） | `macos-vX.Y.Z`（如 `macos-v0.3.0`） |
-| Release workflow | `.github/workflows/release-windows.yml`（触发 `tags: v[0-9]*`） | `.github/workflows/release-macos.yml`（触发 `tags: macos-v*`） |
+| 封版脚本 | `scripts/seal-release.ps1` | `scripts/seal-release-macos.sh` |
+| 本地发布脚本 | `scripts/release-local.ps1`（需 pwsh） | `scripts/release-local-macos.sh`（bash） |
+| Release workflow（备用） | `.github/workflows/release-windows.yml`（触发 `tags: v[0-9]*`） | `.github/workflows/release-macos.yml`（触发 `tags: macos-v*`） |
 | 本地快照 | `releases/vX.Y.Z/`（`source/` + `CHANGELOG.md`） | `releases/macos-vX.Y.Z/`（同上） |
 | 产物 | `RemoteFlow-vX.Y.Z-win-x64.exe` / `.zip` | `RemoteFlow-vX.Y.Z-macos-arm64.dmg` / `-x64.dmg` |
 | 根 `CHANGELOG.md` | Windows 版本条目 | 走 `releases/macos-*/CHANGELOG.md`；根 `CHANGELOG.md` 是否收 macOS 条目按当时约定 |
@@ -82,6 +95,16 @@
 
 → **`main` 因此永远不会「一端是坏的」**。fetch + rebase 拿到的基线可信。
 → **合共享层改动前，先看目标分支的 CI 两端都绿。**
+
+**CI 不可用时（计费 / 配额 / 平台故障）的替代门禁**：在合共享层改动前，本地各跑一遍两端能编译：
+
+```
+dotnet build -c Release                                   # 共享层 + Windows 侧编译校验
+dotnet test  -c Release                                   # Core / Integration 全绿
+dotnet build src/RemoteFlow.App.Mac -c Release            # macOS 侧编译校验（mac 上跑）
+```
+
+CI 恢复后，其结论仍以 CI 为准；本地跑绿只是替代手段，**不得据此把「未执行」写成「已通过」**。
 
 ---
 
@@ -144,22 +167,52 @@ git push origin vX.Y.Z
 - **不得移动 / 删除已推送并已发布的 tag。** 草稿阶段的 tag（Release 还没手动发布）若确需重来，
   见 §7。
 
-### 5.6 CI 出草稿 → 人工发布 → 本地留存
+### 5.6 构建产物 + 发布 Release
 
-- tag 推上去后 `release-windows.yml` 自动跑：build + test + publish + （有证书则 signtool 签）+ 打包 +
-  `upload-artifact` + **创建 GitHub Release 草稿**（`draft: true`，作者 `github-actions[bot]`）。
-- `gh run list --workflow=release-windows.yml --limit 1` 看结果；`gh release view vX.Y.Z` 看草稿与产物。
-- **人工审核草稿**：产物名 / 大小对；Release body（用 `--notes-file releases/vX.Y.Z/CHANGELOG.md` 或网页贴入）；
-  确认没问题再 `gh release edit vX.Y.Z --draft=false --latest`（或网页 Publish）。设 Latest 会自动取消其它版本的 Latest。
-- **产物的两个去处**（历史一直如此，`v0.9.0` 起构建从本地 `seal-release.ps1` 迁到 CI，此步需手动补）：
-  1. **GitHub Release 页** = 用户下载渠道（CI 已上传）。
-  2. **本地 `releases/vX.Y.Z/` 目录** = 磁盘上的不可变快照，用于快速回退 / 现场保留（`.gitignore` 排除 `*.exe|*.zip|*.dmg`，不入库）。
-     发布后执行：
-     ```
-     cd releases/vX.Y.Z && gh release download vX.Y.Z --pattern "RemoteFlow-vX.Y.Z-*"
-     sha256sum RemoteFlow-vX.Y.Z-*        # 与 CI 日志 / Release 页核对
-     ```
-  → 两处一致后，`releases/vX.Y.Z/` 里应有 `source/` + `CHANGELOG.md`（入库）+ exe + zip（本地，gitignore）。
+两条通道产出的产物一致，按当日情况任选其一。**发布前必须确认源码快照 = 产物对应源码**：
+若 `seal` 之后源码又改过（尤其影响构建的 `src/` `native/` `scripts/`），必须重新封版再构建 ——
+不得「改完源码直接复制旧快照」。
+
+#### 通道 A：本地发布（默认主路径，不依赖 Actions）
+
+```
+# Windows（需 pwsh；先跑过 seal-release.ps1 封版）
+pwsh scripts/release-local.ps1 -Version X.Y.Z            # 只构建，产物落 releases/vX.Y.Z/
+pwsh scripts/release-local.ps1 -Version X.Y.Z -Publish   # 构建 + 创建并发布 GitHub Release
+
+# macOS（先跑过 seal-release-macos.sh 封版）
+scripts/release-local-macos.sh                           # 版本取 csproj，只构建
+scripts/release-local-macos.sh --publish                 # 构建 + 创建并发布 GitHub Release
+scripts/release-local-macos.sh 0.8.0 --backfill --publish # 补发旧版本（在该 tag 的源码树上构建）
+```
+
+- 两个脚本都会：跑测试门禁 → 构建 → 产物拷进 `releases/<tag>/` → 算 SHA-256 / 大小 →
+  回写该版本 CHANGELOG 的「产物」节 →（加 `--publish` / `-Publish`）建 Release（草稿 → 发布 → 设 Latest）。
+- **macOS 的产物永远两份**：`-arm64.dmg` + `-x64.dmg`，分别打包，**不融合 universal**
+  （融合后重签会破坏 CoreCLR VM 初始化）。宿主架构那份原生编译，另一份交叉编译 ——
+  缺的 OpenSSL 由 `native/rdp/build-openssl.sh` 自动补（首次联网下载源码）。
+- **签名**：本地无 Developer ID 证书时用 ad-hoc / Apple Development 签名，**别的机器首次打开
+  会被 Gatekeeper 拦**（右键「打开」或到「系统设置 → 隐私与安全性」放行）。正式对外签名 + 公证
+  需 Developer ID Application 证书，并在 macOS 侧设 `RF_SIGN_IDENTITY` + `RF_NOTARY_PROFILE`。
+- **补发旧版本**：macOS 用 `--backfill`（在 tag 的临时 worktree 里构建，保证产物对应快照源码；
+  当前工作树若与该 tag 的构建路径有差异，非 backfill 模式会直接报错拒绝）。
+
+#### 通道 B：GitHub Actions（保留的备用通道）
+
+- push tag 后 `release-windows.yml` / `release-macos.yml` 自动跑：build + test + 打包 +
+  `upload-artifact` + **创建 GitHub Release 草稿**（`draft: true`）。
+- `gh run list --workflow=release-macos.yml --limit 1` 看结果；`gh release view <tag>` 看草稿与产物。
+- **人工审核草稿**：产物名 / 大小对；Release body（`--notes-file releases/<tag>/CHANGELOG.md`）；
+  确认后 `gh release edit <tag> --draft=false --latest`（或网页 Publish）。设 Latest 会自动取消其它版本的 Latest。
+- 注意：Actions 计费 / 配额异常时 job 会在启动前被拒（`The job was not started because recent
+  account payments have failed...`），此时改走通道 A。
+
+#### 产物的两个去处（两条通道都适用）
+
+1. **GitHub Release 页** = 用户下载渠道。
+2. **本地 `releases/<tag>/` 目录** = 磁盘上的不可变快照，用于快速回退 / 现场保留
+   （`.gitignore` 排除 `*.exe|*.zip|*.dmg`，不入库）。
+   → 最终 `releases/<tag>/` 里应有 `source/` + `CHANGELOG.md`（入库）+ 产物（本地，gitignore）。
 
 ### 5.7 发布报告（中文，至少含）
 
@@ -180,6 +233,11 @@ Git Commit / Git Tag
 - 明确标出**哪些改动是共享层带入的**（如「SSH WebGL（共享 `terminal.html`）」），以及**哪些是本平台专属**。
 - Known Issues 里如实列**未实机验证**的项、**跨平台待协调**的项（如某个 P4 式合并 macOS 还没跟上）。
 - Verification 里写清 build / test 的真实数字，未跑的写「未执行」。
+- **本地构建发布时**，Verification 里还要写清：
+  - 构建机架构与「哪份原生 / 哪份交叉」——如「Intel 主机：x64 原生 + arm64 交叉编译」；
+    交叉编出来的那份**无法在本机实机走查**，必须如实写「未实机走查」。
+  - 签名类型（ad-hoc / Apple Development / Developer ID + 公证），以及未公证时
+    「其它机器首次打开需放行」的提示。
 
 ---
 
