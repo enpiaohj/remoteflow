@@ -973,17 +973,49 @@
                         <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,12,0,0">
                             <StackPanel>
                                 <TextBlock Text="账号" Style="{StaticResource Text.SectionTitle}" />
-                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                                    <Button Content="退出云账号" Style="{StaticResource Button.Secondary}"
-                                            Command="{Binding DisconnectCommand}" />
-                                    <Button Content="清除此设备云数据" Style="{StaticResource Button.Danger}" Margin="8,0,0,0"
-                                            Command="{Binding DisconnectAndWipeCommand}" />
-                                </StackPanel>
-                                <Button Content="清除本地数据并从云端恢复" Style="{StaticResource Button.Danger}"
-                                        Margin="0,10,0,0" HorizontalAlignment="Left"
-                                        Command="{Binding RestoreFromCloudCommand}" />
+                                <TextBlock Text="退出仅撤销本机登录并停止同步，本地连接与凭据保留。" Style="{StaticResource Text.Caption}"
+                                           Margin="0,6,0,0" TextWrapping="Wrap" />
+                                <Button Content="退出云账号" Style="{StaticResource Button.Secondary}"
+                                        Margin="0,12,0,0" HorizontalAlignment="Left"
+                                        Command="{Binding DisconnectCommand}" />
                             </StackPanel>
                         </Border>
+
+                        <!-- 危险操作：默认折叠 + 需手动输入「清除」才启用，避免误点 -->
+                        <Expander Margin="0,12,0,0" Foreground="{DynamicResource Status.Danger}">
+                            <Expander.Header>
+                                <TextBlock Text="危险操作（清除数据）" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Status.Danger}" />
+                            </Expander.Header>
+                            <Border Style="{StaticResource Surface.Card}" Padding="24,20"
+                                    BorderBrush="{DynamicResource Status.Danger}" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                               Text="以下操作会删除数据且不可恢复。为避免误点，请先在下方输入「清除」以启用按钮。" />
+                                    <TextBox Style="{StaticResource Input.TextBox}" Margin="0,10,0,0" Width="220"
+                                             HorizontalAlignment="Left"
+                                             Text="{Binding DangerPhrase, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <Border Style="{StaticResource Surface.Divider}" Margin="0,16" />
+
+                                    <TextBlock Text="清除此设备云数据" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                               Text="退出登录，并清掉本机的同步状态与 Vault 密钥缓存；本地连接与凭据保留。" />
+                                    <Button Content="清除此设备云数据" Style="{StaticResource Button.Danger}"
+                                            Margin="0,8,0,0" HorizontalAlignment="Left"
+                                            Command="{Binding DisconnectAndWipeCommand}" />
+
+                                    <Border Style="{StaticResource Surface.Divider}" Margin="0,16" />
+
+                                    <TextBlock Text="清空本机数据并以云端为准" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                               Text="删除本机全部连接、凭据、分组、标签与密码，然后从云端重新拉取一份。本机未上云的改动会丢失。" />
+                                    <Button Content="清空本机数据并从云端恢复" Style="{StaticResource Button.Danger}"
+                                            Margin="0,8,0,0" HorizontalAlignment="Left"
+                                            Command="{Binding RestoreFromCloudCommand}" />
+                                </StackPanel>
+                            </Border>
+                        </Expander>
                     </StackPanel>
                 </StackPanel>
 

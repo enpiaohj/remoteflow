@@ -1350,7 +1350,8 @@ public sealed class SettingsPaneView : NSView
             CloudPendingDevicesCard(c),
             CloudConflictsCard(c),
             CloudSecurityCard(c),
-            CloudAccountCard(c));
+            CloudAccountCard(c),
+            CloudDangerCard(c));
 
         // 首次展开该分页时拉取一次已恢复的会话状态。_pages 是 Lazy，只会跑一次。
         _ = c.InitializeAsync();
@@ -1624,17 +1625,50 @@ public sealed class SettingsPaneView : NSView
     private static NSView CloudAccountCard(CloudSyncViewModel c)
     {
         var signOut = NSButton.CreateButton("退出云账号", () => c.DisconnectCommand.Execute(null));
-        var wipe = NSButton.CreateButton("清除此设备云数据", () => c.DisconnectAndWipeCommand.Execute(null));
-        var restore = NSButton.CreateButton("清除本地数据并从云端恢复", () => c.RestoreFromCloudCommand.Execute(null));
         signOut.BezelStyle = NSBezelStyle.Rounded;
+
+        var card = Card("账号", "person.crop.circle",
+            "退出仅撤销本机登录并停止同步，本地连接与凭据保留。",
+            HStack(8, signOut));
+
+        GateByState(c, card, s => s == CloudSyncUiState.Ready);
+        return card;
+    }
+
+    /// <summary>
+    /// 危险操作：默认折叠，展开后还需手动输入「清除」才启用两个清除按钮 —— 避免误点。
+    /// </summary>
+    private static NSView CloudDangerCard(CloudSyncViewModel c)
+    {
+        var phrase = new NSTextField
+        {
+            Bezeled = true, Bordered = true, Font = NSFont.SystemFontOfSize(13),
+            PlaceholderString = "输入「清除」以启用下面的按钮",
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        phrase.WidthAnchor.ConstraintEqualTo(220).Active = true;
+        Binder.TwoWayText(phrase, c, nameof(c.DangerPhrase), () => c.DangerPhrase, v => c.DangerPhrase = v);
+
+        var wipe = NSButton.CreateButton("清除此设备云数据", () => c.DisconnectAndWipeCommand.Execute(null));
+        var restore = NSButton.CreateButton("清空本机数据并从云端恢复", () => c.RestoreFromCloudCommand.Execute(null));
         wipe.BezelStyle = NSBezelStyle.Rounded;
         restore.BezelStyle = NSBezelStyle.Rounded;
 
-        var card = Card("账号", "person.crop.circle",
-            "退出仅撤销本机登录并停止同步，本地连接与凭据保留。"
+        void SyncStates()
+        {
+            wipe.Enabled = c.DisconnectAndWipeCommand.CanExecute(null);
+            restore.Enabled = c.RestoreFromCloudCommand.CanExecute(null);
+        }
+
+        Binder.On(c, nameof(c.DangerArmed), SyncStates);
+        Binder.On(c, nameof(c.State), SyncStates);
+        Binder.On(c, nameof(c.IsBusy), SyncStates);
+
+        var card = Card("危险操作（清除数据）", "exclamationmark.triangle",
+            "以下操作删除数据且不可恢复。请先输入「清除」启用按钮。"
             + "「清除此设备云数据」清同步状态与密钥缓存、保留本地；"
-            + "「清除本地数据并从云端恢复」则以云端为准：删除本机全部数据后重新拉取。",
-            HStack(8, signOut, wipe), restore);
+            + "「清空本机数据并从云端恢复」以云端为准，删除本机全部数据后重新拉取。",
+            phrase, HStack(8, wipe, restore));
 
         GateByState(c, card, s => s == CloudSyncUiState.Ready);
         return card;

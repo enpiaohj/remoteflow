@@ -123,6 +123,18 @@ public sealed partial class CloudSyncViewModel(
     [ObservableProperty]
     private bool _requireApproval;
 
+    /// <summary>
+    /// 危险操作的「解锁短语」：用户必须在危险区里手动输入「清除」才启用清除类按钮，
+    /// 避免误点（比只弹一次确认框更难误触）。
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DangerArmed))]
+    [NotifyCanExecuteChangedFor(nameof(DisconnectAndWipeCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RestoreFromCloudCommand))]
+    private string _dangerPhrase = string.Empty;
+
+    public bool DangerArmed => DangerPhrase.Trim() == "清除";
+
     [ObservableProperty]
     private string? _errorMessage;
 
@@ -412,7 +424,7 @@ public sealed partial class CloudSyncViewModel(
         ResetToSignedOut();
     });
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanRunDanger))]
     private Task DisconnectAndWipeAsync() => RunAsync(async () =>
     {
         if (!await dialogs.ConfirmAsync(
@@ -429,7 +441,7 @@ public sealed partial class CloudSyncViewModel(
     });
 
     /// <summary>兜底：以云端为准 —— 清空本机数据后从云端完整恢复。</summary>
-    [RelayCommand(CanExecute = nameof(IsReady))]
+    [RelayCommand(CanExecute = nameof(CanRunDanger))]
     private Task RestoreFromCloudAsync() => RunAsync(async () =>
     {
         if (!await dialogs.ConfirmAsync(
@@ -469,6 +481,9 @@ public sealed partial class CloudSyncViewModel(
     private bool _suppressRequireApprovalCallback;
 
     private bool IsReady => State == CloudSyncUiState.Ready && !IsBusy;
+
+    /// <summary>清除类操作：需已就绪且用户手动输入了「清除」。</summary>
+    private bool CanRunDanger => IsReady && DangerArmed;
 
     private void ShowNewRecoveryKey(string key)
     {

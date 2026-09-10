@@ -174,6 +174,12 @@ public sealed class SyncCoordinator(
                     await store.SetServerVersionAsync(entry.EntityType, entry.EntityId, result.Version ?? baseVersion, ct);
                     await store.SetContentHashAsync(entry.EntityType, entry.EntityId, ContentHash(plaintext), ct);
                     await store.SetConflictStateAsync(entry.EntityType, entry.EntityId, false, ct);
+                    if (isDelete)
+                    {
+                        // 墓碑已上云：清掉本地状态行，避免把已删除的实体算进「已同步条目」。
+                        await store.DeleteEntityStateAsync(entry.EntityType, entry.EntityId, ct);
+                    }
+
                     await store.DeleteIfUnchangedAsync(entry.Id, entry.Sequence, ct);
                     pushed++;
                     break;
@@ -362,6 +368,12 @@ public sealed class SyncCoordinator(
         }
 
         await store.SetServerVersionAsync(change.EntityType, change.EntityId, change.Version, ct);
+
+        if (change.Deleted)
+        {
+            // 墓碑落地：实体已不存在，清掉状态行（否则「云端已存」会把墓碑计入）。
+            await store.DeleteEntityStateAsync(change.EntityType, change.EntityId, ct);
+        }
 
         // 内容哈希取「落地后的实际状态」，而非拉下来的明文——仓储写入时可能改写 UpdatedAt 等字段
         // （SqliteConnectionRepository / SqliteCredentialRepository 的 UpdateAsync 会把 UpdatedAt 置为 Now）。

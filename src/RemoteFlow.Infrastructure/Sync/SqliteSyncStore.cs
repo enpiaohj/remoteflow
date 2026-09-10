@@ -310,6 +310,21 @@ public sealed class SqliteSyncStore(RemoteFlowDatabase database)
         return counts;
     }
 
+    /// <summary>
+    /// 删除某实体的同步状态行（墓碑落地 / 删除推送成功后调用）。
+    /// 「已同步条目统计」据此只反映仍然存在的实体，不再把墓碑算进去。
+    /// </summary>
+    public async Task DeleteEntityStateAsync(string entityType, string entityId, CancellationToken ct = default)
+    {
+        await using var connection = database.OpenConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "DELETE FROM sync_entity_state WHERE entity_type = $type AND entity_id = $eid;";
+        command.Parameters.AddWithValue("$type", entityType);
+        command.Parameters.AddWithValue("$eid", entityId);
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<bool> IsConflictedAsync(string entityType, string entityId, CancellationToken ct = default)
     {
         await using var connection = database.OpenConnection();

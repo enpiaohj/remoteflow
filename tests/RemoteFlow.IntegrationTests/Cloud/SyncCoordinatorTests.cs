@@ -258,11 +258,13 @@ public sealed class SyncCoordinatorTests : IDisposable
         var change = Assert.Single(_server.Pull(0, 100).Changes);
         Assert.True(change.Deleted);
 
-        // 另一台设备拉到墓碑 → 本地同样删除。
+        // 另一台设备拉到墓碑 → 本地同样删除，且「已同步条目」不再把它算进去。
         var bob = NewDevice();
         await bob.RunOnceAsync();
         Assert.Null(bob.Source.GetLocal("c-1"));
         Assert.Contains(bob.Source.Applied, a => a is { Id: "c-1", Deleted: true });
+        Assert.Empty(await bob.Store.GetSyncedCountsAsync());   // 墓碑不计入已同步数
+        Assert.Empty(await alice.Store.GetSyncedCountsAsync()); // 删除方同样不计入
     }
 
     private Device NewDevice()
