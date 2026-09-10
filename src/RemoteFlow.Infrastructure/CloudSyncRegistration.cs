@@ -37,6 +37,7 @@ public static class CloudSyncRegistration
         services.AddSingleton<ISyncEntitySource, TagSyncSource>();
 
         services.AddSingleton<SyncEntityLabeler>();
+        services.AddSingleton<ICloudFirstJoinAdopter, CloudFirstJoinAdopter>();
         services.AddSingleton<VaultSwitchDetector>();
         services.AddSingleton<ConflictService>();
         services.AddSingleton<SyncCoordinator>();

@@ -53,6 +53,16 @@ public interface ICredentialRepository
     Task<Credential?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task AddAsync(Credential credential, CancellationToken ct = default);
     Task UpdateAsync(Credential credential, CancellationToken ct = default);
+
+    /// <summary>
+    /// 只更新凭据的本地 Secret 引用，**不触碰 <c>updated_at</c>**。
+    /// 同步引擎落地「密码 / 私钥」时需要改引用，但那不是对凭据元数据的内容修改——
+    /// 若沿用 <see cref="UpdateAsync"/> 会刷新 UpdatedAt，使刚记录的元数据内容哈希立刻失效，
+    /// 下一轮对账便把凭据当成「本地漂移」又推一次。
+    /// </summary>
+    Task SetSecretReferencesAsync(
+        Guid id, string? passwordReference, string? privateKeyReference, CancellationToken ct = default);
+
     Task DeleteAsync(Guid id, CancellationToken ct = default);
 }
 

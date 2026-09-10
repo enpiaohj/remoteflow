@@ -67,11 +67,13 @@ public sealed class CredentialSecretSyncSource(ICredentialRepository credentials
         var payload = JsonSerializer.Deserialize<SecretPayload>(plaintext!)
             ?? throw new JsonException("credential-secret payload deserialized to null.");
 
-        credential.SecretReference = await ReplaceAsync(
+        var secretReference = await ReplaceAsync(
             credential.SecretReference, VaultReference.ForPassword(id), payload.Password, ct);
-        credential.KeyReference = await ReplaceAsync(
+        var keyReference = await ReplaceAsync(
             credential.KeyReference, VaultReference.ForPrivateKey(id), payload.PrivateKey, ct);
-        await credentials.UpdateAsync(credential, ct);
+
+        // 定点更新引用：不刷新 UpdatedAt，否则凭据元数据的内容哈希会被改坏（对账随即误推一次）。
+        await credentials.SetSecretReferencesAsync(id, secretReference, keyReference, ct);
     }
 
     private async Task ClearAsync(Core.Models.Credential credential, CancellationToken ct)
@@ -86,9 +88,7 @@ public sealed class CredentialSecretSyncSource(ICredentialRepository credentials
             await vault.DeleteSecretAsync(credential.KeyReference, ct);
         }
 
-        credential.SecretReference = null;
-        credential.KeyReference = null;
-        await credentials.UpdateAsync(credential, ct);
+        await credentials.SetSecretReferencesAsync(credential.Id, null, null, ct);
     }
 
     private async Task<string?> ReplaceAsync(

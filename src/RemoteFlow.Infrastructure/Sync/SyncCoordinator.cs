@@ -20,7 +20,8 @@ public sealed class SyncCoordinator(
     ConflictService conflictService,
     ILogger<SyncCoordinator> logger,
     SyncOptions? options = null,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null,
+    ICloudFirstJoinAdopter? firstJoinAdopter = null)
 {
     private readonly SyncOptions _options = options ?? new SyncOptions();
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
@@ -45,6 +46,14 @@ public sealed class SyncCoordinator(
             {
                 (pulled, pullConflicts, cursor, var seedStatus) = await PullAsync(context, cursor, ct);
                 status = Worse(status, seedStatus);
+
+                // 首次加入：此刻云端全量已在本地，本地若还留着「从未同步过」的同名条目，
+                // 说明是另一台机器上同一对象的第二份 Id —— 按自然键认领云端 Id 后再对账，
+                // 避免把它们当「新建」推上去变成重复条目。
+                if (firstJoinAdopter is not null)
+                {
+                    await firstJoinAdopter.AdoptAsync(ct);
+                }
             }
 
             if (_options.ReconcileBeforePush && status is SyncStatus.Synced or SyncStatus.Conflicted)

@@ -50,6 +50,19 @@ public sealed class SqliteCredentialRepository(RemoteFlowDatabase database) : IC
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task SetSecretReferencesAsync(
+        Guid id, string? passwordReference, string? privateKeyReference, CancellationToken ct = default)
+    {
+        await using var connection = database.OpenConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "UPDATE credentials SET secret_reference = $secret, key_reference = $key WHERE id = $id;";
+        command.Parameters.AddWithValue("$secret", (object?)passwordReference ?? DBNull.Value);
+        command.Parameters.AddWithValue("$key", (object?)privateKeyReference ?? DBNull.Value);
+        command.Parameters.AddWithValue("$id", id.ToString());
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task UpdateAsync(Credential credential, CancellationToken ct = default)
     {
         credential.UpdatedAt = DateTimeOffset.Now;
