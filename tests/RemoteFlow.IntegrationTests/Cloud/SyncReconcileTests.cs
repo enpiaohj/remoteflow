@@ -102,6 +102,26 @@ public sealed class SyncReconcileTests : IDisposable
     }
 
     [Fact]
+    public async Task Reconcile_prunes_stale_sync_state_for_entities_that_no_longer_exist_locally()
+    {
+        var coordinator = NewCoordinator();
+        var profile = new ConnectionProfile { Name = "Z", Host = "h3", Port = 22, Protocol = ProtocolType.Ssh };
+        await _connections.AddAsync(profile);
+        await _store.EnqueueAsync(SyncEntityTypes.Connection, profile.Id.ToString(), OutboxOperationType.Upsert, 0);
+        await coordinator.RunOnceAsync(Context());
+
+        // 模拟「修复前删掉的实体」：业务行没了，但同步状态行还留着（server_version>0）——
+        // 正是「已同步条目」把已删除的标签也算进去的原因。
+        await _connections.DeleteAsync(profile.Id);
+        Assert.Single(await _store.GetSyncedCountsAsync());
+
+        await coordinator.ReconcileAsync(Context());
+
+        Assert.Empty(await _store.GetSyncedCountsAsync());  // 自愈：不再计入
+        Assert.Empty(await _store.GetDueEntriesAsync(DateTimeOffset.UtcNow, 10)); // 且不传播删除
+    }
+
+    [Fact]
     public async Task An_explicitly_recorded_delete_is_still_propagated()
     {
         var coordinator = NewCoordinator();
