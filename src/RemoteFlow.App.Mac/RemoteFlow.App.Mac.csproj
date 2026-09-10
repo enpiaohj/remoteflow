@@ -21,8 +21,8 @@
     <!-- macOS 版有独立的版本线：两个平台各自按需发布，不强制同步。
          这里是 macOS 的唯一版本来源——About 页、DMG 名、Tag、releases/ 目录都以它为准。
          正式发布时在此递增；CFBundleVersion 是单调递增整数，随之 +1。 -->
-    <ApplicationDisplayVersion>0.7.5</ApplicationDisplayVersion>
-    <ApplicationVersion>15</ApplicationVersion>
+    <ApplicationDisplayVersion>0.8.0</ApplicationDisplayVersion>
+    <ApplicationVersion>16</ApplicationVersion>
     <SupportedOSPlatformVersion>13.0</SupportedOSPlatformVersion>
 
     <!--
