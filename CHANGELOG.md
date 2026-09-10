@@ -7,6 +7,30 @@
 
 ---
 
+## [0.13.2] — 2026-09-10
+
+修「永远显示已同步、却什么都不同步」与冲突看不懂。Windows 与 macOS 同步发布，macOS 侧见
+[`releases/macos-v0.7.2/CHANGELOG.md`](releases/macos-v0.7.2/CHANGELOG.md)。
+
+### 修复
+- **客户端卡在假「已同步」、两边数据不再互通**：服务端账号被清空 / Vault 重新初始化后
+  `VaultId` 变化，而客户端仍保留旧 Vault 的游标（如 30）与各实体的 `server_version`
+  → 对账认为「都已同步」→ 既不推也不拉。新增 `VaultSwitchDetector`：解锁后比对当前
+  `VaultId` 与上次记录，不一致即清空 `sync_state` / `sync_entity_state` / `sync_outbox` /
+  `sync_conflict`，下一次同步把本机既有数据作为新 Vault 的**全量内容重新推送**。
+  `AppSettings` 新增 `CloudVaultId`。
+- **冲突对话框看不出在问谁**：本机已删除的实体（如「(已删除的分组) 9f5fd131-…」）现在改为
+  **解密云端那份密文取名称**（`SyncEntityLabeler.DescribePayload`）；并把
+  「本机已删除，云端仍存在 —— 保留本机=仍删除；使用云端=恢复它」这类**处置后果写进说明**。
+
+### 验证
+- `dotnet build RemoteFlow.slnx -c Release` 0 错误；`dotnet test -c Release` —— Core.Tests 42、
+  IntegrationTests 175（+`VaultSwitchDetectorTests` 3、+`SyncEntityLabelerTests` 5）、
+  IntegrationTests.Windows 9 全绿。
+- 未执行：完整 UI 手动走查、两台物理机的同步演练。
+
+详见 [`releases/v0.13.2/CHANGELOG.md`](releases/v0.13.2/CHANGELOG.md)。
+
 ## [0.13.1] — 2026-09-10
 
 同步删除语义收紧（安全修复）。Windows 与 macOS 同步发布，macOS 侧见
@@ -435,6 +459,7 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
+[0.13.2]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.2
 [0.13.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.1
 [0.13.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.0
 [0.12.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.12.0
