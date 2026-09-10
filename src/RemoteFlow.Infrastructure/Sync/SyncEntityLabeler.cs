@@ -1,3 +1,4 @@
+using System.Text.Json;
 using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Cloud;
 
@@ -67,6 +68,33 @@ public sealed class SyncEntityLabeler(
 
             default:
                 return id.ToString("D")[..8];
+        }
+    }
+
+    /// <summary>
+    /// 从已解密的 Payload 里取实体名称（本地已被删除、只能靠云端密文识别时用）。
+    /// 解析失败返回 null，由调用方回退。
+    /// </summary>
+    public static string? DescribePayload(string entityType, byte[] plaintext)
+    {
+        try
+        {
+            return entityType switch
+            {
+                SyncEntityTypes.Connection => SyncSerializer.Deserialize<Core.Models.ConnectionProfile>(plaintext) is var (_, c)
+                    ? $"{c.Name}（{c.Host}）" : null,
+                SyncEntityTypes.Credential => SyncSerializer.Deserialize<Sources.CredentialSyncSource.CredentialMetadata>(plaintext) is var (_, k)
+                    ? k.Name : null,
+                SyncEntityTypes.Group => SyncSerializer.Deserialize<Core.Models.ConnectionGroup>(plaintext) is var (_, g)
+                    ? g.Name : null,
+                SyncEntityTypes.Tag => SyncSerializer.Deserialize<Core.Models.Tag>(plaintext) is var (_, t)
+                    ? t.Name : null,
+                _ => null,
+            };
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            return null;
         }
     }
 }

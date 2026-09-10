@@ -21,7 +21,8 @@ public sealed class CloudSyncService(
     ILogger<CloudSyncService> logger,
     LocalDataWiper? wiper = null,
     Core.Diagnostics.ISystemInfoCollector? systemInfo = null,
-    SyncEntityLabeler? labeler = null) : ICloudSyncService
+    SyncEntityLabeler? labeler = null,
+    VaultSwitchDetector? vaultSwitch = null) : ICloudSyncService
 {
     private const string AppId = "com.appscloud.remoteflow";
 
@@ -207,22 +208,63 @@ public sealed class CloudSyncService(
     {
         var records = await conflicts.ListAsync(ct);
         var results = new List<CloudConflictInfo>(records.Count);
+        var session = _session;
+
         foreach (var record in records)
         {
             var label = labeler is null
                 ? record.EntityId
                 : await labeler.DescribeAsync(record.EntityType, record.EntityId, ct);
-            var kind = SyncEntityLabeler.TypeLabel(record.EntityType);
-            if (record.EntityType == SyncEntityTypes.CredentialSecret)
+
+            // 本机已删除时 DescribeAsync 只能给出「（已删除的 X）」——改用云端那份密文解出的名称，
+            // 否则用户看到的是一串 GUID，根本不知道在问哪个分组 / 连接。
+            if (label.Contains("（已删除", StringComparison.Ordinal)
+                && session is not null
+                && !record.Remote.Deleted
+                && record.Remote.Ciphertext is { } ciphertext
+                && record.Remote.Nonce is { } nonce)
             {
-                kind += "（两边都改了，需你选择）";
+                try
+                {
+                    var plaintext = session.Decrypt(
+                        new PayloadContext(
+                            _userId, AppId, record.EntityType, record.EntityId,
+                            record.Remote.SchemaVersion, record.Remote.KeyVersion),
+                        new EncryptedPayload(ciphertext, nonce, record.Remote.KeyVersion, record.Remote.SchemaVersion));
+                    var fromCloud = SyncEntityLabeler.DescribePayload(record.EntityType, plaintext);
+                    if (!string.IsNullOrWhiteSpace(fromCloud))
+                    {
+                        label = fromCloud + "（云端）";
+                    }
+                }
+                catch (System.Security.Cryptography.CryptographicException)
+                {
+                    // 解不开就保留原标签，不影响冲突处理。
+                }
             }
 
+            var kind = DescribeSituation(record);
             results.Add(new CloudConflictInfo(
                 record.Id, record.EntityType, record.EntityId, label, kind, record.DetectedAt));
         }
 
         return results;
+    }
+
+    /// <summary>把「哪边已删 / 哪边还在」讲清楚，用户才知道「保留本机 / 使用云端」各自意味着什么。</summary>
+    private static string DescribeSituation(SyncConflictRecord record)
+    {
+        var type = SyncEntityLabeler.TypeLabel(record.EntityType);
+        var localExists = record.Local is not null;
+        return (localExists, record.Remote.Deleted) switch
+        {
+            (false, true) => type + " · 两边都已删除（选任一均会清除这条）",
+            (true, true) => type + " · 云端已删除，本机仍有改动 —— 保留本机=恢复它；使用云端=删除它",
+            (false, false) => type + " · 本机已删除，云端仍存在 —— 保留本机=仍删除；使用云端=恢复它",
+            _ => record.EntityType == SyncEntityTypes.CredentialSecret
+                ? type + " · 两边都改了，需你选择"
+                : type + " · 两边都改了 —— 保留本机=用本机版本；使用云端=用云端版本",
+        };
     }
 
     public async Task<IReadOnlyList<CloudSyncedCount>> GetSyncedCountsAsync(CancellationToken ct = default)
@@ -317,9 +359,19 @@ public sealed class CloudSyncService(
         switch (result.State)
         {
             case VaultUnlockState.Unlocked:
-                AdoptSession(result.Session!, await CurrentKeyVersionAsync(ct));
+            {
+                var status = await client.GetVaultStatusAsync(ct);
+                if (vaultSwitch is not null)
+                {
+                    // Vault 被重建（旧账号被清空 / 重新初始化）时，本地游标与版本号不再有意义——
+                    // 清掉同步状态，让下一次同步把本机数据作为新 Vault 的全量内容重推。
+                    await vaultSwitch.EnsureSameVaultAsync(status.VaultId?.ToString(), ct);
+                }
+
+                AdoptSession(result.Session!, status.CurrentKeyVersion ?? 1);
                 _pendingPassword = null;
                 return CloudUnlockState.Ready;
+            }
 
             case VaultUnlockState.NeedsBootstrap:
                 return CloudUnlockState.NeedsBootstrap;

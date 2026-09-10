@@ -142,6 +142,12 @@ public sealed class AppSettings
     /// <summary>上次登录的邮箱，回填到登录框省得重输。「清除此设备云数据」时一并清空。</summary>
     public string CloudEmail { get; set; } = string.Empty;
 
+    /// <summary>
+    /// 上一次同步所用 Vault 的标识（服务端 VaultId）。用于识别「Vault 被重建 / 换账号」：
+    /// 与当前 Vault 不一致时清空本地同步指针，避免客户端永远以为「已同步」而不再推拉。
+    /// </summary>
+    public string CloudVaultId { get; set; } = string.Empty;
+
     /// <summary>本机云设备标识（首次登录时生成的稳定 Guid 字符串）。清除云数据时一并清空。</summary>
     public string CloudDeviceId { get; set; } = string.Empty;
 
