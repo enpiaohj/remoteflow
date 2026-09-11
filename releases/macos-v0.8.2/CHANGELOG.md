@@ -60,5 +60,5 @@ macOS 端菜单与提示文案规范化（界面打磨；共享层未改动）�
 
 ## 产物
 
-- `RemoteFlow-v0.8.2-macos-arm64.dmg` —— 待发布后补录
-- `RemoteFlow-v0.8.2-macos-x64.dmg` —— 待发布后补录
+- `RemoteFlow-v0.8.2-macos-arm64.dmg` —— 55.8 MB · SHA-256：`685ed37540721b2f3dca63b800d36b192d6d200db6d5c4de73753b4d643d80df`
+- `RemoteFlow-v0.8.2-macos-x64.dmg` —— 57.0 MB · SHA-256：`4c11fee9af624a10b35f4edfbd8e341ac5bb0d9f157e00b30c2a0d22e10418bf`
