@@ -282,6 +282,20 @@ fi
 
 # ── 创建 / 发布 GitHub Release ──────────────────────────────────────────────
 echo "== 7/7 创建 GitHub Release $TAG =="
+# gh release create 要求 tag 已在**远端**存在（本地 tag 不算）。封版脚本按设计不 push，
+# 所以这里先明确检查并给出指引，而不是让 gh 抛一句英文错误、产物白构建一场。
+if ! git ls-remote --tags origin "refs/tags/$TAG" 2>/dev/null | grep -q "refs/tags/$TAG\$"; then
+  echo "  ✗ 远端还没有 tag $TAG —— 先推送 tag 再发布：" >&2
+  echo "      git push origin main --follow-tags" >&2
+  echo "    产物已构建并落盘在 $REL/，推完可用下面任一方式建 Release：" >&2
+  echo "      a) 重跑 scripts/release-local-macos.sh --publish（会重建 DMG）" >&2
+  echo "      b) 直接用已落盘的产物：" >&2
+  echo "         gh release create $TAG --draft --title \"RemoteFlow macOS v$VERSION\" \\" >&2
+  echo "           --notes-file $CHANGELOG \\" >&2
+  echo "           $REL/RemoteFlow-v$VERSION-macos-arm64.dmg $REL/RemoteFlow-v$VERSION-macos-x64.dmg" >&2
+  echo "         gh release edit $TAG --draft=false --latest" >&2
+  exit 1
+fi
 if gh release view "$TAG" >/dev/null 2>&1; then
   echo "  已存在 $TAG 的 Release —— 上传 / 覆盖产物并刷新说明"
   for dmg in $DMGS; do
