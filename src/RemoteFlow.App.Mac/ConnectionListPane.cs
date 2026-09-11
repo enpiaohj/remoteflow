@@ -332,7 +332,7 @@ public sealed class ConnectionListPane : NSViewController
                 () => _pane.RunConnItem(_pane._vm.ToggleFavoriteCommand, conn)));
             menu.AddItem(Item("测试连接…", () => _pane.RunConnItem(_pane._vm.TestConnectionCommand, conn)));
 
-            var move = new NSMenuItem("移动");
+            var move = new NSMenuItem("移动到分组");
             var sub = new NSMenu();
             foreach (var t in _pane._vm.GroupTargets)
             {
