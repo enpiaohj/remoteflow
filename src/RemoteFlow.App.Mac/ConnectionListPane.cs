@@ -126,6 +126,7 @@ public sealed class ConnectionListPane : NSViewController
         header.AddArrangedSubview(_count);
         header.AddArrangedSubview(_recentRange);
 
+        // 列表列不刷底色，露出窗口的系统背景 —— 与左侧栏（毛玻璃）保持同调，不抢眼。
         var root = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
         root.AddSubview(header);
         root.AddSubview(_treeScroll);

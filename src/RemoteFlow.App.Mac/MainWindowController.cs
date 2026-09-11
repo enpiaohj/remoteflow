@@ -209,7 +209,11 @@ public sealed class MainWindowController : NSWindowController
         _split.AddSplitViewItem(navItem);
 
         _listItem = NSSplitViewItem.FromViewController(_listPane);
-        _listItem.MinimumThickness = 240;
+        // 300 而不是 240：nav / list 的 holding priority 都高于详情列，两列实际恒停在各自的
+        // MinimumThickness，240 放不下「名称 + 主机·协议 + 时间/次数 + 星标」四段 —— 收藏页 /
+        // 最近连接页的行会被截成「20 Nginx -Ubuntu...」「192.0.2.11 · RDP ...」「昨...」。
+        // 窗口最小宽 980 = nav 176 + list 300 + detail 420，仍放得下。
+        _listItem.MinimumThickness = 300;
         _listItem.MaximumThickness = 460;
         _listItem.CanCollapse = true;
         _listItem.HoldingPriority = 260; // 固定宽度 —— 折叠时让详情列吃掉空出的宽度，而不是缩窗口
