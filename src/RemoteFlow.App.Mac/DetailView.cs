@@ -832,9 +832,43 @@ public sealed class DetailView : NSView
             AddFill(col, HomeSecurityCard(() => vm.DismissSecurityTipCommand.Execute(null)));
         }
 
-        col.AddArrangedSubview(Gap(24));
-        return ScrollHost(col, 40, 640, fillViewport: true);
+        col.AddArrangedSubview(Gap(40));   // 比别处多留一点：给右下角的版本水印腾地方
+        return WithVersionFootprint(ScrollHost(col, 40, 640, fillViewport: true));
     }
+
+    /// <summary>首页右下角的版本水印 —— 「装的是哪一版」应该一眼可见，不必去翻关于窗口。
+    /// 后添加的标签浮在滚动内容之上，所以不随滚动移动。</summary>
+    private static NSView WithVersionFootprint(NSView content)
+    {
+        var root = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        var label = Muted($"RemoteFlow v{AppVersion}", 11);
+        label.Alignment = NSTextAlignment.Right;
+
+        root.AddSubview(content);
+        root.AddSubview(label);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            content.LeadingAnchor.ConstraintEqualTo(root.LeadingAnchor),
+            content.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor),
+            content.TopAnchor.ConstraintEqualTo(root.TopAnchor),
+            content.BottomAnchor.ConstraintEqualTo(root.BottomAnchor),
+            label.TrailingAnchor.ConstraintEqualTo(root.TrailingAnchor, -22),
+            label.BottomAnchor.ConstraintEqualTo(root.BottomAnchor, -14),
+        });
+
+        // 横向 hugging 压到最低是 ScrollHost 定下的约定（否则详情列会拿 fittingSize 当最大
+        // 厚度、窗口拉不宽）；多包的这一层必须一起遵守，水印自己则保持固有尺寸。
+        root.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
+        content.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
+        label.SetContentHuggingPriorityForOrientation(999, NSLayoutConstraintOrientation.Horizontal);
+        label.SetContentHuggingPriorityForOrientation(999, NSLayoutConstraintOrientation.Vertical);
+        return root;
+    }
+
+    /// <summary>产品版本号，取自 bundle 的 <c>CFBundleShortVersionString</c>
+    /// （= csproj 的 <c>ApplicationDisplayVersion</c>，构建时写进 Info.plist）。</summary>
+    private static string AppVersion =>
+        NSBundle.MainBundle.InfoDictionary?["CFBundleShortVersionString"]?.ToString() ?? "?";
 
     private static NSView HomeSectionHeader(string title, Action? viewAll)
     {
