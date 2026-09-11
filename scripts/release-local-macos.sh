@@ -293,7 +293,8 @@ if ! git ls-remote --tags origin "refs/tags/$TAG" 2>/dev/null | grep -q "refs/ta
   echo "         gh release create $TAG --draft --title \"RemoteFlow macOS v$VERSION\" \\" >&2
   echo "           --notes-file $CHANGELOG \\" >&2
   echo "           $REL/RemoteFlow-v$VERSION-macos-arm64.dmg $REL/RemoteFlow-v$VERSION-macos-x64.dmg" >&2
-  echo "         gh release edit $TAG --draft=false --latest" >&2
+  echo "         gh release edit $TAG --draft=false" >&2
+  echo "       （Latest 归 Windows 线，脚本会自动复位到最新 vX.Y.Z；见发布规范 §1）" >&2
   exit 1
 fi
 if gh release view "$TAG" >/dev/null 2>&1; then
