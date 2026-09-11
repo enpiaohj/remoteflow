@@ -45,6 +45,18 @@
 - 语义化版本：`MAJOR.MINOR.PATCH`。新功能 / 能力增强 = MINOR；纯 Bug Fix / 稳定性 = PATCH；
   Breaking Change = MAJOR。已发布的 tag / 产物不覆盖、不倒退。
 
+### Latest 标记约定
+
+GitHub Releases 页只有**一个** Latest 槽位，而本项目有两条**独立递增**的版本线 ——
+谁最后发布谁就自动占住 Latest，会把另一条线的徽章顶掉。约定：
+
+- **Latest 固定归 Windows 线**（最新的 `vX.Y.Z`）。Releases 页最显眼的位置给主线产品，
+  macOS 用户按 `macos-v*` 的 tag 名自行辨认。
+- `scripts/release-local.ps1` 发布时照常 `--latest`；`scripts/release-local-macos.sh`
+  发布后把 Latest **复位**到最新的 `vX.Y.Z`（已内建在脚本的 7/7 步，无需手工干预）。
+- 手工修正（如 macOS 发布后脚本没复位）：`gh release edit vX.Y.Z --latest`。
+- 这是**有意的不对称**，不是 bug —— 不要为了「对称」让 macOS 也去设 Latest。
+
 ---
 
 ## 2. 分支纪律（这条最重要）
@@ -208,7 +220,7 @@ pwsh scripts/release-local.ps1 -Version X.Y.Z -Publish   # 构建 + 创建并发
 # macOS（先跑过 seal-release-macos.sh 封版）
 scripts/release-local-macos.sh                           # 版本取 csproj，只构建
 scripts/release-local-macos.sh --publish                 # 构建 + 创建并发布 GitHub Release
-scripts/release-local-macos.sh 0.8.0 --backfill --publish # 补发旧版本（在该 tag 的源码树上构建）
+scripts/release-local-macos.sh X.Y.Z --backfill --publish # 补发旧版本（在该 tag 的源码树上构建）
 ```
 
 - 两个脚本都会：跑测试门禁 → 构建 → 产物拷进 `releases/<tag>/` → 算 SHA-256 / 大小 →
@@ -227,6 +239,16 @@ scripts/release-local-macos.sh 0.8.0 --backfill --publish # 补发旧版本（�
   需 Developer ID Application 证书，并在 macOS 侧设 `RF_SIGN_IDENTITY` + `RF_NOTARY_PROFILE`。
 - **补发旧版本**：macOS 用 `--backfill`（在 tag 的临时 worktree 里构建，保证产物对应快照源码；
   当前工作树若与该 tag 的构建路径有差异，非 backfill 模式会直接报错拒绝）。
+- **已决定不补发的版本**：`macos-v0.8.0` —— 封版时 Actions 计费故障导致无产物，
+  功能已由 `macos-v0.8.1` 覆盖，决定不补发（详见 `releases/macos-v0.8.0/CHANGELOG.md`）。
+  tag 保留但不对应 Release，这是有意为之，不是遗漏。
+- **已删除 Release 的版本**：`macos-v0.2.0` / `macos-v0.3.0` —— 当初走 Actions 通道时建了
+  Release **草稿**但始终没人点 Publish，此后 v0.4.0 起均直接发布，两个草稿就此搁置。
+  2026-09-10 经用户确认**删除这两个草稿 Release**：`gh release delete <tag> --yes`
+  （**不带** `--cleanup-tag`，**tag 保留**）。
+  注意：那两个版本的双架构 DMG **只存在于这两个草稿里**，本地 `releases/macos-v0.2.0/`、
+  `releases/macos-v0.3.0/` 只有 `source/` + `CHANGELOG.md`，故删除后该两版的二进制**不再可得**；
+  这是已知且接受的结果。tag 保留、快照保留，历史可追溯。
 
 #### ~~通道 B：GitHub Actions~~ —— 已弃用（2026-09-10）
 
