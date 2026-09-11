@@ -196,7 +196,7 @@ public sealed class SshTerminalView : NSView
             {
                 var what = e.NewState switch
                 {
-                    ConnectionState.Failed => "会话失败",
+                    ConnectionState.Failed => "连接失败",
                     ConnectionState.Disconnected => "会话已断开",
                     _ => "会话已结束",
                 };

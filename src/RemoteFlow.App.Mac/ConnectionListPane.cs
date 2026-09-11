@@ -79,7 +79,7 @@ public sealed class ConnectionListPane : NSViewController
         _flatScroll.Hidden = true;
 
         _recentRange = NSSegmentedControl.FromLabels(
-            new[] { "今天", "7 天", "全部" }, NSSegmentSwitchTracking.SelectOne,
+            new[] { "今天", "近 7 天", "全部" }, NSSegmentSwitchTracking.SelectOne,
             () =>
             {
                 _vm.RecentRange = _recentRange.SelectedSegment switch
@@ -327,12 +327,12 @@ public sealed class ConnectionListPane : NSViewController
             menu.AddItem(Item("连接", () => _pane.ConnectionActivated?.Invoke(_pane, conn)));
             menu.AddItem(NSMenuItem.SeparatorItem);
             menu.AddItem(Item("编辑…", () => _pane.RunConnItem(_pane._vm.EditCommand, conn)));
-            menu.AddItem(Item("复制", () => _pane.RunConnItem(_pane._vm.DuplicateCommand, conn)));
+            menu.AddItem(Item("复制连接", () => _pane.RunConnItem(_pane._vm.DuplicateCommand, conn)));
             menu.AddItem(Item(conn.IsFavorite ? "取消收藏" : "收藏",
                 () => _pane.RunConnItem(_pane._vm.ToggleFavoriteCommand, conn)));
             menu.AddItem(Item("测试连接…", () => _pane.RunConnItem(_pane._vm.TestConnectionCommand, conn)));
 
-            var move = new NSMenuItem("移动到分组");
+            var move = new NSMenuItem("移动");
             var sub = new NSMenu();
             foreach (var t in _pane._vm.GroupTargets)
             {

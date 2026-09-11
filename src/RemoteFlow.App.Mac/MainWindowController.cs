@@ -295,8 +295,17 @@ public sealed class MainWindowController : NSWindowController
         }
     }
 
-    private bool IsNativeFullScreen
+    internal bool IsNativeFullScreen
         => (Window.StyleMask & NSWindowStyle.FullScreenWindow) == NSWindowStyle.FullScreenWindow;
+
+    /// <summary>侧栏（导航列）当前是否折叠 —— 供「显示」菜单动态切换「显示 / 隐藏边栏」标题。</summary>
+    internal bool IsSidebarCollapsed => NavItem?.Collapsed ?? true;
+
+    /// <summary>当前页面是否有可折叠的列表列（首页 / 凭据页没有）—— 供「显示」菜单控制启用。</summary>
+    internal bool IsListApplicable => _listApplicable;
+
+    /// <summary>列表列当前是否可见 —— 供「显示」菜单动态切换「显示 / 隐藏连接列表」标题。</summary>
+    internal bool IsListVisible => _listApplicable && !(_listItem?.Collapsed ?? true);
 
     private NSSplitViewItem? NavItem => _split.SplitViewItems.Length > 0 ? _split.SplitViewItems[0] : null;
 

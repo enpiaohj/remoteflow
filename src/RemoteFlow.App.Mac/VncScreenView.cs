@@ -195,7 +195,7 @@ public sealed class VncScreenView : NSView
         {
             if (e.NewState is ConnectionState.Failed or ConnectionState.Disconnected or ConnectionState.Closed)
             {
-                var what = e.NewState == ConnectionState.Failed ? "会话失败" : "会话已断开";
+                var what = e.NewState == ConnectionState.Failed ? "连接失败" : "会话已断开";
                 var reason = _session.ErrorMessage
                     ?? (_session.ErrorCode == RemoteFlow.Core.Models.ConnectionErrorCode.None
                         ? null

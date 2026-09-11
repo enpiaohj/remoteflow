@@ -105,7 +105,7 @@ public sealed class DetailView : NSView
     }
 
     public void ShowConnecting(string name)
-        => Swap(Centered(Spinner(), $"正在连接 {name} …"));
+        => Swap(Centered(Spinner(), $"正在连接 {name}…"));
 
     // 会话视图的生命周期与多 Tab 由 MainWindowController 管理，这里只负责构造。
     public SshTerminalView MakeSshTerminal(SshSession session) => new(session);

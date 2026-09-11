@@ -34,6 +34,12 @@ public sealed class AppDelegate : NSApplicationDelegate
     /// <summary>「显示 / 隐藏连接列表」菜单项 —— 首页 / 凭据页无列表列时由主窗口禁用。</summary>
     internal NSMenuItem? ToggleListMenuItem { get; private set; }
 
+    /// <summary>「显示 / 隐藏边栏」菜单项 —— 随侧栏折叠状态切换标题（macOS HIG）。</summary>
+    private NSMenuItem? _toggleSidebarMenuItem;
+
+    /// <summary>「进入 / 退出全屏」菜单项 —— 随窗口全屏状态切换标题（macOS HIG）。</summary>
+    private NSMenuItem? _screenFullScreenMenuItem;
+
     public override void DidFinishLaunching(NSNotification notification)
     {
         BuildMainMenu();
@@ -131,12 +137,14 @@ public sealed class AppDelegate : NSApplicationDelegate
         menubar.AddItem(viewItem);
         var viewMenu = new NSMenu("显示");
         viewItem.Submenu = viewMenu;
-        viewMenu.AddItem(new NSMenuItem("显示 / 隐藏边栏", "s", (_, _) =>
+        viewMenu.Delegate = new ViewMenuDelegate(this); // 菜单打开前刷新「显示」类标题
+        _toggleSidebarMenuItem = new NSMenuItem("显示 / 隐藏边栏", "s", (_, _) =>
             NSApplication.SharedApplication.SendAction(
                 new ObjCRuntime.Selector("toggleSidebar:"), null, NSApplication.SharedApplication))
         {
             KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.AlternateKeyMask,
-        });
+        };
+        viewMenu.AddItem(_toggleSidebarMenuItem);
         viewMenu.AutoEnablesItems = false;
         ToggleListMenuItem = new NSMenuItem("显示 / 隐藏连接列表", "l", (_, _) =>
             (NSApplication.SharedApplication.Delegate as AppDelegate)?._mainWindow?.ToggleListPane())
@@ -145,11 +153,12 @@ public sealed class AppDelegate : NSApplicationDelegate
         };
         viewMenu.AddItem(ToggleListMenuItem);
         viewMenu.AddItem(NSMenuItem.SeparatorItem);
-        viewMenu.AddItem(new NSMenuItem("进入 / 退出全屏", "f", (_, _) =>
+        _screenFullScreenMenuItem = new NSMenuItem("进入 / 退出全屏", "f", (_, _) =>
             (NSApplication.SharedApplication.Delegate as AppDelegate)?._mainWindow?.ToggleScreenFullScreen())
         {
             KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.ControlKeyMask,
-        });
+        };
+        viewMenu.AddItem(_screenFullScreenMenuItem);
 
         var windowItem = new NSMenuItem();
         menubar.AddItem(windowItem);
@@ -160,6 +169,39 @@ public sealed class AppDelegate : NSApplicationDelegate
         NSApplication.SharedApplication.WindowsMenu = windowMenu;
 
         NSApplication.SharedApplication.MainMenu = menubar;
+    }
+
+    /// <summary>「显示」菜单每次打开前，同步边栏 / 连接列表 / 全屏三项的标题与启用态（macOS HIG：
+    /// 这些菜单项应随状态切换，而不是写死的「A / B」。状态源在主窗口，这里只做读取与设置。</summary>
+    private void RefreshViewMenuTitles()
+    {
+        if (_mainWindow is not { } w)
+        {
+            return;
+        }
+
+        if (_toggleSidebarMenuItem is { } sidebar)
+        {
+            sidebar.Title = w.IsSidebarCollapsed ? "显示边栏" : "隐藏边栏";
+        }
+
+        if (_screenFullScreenMenuItem is { } full)
+        {
+            full.Title = w.IsNativeFullScreen ? "退出全屏" : "进入全屏";
+        }
+
+        if (ToggleListMenuItem is { } list)
+        {
+            // 首页 / 凭据页无列表列：禁用；否则按列表列是否折叠切换标题。
+            list.Enabled = w.IsListApplicable;
+            list.Title = w.IsListVisible ? "隐藏连接列表" : "显示连接列表";
+        }
+    }
+
+    /// <summary>「显示」菜单的 delegate —— 打开前触发标题刷新。</summary>
+    private sealed class ViewMenuDelegate(AppDelegate owner) : NSMenuDelegate
+    {
+        public override void MenuWillOpen(NSMenu menu) => owner.RefreshViewMenuTitles();
     }
 
     // ── DI ───────────────────────────────────────────────────────
