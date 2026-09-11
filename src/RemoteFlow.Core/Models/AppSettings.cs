@@ -54,6 +54,26 @@ public enum HomeDateLine
 }
 
 /// <summary>
+/// 主窗口**初始**尺寸的预置档位。高分屏、普通屏、笔记本适合的大小差得远，写死一个值
+/// 总有一头不合适，所以做成可选项放进设置。「跟随屏幕」按可用区域比例算，其余是固定值
+/// —— 固定值实际使用时仍会被夹进当前屏幕的可用区域，选「大」也不会在小屏上超出。
+/// </summary>
+public enum WindowSizePreset
+{
+    /// <summary>跟随屏幕：可用区域的 72% 宽 / 78% 高。</summary>
+    Auto = 0,
+
+    /// <summary>大 —— 适合高分辨率外接显示器。</summary>
+    Large = 1,
+
+    /// <summary>中 —— 常规桌面。</summary>
+    Medium = 2,
+
+    /// <summary>小 —— 笔记本 / 小屏。</summary>
+    Compact = 3
+}
+
+/// <summary>
 /// 应用级设置。持久化为独立 JSON 文件，写入采用原子替换，避免异常退出导致配置损坏。
 /// </summary>
 public sealed class AppSettings
@@ -64,6 +84,9 @@ public sealed class AppSettings
     public WindowCloseBehavior CloseBehavior { get; set; } = WindowCloseBehavior.Exit;
 
     public AppTheme Theme { get; set; } = AppTheme.System;
+
+    /// <summary>主窗口初始尺寸预置。见 <see cref="WindowSizePreset"/>。</summary>
+    public WindowSizePreset WindowSize { get; set; } = WindowSizePreset.Auto;
 
     /// <summary>界面语言。V0.1 仅提供简体中文，保留字段以便后续 i18n。</summary>
     public string Language { get; set; } = "zh-CN";

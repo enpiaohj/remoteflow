@@ -70,13 +70,14 @@ public sealed class MainWindowController : NSWindowController
 
         Window.Title = "RemoteFlow";
         Window.ContentMinSize = new CGSize(980, 560);
-        Window.SetContentSize(new CGSize(1160, 720));
-        Window.Center();
         Window.TitleVisibility = NSWindowTitleVisibility.Hidden;
         Window.CollectionBehavior |= NSWindowCollectionBehavior.FullScreenPrimary;
 
         BuildSplit();
         BuildToolbar();
+
+        // 初始尺寸放在 ContentViewController 设好**之后** —— 见 ApplyInitialSizeAndCenter。
+        ApplyInitialSizeAndCenter();
 
         _nav.Selected += OnNavSelected;
         _listPane.ConnectionSelected += (_, c) => ShowInfoCard(c);
@@ -132,9 +133,61 @@ public sealed class MainWindowController : NSWindowController
         _ = StartAsync();
     }
 
+    /// <summary>初始窗口尺寸与居中。档位取自「设置 → 常规 → 外观与行为 → 初始窗口大小」
+    /// （<see cref="WindowSizePreset"/>）：高分屏 / 普通屏 / 笔记本适合的尺寸差得远，写死一个
+    /// 值总有一头不合适，所以做成可选项。无论选哪档都会再夹进当前屏幕可用区域，选「大」也不会
+    /// 在小屏上超出。
+    ///
+    /// 必须在 <c>Window.ContentViewController</c> 设好之后调用：设内容 VC 会让窗口按它的
+    /// fittingSize 重算尺寸并压到 contentMinSize，放在前面设的值会被直接盖掉（表现为
+    /// 每次打开都是 980×560 的最小尺寸）。</summary>
+    private void ApplyInitialSizeAndCenter()
+    {
+        var preset = _services.GetRequiredService<AppSettings>().WindowSize;
+        var visible = (Window.Screen ?? NSScreen.MainScreen)?.VisibleFrame
+                      ?? new CGRect(0, 0, 1440, 900);
+
+        nfloat width = preset switch
+        {
+            WindowSizePreset.Large => 1600,
+            WindowSizePreset.Medium => 1280,
+            WindowSizePreset.Compact => 1080,
+            _ => visible.Width * (nfloat)0.72,  // 跟随屏幕
+        };
+        nfloat height = preset switch
+        {
+            WindowSizePreset.Large => 1040,
+            WindowSizePreset.Medium => 800,
+            WindowSizePreset.Compact => 700,
+            _ => visible.Height * (nfloat)0.78, // 跟随屏幕
+        };
+
+        if (width < 980) { width = 980; }
+        if (height < 560) { height = 560; }
+        var maxWidth = visible.Width - 40;
+        if (width > maxWidth) { width = maxWidth; }
+        var maxHeight = visible.Height - 40;
+        if (height > maxHeight) { height = maxHeight; }
+
+        Window.SetContentSize(new CGSize(width, height));
+        Window.Center();
+    }
+
     private Task StartAsync()
     {
-        _nav.SelectFirst();
+        // 启动落在「设置 → 常规 → 外观与行为 → 默认页面」选的那一页 —— 映射与共享层
+        // MainViewModel 保持一致。原来调 _nav.SelectFirst()：它名字叫「第一个」，内部却写死
+        // 选中第 1 行「我的连接」，于是「默认页面」这个设置在 macOS 端从来没生效过
+        // （选「首页」照样进「我的连接」）。
+        var landing = _services.GetRequiredService<AppSettings>().DefaultLandingPage;
+        _nav.Select(landing switch
+        {
+            LandingPage.Connections => NavSidebar.Item.Connections,
+            LandingPage.Favorites => NavSidebar.Item.Favorites,
+            LandingPage.Recent => NavSidebar.Item.Recent,
+            LandingPage.Credentials => NavSidebar.Item.Credentials,
+            _ => NavSidebar.Item.Home,
+        });
         return Task.CompletedTask;
     }
 

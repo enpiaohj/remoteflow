@@ -782,6 +782,13 @@ public sealed class SettingsPaneView : NSView
 
         var concurrency = IntField(_vm.MaxConcurrentSessions, v => _vm.MaxConcurrentSessions = v);
 
+        // 初始窗口大小：高分屏 / 普通屏 / 笔记本适合的尺寸差得远，写死一个值总有一头不合适，
+        // 做成预置供选。「跟随屏幕」按可用区域比例算，其余是固定值（仍会被夹进屏幕可用区域）。
+        var windowSize = Popup(
+            _vm.WindowSizeOptions.Select(WindowSizeLabel),
+            Math.Max(0, _vm.WindowSizeOptions.ToList().IndexOf(_vm.SelectedWindowSize)),
+            i => _vm.SelectedWindowSize = _vm.WindowSizeOptions[i]);
+
         var language = Popup(new[] { "简体中文" }, 0, _ => { });
         language.Enabled = false; // 目前仅简体中文；保留控件以对齐 Windows 版，i18n 落地后接 _vm.LanguageOptions。
 
@@ -867,9 +874,11 @@ public sealed class SettingsPaneView : NSView
         return Page(
             Card("外观与行为", "paintbrush",
                 "主题会应用到所有页面；默认页面决定每次启动后先落在哪儿；"
+                + "初始窗口大小按显示器选（高分屏选大、笔记本选小），改完下次启动生效；"
                 + "并发会话上限用于在异常情况下防止无限重复建立连接。",
                 Row("主题", theme),
                 Row("默认页面", landing),
+                Row("初始窗口大小", windowSize),
                 Row("并发会话上限", concurrency),
                 Check("登录时自动启动 RemoteFlow", _vm.LaunchOnStartup, v => _vm.LaunchOnStartup = v),
                 Check("关闭窗口时最小化到菜单栏而非退出", _vm.MinimizeToTrayOnClose, v => _vm.MinimizeToTrayOnClose = v)),
@@ -1898,6 +1907,15 @@ public sealed class SettingsPaneView : NSView
         b.Activated += (_, _) => onChange(b.State == NSCellStateValue.On);
         return b;
     }
+
+    /// <summary>「初始窗口大小」预置的中文标签。</summary>
+    private static string WindowSizeLabel(WindowSizePreset preset) => preset switch
+    {
+        WindowSizePreset.Large => "大",
+        WindowSizePreset.Medium => "中",
+        WindowSizePreset.Compact => "小",
+        _ => "跟随屏幕",
+    };
 
     private static NSPopUpButton Popup(IEnumerable<string> items, int selected, Action<int> onSelect)
     {

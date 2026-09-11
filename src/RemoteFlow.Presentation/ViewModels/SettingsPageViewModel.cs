@@ -182,6 +182,13 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     public IReadOnlyList<AppTheme> ThemeOptions { get; } = [AppTheme.System, AppTheme.Light, AppTheme.Dark];
 
+    /// <summary>主窗口**初始**尺寸预置 —— 高分屏 / 普通屏 / 笔记本各取所需，下次启动生效。</summary>
+    [ObservableProperty]
+    private WindowSizePreset _selectedWindowSize;
+
+    public IReadOnlyList<WindowSizePreset> WindowSizeOptions { get; } =
+        [WindowSizePreset.Auto, WindowSizePreset.Large, WindowSizePreset.Medium, WindowSizePreset.Compact];
+
     [ObservableProperty]
     private LandingPage _defaultLandingPage;
 
@@ -369,6 +376,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         LaunchOnStartup = _settings.LaunchOnStartup;
         MinimizeToTrayOnClose = _settings.CloseBehavior == WindowCloseBehavior.MinimizeToTray;
         SelectedTheme = _settings.Theme;
+        SelectedWindowSize = _settings.WindowSize;
         DefaultLandingPage = _settings.DefaultLandingPage;
         Language = string.IsNullOrWhiteSpace(_settings.Language) ? "zh-CN" : _settings.Language;
         SelectedDateFormat = DateFormatOptions.First(o => o.Value == _settings.DateFormat);
@@ -468,6 +476,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         Save();
     }
 
+    partial void OnSelectedWindowSizeChanged(WindowSizePreset value) => Save();
     partial void OnDefaultLandingPageChanged(LandingPage value) => Save();
     partial void OnLanguageChanged(string value) => Save();
 
@@ -600,6 +609,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         _settings.LaunchOnStartup = LaunchOnStartup;
         _settings.CloseBehavior = MinimizeToTrayOnClose ? WindowCloseBehavior.MinimizeToTray : WindowCloseBehavior.Exit;
         _settings.Theme = SelectedTheme;
+        _settings.WindowSize = SelectedWindowSize;
         _settings.DefaultLandingPage = DefaultLandingPage;
         _settings.Language = Language;
 

@@ -63,12 +63,6 @@ public sealed class NavSidebar : NSViewController
         View = fx;
     }
 
-    public void SelectFirst()
-    {
-        _table.SelectRow(1, byExtendingSelection: false); // 我的连接
-        Selected?.Invoke(this, Item.Connections);
-    }
-
     /// <summary>按导航项定位并选中对应行（触发 <see cref="Selected"/>）。</summary>
     public void Select(Item item)
     {
