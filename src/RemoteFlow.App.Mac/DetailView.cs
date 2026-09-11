@@ -659,7 +659,10 @@ public sealed class DetailView : NSView
 
     /// <summary>纵向滚动区：<paramref name="content"/>（纵向 NSStackView，无左右 EdgeInsets）
     /// 左右贴到可视区留 <paramref name="hMargin"/> 边距，随窗口伸缩；子卡片用 AddFill 一起变宽。</summary>
-    private static NSView ScrollHost(NSView content, nfloat hMargin, nfloat minContentWidth)
+    /// <param name="fillViewport">内容比视口矮时，是否把文档撑到视口高度（让内容里可拉伸的
+    /// 部分吸收剩余空间）。首页用它填满全屏时的下半空白；连接详情页内容自成一体，保持自然高度。</param>
+    private static NSView ScrollHost(NSView content, nfloat hMargin, nfloat minContentWidth,
+        bool fillViewport = false)
     {
         var doc = new FlippedHost { TranslatesAutoresizingMaskIntoConstraints = false };
         doc.AddSubview(content);
@@ -686,6 +689,12 @@ public sealed class DetailView : NSView
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
         doc.WidthAnchor.ConstraintEqualTo(scroll.ContentView.WidthAnchor).Active = true;
+        if (fillViewport)
+        {
+            // 文档至少和视口一样高 —— 否则窗口拉高（全屏）时内容仍停在顶部，下面留一大片空白。
+            // 撑高之后由内容里垂直 hugging 最低的那块吸收空间（首页是「收藏 / 最近活动」两列）。
+            doc.HeightAnchor.ConstraintGreaterThanOrEqualTo(scroll.ContentView.HeightAnchor).Active = true;
+        }
         // 横向 hugging 降到最低：告诉 Auto Layout「我乐意被拉得比 fittingSize 宽得多」。
         // 否则 NSSplitViewController 会拿详情列的 fittingSize 当它的最大厚度，窗口拉不宽。
         content.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
@@ -806,6 +815,15 @@ public sealed class DetailView : NSView
         twoCol.AddArrangedSubview(actCol);
         favCol.WidthAnchor.ConstraintEqualTo(actCol.WidthAnchor).Active = true;
         favCol.HeightAnchor.ConstraintEqualTo(actCol.HeightAnchor).Active = true; // 两列齐平
+        // 两列是首页唯一可拉伸的块：垂直 hugging 压到最低，窗口拉高（全屏）时由它们吸收剩余
+        // 高度 —— 列表视口跟着变高、显示更多条目，而不是整页停在顶部、下面留一片空白。
+        twoCol.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Vertical);
+        foreach (var c in new[] { favCol, actCol })
+        {
+            c.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Vertical);
+            // Alignment.Top 只保证顶对齐、不拉伸，补一条底部对齐让卡片随 twoCol 一起长高。
+            c.BottomAnchor.ConstraintEqualTo(twoCol.BottomAnchor).Active = true;
+        }
         AddFill(col, twoCol);
 
         if (vm.ShowSecurityTip)
@@ -815,7 +833,7 @@ public sealed class DetailView : NSView
         }
 
         col.AddArrangedSubview(Gap(24));
-        return ScrollHost(col, 40, 640);
+        return ScrollHost(col, 40, 640, fillViewport: true);
     }
 
     private static NSView HomeSectionHeader(string title, Action? viewAll)
@@ -913,12 +931,11 @@ public sealed class DetailView : NSView
     {
         var card = Card();
         // 固定高度在内容少时会留下一大片空洞（收藏只有一两条时尤其明显）。
-        // 改成只锁上下限。下限取「刚好放得下 4 整行」——内层是滚动列表，
-        // 高度随便取会把最后一行切成半截，看着像没画完（行高 46 + 卡片头尾约 84）。
+        // 只锁下限：取「刚好放得下 4 整行」——内层是滚动列表，高度太小会把最后一行切成半截，
+        // 看着像没画完（行高 46 + 卡片头尾约 84）。
+        // 不再锁上限：首页两列的垂直 hugging 最低，窗口（全屏）拉高时由它们吸收剩余高度，
+        // 列表视口随卡片一起变大；锁上限会让卡片顶到值就不长，页面下部又空出来。
         card.HeightAnchor.ConstraintGreaterThanOrEqualTo(4 * 46 + 84).Active = true;
-        var cap = card.HeightAnchor.ConstraintLessThanOrEqualTo(460);
-        cap.Priority = (float)NSLayoutPriority.DefaultHigh;
-        cap.Active = true;
 
         var head = new NSStackView
         {
