@@ -293,7 +293,8 @@ if ! git ls-remote --tags origin "refs/tags/$TAG" 2>/dev/null | grep -q "refs/ta
   echo "         gh release create $TAG --draft --title \"RemoteFlow macOS v$VERSION\" \\" >&2
   echo "           --notes-file $CHANGELOG \\" >&2
   echo "           $REL/RemoteFlow-v$VERSION-macos-arm64.dmg $REL/RemoteFlow-v$VERSION-macos-x64.dmg" >&2
-  echo "         gh release edit $TAG --draft=false --latest" >&2
+  echo "         gh release edit $TAG --draft=false" >&2
+  echo "       （Latest 归 Windows 线，脚本会自动复位到最新 vX.Y.Z；见发布规范 §1）" >&2
   exit 1
 fi
 if gh release view "$TAG" >/dev/null 2>&1; then
@@ -307,5 +308,18 @@ else
     --notes-file "$CHANGELOG" $REL/RemoteFlow-v$VERSION-macos-arm64.dmg \
     $REL/RemoteFlow-v$VERSION-macos-x64.dmg
 fi
-gh release edit "$TAG" --draft=false --latest
+gh release edit "$TAG" --draft=false
 echo "已发布：https://github.com/enpiaohj/remoteflow/releases/tag/$TAG"
+
+# Latest 归 Windows 线所有（见发布规范 §1「Latest 标记约定」）：GitHub 只有一个 Latest 槽位，
+# 两条独立版本线不能都用它，否则每发一次 macOS 就把 Windows 的徽章顶掉。故这里发布后
+# 把 Latest 复位到最新的 vX.Y.Z。找不到 Windows 版本时不硬设，交人工处理。
+WIN_TAG=$(gh release list --limit 200 --json tagName,isDraft,isPrerelease \
+  --jq '.[] | select(.isDraft == false and .isPrerelease == false) | .tagName' 2>/dev/null \
+  | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1) || WIN_TAG=""
+if [ -n "$WIN_TAG" ]; then
+  gh release edit "$WIN_TAG" --latest >/dev/null
+  echo "  Latest 已复位到 Windows 线：$WIN_TAG"
+else
+  echo "  ⚠ 未找到 Windows 版本 Release，Latest 暂留在 $TAG，请手工指定。" >&2
+fi

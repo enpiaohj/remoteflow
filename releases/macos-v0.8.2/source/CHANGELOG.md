@@ -7,10 +7,76 @@
 
 ---
 
-## [0.13.3] — 2026-09-10
+## [0.14.1] — 2026-09-10
 
-计数修正 + 危险操作防误触。Windows 与 macOS 同步发布，macOS 侧见
-[`releases/macos-v0.7.3/CHANGELOG.md`](releases/macos-v0.7.3/CHANGELOG.md)。
+系统信息采集修正。Windows 与 macOS 同步发布，macOS 侧见
+[`releases/macos-v0.8.1/CHANGELOG.md`](releases/macos-v0.8.1/CHANGELOG.md)。
+
+### 修复
+- **后台「系统」列显示不准**（如「Windows 25H2 (X64)」）：
+  - 版本族与 SKU 改用 `EditionID` 判定（不随系统语言变）+ 构建号 ≥22000 判 Windows 11
+    → 「Windows 11 专业版」（Win11 的 `ProductName` 常误写 Windows 10 Pro）；
+  - `UBR` 是 `REG_DWORD`，此前读到 null 导致构建号缺修订 → 「25H2 (26200.9445)」；
+  - 架构由枚举 `X64` 规范化成 `x64`；macOS 取 `kern.osproductversion`，Linux 取 `/etc/os-release`。
+  - 管理台展示改为「名称 版本 · 架构」。
+
+### 验证
+- Build：`dotnet build RemoteFlow.slnx -c Release` 0 错误；Tests：Core.Tests 42、
+  IntegrationTests 179、IntegrationTests.Windows 9。端到端真实上报核验，服务端存储为
+  `Windows 11 专业版 / 25H2 (26200.9445) / x64`。
+
+详见 [`releases/v0.14.1/CHANGELOG.md`](releases/v0.14.1/CHANGELOG.md)。
+
+## [0.14.0] — 2026-09-10
+
+首次加入自动消重 + 凭据重复推送修复。macOS 侧对应版本 `macos-v0.8.0` **因 GitHub Actions
+账户计费故障未构建、未发布**，功能由 `macos-v0.8.1` 覆盖
+（见 [`releases/macos-v0.8.0/CHANGELOG.md`](releases/macos-v0.8.0/CHANGELOG.md)）。
+
+### 新增
+- **首次加入按自然键认领云端 Id**：两台机器在启用云同步之前各自建过同一台服务器 / 分组 / 标签 /
+  凭据 → 两条不同 Id 的重复条目。现在首次同步（云端全量已落地、对账之前）自动合并：
+  - 自然键：连接 = host + 端口 + 协议 + 名称；凭据 = 名称 + 类型 + 账号 + 域；分组 / 标签 = 名称；
+  - 以云端那份为准：改写子引用（连接的 group/credential、标签关联、分组父子）指向云端 Id，
+    删除本机重复行及其同步状态与待推条目；凭据旧密钥引用提交后从平台密钥库清理；
+  - 单事务、顺序 分组/标签 → 凭据 → 连接；**本机独有条目不受影响**。
+
+### 修复
+- **凭据版本每次多涨 1**：落地密码 / 私钥时刷新了凭据 `UpdateAt` → 内容哈希立刻失效 →
+  对账再推一次。改为定点更新引用（`SetSecretReferencesAsync`），不触碰 `updated_at`。
+
+### 验证
+- `dotnet build RemoteFlow.slnx -c Release` 0 错误；`dotnet test -c Release` —— Core.Tests 42、
+  IntegrationTests 179、IntegrationTests.Windows 9 全绿。
+- 未执行：完整 UI 手动走查、两台物理机的同步演练。
+
+详见 [`releases/v0.14.0/CHANGELOG.md`](releases/v0.14.0/CHANGELOG.md)。
+
+## [0.13.5] — 2026-09-10
+
+同步状态自愈（v0.13.4 计数修正的补完）。macOS 侧见
+[`releases/macos-v0.7.5/CHANGELOG.md`](releases/macos-v0.7.5/CHANGELOG.md)。
+
+### 修复
+- **删除过的条目仍被计入「云端已存」**：v0.13.4 只对此后发生的删除清状态行，修复前已删除实体的
+  状态行仍在（标签显示 6 而实际只剩 3）。现在对账会清理「云端有、本地已无」实体的本地同步状态行
+  —— 只忘记版本、不产生上行操作，**不传播删除**；统计随下一次对账自愈。
+
+### 验证
+- `dotnet build RemoteFlow.slnx -c Release` 0 错误；`dotnet test -c Release` —— Core.Tests 42、
+  IntegrationTests 177、IntegrationTests.Windows 9 全绿。
+- 未执行：完整 UI 手动走查、两台物理机的同步演练。
+
+详见 [`releases/v0.13.5/CHANGELOG.md`](releases/v0.13.5/CHANGELOG.md)。
+
+## [0.13.4] — 2026-09-10
+
+> 本版曾以 `v0.13.3` / `macos-v0.7.3` 封版（版本号与快照均已提交），随后**整版重切**为
+> `v0.13.4` / `macos-v0.7.4`。`v0.13.3` 的 tag 从未推送、没有 Release，是**未发布的中间态**；
+> 本条目即该次变更的最终版本。
+
+计数修正 + 危险操作防误触。macOS 侧见
+[`releases/macos-v0.7.4/CHANGELOG.md`](releases/macos-v0.7.4/CHANGELOG.md)。
 
 ### 修复
 - **「云端已存」把已删除的条目也算进去了**：统计取自 `sync_entity_state`（`server_version>0`），
@@ -28,7 +94,7 @@
   IntegrationTests 176、IntegrationTests.Windows 9 全绿（新增：墓碑不计入已同步条目）。
 - 未执行：完整 UI 手动走查、两台物理机的同步演练。
 
-详见 [`releases/v0.13.3/CHANGELOG.md`](releases/v0.13.3/CHANGELOG.md)。
+详见 [`releases/v0.13.4/CHANGELOG.md`](releases/v0.13.4/CHANGELOG.md)。
 
 ## [0.13.2] — 2026-09-10
 
@@ -482,7 +548,10 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 
 详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
-[0.13.3]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.3
+[0.14.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.14.1
+[0.14.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.14.0
+[0.13.5]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.5
+[0.13.4]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.4
 [0.13.2]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.2
 [0.13.1]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.1
 [0.13.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.13.0

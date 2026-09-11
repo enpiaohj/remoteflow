@@ -86,5 +86,7 @@ gh release create $tag --draft --title "RemoteFlow $tag" --notes-file $changelog
     (Join-Path $outDir $exe) (Join-Path $outDir $zip)
 if ($LASTEXITCODE -ne 0) { throw "gh release create 失败。" }
 
+# Latest 由 Windows 线持有（见发布规范 §1「Latest 标记约定」）；macOS 脚本发布后会把
+# Latest 复位到这里。两条独立版本线共用 GitHub 一个 Latest 槽位，约定归 Windows。
 gh release edit $tag --draft=false --latest
 Write-Host "[release-local] 已发布 $tag" -ForegroundColor Green
