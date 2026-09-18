@@ -4,7 +4,7 @@
         xmlns:svc="clr-namespace:RemoteFlow.Presentation.Services;assembly=RemoteFlow.Presentation"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" ShowInTaskbar="False" SizeToContent="Height" Width="440"
-        WindowStartupLocation="CenterOwner" FontFamily="{StaticResource UiFont}" UseLayoutRounding="True">
+        WindowStartupLocation="CenterOwner" FontFamily="{StaticResource UiFont}" UseLayoutRounding="True" TextElement.Foreground="{DynamicResource Text.Primary}">
 
     <Border Background="{DynamicResource Bg.Layer}" BorderBrush="{DynamicResource Stroke.Default}"
             BorderThickness="1" CornerRadius="12" Margin="16">

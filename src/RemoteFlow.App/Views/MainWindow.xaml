@@ -13,6 +13,7 @@
         Background="{DynamicResource Bg.Base}"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
+        TextElement.Foreground="{DynamicResource Text.Primary}"
         FontFamily="{StaticResource UiFont}">
 
     <!-- 自定义标题栏：把全局搜索与「新建连接」直接放进标题栏，

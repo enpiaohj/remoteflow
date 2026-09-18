@@ -10,7 +10,7 @@
         Width="440"
         WindowStartupLocation="CenterOwner"
         FontFamily="{StaticResource UiFont}"
-        UseLayoutRounding="True">
+        UseLayoutRounding="True" TextElement.Foreground="{DynamicResource Text.Primary}">
 
     <!-- 自绘对话框：系统 MessageBox 无法跟随应用主题，且样式停留在旧版观感 -->
     <Border Background="{DynamicResource Bg.Layer}"

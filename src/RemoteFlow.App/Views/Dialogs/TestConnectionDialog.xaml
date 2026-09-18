@@ -11,7 +11,7 @@
         Width="520"
         WindowStartupLocation="CenterOwner"
         FontFamily="{StaticResource UiFont}"
-        UseLayoutRounding="True">
+        UseLayoutRounding="True" TextElement.Foreground="{DynamicResource Text.Primary}">
 
     <Window.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
