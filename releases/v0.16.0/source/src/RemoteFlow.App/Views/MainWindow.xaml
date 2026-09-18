@@ -1,0 +1,627 @@
+<Window x:Class="RemoteFlow.App.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
+        xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
+        xmlns:pages="clr-namespace:RemoteFlow.App.Views.Pages"
+        xmlns:sessions="clr-namespace:RemoteFlow.App.Views.Sessions"
+        Title="RemoteFlow"
+        Height="940" Width="1560"
+        MinHeight="640" MinWidth="960"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource Bg.Base}"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        FontFamily="{StaticResource UiFont}">
+
+    <!-- 自定义标题栏：把全局搜索与「新建连接」直接放进标题栏，
+         省掉一整条工具栏，也避免传统「文件/编辑/查看」式菜单栏。 -->
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="48"
+                            ResizeBorderThickness="6"
+                            CornerRadius="0"
+                            GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
+        <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
+        <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
+        <conv:ColorStringToBrushConverter x:Key="ColorToBrush" />
+        <conv:MaximizedPaddingConverter x:Key="MaximizedPadding" />
+        <conv:EnumToBoolConverter x:Key="EnumToBool" />
+        <conv:FullScreenRowHeightConverter x:Key="FullScreenRowHeight" />
+        <conv:FullScreenSizeConverter x:Key="FullScreenSize" />
+
+        <!-- 页面 ViewModel → 页面视图 -->
+        <DataTemplate DataType="{x:Type vm:HomePageViewModel}">
+            <pages:HomePage />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ConnectionsPageViewModel}">
+            <pages:ConnectionsPage />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:CredentialsPageViewModel}">
+            <pages:CredentialsPage />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SettingsPageViewModel}">
+            <pages:SettingsPage />
+        </DataTemplate>
+
+        <!-- 标题栏窗口按钮：不使用系统按钮，以便跟随应用主题 -->
+        <Style x:Key="CaptionButton" TargetType="Button">
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="48" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CaptionCloseButton" TargetType="Button" BasedOn="{StaticResource CaptionButton}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}">
+                            <ContentPresenter x:Name="Content" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#C42B1C" />
+                                <Setter Property="Foreground" Value="White" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 会话 Tab 头 -->
+        <Style x:Key="WorkspaceTabHeader" TargetType="RadioButton">
+            <Setter Property="GroupName" Value="WorkspaceTabs" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <!-- 选中的标签与下方白纸连成一体：同底色 + 同描边，底边留空，
+                             视觉上「标签是纸的一个凸起」，而不是飘在灰底上的一块白。 -->
+                        <Border x:Name="Root"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="1,1,1,0"
+                                CornerRadius="8,8,0,0"
+                                Margin="0,0,2,0"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Layer}" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Subtle}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Window.InputBindings>
+        <!-- 键盘效率设计（产品设计文档 §7.12） -->
+        <KeyBinding Key="K" Modifiers="Ctrl" Command="{Binding FocusSearchCommand}" />
+        <KeyBinding Key="N" Modifiers="Ctrl" Command="{Binding NewConnectionCommand}" />
+    </Window.InputBindings>
+
+    <!--
+        最大化时补偿 WindowChrome 的边缘溢出，避免内容被屏幕边缘裁切；
+        但全屏会话（WindowStyle=None）没有 Chrome，不能再补 8px，否则四周留边。
+    -->
+    <Border x:Name="RootPadding">
+        <Grid>
+            <Grid.RowDefinitions>
+                <!-- 仅「完全全屏」档隐藏应用标题栏；窗口最大化档保留标题栏与边框 -->
+                <RowDefinition Height="{Binding IsScreenFull, Converter={StaticResource FullScreenRowHeight}}" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- ══ 标题栏 ══════════════════════════════════════════ -->
+            <Grid Grid.Row="0" Background="{DynamicResource Bg.Base}"
+                  Visibility="{Binding IsScreenFull, Converter={StaticResource InverseBoolToVisibility}}"
+                  MouseRightButtonUp="OnTitleBarSystemMenu">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 品牌区 -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
+                    <Border Width="24" Height="24" CornerRadius="6" Background="{DynamicResource Brand.Default}">
+                        <TextBlock Text="&#xE8AF;"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="13"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="RemoteFlow"
+                               FontFamily="{StaticResource UiFontDisplay}"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource Text.Primary}"
+                               VerticalAlignment="Center"
+                               Margin="10,0,0,0" />
+                    <TextBlock Text="{Binding AppVersion}"
+                               Style="{StaticResource Text.Caption}"
+                               Foreground="{DynamicResource Text.Tertiary}"
+                               VerticalAlignment="Center"
+                               Margin="8,0,0,0"
+                               ToolTip="点侧栏「帮助与关于」查看更多" />
+                </StackPanel>
+
+                <!-- 全局搜索：标题栏两个高频动作之一 -->
+                <Border x:Name="SearchSurface"
+                        Grid.Column="1"
+                        MaxWidth="520"
+                        Height="34"
+                        Margin="24,0"
+                        Background="{DynamicResource Bg.Layer}"
+                        BorderBrush="{DynamicResource Stroke.Default}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource Radius.Medium}"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Text="{StaticResource Icon.Search}"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource Text.Tertiary}"
+                                   VerticalAlignment="Center"
+                                   Margin="10,0,0,0" />
+
+                        <TextBox x:Name="SearchBox"
+                                 Grid.Column="1"
+                                 Text="{Binding GlobalSearchText, UpdateSourceTrigger=PropertyChanged, Delay=120}"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 FontSize="13"
+                                 Foreground="{DynamicResource Text.Primary}"
+                                 CaretBrush="{DynamicResource Text.Primary}"
+                                 VerticalContentAlignment="Center"
+                                 Margin="8,0" />
+
+                        <!-- 占位提示 -->
+                        <TextBlock Grid.Column="1"
+                                   Text="搜索服务器、IP、标签、备注…"
+                                   Foreground="{DynamicResource Text.Tertiary}"
+                                   FontSize="13"
+                                   VerticalAlignment="Center"
+                                   Margin="9,0"
+                                   IsHitTestVisible="False">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <!-- 空态显示 Ctrl+K 键帽，有内容时换成清除按钮 -->
+                        <Border Grid.Column="2"
+                                Margin="0,0,6,0"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource Bg.Subtle}"
+                                BorderBrush="{DynamicResource Stroke.Subtle}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="6,2"
+                                IsHitTestVisible="False">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock Text="Ctrl K" Style="{StaticResource Text.Label}" />
+                        </Border>
+
+                        <Button Grid.Column="2"
+                                Width="28" Height="28"
+                                Margin="0,0,3,0"
+                                Style="{StaticResource Button.Icon}"
+                                Content="{StaticResource Icon.Close}"
+                                FontSize="10"
+                                ToolTip="清除搜索"
+                                Command="{Binding ConnectionsPage.ClearSearchCommand}"
+                                Visibility="{Binding GlobalSearchText.Length, Converter={StaticResource CountToVisibility}}" />
+                    </Grid>
+                </Border>
+
+                <!-- 新建连接：标题栏两个高频动作之二 -->
+                <Button Grid.Column="2"
+                        Style="{StaticResource Button.Primary}"
+                        MinHeight="32"
+                        Margin="0,0,12,0"
+                        Padding="14,0"
+                        VerticalAlignment="Center"
+                        Command="{Binding NewConnectionCommand}"
+                        ToolTip="新建连接 (Ctrl+N)"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{StaticResource Icon.Add}"
+                                   FontFamily="{StaticResource IconFont}"
+                                   FontSize="12"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="新建连接" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <!-- 窗口控制 -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal">
+                    <Button Style="{StaticResource CaptionButton}" Content="&#xE921;"
+                            Click="OnMinimizeClick" ToolTip="最小化" />
+                    <Button x:Name="MaximizeButton" Style="{StaticResource CaptionButton}" Content="&#xE922;"
+                            Click="OnMaximizeClick" ToolTip="最大化" />
+                    <Button Style="{StaticResource CaptionCloseButton}" Content="&#xE8BB;"
+                            Click="OnCloseClick" ToolTip="关闭" />
+                </StackPanel>
+            </Grid>
+
+            <!-- ══ 主体 ════════════════════════════════════════════ -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <!-- 全屏会话时把导航列宽收为 0，否则会在左侧留下一条空白带 -->
+                    <ColumnDefinition x:Name="NavColumn"
+                                      Width="{Binding IsSessionFullScreen, Converter={StaticResource FullScreenSize}, ConverterParameter=216}" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition x:Name="DetailColumn" Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- ── 左侧导航：分「连接 / 管理」两组，设置固定在底部 ── -->
+                <Border Grid.Column="0"
+                        Background="{DynamicResource Bg.Sidebar}"
+                        Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
+                  <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="0,16,0,8">
+                            <TextBlock Text="连接" Style="{StaticResource Nav.SectionHeader}" />
+
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Home, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Home}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Home}" Style="{StaticResource Nav.Icon}" />
+                                    <TextBlock Text="首页" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Connections, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Connections}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Connections}" Style="{StaticResource Nav.Icon}" />
+                                    <TextBlock Text="我的连接" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Favorites, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Favorites}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Favorite}" Style="{StaticResource Nav.Icon}" />
+                                    <TextBlock Text="收藏" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Recent, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Recent}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Recent}" Style="{StaticResource Nav.Icon}" />
+                                    <TextBlock Text="最近连接" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="18,12" />
+
+                            <TextBlock Text="管理" Style="{StaticResource Nav.SectionHeader}" />
+
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Credentials, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Credentials}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Credential}" Style="{StaticResource Nav.Icon}" />
+                                    <TextBlock Text="凭据" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Settings, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Settings}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Settings}" Style="{StaticResource Nav.Icon}" />
+                                    <TextBlock Text="设置" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
+
+                            <!-- 点一下就弹「关于」对话框，不是要停留的页面，所以不用 Nav.Item
+                                 那套 RadioButton + IsChecked 常驻选中态，用 Nav.ItemButton。 -->
+                            <Button Style="{StaticResource Nav.ItemButton}" Click="OnHelpClick">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Info}" Style="{StaticResource Nav.Icon}" />
+                                    <TextBlock Text="帮助与关于" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- 会话状态放到底部状态栏，这里不再重复 -->
+                  </Grid>
+                </Border>
+
+                <!-- ── 中央工作区 ────────────────────────────────── -->
+                <Grid Grid.Column="1" Margin="0,0,0,0">
+                    <Grid.RowDefinitions>
+                        <!-- Auto：Tab 栏 Collapsed 时该行自然收为 0，全屏把整块屏幕
+                             让给远程画面；会话工具条（带「退出全屏」按钮）保留为退出入口。 -->
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Tab 栏。非全屏时始终在列，用户随时能从会话回到连接列表 -->
+                    <Border Grid.Row="0"
+                            Background="{DynamicResource Bg.Base}"
+                            Padding="8,6,8,0"
+                            Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding Tabs}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <RadioButton Style="{StaticResource WorkspaceTabHeader}"
+                                                     IsChecked="{Binding IsActive, Mode=OneWay}"
+                                                     Checked="OnTabHeaderChecked"
+                                                     ContextMenuOpening="OnTabContextMenuOpening">
+                                            <RadioButton.ContextMenu>
+                                                <!-- 仅会话 Tab 生效；首页 Tab 由 OnTabContextMenuOpening 拦掉。
+                                                     动作统一用 Click 在代码后置分发。 -->
+                                                <ContextMenu Opened="OnTabContextMenuOpened">
+                                                    <MenuItem Header="重新连接" Click="OnTabReconnectClick" />
+                                                    <Separator />
+                                                    <MenuItem Header="关闭会话" InputGestureText="Ctrl+W" Click="OnTabCloseClick" />
+                                                    <MenuItem Tag="closeOthers"
+                                                              Header="关闭其他会话"
+                                                              Click="OnTabCloseOthersClick" />
+                                                    <MenuItem Tag="closeRight"
+                                                              Header="关闭右侧会话"
+                                                              Click="OnTabCloseRightClick" />
+                                                    <MenuItem Header="关闭全部会话" Click="OnTabCloseAllClick" />
+                                                </ContextMenu>
+                                            </RadioButton.ContextMenu>
+                                            <StackPanel Orientation="Horizontal" Margin="12,0,8,0">
+                                                <TextBlock Text="{Binding Icon}"
+                                                           FontFamily="{StaticResource IconFont}"
+                                                           FontSize="13"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Text.Secondary}" />
+                                                <TextBlock Text="{Binding Title}"
+                                                           Margin="8,0,0,0"
+                                                           MaxWidth="150"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"
+                                                           FontSize="13"
+                                                           Foreground="{DynamicResource Text.Primary}" />
+
+                                                <!-- 会话状态点：与状态文字一起出现在 Tab 提示中 -->
+                                                <Ellipse Width="7" Height="7" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                         Fill="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}">
+                                                    <Ellipse.Visibility>
+                                                        <Binding Path="CanClose" Converter="{StaticResource BoolToVisibility}" />
+                                                    </Ellipse.Visibility>
+                                                    <Ellipse.ToolTip>
+                                                        <ToolTip Content="{Binding StateText}" />
+                                                    </Ellipse.ToolTip>
+                                                </Ellipse>
+
+                                                <Button Style="{StaticResource Button.Icon}"
+                                                        Width="26" Height="26" Margin="6,0,-2,0"
+                                                        FontSize="11"
+                                                        Content="{StaticResource Icon.Close}"
+                                                        ToolTip="关闭会话 (Ctrl+W)"
+                                                        Command="{Binding CloseCommand}"
+                                                        Visibility="{Binding CanClose, Converter={StaticResource BoolToVisibility}}" />
+                                            </StackPanel>
+                                        </RadioButton>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- 内容区：所有 Tab 内容常驻，仅切换可见性，保证会话不被销毁。
+                         按最新反馈还原为白色内容区（Bg.Layer），不再跟随 Windows 11
+                         灰机身配色思路——这条改动是应用级的，覆盖首页在内的所有页面，
+                         不能只在某一页面单独还原。
+                         会话 Tab（RDP/SSH/VNC）自己在 SessionHostView 里画深色背景，
+                         互不影响。
+                         会话全屏时必须去掉描边和圆角：否则远程画面四周会露出一圈边框。 -->
+                    <Border Grid.Row="1"
+                            Background="{DynamicResource Bg.Layer}"
+                            SnapsToDevicePixels="True">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="BorderBrush" Value="{DynamicResource Stroke.Subtle}" />
+                                <Setter Property="BorderThickness" Value="1,1,1,0" />
+                                <Setter Property="CornerRadius" Value="12,12,0,0" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSessionFullScreen}" Value="True">
+                                        <Setter Property="BorderThickness" Value="0" />
+                                        <Setter Property="CornerRadius" Value="0" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                      <Grid>
+                        <!-- 页面数据加载失败横幅：静默失败会让用户对着空白页发懵 -->
+                        <Border Panel.ZIndex="20"
+                                VerticalAlignment="Top"
+                                Background="{DynamicResource Bg.Subtle}"
+                                BorderBrush="{DynamicResource Status.Warning}"
+                                BorderThickness="0,0,0,2"
+                                Padding="16,10"
+                                Visibility="{Binding PageLoadError.Length, Converter={StaticResource CountToVisibility}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{StaticResource Icon.Warning}"
+                                           FontFamily="{StaticResource IconFont}" FontSize="13"
+                                           Foreground="{DynamicResource Status.Warning}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{Binding PageLoadError}"
+                                           Style="{StaticResource Text.Caption}"
+                                           TextWrapping="Wrap"
+                                           VerticalAlignment="Center"
+                                           Margin="10,0,12,0" />
+                                <Button Grid.Column="2" Style="{StaticResource Button.Secondary}"
+                                        Content="重试" VerticalAlignment="Center"
+                                        Command="{Binding RetryPageLoadCommand}" />
+                            </Grid>
+                        </Border>
+
+                        <ItemsControl ItemsSource="{Binding Tabs}"
+                                      HorizontalContentAlignment="Stretch"
+                                      VerticalContentAlignment="Stretch">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <Grid />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemContainerStyle>
+                                <Style TargetType="ContentPresenter">
+                                    <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                    <Setter Property="VerticalAlignment" Value="Stretch" />
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ItemsControl.ItemContainerStyle>
+                            <ItemsControl.Resources>
+                                <DataTemplate DataType="{x:Type vm:PageTabViewModel}">
+                                    <ContentControl Content="{Binding Page}"
+                                                    HorizontalContentAlignment="Stretch"
+                                                    VerticalContentAlignment="Stretch" />
+                                </DataTemplate>
+                                <DataTemplate DataType="{x:Type vm:SessionTabViewModel}">
+                                    <sessions:SessionHostView />
+                                </DataTemplate>
+                            </ItemsControl.Resources>
+                        </ItemsControl>
+                      </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- ── 右侧详情面板：选中连接时显示，全屏会话时收起 ── -->
+                <Border Grid.Column="2"
+                        Width="304"
+                        Background="{DynamicResource Bg.Sidebar}"
+                        BorderBrush="{DynamicResource Stroke.Subtle}"
+                        BorderThickness="1,0,0,0">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <!-- 详情面板只在连接列表页出现：窗口够宽、未全屏、非会话 Tab、
+                                     且未处于多选模式（多选时隐藏详情，让列表占满 Workspace） -->
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsDetailPanelVisible}" Value="True" />
+                                        <Condition Binding="{Binding IsSessionFullScreen}" Value="False" />
+                                        <Condition Binding="{Binding IsSessionSelected}" Value="False" />
+                                        <Condition Binding="{Binding IsConnectionListPage}" Value="True" />
+                                        <Condition Binding="{Binding ConnectionsPage.IsMultiSelect}" Value="False" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+
+                    <pages:ConnectionDetailPanel DataContext="{Binding ConnectionsPage}" />
+                </Border>
+            </Grid>
+
+            <!-- ══ 底部状态栏：一条细条，与内容区拉开、给窗口一个明确的下边界 ══ -->
+            <Border Grid.Row="2" Height="24" Background="{DynamicResource Bg.Base}"
+                    BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,1,0,0"
+                    Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
+                <Grid Margin="16,0,14,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                 Fill="{Binding SessionStatusBrushKey, Converter={StaticResource KeyToBrush}}" />
+                        <TextBlock Text="{Binding SessionStatusText}" Style="{StaticResource Text.Caption}" Margin="8,0,0,0" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <TextBlock Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}" FontSize="11"
+                                   Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                        <TextBlock Text="本地优先 · 凭据由 Windows DPAPI 保护"
+                                   Style="{StaticResource Text.Caption}" Margin="7,0,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

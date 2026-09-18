@@ -1,0 +1,86 @@
+## ── 构建输出 ──────────────────────────────────────────────
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+
+## ── Visual Studio / Rider / VS Code ───────────────────────
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.DotSettings.user
+
+## ── 测试与覆盖率 ──────────────────────────────────────────
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+coverage*.info
+
+## ── NuGet ────────────────────────────────────────────────
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+## ── 发布产物（大文件不入 Git History，改用 GitHub Releases）─
+## 本地 releases/vX.Y.Z/ 快照保留 source/ 与 CHANGELOG.md，
+## 排除其中的可执行/安装包/压缩包。
+releases/**/*.exe
+releases/**/*.msi
+releases/**/*.dmg
+releases/**/*.pkg
+releases/**/*.zip
+releases/**/*.tar.gz
+publish/
+
+## ── WebView2 运行时数据 ──────────────────────────────────
+**/WebView2/
+
+## ── 操作系统 ─────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+## ── 机密 / 本地配置（绝不入库）───────────────────────────
+*.env
+.env.*
+!.env.example
+appsettings.*.local.json
+secrets.json
+*.pfx
+*.p12
+*.key
+*.pem
+
+## ── 运行时数据库（用户数据，不入库）─────────────────────
+*.db
+*.db-shm
+*.db-wal
+vault.dat
+
+## ── Claude Code 会话运行时（本地工具状态，不入库）───────
+.claude/
+dist/
+
+## ── native 构建产物（源码 native/rdp/*.c 入库，dylib 由 build.sh 现编）──
+src/RemoteFlow.Protocol.Rdp.Mac/runtimes/**/native/*.dylib
+
+# 自建 FreeRDP（源码/构建/产物，不入库）
+native/rdp/freerdp-src/
+native/rdp/freerdp-build*/
+native/rdp/freerdp-dist/

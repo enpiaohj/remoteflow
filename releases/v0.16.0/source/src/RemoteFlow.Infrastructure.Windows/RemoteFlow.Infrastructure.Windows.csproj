@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RemoteFlow.Infrastructure.Windows —— Infrastructure 中依赖 Windows 专属 API 的部分。
+    目前只有 DpapiCredentialVault（Windows Data Protection API）。
+    把它从 RemoteFlow.Infrastructure 剥离出来，使后者可以降到平台无关的 net10.0，
+    让 SQLite 仓储 / 设置 / 日志在 macOS 与 Windows 两端共用同一份实现。
+    对应 macOS 版技术方案 §6.2。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>RemoteFlow.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RemoteFlow.Core\RemoteFlow.Core.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Infrastructure\RemoteFlow.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+  </ItemGroup>
+
+</Project>

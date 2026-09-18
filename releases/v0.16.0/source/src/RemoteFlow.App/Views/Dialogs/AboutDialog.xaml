@@ -1,0 +1,105 @@
+<Window x:Class="RemoteFlow.App.Views.Dialogs.AboutDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        SizeToContent="Height"
+        Width="420"
+        WindowStartupLocation="CenterOwner"
+        FontFamily="{StaticResource UiFont}"
+        UseLayoutRounding="True">
+
+    <Border Background="{DynamicResource Bg.Layer}"
+            BorderBrush="{DynamicResource Stroke.Default}"
+            BorderThickness="1"
+            CornerRadius="12"
+            Margin="16">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.24" Direction="270" />
+        </Border.Effect>
+
+        <StackPanel>
+            <StackPanel Margin="28,26,28,0">
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="36" Height="36" CornerRadius="9" Background="{DynamicResource Brand.Default}">
+                        <TextBlock Text="&#xE8AF;" FontFamily="{StaticResource IconFont}" FontSize="17"
+                                   Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="RemoteFlow" Style="{StaticResource Text.SectionTitle}" />
+                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0">
+                            <Run Text="版本" /><Run Text=" " /><Run x:Name="VersionRun" Text="0.0.0" />
+                            <Run Text=" · 统一远程连接工作台" />
+                        </TextBlock>
+                    </StackPanel>
+                </StackPanel>
+
+                <Border Style="{StaticResource Surface.Divider}" Margin="0,18,0,16" />
+
+                <TextBlock Text="快捷键" Style="{StaticResource Text.Label}" Margin="0,0,0,10" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource Kbd}"><TextBlock Text="Ctrl K" Style="{StaticResource Text.Label}" /></Border>
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="聚焦全局搜索" Style="{StaticResource Text.Body}"
+                               Margin="10,0,0,0" VerticalAlignment="Center" />
+
+                    <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource Kbd}" Margin="0,8,0,0"><TextBlock Text="Ctrl N" Style="{StaticResource Text.Label}" /></Border>
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="新建连接" Style="{StaticResource Text.Body}"
+                               Margin="10,8,0,0" VerticalAlignment="Center" />
+
+                    <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource Kbd}" Margin="0,8,0,0"><TextBlock Text="Ctrl W" Style="{StaticResource Text.Label}" /></Border>
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="关闭当前会话标签" Style="{StaticResource Text.Body}"
+                               Margin="10,8,0,0" VerticalAlignment="Center" />
+
+                    <Border Grid.Row="3" Grid.Column="0" Style="{StaticResource Kbd}" Margin="0,8,0,0"><TextBlock Text="F11" Style="{StaticResource Text.Label}" /></Border>
+                    <TextBlock Grid.Row="3" Grid.Column="1" Text="会话全屏 / 逐档切换" Style="{StaticResource Text.Body}"
+                               Margin="10,8,0,0" VerticalAlignment="Center" />
+                </Grid>
+
+                <Border Style="{StaticResource Surface.Divider}" Margin="0,18,0,16" />
+
+                <!-- 用 Grid 而不是横向 StackPanel：StackPanel 沿方向轴给子元素无限宽度
+                     做测量，带 TextWrapping 的 TextBlock 会先按"不换行"量出一个偏矮的
+                     高度，SizeToContent="Height" 就按这个错误高度定了窗口大小，实际
+                     排版换行后文字被裁切。Grid 的 * 列有确定宽度，量测阶段就能算对
+                     换行后的真实高度。 -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}"
+                               FontSize="14" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Top" Margin="0,2,0,0" />
+                    <TextBlock Grid.Column="1" Text="本地优先：连接与凭据信息保存在本机 SQLite，密码 / 私钥由 Windows DPAPI 加密保护，不上传任何服务器。"
+                               Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="8,0,0,0" />
+                </Grid>
+            </StackPanel>
+
+            <Border Background="{DynamicResource Bg.Subtle}"
+                    CornerRadius="0,0,11,11"
+                    Margin="0,20,0,0"
+                    Padding="24,16">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Style="{StaticResource Button.Secondary}"
+                            Content="关闭"
+                            IsCancel="True"
+                            IsDefault="True"
+                            Click="OnCloseClick" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+</Window>
