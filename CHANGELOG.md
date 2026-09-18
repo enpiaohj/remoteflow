@@ -3,9 +3,28 @@
 本文件记录 RemoteFlow 的版本变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-每个正式版本的完整变更详情见 `releases/v<X.Y.Z>/CHANGELOG.md`。
+每个正式版本的完整变更见下方对应条目。
 
 ---
+
+## [0.17.0] — 2026-09-18
+
+会话视图与帮助 / 关于入口更新。本版本为**开源净仓首发版本**。
+
+### 新增
+- **「帮助」「关于」拆分并内嵌为工作区页面**：侧栏底部两个入口与设置同构（RadioButton 切换、
+  Tab 栏常驻标签）。使用指南页含八个章节卡片（快速上手 / 连接管理 / 会话操作 / 三档全屏与 F11 /
+  凭据与安全 / 数据与备份 / 云同步 / 快捷键速查），快速上手带步骤数字徽章，会话操作带协议色标签，
+  三档全屏以 pill 链可视化；关于页含产品卡、版本与归属（开发者 / 源码仓库 / 许可证 GPL-3.0）、
+  隐私与数据四条目。原「帮助与关于」对话框移除。
+
+### 变更
+- README 重写为公开版：补充云同步加密与同步原理说明（信封包装、认证与解密分离、
+  字段级加密、Outbox + 字段级 Last-Write-Win），新增体验服务器与自建说明。
+- 测试夹具主机地址统一规范为 RFC 5737 文档地址段（TEST-NET-1/2），不与任何真实网络重叠。
+
+### 平台
+- 本版本仅发布 Windows（win-x64）；macOS 版本线独立维护，本版本不含 macOS 产物。
 
 ## [0.16.0] — 2026-09-14
 
@@ -56,12 +75,11 @@
 - 实机走查 publish 产物：能起、主界面与左侧导航正常、能进设置页、点标题栏「关闭」干净退出（exit code 0），退出后无 `remoteflow.db-wal/-shm` 残留。
 - 本次新增的会话三档全屏与关窗确认已实机逐项验证：F11 三档循环、药丸「完全全屏」与「退出全屏」、关窗提示三个分支、托盘退出不追问。
 
-详见 [`releases/v0.15.0/CHANGELOG.md`](releases/v0.15.0/CHANGELOG.md)。
 
 ## [0.14.1] — 2026-09-10
 
 系统信息采集修正。Windows 与 macOS 同步发布，macOS 侧见
-[`releases/macos-v0.8.1/CHANGELOG.md`](releases/macos-v0.8.1/CHANGELOG.md)。
+`releases/macos-v0.8.1/CHANGELOG.md`。
 
 ### 修复
 - **后台「系统」列显示不准**（如「Windows 25H2 (X64)」）：
@@ -76,13 +94,12 @@
   IntegrationTests 179、IntegrationTests.Windows 9。端到端真实上报核验，服务端存储为
   `Windows 11 专业版 / 25H2 (26200.9445) / x64`。
 
-详见 [`releases/v0.14.1/CHANGELOG.md`](releases/v0.14.1/CHANGELOG.md)。
 
 ## [0.14.0] — 2026-09-10
 
 首次加入自动消重 + 凭据重复推送修复。macOS 侧对应版本 `macos-v0.8.0` **因 GitHub Actions
 账户计费故障未构建、未发布**，功能由 `macos-v0.8.1` 覆盖
-（见 [`releases/macos-v0.8.0/CHANGELOG.md`](releases/macos-v0.8.0/CHANGELOG.md)）。
+（见 `releases/macos-v0.8.0/CHANGELOG.md`）。
 
 ### 新增
 - **首次加入按自然键认领云端 Id**：两台机器在启用云同步之前各自建过同一台服务器 / 分组 / 标签 /
@@ -101,12 +118,11 @@
   IntegrationTests 179、IntegrationTests.Windows 9 全绿。
 - 未执行：完整 UI 手动走查、两台物理机的同步演练。
 
-详见 [`releases/v0.14.0/CHANGELOG.md`](releases/v0.14.0/CHANGELOG.md)。
 
 ## [0.13.5] — 2026-09-10
 
 同步状态自愈（v0.13.4 计数修正的补完）。macOS 侧见
-[`releases/macos-v0.7.5/CHANGELOG.md`](releases/macos-v0.7.5/CHANGELOG.md)。
+`releases/macos-v0.7.5/CHANGELOG.md`。
 
 ### 修复
 - **删除过的条目仍被计入「云端已存」**：v0.13.4 只对此后发生的删除清状态行，修复前已删除实体的
@@ -118,7 +134,6 @@
   IntegrationTests 177、IntegrationTests.Windows 9 全绿。
 - 未执行：完整 UI 手动走查、两台物理机的同步演练。
 
-详见 [`releases/v0.13.5/CHANGELOG.md`](releases/v0.13.5/CHANGELOG.md)。
 
 ## [0.13.4] — 2026-09-10
 
@@ -127,7 +142,7 @@
 > 本条目即该次变更的最终版本。
 
 计数修正 + 危险操作防误触。macOS 侧见
-[`releases/macos-v0.7.4/CHANGELOG.md`](releases/macos-v0.7.4/CHANGELOG.md)。
+`releases/macos-v0.7.4/CHANGELOG.md`。
 
 ### 修复
 - **「云端已存」把已删除的条目也算进去了**：统计取自 `sync_entity_state`（`server_version>0`），
@@ -145,12 +160,11 @@
   IntegrationTests 176、IntegrationTests.Windows 9 全绿（新增：墓碑不计入已同步条目）。
 - 未执行：完整 UI 手动走查、两台物理机的同步演练。
 
-详见 [`releases/v0.13.4/CHANGELOG.md`](releases/v0.13.4/CHANGELOG.md)。
 
 ## [0.13.2] — 2026-09-10
 
 修「永远显示已同步、却什么都不同步」与冲突看不懂。Windows 与 macOS 同步发布，macOS 侧见
-[`releases/macos-v0.7.2/CHANGELOG.md`](releases/macos-v0.7.2/CHANGELOG.md)。
+`releases/macos-v0.7.2/CHANGELOG.md`。
 
 ### 修复
 - **客户端卡在假「已同步」、两边数据不再互通**：服务端账号被清空 / Vault 重新初始化后
@@ -169,12 +183,11 @@
   IntegrationTests.Windows 9 全绿。
 - 未执行：完整 UI 手动走查、两台物理机的同步演练。
 
-详见 [`releases/v0.13.2/CHANGELOG.md`](releases/v0.13.2/CHANGELOG.md)。
 
 ## [0.13.1] — 2026-09-10
 
 同步删除语义收紧（安全修复）。Windows 与 macOS 同步发布，macOS 侧见
-[`releases/macos-v0.7.1/CHANGELOG.md`](releases/macos-v0.7.1/CHANGELOG.md)。
+`releases/macos-v0.7.1/CHANGELOG.md`。
 
 ### 修复
 - **删除不再从「本地不存在」推断传播**：对账（崩溃兜底）原本会把「云端有、本地已无」自动补成
@@ -192,12 +205,11 @@
   IntegrationTests.Windows 9 全绿。
 - 未执行：完整 UI 手动走查、两台物理机的同步演练。
 
-详见 [`releases/v0.13.1/CHANGELOG.md`](releases/v0.13.1/CHANGELOG.md)。
 
 ## [0.13.0] — 2026-09-10
 
 客户端资产上报 + 冲突可读化 + 关联清理。Windows 与 macOS 同步发布，macOS 侧见
-[`releases/macos-v0.7.0/CHANGELOG.md`](releases/macos-v0.7.0/CHANGELOG.md)。
+`releases/macos-v0.7.0/CHANGELOG.md`。
 
 ### 新增
 - **上报本机基础系统信息（资产信息）**：登录 / 恢复会话后自动上报，
@@ -226,12 +238,11 @@
   `CloudSyncFacadeTests` 全通过；服务端 Devices 表核验到真实采集值。
 - 未执行：完整 UI 手动走查、两台物理机的同步演练。
 
-详见 [`releases/v0.13.0/CHANGELOG.md`](releases/v0.13.0/CHANGELOG.md)。
 
 ## [0.12.0] — 2026-09-10
 
 多设备一致性的两个结构改进。Windows 与 macOS 同步发布，macOS 侧见
-[`releases/macos-v0.6.0/CHANGELOG.md`](releases/macos-v0.6.0/CHANGELOG.md)。
+`releases/macos-v0.6.0/CHANGELOG.md`。
 
 ### 新增
 - **「清除本地数据并从云端恢复」**（云同步 → 账号卡片，双端）：以云端为权威的兜底。
@@ -262,12 +273,11 @@
 - 端到端 `CloudRoundTripTests` / `CloudSyncFacadeTests` 对 `https://sync.appscloud.cn/` 3/3 通过。
 - 未执行：完整 UI 手动走查、两台物理机的同步演练。
 
-详见 [`releases/v0.12.0/CHANGELOG.md`](releases/v0.12.0/CHANGELOG.md)。
 
 ## [0.11.3] — 2026-09-10
 
 修复「两台设备都显示已同步、连接数却不一致」。Windows 与 macOS 同步发布，macOS 侧见
-[`releases/macos-v0.5.3/CHANGELOG.md`](releases/macos-v0.5.3/CHANGELOG.md)。
+`releases/macos-v0.5.3/CHANGELOG.md`。
 
 ### 修复
 - **干净设备拉取时 `connection` 落地报外键错误 → 整轮同步失败、数据永不收敛**：
@@ -299,13 +309,12 @@
 - 之前卡住的设备升级后会自动重试整批拉取并收敛。若因为服务端数据被重置过，本机的同步
   指针可能指向已不存在的云端数据 → 在「云同步」里做一次「清除此设备云数据」再重新登录即可。
 
-详见 [`releases/v0.11.3/CHANGELOG.md`](releases/v0.11.3/CHANGELOG.md)。
 
 ## [0.11.2] — 2026-09-10
 
 继续修复云同步在「第二台设备」上的阻塞。v0.11.1 修了陈旧 VMK 缓存，本版修更常见的两个成因。
 Windows 与 macOS 同步发布，macOS 侧见
-[`releases/macos-v0.5.2/CHANGELOG.md`](releases/macos-v0.5.2/CHANGELOG.md)。
+`releases/macos-v0.5.2/CHANGELOG.md`。
 
 ### 修复
 - **第二台设备一直「同步出错，将自动重试」（拉取时父实体未到）**：服务端按 Revision 排序返回变更，
@@ -332,12 +341,11 @@ Windows 与 macOS 同步发布，macOS 侧见
 - 端到端 `CloudRoundTripTests` / `CloudSyncFacadeTests` 对 `https://sync.appscloud.cn/` 3/3 通过。
 - 未执行：完整 UI 手动走查、实机会话回归、两台物理机的同步演练。
 
-详见 [`releases/v0.11.2/CHANGELOG.md`](releases/v0.11.2/CHANGELOG.md)。
 
 ## [0.11.1] — 2026-09-09
 
 修复 v0.11.0 的一个云同步阻塞性缺陷。Windows 与 macOS 同步发布，macOS 侧见
-[`releases/macos-v0.5.1/CHANGELOG.md`](releases/macos-v0.5.1/CHANGELOG.md)。
+`releases/macos-v0.5.1/CHANGELOG.md`。
 
 ### 修复
 - **第二台设备一直「同步出错，将自动重试」，重开也不恢复**：VMK（Vault 主密钥）
@@ -365,13 +373,12 @@ Windows 与 macOS 同步发布，macOS 侧见
 - 已卡在「同步出错」的设备：升级到本版后会自动检测到缓存陈旧，提示重新输入主口令即可恢复；
   或手动「云同步 → 清除此设备云数据」后重新登录。
 
-详见 [`releases/v0.11.1/CHANGELOG.md`](releases/v0.11.1/CHANGELOG.md)。
 
 ## [0.11.0] — 2026-09-09
 
 端到端加密模型改为**口令派生**（Bitwarden 式），并补齐云同步的账号 / 使用体验。
 Windows(WPF) 与 macOS(AppKit) 同版本同步发布：本条目记 Windows 侧，macOS 侧见
-[`releases/macos-v0.5.0/CHANGELOG.md`](releases/macos-v0.5.0/CHANGELOG.md)（同一功能、AppKit 界面）。
+`releases/macos-v0.5.0/CHANGELOG.md`（同一功能、AppKit 界面）。
 
 ### 架构
 - **VMK 加密改为口令派生**（共享层）：主密钥（VMK）改由 `PBKDF2-SHA256(主口令, salt, 600k 迭代)` 派生的 KEK 用 AES-256-GCM 包装。
@@ -413,12 +420,11 @@ Windows(WPF) 与 macOS(AppKit) 同版本同步发布：本条目记 Windows 侧�
 - publish：`dotnet publish src/RemoteFlow.App -c Release -r win-x64` 单文件启动正常（运行 12s 无异常退出）。
 - 未执行：完整 UI 手动走查、实机 RDP / SSH / VNC 会话、多台真实设备的同步 / 冲突 / 恢复演练。
 
-详见 [`releases/v0.11.0/CHANGELOG.md`](releases/v0.11.0/CHANGELOG.md)。
 
 ## [0.10.0] — 2026-09-09
 
 云同步（Cloud Sync）落地。Windows(WPF) 与 macOS(AppKit) 同一版本同步发布：
-本条目记 Windows 侧，macOS 侧见 [`releases/macos-v0.4.0/CHANGELOG.md`](releases/macos-v0.4.0/CHANGELOG.md)（同一功能、AppKit 界面）。
+本条目记 Windows 侧，macOS 侧见 `releases/macos-v0.4.0/CHANGELOG.md`（同一功能、AppKit 界面）。
 
 ### 架构
 - 新增端到端加密同步栈（共享层，双端共用）：
@@ -454,7 +460,6 @@ Windows(WPF) 与 macOS(AppKit) 同版本同步发布：本条目记 Windows 侧�
 - publish：`dotnet publish src/RemoteFlow.App -c Release -r win-x64` 单文件启动正常（运行 12s 无异常退出）。
 - 未执行：完整 UI 手动走查、实机 RDP / SSH / VNC 会话、多台真实设备的同步 / 冲突 / 恢复演练；`sync.appscloud.cn` 正式部署尚未上线（端到端验证跑在测试环境）。
 
-详见 [`releases/v0.10.0/CHANGELOG.md`](releases/v0.10.0/CHANGELOG.md)。
 
 ## [0.9.0] — 2026-09-09
 
@@ -487,14 +492,12 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 ### 跨平台协调项
 - 「首页时间显示」合并（上）从共享 `HomePageViewModel` 删除了 `ClockLine` / `HasClockLine`；macOS 的 `DetailView.cs` 消费这两个成员，**本版发布后 macOS CI 构建会失败，直到 macOS 平台同步改视图**。Windows 版本不受影响。
 
-详见 [`releases/v0.9.0/CHANGELOG.md`](releases/v0.9.0/CHANGELOG.md)。
 
 ## [0.8.1] — 2026-09-07
 
 ### 修复
 - 会话全屏在“非标准最大化”下溢出：从最大化窗口进全屏时，无边框窗口残留 WindowChrome 的约 8px 溢出矩形——上沿被顶出屏幕、底部露出本机任务栏，且顶沿胶囊工具条无法唤出。改为按物理像素定位到当前显示器完整边界（`SetWindowPos` → `rcMonitor`），并在被 WPF 重排时 snap 回；顶沿唤出判定带一并放宽做兜底。
 
-详见 [`releases/v0.8.1/CHANGELOG.md`](releases/v0.8.1/CHANGELOG.md)。
 
 ## [0.8.0] — 2026-09-06
 
@@ -505,7 +508,6 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 ### 修复
 - 发送 RDP 安全组合键或启动远端任务管理器前，自动恢复宿主窗口与 ActiveX 输入焦点，避免工具条夺焦后动作无响应、误作用于本机或退出应用全屏。
 
-详见 [`releases/v0.8.0/CHANGELOG.md`](releases/v0.8.0/CHANGELOG.md)。
 
 ## [0.7.0] — 2026-09-06
 
@@ -514,7 +516,6 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 - 托盘右键结构化菜单：打开/隐藏、新建连接（预选协议）、最近连接、活动会话 + 断开全部、设置、开机启动（双向同步）、正式退出。
 - 会话 Tab「关闭右侧会话」。
 
-详见 [`releases/v0.7.0/CHANGELOG.md`](releases/v0.7.0/CHANGELOG.md)。
 
 ## [0.6.0] — 2026-09-06
 
@@ -523,7 +524,6 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 - 会话实时状态同步（SessionManager 唯一状态源、聚合通知、首页/列表/详情/托盘实时、右键 连接/切换/断开）。
 - 首页时间显示与顺序预设、已连接口径、托盘与会话切换、右键菜单分组、复制自动命名、统一「测试连接」对话框。
 
-详见 [`releases/v0.6.0/CHANGELOG.md`](releases/v0.6.0/CHANGELOG.md)。
 
 ## [0.5.0] — 2026-09-05
 
@@ -531,14 +531,12 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 - 默认分组保护与规则（分组 is_default/is_protected、schema v3、删除默认选新默认、设为默认分组、删光不复活）。
 - VNC 输入发送链路修复与会话三档缩放。
 
-详见 [`releases/v0.5.0/CHANGELOG.md`](releases/v0.5.0/CHANGELOG.md)。
 
 ## [0.4.0] — 2026-09-05
 
 ### 新增 / 变更
 - 统一连接链路与首页收藏连接；我的连接多选批量；凭据批量与筛选；右侧详情分区完善；首页密度与统计；图标全应用统一；导航键盘可达性。
 
-详见 [`releases/v0.4.0/CHANGELOG.md`](releases/v0.4.0/CHANGELOG.md)。
 
 ## [0.3.2] — 2026-09-05
 
@@ -547,7 +545,6 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
   现随 exe 内嵌并在运行时释放，不再依赖 exe 旁存在 `Assets/Terminal/`。
   已实机验证。
 
-详见 [`releases/v0.3.2/CHANGELOG.md`](releases/v0.3.2/CHANGELOG.md)。
 
 ## [0.3.1] — 2026-09-05
 
@@ -556,7 +553,6 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
   未被输入宽限期覆盖，现已一并纳入，并为 `DragMove()` 增加防御性异常处理。
   已实机验证。
 
-详见 [`releases/v0.3.1/CHANGELOG.md`](releases/v0.3.1/CHANGELOG.md)。
 
 ## [0.1.1] — 2026-09-04
 
@@ -565,7 +561,6 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
   用户接受则记录指纹并自动重试；指纹变化仍是强警告。
 - 连接 CSV 导入不去重——以名称 + 主机 + 端口 + 协议为身份，重复导入不再产生副本。
 
-详见 [`releases/v0.1.1/CHANGELOG.md`](releases/v0.1.1/CHANGELOG.md)。
 
 ## [0.1.0] — 2026-09-04
 
@@ -597,7 +592,6 @@ Windows 平台版本。macOS 原生版走独立的 `macos-v*` 版本线，不在
 - 单文件 exe 的 SSH 终端需同目录 `Assets/Terminal/`，用 `.zip` 包。
 - SSH / VNC 未做真实设备深度联调，人工测试清单已随快照归档。
 
-详见 [`releases/v0.1.0/CHANGELOG.md`](releases/v0.1.0/CHANGELOG.md)。
 
 [0.16.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.16.0
 [0.15.0]: https://github.com/enpiaohj/remoteflow/releases/tag/v0.15.0

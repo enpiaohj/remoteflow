@@ -23,9 +23,9 @@
     <Product>RemoteFlow</Product>
     <Company>RemoteFlow</Company>
     <Authors>RemoteFlow</Authors>
-    <VersionPrefix>0.16.0</VersionPrefix>
-    <AssemblyVersion>0.16.0.0</AssemblyVersion>
-    <FileVersion>0.16.0.0</FileVersion>
+    <VersionPrefix>0.17.0</VersionPrefix>
+    <AssemblyVersion>0.17.0.0</AssemblyVersion>
+    <FileVersion>0.17.0.0</FileVersion>
     <Copyright>Copyright © 2026</Copyright>
     <NeutralLanguage>zh-CN</NeutralLanguage>
   </PropertyGroup>
