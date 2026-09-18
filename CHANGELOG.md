@@ -26,6 +26,15 @@
 ### 平台
 - 本版本仅发布 Windows（win-x64）；macOS 版本线独立维护，本版本不含 macOS 产物。
 
+### Artifacts
+- `RemoteFlow-v0.17.0-win-x64.exe`
+  - Size：74,889,239 bytes
+  - SHA-256：`6A9CF7AD3770D532863ADD5D4B36C81F663F1AA7573660A069D71B592F6411BF`
+- `RemoteFlow-v0.17.0-win-x64.zip`
+  - Size：69,415,783 bytes
+  - SHA-256：`E5B9AF690E1D605E2502F2FF324FA22492B953C55CE8385ECA1B2F03A7B13F31`
+- 均附于 GitHub Release `v0.17.0`（与上表哈希一致）。
+
 ## [0.16.0] — 2026-09-14
 
 全屏悬浮工具条交互更新：顶沿唤出改为悬停判定防误弹，显示 / 消失延迟按全屏档位可配置。

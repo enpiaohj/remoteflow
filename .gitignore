@@ -84,3 +84,7 @@ src/RemoteFlow.Protocol.Rdp.Mac/runtimes/**/native/*.dylib
 native/rdp/freerdp-src/
 native/rdp/freerdp-build*/
 native/rdp/freerdp-dist/
+
+# 本地构建产物（上传 GitHub Releases 后本地留存）
+/RemoteFlow-v*-win-x64.exe
+/RemoteFlow-v*-win-x64.zip
