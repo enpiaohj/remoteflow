@@ -1,0 +1,19 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- 16 / 32 px 专用：单 chevron，去回声、加粗、放大，保证像素级可辨。 -->
+  <defs>
+    <linearGradient id="face" x1="512" y1="100" x2="512" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5C8CFF"/>
+      <stop offset="0.55" stop-color="#3358E6"/>
+      <stop offset="1" stop-color="#233FBE"/>
+    </linearGradient>
+    <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+    <linearGradient id="sheen" x1="512" y1="100" x2="512" y2="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#face)"/>
+  <g clip-path="url(#sq)"><rect x="100" y="100" width="824" height="824" fill="url(#sheen)"/></g>
+  <path d="M406 336 L 610 512 L 406 688" fill="none" stroke="#FFFFFF" stroke-width="150"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
