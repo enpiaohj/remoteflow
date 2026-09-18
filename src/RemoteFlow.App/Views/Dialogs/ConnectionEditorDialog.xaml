@@ -30,6 +30,9 @@
         <!-- 协议选择项 -->
         <Style x:Key="ProtocolOption" TargetType="RadioButton">
             <Setter Property="GroupName" Value="Protocol" />
+            <!-- 控件自身 Foreground 默认是系统黑，会屏蔽 Window 级 TextElement.Foreground
+                 的继承（深色主题下黑底黑字），必须在此显式跟随主题 -->
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
             <Setter Property="Height" Value="40" />
             <Setter Property="Margin" Value="0,0,0,4" />
             <Setter Property="Cursor" Value="Hand" />
