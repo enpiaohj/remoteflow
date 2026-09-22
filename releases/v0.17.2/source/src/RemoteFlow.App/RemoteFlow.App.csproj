@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RemoteFlow.App —— WPF 主程序（UI / Startup / Composition Root）。
+    引用 WinForms 以承载 RDP ActiveX（WindowsFormsHost）。
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>RemoteFlow.App</RootNamespace>
+    <AssemblyName>RemoteFlow</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\RemoteFlow.ico</ApplicationIcon>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- SendInput 的 [LibraryImport] 源生成器需要 unsafe 上下文 -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!--
+      WFO0003：WinForms 分析器建议把 app.manifest 里的高 DPI 设置移到项目属性。
+      但本项目是 WPF 宿主（UseWPF），进程的 DPI 感知由 WPF 读取 app.manifest 的
+      <dpiAwareness>PerMonitorV2</dpiAwareness> 决定，这正是我们需要的（多显示器
+      不同缩放下画面清晰）。WinForms 只是被内嵌用于承载 RDP ActiveX，不是宿主，
+      其 ApplicationHighDpiMode 在这里不生效。因此该警告是框架分析器的误报，明确抑制。
+    -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      WPF 与 WinForms 有大量同名类型：UserControl、KeyEventArgs、MouseEventArgs、
+      Point、Image、Application、Clipboard、MessageBox…
+      本项目以 WPF 为主，只在托盘图标与 RDP ActiveX 宿主两处用到 WinForms，
+      因此移除这两个隐式 using，改为在需要的少数文件里显式引入。
+      这样避免了在几十个文件里逐个写 using alias 消歧义。
+    -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <!-- 发布配置：win-x64 Self-contained 单文件 -->
+  <PropertyGroup>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishReadyToRun>false</PublishReadyToRun>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RemoteFlow.Core\RemoteFlow.Core.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Application\RemoteFlow.Application.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Presentation\RemoteFlow.Presentation.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Infrastructure\RemoteFlow.Infrastructure.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Infrastructure.Windows\RemoteFlow.Infrastructure.Windows.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Protocol.Rdp\RemoteFlow.Protocol.Rdp.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Protocol.Ssh\RemoteFlow.Protocol.Ssh.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Protocol.Vnc\RemoteFlow.Protocol.Vnc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Web.WebView2" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      引用本工程 internal 类型的测试都在 Windows 专属测试工程里
+      （跨平台测试工程已不再引用 WPF 工程，见技术方案 §6.1）。
+    -->
+    <InternalsVisibleTo Include="RemoteFlow.IntegrationTests.Windows" />
+  </ItemGroup>
+
+
+</Project>

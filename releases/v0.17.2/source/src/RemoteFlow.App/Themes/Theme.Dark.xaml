@@ -1,0 +1,55 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        深色主题调色板。键名与 Theme.Light.xaml 完全一致，
+        切换主题只是替换这一个字典，控件模板无需任何改动。
+
+        沿用浅色的「机身 + 纸张」结构：机身更暗，中央工作区更亮。
+        中性色带一点蓝，避免纯灰在大面积深色下发闷。
+    -->
+
+    <SolidColorBrush x:Key="Bg.Base" Color="#15171C" />
+    <SolidColorBrush x:Key="Bg.Sidebar" Color="#15171C" />
+    <SolidColorBrush x:Key="Bg.Layer" Color="#1D2027" />
+    <SolidColorBrush x:Key="Bg.Subtle" Color="#23272F" />
+    <SolidColorBrush x:Key="Bg.Hover" Color="#2A2F38" />
+    <SolidColorBrush x:Key="Bg.Pressed" Color="#333944" />
+    <SolidColorBrush x:Key="Bg.Selected" Color="#232A46" />
+    <SolidColorBrush x:Key="Bg.SelectedHover" Color="#2E3758" />
+    <SolidColorBrush x:Key="Bg.RowSelected" Color="#202942" />
+    <SolidColorBrush x:Key="Bg.RowSelectedHover" Color="#293350" />
+    <SolidColorBrush x:Key="Bg.Session" Color="#0E1013" />
+
+    <SolidColorBrush x:Key="Text.Primary" Color="#F2F4F8" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="#A8B1C1" />
+    <SolidColorBrush x:Key="Text.Tertiary" Color="#78818F" />
+    <SolidColorBrush x:Key="Text.OnAccent" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Text.Disabled" Color="#5A6270" />
+
+    <SolidColorBrush x:Key="Stroke.Subtle" Color="#282D36" />
+    <SolidColorBrush x:Key="Stroke.Default" Color="#333944" />
+    <SolidColorBrush x:Key="Stroke.Strong" Color="#4A5261" />
+    <SolidColorBrush x:Key="Stroke.Focus" Color="#8098F5" />
+
+    <Color x:Key="Brand.Color">#8098F5</Color>
+    <SolidColorBrush x:Key="Brand.Default" Color="#8098F5" />
+    <SolidColorBrush x:Key="Brand.Hover" Color="#9AACF7" />
+    <SolidColorBrush x:Key="Brand.Pressed" Color="#6A83E8" />
+    <SolidColorBrush x:Key="Brand.Subtle" Color="#232A46" />
+
+    <SolidColorBrush x:Key="Status.Success" Color="#3FBF7F" />
+    <SolidColorBrush x:Key="Status.Warning" Color="#E0A030" />
+    <SolidColorBrush x:Key="Status.Danger" Color="#F2726A" />
+    <SolidColorBrush x:Key="Status.DangerHover" Color="#F58F88" />
+    <SolidColorBrush x:Key="Status.Info" Color="#8098F5" />
+    <SolidColorBrush x:Key="Status.Idle" Color="#78818F" />
+
+    <SolidColorBrush x:Key="Protocol.Rdp" Color="#8098F5" />
+    <SolidColorBrush x:Key="Protocol.Ssh" Color="#35BE8C" />
+    <SolidColorBrush x:Key="Protocol.Vnc" Color="#A98BEA" />
+
+    <Color x:Key="Shadow.Cast">#000000</Color>
+    <SolidColorBrush x:Key="Shadow.Color" Color="#40000000" />
+
+</ResourceDictionary>
