@@ -34,6 +34,9 @@
   自绘 `ControlTemplate` 的控件（RadioButton / Button 等）必须在**控件样式上显式 Foreground**——
   控件自身 Foreground 默认是系统黑，会屏蔽窗口级继承（深色主题下黑底黑字，v0.17.1 教训）。
 - View 不操作协议实现；ViewModel 不保存 Secret；数据库访问统一走 Repository。
+- **新增设置项的接线**（`SettingsPageViewModel`）：必须同时补 ①`partial void OnXxxChanged(...) => Save()`
+  （漏了则开关静默无效——v0.18.0 前真实踩过）；②需要即时作用于进行中会话的选项，订阅
+  `SettingsPageViewModel.SettingsSaved` 静态事件重放（参照 `SshSessionView.OnSettingsSaved`）。
 
 ## 发布流程（固化，每次发布按此执行，不要临场发挥）
 
