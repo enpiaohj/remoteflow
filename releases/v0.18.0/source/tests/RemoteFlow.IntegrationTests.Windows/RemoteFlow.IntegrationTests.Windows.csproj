@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Windows 专属集成测试：DPAPI 保险库、RDP ActiveX 键盘序列，
+    以及暂时仍位于 WPF 工程内的类型（DateTimeDisplay、ConnectionTestService、
+    ConnectionQualityProbe、TerminalAssetStore、ViewModel）。
+    后者会随共享层抽取（技术方案 §6.5 / §6.6）陆续迁回跨平台测试工程。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>RemoteFlow.IntegrationTests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\RemoteFlow.Core\RemoteFlow.Core.csproj" />
+    <ProjectReference Include="..\..\src\RemoteFlow.Application\RemoteFlow.Application.csproj" />
+    <ProjectReference Include="..\..\src\RemoteFlow.Infrastructure\RemoteFlow.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\RemoteFlow.Infrastructure.Windows\RemoteFlow.Infrastructure.Windows.csproj" />
+    <ProjectReference Include="..\..\src\RemoteFlow.App\RemoteFlow.App.csproj" />
+    <ProjectReference Include="..\..\src\RemoteFlow.Protocol.Rdp\RemoteFlow.Protocol.Rdp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 临时工作目录辅助类与跨平台工程共用一份源码，避免复制粘贴分叉 -->
+    <Compile Include="..\RemoteFlow.IntegrationTests\TempWorkspace.cs" Link="TempWorkspace.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>
