@@ -1,0 +1,88 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RemoteFlow.App.Mac —— macOS 客户端（原生 AppKit / net10.0-macos）。
+    复用平台无关的 RemoteFlow.Presentation（ViewModel / 服务 / 终端资产）
+    与 RemoteFlow.Protocol.* / Infrastructure.Mac。
+    对应 macOS 版技术方案 v1.3 §8（原 Avalonia 方案已弃，见 §3.4）。
+
+    不进 RemoteFlow.slnx：net10.0-macos 无法跨平台构建，作为 macOS 专属叶子独立 build。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-macos</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>RemoteFlow.App.Mac</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <ApplicationTitle>RemoteFlow</ApplicationTitle>
+    <ApplicationId>com.remoteflow.mac</ApplicationId>
+    <!-- macOS 版有独立的版本线：两个平台各自按需发布，不强制同步。
+         这里是 macOS 的唯一版本来源——About 页、DMG 名、Tag、releases/ 目录都以它为准。
+         正式发布时在此递增；CFBundleVersion 是单调递增整数，随之 +1。 -->
+    <ApplicationDisplayVersion>0.8.3</ApplicationDisplayVersion>
+    <ApplicationVersion>19</ApplicationVersion>
+    <SupportedOSPlatformVersion>13.0</SupportedOSPlatformVersion>
+
+    <!--
+      本机 Xcode 26.3（macOS SDK 26.2）低于 .NET macos pack 期望的 SDK 26.5。
+      spike 已验证：本项目仅用稳定 AppKit/WebKit API，跳过版本校验可正常构建运行。
+      正式发布前应升级 Xcode 或固定匹配的 SDK pack（见 v1.3 §8.A / §13）。
+    -->
+    <ValidateXcodeVersion>false</ValidateXcodeVersion>
+
+    <RuntimeIdentifiers>osx-x64;osx-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <!--
+    Release 专属绕法：ILLink「Setup」+ 静态 registrar 需 macOS 26.5 SDK 头文件（MM0179）。
+    关裁剪 + 动态 registrar（运行期注册，绕过编译期头文件依赖）。
+    正式发布升级 Xcode 后删除本段，恢复默认（静态 registrar + 裁剪）进一步瘦身 / 提速（§8.F）。
+    Debug 不受影响。
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <LinkMode>None</LinkMode>
+    <Registrar>dynamic</Registrar>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RemoteFlow.Core\RemoteFlow.Core.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Application\RemoteFlow.Application.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Presentation\RemoteFlow.Presentation.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Infrastructure\RemoteFlow.Infrastructure.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Infrastructure.Mac\RemoteFlow.Infrastructure.Mac.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Protocol.Ssh\RemoteFlow.Protocol.Ssh.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Protocol.Vnc\RemoteFlow.Protocol.Vnc.csproj" />
+    <ProjectReference Include="..\RemoteFlow.Protocol.Rdp.Mac\RemoteFlow.Protocol.Rdp.Mac.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 内嵌 RDP 的 FreeRDP 封装 dylib（native/rdp/build.sh 产出）。缺失时应用仍启动，
+         RDP 回落外部客户端（见 RdpConnectionProvider.IsAvailable / RdpLauncher）。 -->
+    <NativeReference Include="..\RemoteFlow.Protocol.Rdp.Mac\runtimes\$(RuntimeIdentifier)\native\libremoteflow_rdp.dylib"
+                     Kind="Dynamic"
+                     Condition="'$(RuntimeIdentifier)' != '' And Exists('..\RemoteFlow.Protocol.Rdp.Mac\runtimes\$(RuntimeIdentifier)\native\libremoteflow_rdp.dylib')" />
+    <!-- Debug：自建 FreeRDP dylib 一起进 MonoBundle，靠 shim 的 @loader_path 解析（内循环免 bundle）。
+         Release 不走这条——由 scripts/bundle-freerdp.sh 收进 Contents/Frameworks 并重写路径。 -->
+    <NativeReference Include="..\RemoteFlow.Protocol.Rdp.Mac\runtimes\$(RuntimeIdentifier)\native\libfreerdp*.dylib;..\RemoteFlow.Protocol.Rdp.Mac\runtimes\$(RuntimeIdentifier)\native\libwinpr*.dylib"
+                     Kind="Dynamic"
+                     Condition="'$(Configuration)' == 'Debug' And '$(RuntimeIdentifier)' != ''" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- App 图标：iconset → AppIcon.icns，经 Info.plist 的 CFBundleIconFile 引用。 -->
+    <BundleResource Include="Resources\AppIcon.icns" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Sinks.File" />
+    <PackageReference Include="Serilog.Extensions.Logging" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+  </ItemGroup>
+
+</Project>
