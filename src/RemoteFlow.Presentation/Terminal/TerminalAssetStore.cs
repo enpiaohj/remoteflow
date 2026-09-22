@@ -28,13 +28,38 @@ public static class TerminalAssetStore
     ];
 
     private static readonly Lazy<string> DefaultDirectory = new(
-        MaterializeDefaultDirectory,
+        ComputeDefaultDirectory,
         LazyThreadSafetyMode.ExecutionAndPublication);
 
-    /// <summary>确保当前版本的终端资源已落盘，并返回可供 WebView 映射的物理目录。</summary>
-    public static string EnsureAvailable() => DefaultDirectory.Value;
+    /// <summary>释放目录的写入锁：多会话并发触达时只释放一次（双检）。</summary>
+    private static readonly object ExtractLock = new();
 
-    private static string MaterializeDefaultDirectory()
+    /// <summary>
+    /// 确保当前版本的终端资源已落盘，并返回可供 WebView 映射的物理目录。
+    /// <para>
+    /// 目录被外部删除（磁盘清理工具、误删）时会<b>自动重新释放</b>——否则新会话
+    /// 加载不到 terminal.html，表现为连接闪断、信任窗口被吞（v0.17.2 后真实发生）。
+    /// </para>
+    /// </summary>
+    public static string EnsureAvailable()
+    {
+        var directory = DefaultDirectory.Value;
+
+        if (!Directory.Exists(directory))
+        {
+            lock (ExtractLock)
+            {
+                if (!Directory.Exists(directory))
+                {
+                    ExtractTo(directory);
+                }
+            }
+        }
+
+        return directory;
+    }
+
+    private static string ComputeDefaultDirectory()
     {
         var assemblyVersion = typeof(TerminalAssetStore).Assembly.GetName().Version?.ToString(3)
                               ?? "unknown";
