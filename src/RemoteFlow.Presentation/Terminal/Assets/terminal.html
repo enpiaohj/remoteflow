@@ -26,7 +26,7 @@
       scrollbar-width: thin;
     }
 
-    /* 搜索浮层：自身带不透明底色，深浅终端主题下都可读 */
+    /* 搜索浮层：浅色白底，与右键菜单同一观感 */
     .rf-search {
       position: fixed;
       top: 8px;
@@ -36,20 +36,20 @@
       align-items: center;
       gap: 2px;
       padding: 4px 6px;
-      background: rgba(45, 45, 45, 0.95);
-      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.97);
+      border: 1px solid rgba(0, 0, 0, 0.2);
       border-radius: 6px;
-      color: #eee;
+      color: #333;
       font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "微软雅黑", monospace;
       font-size: 12px;
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
     }
     .rf-search input {
       width: 190px;
-      background: rgba(0, 0, 0, 0.4);
-      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: rgba(0, 0, 0, 0.05);
+      border: 1px solid rgba(0, 0, 0, 0.25);
       border-radius: 4px;
-      color: #eee;
+      color: #333;
       padding: 2px 6px;
       outline: none;
       font-family: inherit;
@@ -58,7 +58,7 @@
     .rf-search button {
       background: transparent;
       border: none;
-      color: #cfcfcf;
+      color: #555;
       cursor: pointer;
       font-size: 10px;
       padding: 2px 6px;
@@ -66,11 +66,11 @@
       line-height: 1.2;
     }
     .rf-search button:hover {
-      background: rgba(255, 255, 255, 0.16);
-      color: #fff;
+      background: rgba(0, 0, 0, 0.08);
+      color: #000;
     }
     .rf-search-count {
-      color: #9a9a9a;
+      color: #777;
       font-size: 11px;
       padding: 0 4px;
       min-width: 40px;
@@ -78,7 +78,7 @@
       white-space: nowrap;
     }
 
-    /* 右键菜单：跟随终端主题深浅（打开菜单时实时判断）。 */
+    /* 右键菜单：固定浅色白底（对齐参考样式），深浅终端下都保持一致观感。 */
     .rf-ctx {
       position: fixed;
       z-index: 30;
@@ -93,12 +93,6 @@
       font-size: 12px;
       color: #333;
       user-select: none;
-    }
-    .rf-ctx.dark {
-      background: #2d2d2d;
-      border-color: rgba(255, 255, 255, 0.18);
-      color: #ddd;
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
     }
     .rf-ctx button {
       display: flex;
@@ -121,9 +115,6 @@
     .rf-ctx button:hover:not([disabled]) {
       background: rgba(15, 108, 189, 0.12);
     }
-    .rf-ctx.dark button:hover:not([disabled]) {
-      background: rgba(255, 255, 255, 0.12);
-    }
     .rf-ctx button[disabled] {
       opacity: 0.4;
       cursor: default;
@@ -133,38 +124,10 @@
       font-size: 11px;
       color: #999;
     }
-    .rf-ctx.dark kbd {
-      color: #888;
-    }
     .rf-ctx-sep {
       height: 1px;
       margin: 5px 10px;
       background: #e3e3e3;
-    }
-    .rf-ctx.dark .rf-ctx-sep {
-      background: rgba(255, 255, 255, 0.12);
-    }
-    /* 搜索浮层：同样跟随终端主题深浅 */
-    .rf-search.light {
-      background: rgba(255, 255, 255, 0.97);
-      border-color: rgba(0, 0, 0, 0.2);
-      color: #333;
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
-    }
-    .rf-search.light input {
-      background: rgba(0, 0, 0, 0.05);
-      border-color: rgba(0, 0, 0, 0.25);
-      color: #333;
-    }
-    .rf-search.light button {
-      color: #555;
-    }
-    .rf-search.light button:hover {
-      background: rgba(0, 0, 0, 0.08);
-      color: #000;
-    }
-    .rf-search.light .rf-search-count {
-      color: #777;
     }
   </style>
 </head>
@@ -397,8 +360,6 @@
     }
 
     function openSearch() {
-      // 浮层跟随终端主题深浅（右键菜单同一判断）
-      searchBar.classList.toggle('light', !isDarkTerminal());
       searchBar.style.display = 'flex';
       searchInput.focus();
       searchInput.select();
@@ -484,16 +445,6 @@
     const isWindowsHost = !!(window.chrome && window.chrome.webview);
     let lastCopied = '';
 
-    // 当前终端背景是否深色（按背景色亮度判断），右键菜单 / 搜索浮层跟随
-    function isDarkTerminal() {
-      const bg = terminal.options.theme && terminal.options.theme.background;
-      const m = /^#?([0-9a-f]{6})$/i.exec(String(bg || ''));
-      if (!m) { return true; }
-      const v = parseInt(m[1], 16);
-      const lum = 0.299 * ((v >> 16) & 255) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255);
-      return lum < 140;
-    }
-
     function closeCtxMenu() {
       ctxMenu.style.display = 'none';
     }
@@ -505,8 +456,6 @@
           return; // 搜索框保留系统右键（剪切/粘贴文本）
         }
         e.preventDefault();
-        // 打开瞬间按当前终端背景实时切换深浅，保证与主题一致
-        ctxMenu.classList.toggle('dark', isDarkTerminal());
         ctxCopy.disabled = !terminal.hasSelection();
         ctxPasteSel.disabled = !lastCopied;
         ctxMenu.style.display = 'block';
