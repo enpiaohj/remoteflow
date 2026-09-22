@@ -88,6 +88,7 @@ public sealed class SshSessionView : ContentControl, IDisposable
         _session.DataReceived += OnSessionDataReceived;
         _viewModel.ActionRequested += OnActionRequested;
         _theme.EffectiveThemeChanged += OnThemeChanged;
+        SettingsPageViewModel.SettingsSaved += OnSettingsSaved;
 
         Loaded += OnLoaded;
     }
@@ -198,6 +199,20 @@ public sealed class SshSessionView : ContentControl, IDisposable
                         await ConfirmAndSendPasteAsync(pasteText);
                     }
                     break;
+
+                case "copy-selection":
+                    // 右键菜单「复制选中」：文本已在页面取好，宿主负责写剪贴板。
+                    var copyText = root.GetProperty("text").GetString();
+                    if (!string.IsNullOrEmpty(copyText))
+                    {
+                        Clipboard.SetText(copyText);
+                    }
+                    break;
+
+                case "request-paste":
+                    // 右键菜单「粘贴到终端」：由宿主读剪贴板并走同一套粘贴安全确认。
+                    await PasteFromClipboardAsync();
+                    break;
             }
         }
         catch (Exception ex)
@@ -240,6 +255,7 @@ public sealed class SshSessionView : ContentControl, IDisposable
     {
         await ApplyTerminalThemeAsync();
         await InvokeTerminalAsync("setFont", _settings.SshFontFamily, _settings.SshFontSize);
+        await InvokeTerminalAsync("setBracketedPaste", _settings.SshBracketedPaste);
     }
 
     /// <summary>
@@ -511,6 +527,15 @@ public sealed class SshSessionView : ContentControl, IDisposable
         }
     }
 
+    /// <summary>设置保存后把终端相关选项重放到进行中的会话（如括号粘贴开关即时生效）。</summary>
+    private async void OnSettingsSaved(object? sender, EventArgs e)
+    {
+        if (_terminalReady)
+        {
+            await ApplyTerminalOptionsAsync();
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -524,6 +549,7 @@ public sealed class SshSessionView : ContentControl, IDisposable
         _session.DataReceived -= OnSessionDataReceived;
         _viewModel.ActionRequested -= OnActionRequested;
         _theme.EffectiveThemeChanged -= OnThemeChanged;
+        SettingsPageViewModel.SettingsSaved -= OnSettingsSaved;
 
         _flushTimer.Stop();
         _flushTimer.Tick -= OnFlushTick;

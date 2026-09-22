@@ -152,6 +152,13 @@ public sealed class AppSettings
     /// <summary>大文本粘贴时先警告。</summary>
     public bool SshWarnLargePaste { get; set; } = true;
 
+    /// <summary>
+    /// 粘贴时使用括号模式（bracketed paste）：告知远端「这是粘贴」，使 bash 5.1+ 等
+    /// readline 不把多行内容逐行执行，并给出粘贴高亮。关闭后粘贴内容直接回显，
+    /// 不再出现粘贴高亮，但多行粘贴会被 shell 逐行立即执行（有误执行风险）。
+    /// </summary>
+    public bool SshBracketedPaste { get; set; } = true;
+
     // ── VNC 默认值 ────────────────────────────────────────
     public VncScaleMode VncDefaultScaleMode { get; set; } = VncScaleMode.FitToWindow;
     public bool VncDefaultViewOnly { get; set; }

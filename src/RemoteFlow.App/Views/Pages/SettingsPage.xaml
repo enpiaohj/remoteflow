@@ -704,6 +704,21 @@
                                 <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
                                           IsChecked="{Binding SshWarnLargePaste}" />
                             </Grid>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="粘贴时使用括号模式" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="告知远端「这是粘贴」：多行内容不会被逐行执行，bash 5.1+ 会以高亮显示粘贴的内容（按方向键即消失）。关闭后粘贴直接回显、无高亮，但多行内容会被立即逐行执行，有误执行风险。" Style="{StaticResource Text.Caption}"
+                                               TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
+                                          IsChecked="{Binding SshBracketedPaste}" />
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </StackPanel>
