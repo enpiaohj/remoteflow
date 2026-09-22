@@ -303,6 +303,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     [ObservableProperty]
     private bool _sshWarnLargePaste;
 
+    /// <summary>粘贴时使用括号模式。关闭后不再出现远端的粘贴高亮，但多行粘贴会被逐行执行。</summary>
+    [ObservableProperty]
+    private bool _sshBracketedPaste = true;
+
     public IReadOnlyList<string> TerminalTypeOptions { get; } = ["xterm-256color", "xterm", "vt100", "linux"];
 
     public IReadOnlyList<string> SshEncodingOptions { get; } = ["UTF-8", "GBK", "GB18030", "Big5", "ISO-8859-1"];
@@ -436,6 +440,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         SelectedSshTerminalTheme = SshTerminalThemeOptions.First(o => o.Value == _settings.SshTerminalTheme);
         SshConfirmMultilinePaste = _settings.SshConfirmMultilinePaste;
         SshWarnLargePaste = _settings.SshWarnLargePaste;
+        SshBracketedPaste = _settings.SshBracketedPaste;
 
         VncFitToWindow = _settings.VncDefaultScaleMode == VncScaleMode.FitToWindow;
         VncViewOnly = _settings.VncDefaultViewOnly;
@@ -643,6 +648,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     partial void OnSshConfirmMultilinePasteChanged(bool value) => Save();
     partial void OnSshWarnLargePasteChanged(bool value) => Save();
+    partial void OnSshBracketedPasteChanged(bool value) => Save();
     partial void OnVncFitToWindowChanged(bool value) => Save();
     partial void OnVncViewOnlyChanged(bool value) => Save();
     partial void OnVncSharedConnectionChanged(bool value) => Save();
@@ -652,6 +658,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     partial void OnSelectedPillHideDelayWindowFullChanged(PillDelayOption value) => Save();
     partial void OnSelectedPillRevealDelayScreenFullChanged(PillDelayOption value) => Save();
     partial void OnSelectedPillHideDelayScreenFullChanged(PillDelayOption value) => Save();
+
+    /// <summary>任一设置保存后触发。已打开的会话视图订阅它，让新设置对进行中的会话即时生效。</summary>
+    public static event EventHandler? SettingsSaved;
 
     private void Save()
     {
@@ -680,6 +689,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         _settings.SshTerminalTheme = SelectedSshTerminalTheme.Value;
         _settings.SshConfirmMultilinePaste = SshConfirmMultilinePaste;
         _settings.SshWarnLargePaste = SshWarnLargePaste;
+        _settings.SshBracketedPaste = SshBracketedPaste;
 
         _settings.VncDefaultScaleMode = VncFitToWindow ? VncScaleMode.FitToWindow : VncScaleMode.Original;
         _settings.VncDefaultViewOnly = VncViewOnly;
@@ -695,6 +705,9 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
         // 写盘失败不应打断用户操作，仅记录并提示。
         _ = SaveAsync();
+
+        // 让已打开的会话视图（SSH 终端等）把新设置重放到进行中的会话上。
+        SettingsSaved?.Invoke(this, EventArgs.Empty);
     }
 
     private async Task SaveAsync()

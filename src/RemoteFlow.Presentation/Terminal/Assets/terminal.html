@@ -77,6 +77,95 @@
       text-align: center;
       white-space: nowrap;
     }
+
+    /* 右键菜单：跟随终端主题深浅（打开菜单时实时判断）。 */
+    .rf-ctx {
+      position: fixed;
+      z-index: 30;
+      display: none;
+      min-width: 190px;
+      padding: 5px 0;
+      background: #ffffff;
+      border: 1px solid #d9d9d9;
+      border-radius: 8px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+      font-family: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "微软雅黑", monospace;
+      font-size: 12px;
+      color: #333;
+      user-select: none;
+    }
+    .rf-ctx.dark {
+      background: #2d2d2d;
+      border-color: rgba(255, 255, 255, 0.18);
+      color: #ddd;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    }
+    .rf-ctx button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      width: calc(100% - 8px);
+      margin: 0 4px;
+      text-align: left;
+      background: transparent;
+      border: none;
+      color: inherit;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: inherit;
+      padding: 6px 12px;
+      border-radius: 5px;
+      white-space: nowrap;
+    }
+    .rf-ctx button:hover:not([disabled]) {
+      background: rgba(15, 108, 189, 0.12);
+    }
+    .rf-ctx.dark button:hover:not([disabled]) {
+      background: rgba(255, 255, 255, 0.12);
+    }
+    .rf-ctx button[disabled] {
+      opacity: 0.4;
+      cursor: default;
+    }
+    .rf-ctx kbd {
+      font-family: inherit;
+      font-size: 11px;
+      color: #999;
+    }
+    .rf-ctx.dark kbd {
+      color: #888;
+    }
+    .rf-ctx-sep {
+      height: 1px;
+      margin: 5px 10px;
+      background: #e3e3e3;
+    }
+    .rf-ctx.dark .rf-ctx-sep {
+      background: rgba(255, 255, 255, 0.12);
+    }
+    /* 搜索浮层：同样跟随终端主题深浅 */
+    .rf-search.light {
+      background: rgba(255, 255, 255, 0.97);
+      border-color: rgba(0, 0, 0, 0.2);
+      color: #333;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+    }
+    .rf-search.light input {
+      background: rgba(0, 0, 0, 0.05);
+      border-color: rgba(0, 0, 0, 0.25);
+      color: #333;
+    }
+    .rf-search.light button {
+      color: #555;
+    }
+    .rf-search.light button:hover {
+      background: rgba(0, 0, 0, 0.08);
+      color: #000;
+    }
+    .rf-search.light .rf-search-count {
+      color: #777;
+    }
   </style>
 </head>
 <body>
@@ -90,6 +179,18 @@
     <button id="searchPrev" title="上一个 (Shift+Enter)" type="button">&#x25B2;</button>
     <button id="searchNext" title="下一个 (Enter)" type="button">&#x25BC;</button>
     <button id="searchClose" title="关闭 (Esc)" type="button">&#x2715;</button>
+  </div>
+
+  <!-- 右键菜单：复制 / 粘贴 / 粘贴选中 / 查找 / 清空缓存（对齐参考样式）。
+       粘贴类操作均经宿主粘贴安全确认；「粘贴选中」直接回填最近一次复制的内容。 -->
+  <div id="ctxmenu" class="rf-ctx">
+    <button id="ctxCopy" type="button"><span>复制</span><kbd>Ctrl+Shift+C</kbd></button>
+    <button id="ctxPaste" type="button"><span>粘贴</span><kbd>Ctrl+Shift+V</kbd></button>
+    <button id="ctxPasteSel" type="button"><span>粘贴选中</span></button>
+    <div class="rf-ctx-sep"></div>
+    <button id="ctxFind" type="button"><span>查找</span><kbd>Ctrl+Shift+F</kbd></button>
+    <div class="rf-ctx-sep"></div>
+    <button id="ctxClear" type="button"><span>清空缓存</span></button>
   </div>
 
   <script src="xterm.js"></script>
@@ -296,6 +397,8 @@
     }
 
     function openSearch() {
+      // 浮层跟随终端主题深浅（右键菜单同一判断）
+      searchBar.classList.toggle('light', !isDarkTerminal());
       searchBar.style.display = 'flex';
       searchInput.focus();
       searchInput.select();
@@ -363,6 +466,114 @@
       post({ type: 'paste-intercepted', text });
     }, true);
 
+    // ── 右键菜单：复制 / 粘贴 / 粘贴选中 / 查找 / 清空缓存 ──────
+    // WebView2 关闭了默认右键菜单，终端区此前右键没有任何反应。
+    // 菜单在页面内自绘（结构对齐参考样式，右侧标注快捷键）：
+    //   复制      —— 选中文本交宿主写剪贴板，同时记为「粘贴选中」的来源；
+    //   粘贴      —— 通知宿主读剪贴板并走同一套粘贴安全确认；
+    //   粘贴选中  —— 把最近一次「复制」的内容直接回填（快速重贴，仍走安全确认）；
+    //   查找      —— 唤出搜索浮层（同 Ctrl+Shift+F）；
+    //   清空缓存  —— 清空当前终端缓冲。
+    // 仅在 Windows 宿主（WebView2）启用；macOS 保留系统右键行为。
+    const ctxMenu = document.getElementById('ctxmenu');
+    const ctxCopy = document.getElementById('ctxCopy');
+    const ctxPaste = document.getElementById('ctxPaste');
+    const ctxPasteSel = document.getElementById('ctxPasteSel');
+    const ctxFind = document.getElementById('ctxFind');
+    const ctxClear = document.getElementById('ctxClear');
+    const isWindowsHost = !!(window.chrome && window.chrome.webview);
+    let lastCopied = '';
+
+    // 当前终端背景是否深色（按背景色亮度判断），右键菜单 / 搜索浮层跟随
+    function isDarkTerminal() {
+      const bg = terminal.options.theme && terminal.options.theme.background;
+      const m = /^#?([0-9a-f]{6})$/i.exec(String(bg || ''));
+      if (!m) { return true; }
+      const v = parseInt(m[1], 16);
+      const lum = 0.299 * ((v >> 16) & 255) + 0.587 * ((v >> 8) & 255) + 0.114 * (v & 255);
+      return lum < 140;
+    }
+
+    function closeCtxMenu() {
+      ctxMenu.style.display = 'none';
+    }
+
+    if (isWindowsHost) {
+      document.addEventListener('contextmenu', e => {
+        const target = e.target;
+        if (target instanceof Element && target.closest('#searchbar')) {
+          return; // 搜索框保留系统右键（剪切/粘贴文本）
+        }
+        e.preventDefault();
+        // 打开瞬间按当前终端背景实时切换深浅，保证与主题一致
+        ctxMenu.classList.toggle('dark', isDarkTerminal());
+        ctxCopy.disabled = !terminal.hasSelection();
+        ctxPasteSel.disabled = !lastCopied;
+        ctxMenu.style.display = 'block';
+        const menuW = ctxMenu.offsetWidth || 190;
+        const menuH = ctxMenu.offsetHeight || 200;
+        ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - menuW - 6) + 'px';
+        ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - menuH - 6) + 'px';
+      });
+
+      window.addEventListener('mousedown', e => {
+        if (e.target instanceof Element && !e.target.closest('#ctxmenu')) {
+          closeCtxMenu();
+        }
+      });
+      window.addEventListener('blur', closeCtxMenu);
+      window.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { closeCtxMenu(); }
+      });
+
+      ctxCopy.addEventListener('click', () => {
+        const text = terminal.getSelection();
+        if (text) {
+          lastCopied = text;
+          post({ type: 'copy-selection', text });
+        }
+        terminal.clearSelection();
+        closeCtxMenu();
+        terminal.focus();
+      });
+
+      ctxPaste.addEventListener('click', () => {
+        closeCtxMenu();
+        // 通知宿主读剪贴板并走粘贴安全确认（多行 / 大文本），确认后回填
+        post({ type: 'request-paste' });
+        terminal.focus();
+      });
+
+      ctxPasteSel.addEventListener('click', () => {
+        closeCtxMenu();
+        if (lastCopied) {
+          // 与 Ctrl+V / 右键粘贴同一安全通道（多行 / 大文本确认）
+          post({ type: 'paste-intercepted', text: lastCopied });
+        }
+        terminal.focus();
+      });
+
+      ctxFind.addEventListener('click', () => {
+        closeCtxMenu();
+        openSearch();
+      });
+
+      ctxClear.addEventListener('click', () => {
+        closeCtxMenu();
+        terminal.clear();
+        terminal.focus();
+      });
+
+      // Ctrl+Shift+F：全局查找（与菜单标注一致；终端持有焦点时生效）
+      terminal.attachCustomKeyEventHandler(e => {
+        if (e.type === 'keydown' && e.ctrlKey && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
+          openSearch();
+          return false;
+        }
+        return true;
+      });
+    }
+
     const encoder = new TextEncoder();
 
     function toBase64(bytes) {
@@ -424,8 +635,15 @@
 
     // 用户键入 → 转 UTF-8 字节 → 交给宿主发往远端
     let __inputSeq = 0;
+    // 「括号粘贴」开关（宿主设置）：关闭时把 xterm 为粘贴内容加的包裹序列剥掉，
+    // 远端不再认为是粘贴——bash 5.1+ 的粘贴高亮消失，但多行粘贴会被逐行执行。
+    let bracketedPasteEnabled = true;
     terminal.onData(data => {
-      post({ type: 'input', seq: ++__inputSeq, data: toBase64(encoder.encode(data)) });
+      let out = data;
+      if (!bracketedPasteEnabled) {
+        out = out.replace(/^\x1b\[200~/, '').replace(/\x1b\[201~$/, '');
+      }
+      post({ type: 'input', seq: ++__inputSeq, data: toBase64(encoder.encode(out)) });
     });
 
     // 处理 Ctrl+C 等由 xterm 直接产生的二进制序列之外的粘贴等场景
@@ -458,6 +676,23 @@
     function fit() {
       try {
         fitAddon.fit();
+        // ── 渲染溢出自校正 ──
+        // FitAddon 按字体量测的行高与浏览器实际渲染行高存在细微偏差（字体回退、
+        // DPI 缩放、渲染器取整），单行看不出来，累计几十行后最后一行会被容器
+        // 底边裁掉一半——表现为「提示符只显示一半、看不到输入光标」。
+        // 以 .xterm 的实际渲染高度为准：溢出就逐行减 rows，直到整屏都在容器内。
+        const termEl = terminal.element;
+        const parentEl = termEl && termEl.parentElement;
+        if (termEl && parentEl) {
+          const pStyle = window.getComputedStyle(parentEl);
+          const avail = parentEl.clientHeight
+            - (parseFloat(pStyle.paddingTop) || 0)
+            - (parseFloat(pStyle.paddingBottom) || 0);
+          let guard = 0;
+          while (termEl.offsetHeight > avail && terminal.rows > 1 && guard++ < 10) {
+            terminal.resize(terminal.cols, terminal.rows - 1);
+          }
+        }
         reportResize();
       } catch (e) {
         // 容器尺寸为 0（Tab 尚未显示）时 fit 会失败，属于正常情况
@@ -499,6 +734,11 @@
         if (family) { terminal.options.fontFamily = family; }
         if (size) { terminal.options.fontSize = size; }
         fit();
+      },
+
+      /** 设置「括号粘贴」开关。关闭后粘贴内容不再带包裹序列发往远端。 */
+      setBracketedPaste(enabled) {
+        bracketedPasteEnabled = enabled !== false;
       },
 
       fit,
