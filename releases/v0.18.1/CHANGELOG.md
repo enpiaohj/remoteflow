@@ -2,6 +2,8 @@
 
 发布日期：2026-09-22 · 上一版本 v0.18.0
 
+> 注：source/ 快照中的 `terminal.html` 已按本版实际产物补齐（原 tag 提交遗漏该文件），与 GitHub Release 挂载的 exe/zip 对应。
+
 
 SSH 终端右键菜单配色修正。本版本仅发布 Windows（win-x64）。
 
