@@ -1,0 +1,43 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 主体：顶部受光的蓝 → 靛蓝竖向渐变 -->
+    <linearGradient id="face" x1="512" y1="100" x2="512" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5C8CFF"/>
+      <stop offset="0.55" stop-color="#3358E6"/>
+      <stop offset="1" stop-color="#233FBE"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="512" y1="100" x2="512" y2="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="512" y1="620" x2="512" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0A1E6E" stop-opacity="0"/>
+      <stop offset="1" stop-color="#0A1E6E" stop-opacity="0.28"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="512" cy="300" r="460" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8FB4FF" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#8FB4FF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="cast" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#0A1550" flood-opacity="0.28"/>
+    </filter>
+    <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+  </defs>
+
+  <!-- 底座 + 光影 -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#face)"/>
+  <g clip-path="url(#sq)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>
+    <rect x="100" y="100" width="824" height="824" fill="url(#sheen)"/>
+    <rect x="100" y="100" width="824" height="824" fill="url(#floor)"/>
+  </g>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="184.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.16"/>
+
+  <!-- 双 chevron —— "Flow / 向前 / 连上"。后一道半透明作流动回声 -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M338 408 L 452 520 L 338 632" stroke="#FFFFFF" stroke-width="88" opacity="0.26"/>
+    <g filter="url(#cast)">
+      <path d="M534 408 L 648 520 L 534 632" stroke="#FFFFFF" stroke-width="90"/>
+    </g>
+  </g>
+</svg>

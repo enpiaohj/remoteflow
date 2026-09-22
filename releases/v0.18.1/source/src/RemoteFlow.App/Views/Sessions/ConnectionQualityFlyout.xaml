@@ -1,0 +1,219 @@
+<Window x:Class="RemoteFlow.App.Views.Sessions.ConnectionQualityFlyout"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        ShowActivated="True"
+        Topmost="True"
+        SizeToContent="Height"
+        Width="340"
+        WindowStartupLocation="Manual"
+        FontFamily="{StaticResource UiFont}"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+
+    <Window.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
+        <conv:EnumDisplayNameConverter x:Key="EnumDisplayName" />
+    </Window.Resources>
+
+    <!-- 连接质量详情 Flyout：独立顶层窗口，盖在 RDP ActiveX airspace 之上；
+         内容全部来自 SessionTabViewModel / SessionQualityState，禁止此处自维护连接状态。 -->
+    <Border Background="{DynamicResource Bg.Layer}"
+            BorderBrush="{DynamicResource Stroke.Default}"
+            BorderThickness="1"
+            CornerRadius="12"
+            Margin="16">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.26" Direction="270" />
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- ── 标题行：可拖动 ── -->
+            <Border Grid.Row="0"
+                    Background="Transparent"
+                    Padding="20,14,12,8"
+                    MouseLeftButtonDown="OnTitleDragStart">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="连接质量详情"
+                               Style="{StaticResource Text.SectionTitle}"
+                               FontSize="14"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="2"
+                            Style="{StaticResource Button.Icon}"
+                            Width="28" Height="28"
+                            FontSize="12"
+                            Content="&#xE711;"
+                            ToolTip="关闭 (Esc)"
+                            Click="OnCloseClick" />
+                </Grid>
+            </Border>
+
+            <!-- ── 状态头：● 已连接 / 网络波动 等 ── -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="20,2,20,0">
+                <TextBlock Text="{Binding FlyoutStateIcon}"
+                           FontFamily="{StaticResource IconFont}"
+                           FontSize="13"
+                           VerticalAlignment="Center"
+                           Foreground="{Binding FlyoutStateBrushKey, Converter={StaticResource KeyToBrush}}" />
+                <TextBlock Text="{Binding FlyoutStateText}"
+                           Style="{StaticResource Text.Body}"
+                           FontWeight="SemiBold"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Title}"
+                           Style="{StaticResource Text.Caption}"
+                           TextTrimming="CharacterEllipsis"
+                           MaxWidth="150"
+                           Margin="10,0,0,0"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+
+            <!-- ── 指标区 ── -->
+            <Border Grid.Row="2"
+                    Background="{DynamicResource Bg.Subtle}"
+                    CornerRadius="8"
+                    Margin="16,12,16,0"
+                    Padding="14,4">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- 左列：指标名 -->
+                    <StackPanel Grid.Column="0" Margin="0,8,0,8">
+                        <TextBlock Text="连接质量" Style="{StaticResource Text.Caption}" Height="26" />
+                        <TextBlock Text="延迟" Style="{StaticResource Text.Caption}" Height="26" />
+                        <TextBlock Text="抖动" Style="{StaticResource Text.Caption}" Height="26" />
+                        <TextBlock Text="丢包" Style="{StaticResource Text.Caption}" Height="26" />
+                        <TextBlock Text="会话时长" Style="{StaticResource Text.Caption}" Height="26" />
+                        <TextBlock Text="重连次数" Style="{StaticResource Text.Caption}" Height="26" />
+                        <TextBlock Text="协议" Style="{StaticResource Text.Caption}" Height="26" />
+                        <TextBlock Text="主机" Style="{StaticResource Text.Caption}" Height="26" />
+                    </StackPanel>
+
+                    <!-- 右列：指标值（右对齐，值仅以状态点与少量文字用色，不大面积上背景色） -->
+                    <StackPanel Grid.Column="1" Margin="14,8,0,8">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Height="26">
+                            <Ellipse Width="7" Height="7" Margin="0,0,6,0"
+                                     VerticalAlignment="Center"
+                                     Fill="{Binding Quality.GradeBrushKey, Converter={StaticResource KeyToBrush}}" />
+                            <TextBlock Text="{Binding Quality.GradeText}"
+                                       Style="{StaticResource Text.Body}"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Foreground="{Binding Quality.GradeBrushKey, Converter={StaticResource KeyToBrush}}" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding Quality.LatencyText}"
+                                   Style="{StaticResource Text.Caption}"
+                                   HorizontalAlignment="Right"
+                                   Height="26"
+                                   VerticalAlignment="Center"
+                                   FontFamily="{StaticResource MonoFont}"
+                                   FontSize="12" />
+                        <TextBlock Text="{Binding Quality.JitterText}"
+                                   Style="{StaticResource Text.Caption}"
+                                   HorizontalAlignment="Right"
+                                   Height="26"
+                                   VerticalAlignment="Center"
+                                   FontFamily="{StaticResource MonoFont}"
+                                   FontSize="12" />
+                        <TextBlock Text="{Binding Quality.LossText}"
+                                   Style="{StaticResource Text.Caption}"
+                                   HorizontalAlignment="Right"
+                                   Height="26"
+                                   VerticalAlignment="Center"
+                                   FontFamily="{StaticResource MonoFont}"
+                                   FontSize="12" />
+                        <TextBlock Text="{Binding SessionDurationText}"
+                                   Style="{StaticResource Text.Caption}"
+                                   HorizontalAlignment="Right"
+                                   Height="26"
+                                   VerticalAlignment="Center"
+                                   FontFamily="{StaticResource MonoFont}"
+                                   FontSize="12" />
+                        <TextBlock Style="{StaticResource Text.Caption}"
+                                   HorizontalAlignment="Right"
+                                   Height="26"
+                                   VerticalAlignment="Center"
+                                   FontFamily="{StaticResource MonoFont}"
+                                   FontSize="12">
+                            <Run Text="{Binding ReconnectCount, Mode=OneWay}" /><Run Text=" 次" />
+                        </TextBlock>
+                        <TextBlock Text="{Binding Profile.Protocol, Converter={StaticResource EnumDisplayName}}"
+                                   Style="{StaticResource Text.Caption}"
+                                   HorizontalAlignment="Right"
+                                   Height="26"
+                                   VerticalAlignment="Center"
+                                   FontSize="12" />
+                        <TextBlock Text="{Binding HostPortLine}"
+                                   Style="{StaticResource Text.Caption}"
+                                   HorizontalAlignment="Right"
+                                   Height="26"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   FontFamily="{StaticResource MonoFont}"
+                                   FontSize="12" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ── 脚注 + 重新检测 ── -->
+            <StackPanel Grid.Row="3" Margin="20,12,20,16">
+                <TextBlock Text="{Binding Quality.NoteText}"
+                           Style="{StaticResource Text.Caption}"
+                           Foreground="{DynamicResource Text.Tertiary}"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,10"
+                           Visibility="{Binding Quality.HasNote, Converter={StaticResource BoolToVisibility}}" />
+                <TextBlock Text="{Binding Quality.LastProbeText}"
+                           Style="{StaticResource Text.Caption}"
+                           Foreground="{DynamicResource Text.Tertiary}"
+                           Margin="0,0,0,10"
+                           Visibility="{Binding Quality.HasResult, Converter={StaticResource BoolToVisibility}}" />
+
+                <Grid>
+                    <TextBlock Text="正在检测…"
+                               Style="{StaticResource Text.Caption}"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource Brand.Default}"
+                               Visibility="{Binding Quality.IsProbing, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Style="{StaticResource Button.Secondary}"
+                            HorizontalAlignment="Right"
+                            Padding="14,0"
+                            MinWidth="92"
+                            MinHeight="32"
+                            Command="{Binding Quality.RedetectCommand}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE72C;"
+                                       FontFamily="{StaticResource IconFont}"
+                                       FontSize="12"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="重新检测" Margin="7,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
