@@ -54,6 +54,10 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
     [ObservableProperty]
     private string _groupName = "未分组";
 
+    /// <summary>分组完整路径（如「生产环境 / Windows / 应用服务器」）。详情面板展示。</summary>
+    [ObservableProperty]
+    private string _groupPath = "未分组";
+
     /// <summary>凭据名称。详情面板只显示名称，绝不显示密码。</summary>
     [ObservableProperty]
     private string _credentialName = "未指定";
@@ -177,6 +181,15 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
     /// <summary>最近连接：刚刚 / N 分钟前；更早则用统一紧凑时间。从未连接给占位。</summary>
     public string LastConnectedDisplay
         => Profile.LastConnectedAt is { } time ? DateTimeDisplay.RelativeRecent(time) : "从未连接";
+
+    /// <summary>列表「最近连接」列用的短时间（如 09-23 15:46），比相对时间更利于扫读。</summary>
+    public string LastConnectedCompact
+        => Profile.LastConnectedAt is { } time ? DateTimeDisplay.Compact(time) : "从未连接";
+
+    /// <summary>详情面板快捷宫格的收藏切换文案。</summary>
+    public string FavoriteToggleText => IsFavorite ? "取消收藏" : "收藏";
+
+    partial void OnIsFavoriteChanged(bool value) => OnPropertyChanged(nameof(FavoriteToggleText));
 
     /// <summary>创建时间等档案信息用绝对时间（统一格式）。</summary>
     public string CreatedAtDisplay => DateTimeDisplay.Absolute(Profile.CreatedAt);

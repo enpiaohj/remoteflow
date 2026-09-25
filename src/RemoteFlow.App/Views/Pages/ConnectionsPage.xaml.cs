@@ -520,6 +520,97 @@ public partial class ConnectionsPage : UserControl
         OpenBatchMenu(button, menu);
     }
 
+    /// <summary>
+    /// 动作条「批量操作 ▾」：选择与批量的统一入口（勾选框常驻可见后，
+    /// 这里把原「多选开关」的能力全部收进菜单）。
+    /// </summary>
+    private async void OnBatchOperationsClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || ViewModel is not { } vm)
+        {
+            return;
+        }
+
+        var menu = new ContextMenu();
+        menu.Items.Add(new MenuItem { Header = "全选当前列表", Command = vm.SelectAllVisibleCommand });
+        menu.Items.Add(new MenuItem
+        {
+            Header = "清空选择",
+            Command = vm.ClearSelectionCommand,
+            IsEnabled = vm.HasSelection
+        });
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem
+        {
+            Header = "批量连接",
+            Command = vm.ConnectSelectedCommand,
+            IsEnabled = vm.HasSelection
+        });
+        menu.Items.Add(new MenuItem
+        {
+            Header = vm.FavoriteActionText,
+            Command = vm.ToggleFavoriteSelectedCommand,
+            IsEnabled = vm.HasSelection
+        });
+
+        var targets = vm.GroupTargets;
+        if (targets.Count > 0 && vm.HasSelection)
+        {
+            var move = new MenuItem { Header = "移动到分组" };
+            foreach (var target in targets)
+            {
+                var captured = target;
+                var sub = new MenuItem { Header = target.Name, Tag = captured };
+                sub.Click += async (_, _) => await vm.MoveSelectedToGroupAsync(captured.GroupId);
+                move.Items.Add(sub);
+            }
+            menu.Items.Add(move);
+        }
+
+        var tags = await LoadTagsAsync(vm);
+        if (tags.Count > 0 && vm.HasSelection)
+        {
+            var addTags = new MenuItem { Header = "添加标签" };
+            foreach (var tag in tags)
+            {
+                addTags.Items.Add(new MenuItem
+                {
+                    Header = tag.Name,
+                    Command = vm.AddTagToSelectedCommand,
+                    CommandParameter = tag
+                });
+            }
+            menu.Items.Add(addTags);
+        }
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem
+        {
+            Header = "删除所选",
+            Command = vm.DeleteSelectedCommand,
+            IsEnabled = vm.HasSelection
+        });
+
+        OpenBatchMenu(button, menu);
+    }
+
+    /// <summary>动作条「…」：对当前选中行的低频操作。</summary>
+    private void OnRowActionsMoreClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || ViewModel is not { } vm || vm.SelectedItem is not { } item)
+        {
+            return;
+        }
+
+        var menu = new ContextMenu();
+        menu.Items.Add(new MenuItem { Header = "复制连接", Command = vm.DuplicateCommand, CommandParameter = item });
+        menu.Items.Add(new MenuItem { Header = "测试连接", Command = vm.TestConnectionCommand, CommandParameter = item });
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem { Header = "删除", Command = vm.DeleteCommand, CommandParameter = item });
+
+        OpenBatchMenu(button, menu);
+    }
+
     /// <summary>列头 CheckBox：全选 / 取消全选当前可见项。</summary>
     private void OnSelectAllHeaderClick(object sender, RoutedEventArgs e)
     {

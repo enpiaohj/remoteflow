@@ -278,7 +278,11 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     public bool SelectedItemHasHistory => SelectedItemHistory.Count > 0;
 
-    partial void OnSelectedItemChanged(ConnectionItemViewModel? value) => _ = LoadSelectedHistoryAsync(value);
+    partial void OnSelectedItemChanged(ConnectionItemViewModel? value)
+    {
+        OnPropertyChanged(nameof(HasSelectedItem));
+        _ = LoadSelectedHistoryAsync(value);
+    }
 
     private async Task LoadSelectedHistoryAsync(ConnectionItemViewModel? item)
     {
@@ -520,8 +524,11 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// <summary>进入多选但还没勾选时，只显示提示条（不显示一排业务按钮）。</summary>
     public bool IsSelectionHintVisible => IsMultiSelect && !HasSelection;
 
-    /// <summary>已勾选 ≥1 项时，才显示批量业务操作栏。</summary>
-    public bool IsBatchBarVisible => IsMultiSelect && HasSelection;
+    /// <summary>勾选 ≥1 项即显示批量操作栏（勾选框常驻可见，不再有独立的多选模式开关）。</summary>
+    public bool IsBatchBarVisible => HasSelection;
+
+    /// <summary>当前是否有选中行（动作条「连接 / Ping / 编辑」的可用性）。</summary>
+    public bool HasSelectedItem => SelectedItem is not null;
 
     /// <summary>收藏动作的文案随选择变化：所选都已是收藏 → 显示「取消收藏」，否则「收藏」。</summary>
     public string FavoriteActionText => SelectedConnections.Any(i => !i.IsFavorite) ? "收藏" : "取消收藏";
@@ -693,7 +700,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         {
             GroupName = profile.GroupId is { } gid && _groupNames.TryGetValue(gid, out var groupName)
                 ? groupName
-                : "未分组"
+                : "未分组",
+            GroupPath = BuildGroupPath(profile.GroupId)
         };
 
         var chips = profile.TagIds
@@ -892,6 +900,28 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// <summary>连接的归一化分组键：未归类 / 「未分组」桶统一映射为 null。</summary>
     private static Guid? EffectiveGroupId(ConnectionItemViewModel item)
         => item.Profile.GroupId is { } gid && gid != ConnectionGroup.UngroupedId ? gid : null;
+
+    /// <summary>分组完整路径（如「生产环境 / Windows / 应用服务器」），详情面板展示。</summary>
+    private string BuildGroupPath(Guid? groupId)
+    {
+        if (groupId is not { } id || id == ConnectionGroup.UngroupedId)
+        {
+            return "未分组";
+        }
+
+        var names = new Stack<string>();
+        var current = _groups.FirstOrDefault(g => g.Id == id);
+        var guard = 0;
+        while (current is not null && guard++ < 16)
+        {
+            names.Push(current.Name);
+            current = current.ParentId is { } pid
+                ? _groups.FirstOrDefault(g => g.Id == pid)
+                : null;
+        }
+
+        return names.Count > 0 ? string.Join(" / ", names) : "未分组";
+    }
 
     private static void CollectGroupIds(ConnectionGroupNodeViewModel node, HashSet<Guid?> into)
     {
