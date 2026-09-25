@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>RemoteFlow 连接工作台 · 概念设计 v0.1</title>
+<style>
+  :root{
+    --brand:#2563eb; --brand-tint:#eef3fe; --brand-tint-2:#e3ecfd;
+    --text:#1a1f27; --text-2:#5b6472; --text-3:#98a0ad;
+    --line:#e7eaf0; --line-soft:#eef0f5;
+    --bg-side:#f7f8fa; --bg-hover:#f2f4f8;
+    --ok:#16a34a; --ok-dot:#22c55e; --off:#9aa3b0; --warn:#d97706;
+    --chip-rdp:#e8effd; --chip-rdp-t:#2456d6; --chip-ssh:#e7f6ec; --chip-ssh-t:#188a42; --chip-vnc:#f1ecfd; --chip-vnc-t:#7c3aed;
+    --mono:"Cascadia Mono",Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:1440px;height:900px;overflow:hidden;}
+  body{font-family:"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif;
+       color:var(--text);font-size:13px;display:flex;background:#fff;}
+  .app{display:flex;width:100%;height:100%;}
+
+  /* ── 左导航 ─────────────────────────────── */
+  .rail{width:48px;background:var(--bg-side);border-right:1px solid var(--line);
+        display:flex;flex-direction:column;align-items:center;padding:8px 0 10px;gap:2px;}
+  .brand{height:40px;display:flex;align-items:center;justify-content:center;margin-bottom:4px;}
+  .brand .tile{width:26px;height:26px;border-radius:7px;background:var(--brand);color:#fff;
+        display:flex;align-items:center;justify-content:center;font-size:13px;}
+  .r-item{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+        color:var(--text-3);font-size:14px;}
+  .r-item.active{background:var(--brand-tint);color:var(--brand);}
+  .rail .spacer{flex:1;}
+  .rail .divider{width:24px;height:1px;background:var(--line);margin:6px 0;}
+
+  /* ── 主区 ──────────────────────────────── */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;}
+
+  .ctx{height:50px;display:flex;align-items:center;padding:0 16px;gap:10px;}
+  .ctx h1{font-size:16px;font-weight:600;}
+  .ctx .sub{font-size:12px;color:var(--text-3);}
+  .ctx .grow{flex:1;}
+  .btn-ghost{display:flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid var(--line);
+        border-radius:7px;font-size:12.5px;color:var(--text-2);background:#fff;}
+  .btn-primary{display:flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:7px;
+        background:var(--brand);color:#fff;font-size:12.5px;font-weight:600;}
+  .icon-btn{width:30px;height:30px;border:1px solid var(--line);border-radius:7px;background:#fff;
+        display:flex;align-items:center;justify-content:center;color:var(--text-2);font-size:12px;}
+
+  .toolbar{height:42px;display:flex;align-items:center;gap:8px;padding:0 16px;
+        border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line);}
+  .search{width:300px;height:30px;border:1px solid var(--line);border-radius:7px;background:#fff;
+        display:flex;align-items:center;padding:0 8px;color:var(--text-3);font-size:12.5px;}
+  .search .kbd{margin-left:auto;font-size:10px;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--text-3);background:#fafbfc;}
+  .select{height:30px;display:flex;align-items:center;gap:14px;padding:0 10px;border:1px solid var(--line);
+        border-radius:7px;font-size:12.5px;color:var(--text-2);background:#fff;}
+  .select .caret{font-size:9px;color:var(--text-3);}
+  .toolbar .grow{flex:1;}
+
+  /* ── 工作台三栏 ─────────────────────────── */
+  .bench{flex:1;display:flex;min-height:0;}
+
+  .tree{width:216px;border-right:1px solid var(--line);padding:10px 8px;display:flex;flex-direction:column;}
+  .tree-head{display:flex;align-items:center;height:26px;padding:0 8px;margin-bottom:4px;}
+  .tree-head .t{font-size:11px;font-weight:600;color:var(--text-3);letter-spacing:1.5px;}
+  .tree-head .plus{margin-left:auto;color:var(--text-3);font-size:13px;}
+  .trow{display:flex;align-items:center;gap:7px;height:30px;padding:0 8px;border-radius:7px;
+        font-size:12.5px;color:var(--text-2);}
+  .trow .ico{width:14px;text-align:center;font-size:11px;color:var(--text-3);}
+  .trow .cnt{margin-left:auto;font-size:11px;color:var(--text-3);}
+  .trow.active{background:var(--brand-tint);color:var(--brand);font-weight:600;}
+  .trow.active .ico,.trow.active .cnt{color:var(--brand);}
+  .tree .divider{height:1px;background:var(--line-soft);margin:8px 6px;}
+  .trow .chev{width:10px;font-size:8px;color:var(--text-3);}
+  .indent-1{padding-left:24px;} .indent-2{padding-left:40px;}
+
+  /* ── 列表 ─────────────────────────────── */
+  .list{flex:1;min-width:0;display:flex;flex-direction:column;padding:0 14px;}
+  .cols{display:flex;align-items:center;height:34px;border-bottom:1px solid var(--line);
+        font-size:11px;color:var(--text-3);padding:0 4px;}
+  .cols .c{padding:0 8px;}
+  .rows{flex:1;overflow:hidden;}
+  .row{display:flex;align-items:center;height:44px;border-bottom:1px solid var(--line-soft);
+        font-size:12.5px;padding:0 4px;position:relative;}
+  .row.selected{background:var(--brand-tint);}
+  .row.selected::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;
+        border-radius:0 3px 3px 0;background:var(--brand);}
+  .c-check{width:26px;display:flex;justify-content:center;color:var(--text-3);}
+  .c-check .box{width:14px;height:14px;border:1.4px solid #c6ccd6;border-radius:4px;}
+  .c-check .box.on{background:var(--brand);border-color:var(--brand);color:#fff;font-size:9px;
+        display:flex;align-items:center;justify-content:center;}
+  .c-name{width:218px;display:flex;align-items:center;gap:10px;min-width:0;}
+  .dev{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+        font-size:13px;flex:none;}
+  .dev.rdp{background:var(--chip-rdp);color:var(--chip-rdp-t);}
+  .dev.ssh{background:var(--chip-ssh);color:var(--chip-ssh-t);}
+  .dev.vnc{background:var(--chip-vnc);color:var(--chip-vnc-t);}
+  .dev .dot{width:7px;height:7px;border-radius:50%;border:1.6px solid #fff;margin:-4px -2px -2px 14px;position:relative;top:8px;left:6px;}
+  .dev .dot.ok{background:var(--ok-dot);} .dev .dot.busy{background:#f0b429;}
+  .c-name .nm{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .row.selected .c-name .nm{color:var(--brand);}
+  .c-host{width:172px;font-family:var(--mono);font-size:11.5px;color:var(--text-2);
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .c-proto{width:62px;}
+  .chip{display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:5px;font-size:10.5px;font-weight:600;}
+  .chip.rdp{background:var(--chip-rdp);color:var(--chip-rdp-t);}
+  .chip.ssh{background:var(--chip-ssh);color:var(--chip-ssh-t);}
+  .chip.vnc{background:var(--chip-vnc);color:var(--chip-vnc-t);}
+  .c-tags{width:118px;display:flex;gap:4px;align-items:center;}
+  .tag{display:inline-flex;align-items:center;gap:4px;height:19px;padding:0 7px;border-radius:5px;
+        background:#f1f3f7;font-size:10.5px;color:var(--text-2);}
+  .tag i{width:5px;height:5px;border-radius:50%;}
+  .tag.more{background:transparent;color:var(--text-3);}
+  .c-status{width:74px;display:flex;align-items:center;gap:6px;font-size:12px;}
+  .dot{width:7px;height:7px;border-radius:50%;}
+  .dot.ok{background:var(--ok-dot);} .dot.off{background:#c3c9d3;}
+  .st-ok{color:var(--ok);} .st-off{color:var(--off);}
+  .c-time{width:96px;text-align:right;color:var(--text-2);font-size:12px;
+        font-variant-numeric:tabular-nums;}
+  .c-star{width:32px;text-align:center;color:#c0c6d0;font-size:13px;}
+  .c-star.on{color:#f2b60d;}
+  .c-more{width:28px;text-align:center;color:var(--text-3);}
+  .row .hover-connect{margin-left:8px;display:none;}
+
+  /* ── 详情 ─────────────────────────────── */
+  .inspector{width:292px;border-left:1px solid var(--line);padding:14px 16px;display:flex;flex-direction:column;gap:0;}
+  .insp-head{display:flex;gap:10px;align-items:flex-start;}
+  .insp-head .dev{width:38px;height:38px;border-radius:10px;font-size:17px;}
+  .insp-head .nm{font-size:15px;font-weight:600;line-height:20px;}
+  .insp-head .host{font-family:var(--mono);font-size:11.5px;color:var(--text-2);margin-top:2px;}
+  .insp-head .star{margin-left:auto;color:#f2b60d;font-size:14px;}
+  .pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:10px;
+        font-size:10.5px;font-weight:600;margin-top:6px;}
+  .pill.ok{background:#e7f6ec;color:var(--ok);}
+  .connect{margin-top:12px;display:flex;gap:4px;}
+  .connect .b1{flex:1;height:32px;border-radius:7px;background:var(--brand);color:#fff;font-weight:600;
+        font-size:13px;display:flex;align-items:center;justify-content:center;}
+  .connect .b2{width:30px;height:32px;border-radius:7px;background:var(--brand);color:#fff;
+        display:flex;align-items:center;justify-content:center;font-size:9px;border-left:1px solid rgba(255,255,255,.35);}
+  .quick{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-top:8px;}
+  .q{height:28px;border:1px solid var(--line);border-radius:7px;font-size:11.5px;color:var(--text-2);
+        display:flex;align-items:center;justify-content:center;gap:5px;background:#fff;}
+  .q.dis{color:#b9c0cb;background:#fafbfc;}
+  .sec{margin-top:16px;}
+  .sec .t{font-size:11px;font-weight:600;color:var(--text-3);letter-spacing:1px;margin-bottom:9px;}
+  .kv{display:flex;padding:4px 0;font-size:12px;}
+  .kv .k{width:70px;color:var(--text-3);flex:none;}
+  .kv .v{color:var(--text);min-width:0;}
+  .kv .v.mono{font-family:var(--mono);font-size:11.5px;}
+  .chip.mini{height:17px;font-size:10px;padding:0 6px;}
+  .tl{position:relative;margin-left:3px;}
+  .tl::before{content:"";position:absolute;left:3.5px;top:8px;bottom:8px;width:1px;background:var(--line);}
+  .tl-item{position:relative;padding:0 0 12px 18px;font-size:12px;}
+  .tl-item .dot{position:absolute;left:0;top:4px;}
+  .tl-item .r{color:var(--text-2);}
+  .tl-item .d{color:var(--text-3);margin-left:6px;}
+  .link{color:var(--brand);font-size:12px;margin-top:2px;}
+
+  /* ── 状态栏 ─────────────────────────────── */
+  .status{height:26px;border-top:1px solid var(--line);display:flex;align-items:center;
+        padding:0 14px;font-size:11.5px;color:var(--text-2);background:#fafbfc;}
+  .status .l{display:flex;align-items:center;gap:6px;}
+  .status .r{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--text-3);}
+  .status .r b{color:var(--text-2);font-weight:600;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- 模块图标栏：只承担「换页面」，收藏 / 最近连接降为工作台内的视图 -->
+  <aside class="rail">
+    <div class="brand"><div class="tile">⇄</div></div>
+    <div class="r-item" title="首页">⌂</div>
+    <div class="r-item active" title="连接工作台">◫</div>
+    <div class="r-item" title="凭据">◇</div>
+    <div class="r-item" title="终端片段">▸</div>
+    <div class="r-item" title="设置">⚙</div>
+    <div class="spacer"></div>
+    <div class="divider"></div>
+    <div class="r-item" title="帮助">?</div>
+    <div class="r-item" title="关于">i</div>
+  </aside>
+
+  <!-- 主区 -->
+  <section class="main">
+
+    <!-- 上下文 + 动作（合并为一行，消除三层工具行） -->
+    <div class="ctx">
+      <h1>连接工作台</h1>
+      <span class="sub">86 台设备 · 10 台在线</span>
+      <div class="grow"></div>
+      <div class="icon-btn" title="探测当前列表">⇅</div>
+      <div class="icon-btn" title="刷新">⟳</div>
+      <div class="btn-ghost">批量操作 ▾</div>
+      <div class="btn-primary">＋ 新建连接</div>
+    </div>
+
+    <!-- 搜索与筛选（唯一一层工具行） -->
+    <div class="toolbar">
+      <div class="search">⌕ 搜索名称、IP、标签、备注…<span class="kbd">Ctrl K</span></div>
+      <div class="select">全部协议<span class="caret">▼</span></div>
+      <div class="select">全部标签<span class="caret">▼</span></div>
+      <div class="select">全部状态<span class="caret">▼</span></div>
+      <div class="select">按名称<span class="caret">▼</span></div>
+      <div class="grow"></div>
+    </div>
+
+    <!-- 三栏工作台 -->
+    <div class="bench">
+
+      <!-- 资源树 -->
+      <nav class="tree">
+        <div class="tree-head"><span class="t">连接资源</span><span class="plus">＋</span></div>
+        <div class="trow active"><span class="ico">▣</span>全部连接<span class="cnt">86</span></div>
+        <div class="trow"><span class="ico">★</span>收藏<span class="cnt">6</span></div>
+        <div class="trow"><span class="ico">◷</span>最近连接<span class="cnt">12</span></div>
+        <div class="divider"></div>
+        <div class="trow"><span class="chev">▾</span><span class="ico">▣</span>生产环境<span class="cnt">28</span></div>
+        <div class="trow indent-1"><span class="chev">▾</span><span class="ico">▣</span>Windows<span class="cnt">12</span></div>
+        <div class="trow indent-2"><span class="ico">▤</span>域控服务器<span class="cnt">4</span></div>
+        <div class="trow indent-2 active"><span class="ico">▤</span>应用服务器<span class="cnt">5</span></div>
+        <div class="trow indent-2"><span class="ico">▤</span>数据库服务器<span class="cnt">3</span></div>
+        <div class="trow indent-1"><span class="chev">▸</span><span class="ico">▣</span>Linux<span class="cnt">10</span></div>
+        <div class="trow indent-1"><span class="chev">▸</span><span class="ico">▣</span>VMware<span class="cnt">4</span></div>
+        <div class="trow"><span class="chev">▸</span><span class="ico">▣</span>测试环境<span class="cnt">20</span></div>
+        <div class="trow"><span class="chev">▸</span><span class="ico">▣</span>办公环境<span class="cnt">8</span></div>
+        <div class="trow"><span class="chev">▸</span><span class="ico">▣</span>其他<span class="cnt">2</span></div>
+      </nav>
+
+      <!-- 列表 -->
+      <section class="list">
+        <div class="cols">
+          <div class="c-check"><span class="box"></span></div>
+          <div class="c-name">名称</div>
+          <div class="c-host">主机 / IP</div>
+          <div class="c-proto">协议</div>
+          <div class="c-tags">标签</div>
+          <div class="c-status">状态</div>
+          <div class="c-time">最近连接</div>
+          <div class="c-star">★</div>
+          <div class="c-more">⋯</div>
+        </div>
+        <div class="rows">
+
+          <div class="row">
+            <div class="c-check"><span class="box"></span></div>
+            <div class="c-name"><div class="dev ssh">▸</div><span class="nm">web-01 · nginx</span></div>
+            <div class="c-host">web-01.example.com</div>
+            <div class="c-proto"><span class="chip ssh">SSH</span></div>
+            <div class="c-tags"><span class="tag"><i style="background:#e5484d"></i>生产</span><span class="tag more">+1</span></div>
+            <div class="c-status"><span class="dot ok"></span><span class="st-ok">在线</span></div>
+            <div class="c-time">09-25 18:02</div>
+            <div class="c-star on">★</div><div class="c-more">⋯</div>
+          </div>
+
+          <div class="row selected">
+            <div class="c-check"><span class="box on">✓</span></div>
+            <div class="c-name"><div class="dev rdp">▦</div><span class="nm">app-gateway</span></div>
+            <div class="c-host">198.51.100.10:6389</div>
+            <div class="c-proto"><span class="chip rdp">RDP</span></div>
+            <div class="c-tags"><span class="tag"><i style="background:#e5484d"></i>生产</span></div>
+            <div class="c-status"><span class="dot ok"></span><span class="st-ok">在线</span></div>
+            <div class="c-time">09-25 17:46</div>
+            <div class="c-star on">★</div><div class="c-more">⋯</div>
+          </div>
+
+          <div class="row">
+            <div class="c-check"><span class="box"></span></div>
+            <div class="c-name"><div class="dev ssh">▸</div><span class="nm">ci-runner-02</span></div>
+            <div class="c-host">198.51.100.21</div>
+            <div class="c-proto"><span class="chip ssh">SSH</span></div>
+            <div class="c-tags"><span class="tag"><i style="background:#3b82f6"></i>测试</span></div>
+            <div class="c-status"><span class="dot ok"></span><span class="st-ok">在线</span></div>
+            <div class="c-time">09-25 14:37</div>
+            <div class="c-star">☆</div><div class="c-more">⋯</div>
+          </div>
+
+          <div class="row">
+            <div class="c-check"><span class="box"></span></div>
+            <div class="c-name"><div class="dev rdp">▦</div><span class="nm">dc-01</span></div>
+            <div class="c-host">198.51.100.11</div>
+            <div class="c-proto"><span class="chip rdp">RDP</span></div>
+            <div class="c-tags"><span class="tag"><i style="background:#3b82f6"></i>测试</span></div>
+            <div class="c-status"><span class="dot ok"></span><span class="st-ok">在线</span></div>
+            <div class="c-time">09-23 13:41</div>
+            <div class="c-star">☆</div><div class="c-more">⋯</div>
+          </div>
+
+          <div class="row">
+            <div class="c-check"><span class="box"></span></div>
+            <div class="c-name"><div class="dev vnc">◉</div><span class="nm">mac-studio</span></div>
+            <div class="c-host">198.51.100.173</div>
+            <div class="c-proto"><span class="chip vnc">VNC</span></div>
+            <div class="c-tags"><span class="tag"><i style="background:#e5484d"></i>生产</span></div>
+            <div class="c-status"><span class="dot off"></span><span class="st-off">离线</span></div>
+            <div class="c-time">09-22 22:05</div>
+            <div class="c-star">☆</div><div class="c-more">⋯</div>
+          </div>
+
+          <div class="row">
+            <div class="c-check"><span class="box"></span></div>
+            <div class="c-name"><div class="dev ssh">▸</div><span class="nm">db-replica</span></div>
+            <div class="c-host">db-02.example.com</div>
+            <div class="c-proto"><span class="chip ssh">SSH</span></div>
+            <div class="c-tags"><span class="tag"><i style="background:#e5484d"></i>生产</span><span class="tag"><i style="background:#8b5cf6"></i>核心</span></div>
+            <div class="c-status"><span class="dot ok"></span><span class="st-ok">在线</span></div>
+            <div class="c-time">09-20 11:28</div>
+            <div class="c-star">☆</div><div class="c-more">⋯</div>
+          </div>
+
+          <div class="row">
+            <div class="c-check"><span class="box"></span></div>
+            <div class="c-name"><div class="dev ssh">▸</div><span class="nm">k8s-master</span></div>
+            <div class="c-host">198.51.100.50</div>
+            <div class="c-proto"><span class="chip ssh">SSH</span></div>
+            <div class="c-tags"><span class="tag"><i style="background:#8b5cf6"></i>核心</span></div>
+            <div class="c-status"><span class="dot ok"></span><span class="st-ok">在线</span></div>
+            <div class="c-time">09-19 16:05</div>
+            <div class="c-star">☆</div><div class="c-more">⋯</div>
+          </div>
+
+          <div class="row">
+            <div class="c-check"><span class="box"></span></div>
+            <div class="c-name"><div class="dev rdp">▦</div><span class="nm">file-server</span></div>
+            <div class="c-host">198.51.100.30</div>
+            <div class="c-proto"><span class="chip rdp">RDP</span></div>
+            <div class="c-tags"><span class="tag"><i style="background:#e5484d"></i>生产</span></div>
+            <div class="c-status"><span class="dot ok"></span><span class="st-ok">在线</span></div>
+            <div class="c-time">09-18 10:02</div>
+            <div class="c-star">☆</div><div class="c-more">⋯</div>
+          </div>
+
+          <div class="row">
+            <div class="c-check"><span class="box"></span></div>
+            <div class="c-name"><div class="dev vnc">◉</div><span class="nm">ops-console</span></div>
+            <div class="c-host">198.51.100.32</div>
+            <div class="c-proto"><span class="chip vnc">VNC</span></div>
+            <div class="c-tags"><span class="tag"><i style="background:#f0b429"></i>备份</span></div>
+            <div class="c-status"><span class="dot off"></span><span class="st-off">离线</span></div>
+            <div class="c-time">09-15 09:32</div>
+            <div class="c-star">☆</div><div class="c-more">⋯</div>
+          </div>
+
+          <div class="row">
+            <div class="c-check"><span class="box"></span></div>
+            <div class="c-name"><div class="dev ssh">▸</div><span class="nm">mail-relay</span></div>
+            <div class="c-host">mail.example.com</div>
+            <div class="c-proto"><span class="chip ssh">SSH</span></div>
+            <div class="c-tags"><span class="tag"><i style="background:#e5484d"></i>生产</span></div>
+            <div class="c-status"><span class="dot ok"></span><span class="st-ok">在线</span></div>
+            <div class="c-time">09-12 00:16</div>
+            <div class="c-star">☆</div><div class="c-more">⋯</div>
+          </div>
+
+          <div class="row">
+            <div class="c-check"><span class="box"></span></div>
+            <div class="c-name"><div class="dev rdp">▦</div><span class="nm">backup-nas</span></div>
+            <div class="c-host">198.51.100.60</div>
+            <div class="c-proto"><span class="chip rdp">RDP</span></div>
+            <div class="c-tags"><span class="tag"><i style="background:#f0b429"></i>备份</span></div>
+            <div class="c-status"><span class="dot ok"></span><span class="st-ok">在线</span></div>
+            <div class="c-time">09-08 08:17</div>
+            <div class="c-star">☆</div><div class="c-more">⋯</div>
+          </div>
+
+          <div class="row">
+            <div class="c-check"><span class="box"></span></div>
+            <div class="c-name"><div class="dev ssh">▸</div><span class="nm">vpn-edge</span></div>
+            <div class="c-host">198.51.100.1</div>
+            <div class="c-proto"><span class="chip ssh">SSH</span></div>
+            <div class="c-tags"></div>
+            <div class="c-status"><span class="dot off"></span><span class="st-off">离线</span></div>
+            <div class="c-time">从未连接</div>
+            <div class="c-star">☆</div><div class="c-more">⋯</div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- 详情 -->
+      <aside class="inspector">
+        <div class="insp-head">
+          <div class="dev rdp">▦</div>
+          <div>
+            <div class="nm">app-gateway</div>
+            <div class="host">198.51.100.10:6389</div>
+            <span class="pill ok"><span class="dot ok"></span>在线</span>
+          </div>
+          <div class="star">★</div>
+        </div>
+
+        <div class="connect"><div class="b1">连接</div><div class="b2">▾</div></div>
+        <div class="quick">
+          <div class="q">✎ 编辑</div><div class="q">⧉ 复制 IP</div><div class="q">⇅ Ping</div>
+          <div class="q">★ 收藏</div><div class="q dis">Traceroute</div><div class="q dis">打开 Web</div>
+        </div>
+
+        <div class="sec">
+          <div class="t">连接信息</div>
+          <div class="kv"><div class="k">主机</div><div class="v mono">198.51.100.10</div></div>
+          <div class="kv"><div class="k">端口</div><div class="v">6389</div></div>
+          <div class="kv"><div class="k">协议</div><div class="v"><span class="chip mini rdp">RDP</span></div></div>
+          <div class="kv"><div class="k">分组</div><div class="v">生产环境 / Windows / 应用服务器</div></div>
+          <div class="kv"><div class="k">凭据</div><div class="v">demo-key-01</div></div>
+        </div>
+
+        <div class="sec">
+          <div class="t">使用信息</div>
+          <div class="kv"><div class="k">创建时间</div><div class="v">2026-09-16 08:57</div></div>
+          <div class="kv"><div class="k">最近连接</div><div class="v">09-25 17:46</div></div>
+          <div class="kv"><div class="k">上次时长</div><div class="v">33 秒</div></div>
+          <div class="kv"><div class="k">连接次数</div><div class="v">12 次</div></div>
+        </div>
+
+        <div class="sec">
+          <div class="t">最近活动</div>
+          <div class="tl">
+            <div class="tl-item"><span class="dot ok"></span>09-25 17:46 <span class="r">连接成功</span><span class="d">33 秒</span></div>
+            <div class="tl-item"><span class="dot ok"></span>09-24 20:12 <span class="r">连接成功</span><span class="d">12 分钟</span></div>
+            <div class="tl-item"><span class="dot off"></span>09-20 18:05 <span class="r">连接超时</span><span class="d">—</span></div>
+          </div>
+          <div class="link">查看更多 ›</div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- 状态栏 -->
+    <footer class="status">
+      <div class="l"><span class="dot off"></span>无活动会话</div>
+      <div class="r"><span>在线 <b>10</b> / 86</span><span>本地优先</span><span>凭据由 Windows DPAPI 保护</span></div>
+    </footer>
+  </section>
+</div>
+</body>
+</html>
