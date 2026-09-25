@@ -137,12 +137,12 @@
                         </Border>
                     </Grid>
                     <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontSize="12"
-                               Margin="8,0,6,0" MaxWidth="132" TextTrimming="CharacterEllipsis" />
+                               Margin="9,0,7,0" MaxWidth="210" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
                 <TextBlock Grid.Column="2" Text="{Binding HostDisplay}" Style="{StaticResource Text.BodySecondary}"
                            FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="12,0,0,0"
-                           MaxWidth="112" TextTrimming="CharacterEllipsis" />
+                           MaxWidth="170" TextTrimming="CharacterEllipsis" />
                 <!-- 协议徽章与首页一致：协议色小徽章，替代 A+ 时的裸文字列 -->
                 <Grid Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="14,0,0,0">
                     <Border CornerRadius="4"
@@ -160,9 +160,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border CornerRadius="5" Margin="0,0,5,0"
-                                        Background="{DynamicResource Bg.Subtle}"
-                                        BorderBrush="{DynamicResource Stroke.Subtle}"
-                                        BorderThickness="1">
+                                        Background="{DynamicResource Bg.Subtle}">
                                     <StackPanel Orientation="Horizontal" Margin="6,3">
                                         <Ellipse Width="6" Height="6" VerticalAlignment="Center"
                                                  Fill="{Binding Color, Converter={StaticResource ColorToBrush}}" />
@@ -185,7 +183,8 @@
                             ToolTip="{Binding PresenceTooltip}">
                     <Ellipse Width="7" Height="7" VerticalAlignment="Center"
                              Fill="{Binding PresenceBrushKey, Converter={StaticResource KeyToBrush}}" />
-                    <TextBlock Text="{Binding PresenceDisplay}" Style="{StaticResource Text.Caption}"
+                    <TextBlock Text="{Binding PresenceDisplay}" FontSize="12"
+                               Foreground="{Binding PresenceBrushKey, Converter={StaticResource KeyToBrush}}"
                                Margin="6,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
 

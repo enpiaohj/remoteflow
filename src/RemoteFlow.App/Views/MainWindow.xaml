@@ -230,11 +230,24 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <!-- Tab 栏。非全屏时始终在列，用户随时能从会话回到连接列表 -->
+                    <!-- Tab 栏。仅剩工作区页签（无会话）时整条隐藏——避免一行纯噪音；
+                         一旦开出会话 Tab 即自动出现。 -->
                     <Border Grid.Row="0"
                             Background="{DynamicResource Bg.Base}"
-                            Padding="8,6,8,0"
-                            Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
+                            Padding="8,6,8,0">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSessionFullScreen}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Tabs.Count}" Value="1">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                             <ItemsControl ItemsSource="{Binding Tabs}">
                                 <ItemsControl.ItemsPanel>
@@ -447,12 +460,12 @@
                             <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="首页"
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Home, Mode=TwoWay}"
                                          Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Home}">
-                                <TextBlock Text="{StaticResource Icon.Home}" FontFamily="{StaticResource IconFont}" FontSize="14" />
+                                <TextBlock Text="{StaticResource Icon.Home}" FontFamily="{StaticResource IconFont}" FontSize="16" />
                             </RadioButton>
                             <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="连接工作台"
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Connections, Mode=TwoWay}"
                                          Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Connections}">
-                                <TextBlock Text="{StaticResource Icon.Connections}" FontFamily="{StaticResource IconFont}" FontSize="14" />
+                                <TextBlock Text="{StaticResource Icon.Connections}" FontFamily="{StaticResource IconFont}" FontSize="16" />
                             </RadioButton>
 
                             <Border Style="{StaticResource Surface.Divider}" Margin="12,8" />
@@ -460,12 +473,12 @@
                             <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="凭据"
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Credentials, Mode=TwoWay}"
                                          Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Credentials}">
-                                <TextBlock Text="{StaticResource Icon.Credential}" FontFamily="{StaticResource IconFont}" FontSize="14" />
+                                <TextBlock Text="{StaticResource Icon.Credential}" FontFamily="{StaticResource IconFont}" FontSize="16" />
                             </RadioButton>
                             <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="设置"
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Settings, Mode=TwoWay}"
                                          Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Settings}">
-                                <TextBlock Text="{StaticResource Icon.Settings}" FontFamily="{StaticResource IconFont}" FontSize="14" />
+                                <TextBlock Text="{StaticResource Icon.Settings}" FontFamily="{StaticResource IconFont}" FontSize="16" />
                             </RadioButton>
                         </StackPanel>
                     </ScrollViewer>
@@ -475,12 +488,12 @@
                         <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="帮助"
                                      IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Help, Mode=TwoWay}"
                                      Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Help}">
-                            <TextBlock Text="{StaticResource Icon.Help}" FontFamily="{StaticResource IconFont}" FontSize="14" />
+                            <TextBlock Text="{StaticResource Icon.Help}" FontFamily="{StaticResource IconFont}" FontSize="16" />
                         </RadioButton>
                         <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="关于"
                                      IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=About, Mode=TwoWay}"
                                      Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.About}">
-                            <TextBlock Text="{StaticResource Icon.Info}" FontFamily="{StaticResource IconFont}" FontSize="14" />
+                            <TextBlock Text="{StaticResource Icon.Info}" FontFamily="{StaticResource IconFont}" FontSize="16" />
                         </RadioButton>
                     </StackPanel>
                   </Grid>
