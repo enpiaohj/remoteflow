@@ -217,6 +217,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<AppServices.GroupService>();
         services.AddSingleton<AppServices.CredentialService>();
         services.AddSingleton<AppServices.ConnectionSearchService>();
+        services.AddSingleton<PresenceProbeService>();
         services.AddSingleton<AppServices.ImportExportService>();
         services.AddSingleton<AppServices.CredentialBackupService>();
         services.AddSingleton<LocalBackupService>();

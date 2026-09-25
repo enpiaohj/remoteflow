@@ -201,6 +201,12 @@ public sealed class AppSettings
     /// <summary>会话区最大并发 Tab 数，用于防止异常情况下无限创建重复连接。</summary>
     public int MaxConcurrentSessions { get; set; } = 20;
 
+    /// <summary>
+    /// 连接工作台是否自动探测连接的可达性（TCP 单步、并发受限）。
+    /// 关闭后「在线状态」列回到未探测态，可随时用列表工具条的「探测」手动触发。
+    /// </summary>
+    public bool PresenceProbeEnabled { get; set; } = true;
+
     public AppSettings Clone()
     {
         var copy = (AppSettings)MemberwiseClone();

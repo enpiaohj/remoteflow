@@ -102,6 +102,76 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
     [ObservableProperty]
     private string _recentBucket = "更早";
 
+    /// <summary>
+    /// 在线探测状态（列表「状态」列）。与 <see cref="IsConnected"/>（存在活动会话）语义区分：
+    /// 探测的是「现在能否连通主机」，有活动会话时无论探测结果如何都按在线呈现。
+    /// </summary>
+    [ObservableProperty]
+    private PresenceState _presence = PresenceState.Unknown;
+
+    /// <summary>最近一次探测完成的时间（tooltip 用）。null 表示从未探测。</summary>
+    private DateTimeOffset? _lastProbedAt;
+
+    partial void OnPresenceChanged(PresenceState value) => RaisePresenceDisplays();
+
+    partial void OnIsConnectedChanged(bool value) => RaisePresenceDisplays();
+
+    /// <summary>状态列文字：有活动会话一律「已连接」，否则随探测状态。</summary>
+    public string PresenceDisplay => IsConnected
+        ? "已连接"
+        : Presence switch
+        {
+            PresenceState.Probing => "探测中",
+            PresenceState.Online => "在线",
+            PresenceState.Offline => "离线",
+            _ => "—"
+        };
+
+    /// <summary>状态点 / 文字的颜色语义键。离线用中性灰——「现在不通」不是错误，别渲染成红色告警。</summary>
+    public string PresenceBrushKey => IsConnected
+        ? "Status.Success"
+        : Presence switch
+        {
+            PresenceState.Probing => "Status.Warning",
+            PresenceState.Online => "Status.Success",
+            _ => "Text.Tertiary"
+        };
+
+    /// <summary>状态列 tooltip：说明数据来自什么时候，避免把陈旧结果当实时。</summary>
+    public string PresenceTooltip => IsConnected
+        ? "存在活动会话"
+        : Presence switch
+        {
+            PresenceState.Probing => "正在探测…",
+            PresenceState.Online or PresenceState.Offline when _lastProbedAt is { } at
+                => $"探测于 {DateTimeDisplay.Compact(at)}",
+            _ => "尚未探测，点击工具条「探测」立即检查"
+        };
+
+    private void RaisePresenceDisplays()
+    {
+        OnPropertyChanged(nameof(PresenceDisplay));
+        OnPropertyChanged(nameof(PresenceBrushKey));
+        OnPropertyChanged(nameof(PresenceTooltip));
+    }
+
+    /// <summary>标记进入探测中（发起批量探测前统一置位）。</summary>
+    public void MarkProbing() => Presence = PresenceState.Probing;
+
+    /// <summary>写入一次探测结果并记录探测时间。</summary>
+    public void SetProbeResult(bool online)
+    {
+        _lastProbedAt = DateTimeOffset.Now;
+        Presence = online ? PresenceState.Online : PresenceState.Offline;
+    }
+
+    /// <summary>清空探测状态（关闭探测开关时）。</summary>
+    public void ClearProbe()
+    {
+        _lastProbedAt = null;
+        Presence = PresenceState.Unknown;
+    }
+
     public DateTimeOffset? LastConnectedAt => Profile.LastConnectedAt;
 
     /// <summary>最近连接：刚刚 / N 分钟前；更早则用统一紧凑时间。从未连接给占位。</summary>
