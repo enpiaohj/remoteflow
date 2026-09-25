@@ -195,7 +195,7 @@
             <!-- ══ 标题栏：纯拖拽区 + 窗口按钮。logo 在图标栏栏顶，
                  全局搜索由工作台页内搜索承担（概念设计 v0.2）。 ══ -->
             <Grid Grid.Row="0" Grid.Column="1"
-                  Background="{DynamicResource Bg.Base}"
+                  Background="{DynamicResource Bg.Layer}"
                   Visibility="{Binding IsScreenFull, Converter={StaticResource InverseBoolToVisibility}}"
                   MouseRightButtonUp="OnTitleBarSystemMenu">
                 <Grid.ColumnDefinitions>
@@ -469,7 +469,7 @@
                 </Border>
 
             <!-- ══ 底部状态栏：一条细条，与内容区拉开、给窗口一个明确的下边界 ══ -->
-            <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Height="24" Background="{DynamicResource Bg.Base}"
+            <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Height="24" Background="{DynamicResource Bg.Layer}"
                     BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,1,0,0"
                     Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
                 <Grid Margin="16,0,14,0">
