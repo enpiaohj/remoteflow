@@ -199,46 +199,22 @@
                   Visibility="{Binding IsScreenFull, Converter={StaticResource InverseBoolToVisibility}}"
                   MouseRightButtonUp="OnTitleBarSystemMenu">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- 窗口控制 -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button Style="{StaticResource CaptionButton}" Content="&#xE921;"
-                            Click="OnMinimizeClick" ToolTip="最小化" />
-                    <Button x:Name="MaximizeButton" Style="{StaticResource CaptionButton}" Content="&#xE922;"
-                            Click="OnMaximizeClick" ToolTip="最大化" />
-                    <Button Style="{StaticResource CaptionCloseButton}" Content="&#xE8BB;"
-                            Click="OnCloseClick" ToolTip="关闭" />
-                </StackPanel>
-            </Grid>
-
-            <!-- ══ 主体 ════════════════════════════════════════════ -->
-            <Grid Grid.Row="1" Grid.Column="1">
-
-                <!-- ── 中央工作区 ────────────────────────────────── -->
-                <Grid Margin="0,0,0,0">
-                    <Grid.RowDefinitions>
-                        <!-- Auto：Tab 栏 Collapsed 时该行自然收为 0，全屏把整块屏幕
-                             让给远程画面；会话工具条（带「退出全屏」按钮）保留为退出入口。 -->
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-
-                    <!-- Tab 栏。仅剩工作区页签（无会话）时整条隐藏——避免一行纯噪音；
-                         一旦开出会话 Tab 即自动出现。 -->
-                    <Border Grid.Row="0"
-                            Background="{DynamicResource Bg.Base}"
-                            Padding="8,6,8,0">
+                    <!-- 标签条：常驻标题栏行（浏览器式），无会话 / 有会话统一；
+                         完全全屏时随标题栏整行收起。 -->
+                    <Border Grid.Column="0"
+                            VerticalAlignment="Bottom"
+                            Background="Transparent"
+                            Padding="8,4,8,0">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Visibility" Value="Visible" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsSessionFullScreen}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Tabs.Count}" Value="1">
                                         <Setter Property="Visibility" Value="Collapsed" />
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -313,6 +289,24 @@
                         </ScrollViewer>
                     </Border>
 
+                <!-- 窗口控制 -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button Style="{StaticResource CaptionButton}" Content="&#xE921;"
+                            Click="OnMinimizeClick" ToolTip="最小化" />
+                    <Button x:Name="MaximizeButton" Style="{StaticResource CaptionButton}" Content="&#xE922;"
+                            Click="OnMaximizeClick" ToolTip="最大化" />
+                    <Button Style="{StaticResource CaptionCloseButton}" Content="&#xE8BB;"
+                            Click="OnCloseClick" ToolTip="关闭" />
+                </StackPanel>
+            </Grid>
+
+            <!-- ══ 主体 ════════════════════════════════════════════ -->
+            <Grid Grid.Row="1" Grid.Column="1">
+
+                <!-- ── 中央工作区 ────────────────────────────────── -->
+                <Grid Margin="0,0,0,0">
+
+
                     <!-- 内容区：所有 Tab 内容常驻，仅切换可见性，保证会话不被销毁。
                          按最新反馈还原为白色内容区（Bg.Layer），不再跟随 Windows 11
                          灰机身配色思路——这条改动是应用级的，覆盖首页在内的所有页面，
@@ -320,7 +314,7 @@
                          会话 Tab（RDP/SSH/VNC）自己在 SessionHostView 里画深色背景，
                          互不影响。
                          会话全屏时必须去掉描边和圆角：否则远程画面四周会露出一圈边框。 -->
-                    <Border Grid.Row="1"
+                    <Border
                             Background="{DynamicResource Bg.Layer}"
                             SnapsToDevicePixels="True">
                         <Border.Style>
