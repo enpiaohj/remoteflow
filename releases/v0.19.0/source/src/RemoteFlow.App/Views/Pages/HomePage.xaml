@@ -1,0 +1,491 @@
+<UserControl x:Class="RemoteFlow.App.Views.Pages.HomePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
+             xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:HomePageViewModel}">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
+        <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
+
+        <!-- 区块标题 + 右侧「查看全部」链接 -->
+        <Style x:Key="Home.LinkButton" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Padding="4,2">
+                            <ContentPresenter />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brand.Hover}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 首页「最近连接 / 收藏」行的右键菜单：快速访问，只保留
+             连接(无活动)/切换到会话+断开连接(有活动) / 编辑 / 测试连接 / 收藏|取消收藏 / 管理连接。
+             分组布局：主操作组=connect + disconnect + 编辑；第二组=测试连接与收藏切换；末组=定位。
+             统一经 HomePage.ConnectionActionRequested 桥接到既有命令，不在首页复制实现。
+             x:Shared=False 使每行实例化独立菜单；DataContext 在菜单打开时取自所在行。
+             Opened 时把该行设为选中，依行 IsFavorite 写入收藏项 Header，
+             并按行会话状态把 connect 改名 / 显隐 disconnect（与「我的连接」行菜单同一约定）。 -->
+        <ContextMenu x:Key="HomeRowMenu" x:Shared="False" Opened="OnHomeRowMenuOpened">
+            <MenuItem Tag="connect" Header="连接" Click="OnRowActionClick" />
+            <MenuItem Tag="disconnect" Header="断开连接" Click="OnRowActionClick" />
+            <MenuItem Tag="edit" Header="编辑" Click="OnRowActionClick" />
+            <Separator />
+            <MenuItem Tag="test" Header="测试连接" Click="OnRowActionClick" />
+            <!-- 收藏 / 取消收藏：Header 随行当前收藏状态切换，打开时由 OnHomeRowMenuOpened 写入 -->
+            <MenuItem Tag="favorite" Header="收藏" Click="OnRowActionClick" />
+            <Separator />
+            <MenuItem Tag="manage" Header="管理连接" Click="OnRowActionClick" />
+        </ContextMenu>
+
+        <!-- 最近连接：大号快捷卡片。是首页最突出的快捷入口，给足高度和图标尺寸 -->
+        <DataTemplate x:Key="RecentCard" DataType="{x:Type vm:ConnectionItemViewModel}">
+            <Grid Margin="0,0,14,0" MinHeight="102"
+                  ContextMenu="{StaticResource HomeRowMenu}">
+                <Button Cursor="Hand" HorizontalContentAlignment="Stretch"
+                        Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <!-- 左缘一条协议色竖条：一眼分辨 RDP / SSH / VNC，
+                                 也给这张卡片一个视觉锚点，不再是一块空白方框。 -->
+                            <Border x:Name="Root"
+                                    Background="{DynamicResource Bg.Layer}"
+                                    BorderBrush="{DynamicResource Stroke.Subtle}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource Radius.Large}"
+                                    SnapsToDevicePixels="True">
+                                <Grid>
+                                    <Border Width="3" HorizontalAlignment="Left" Margin="0,16"
+                                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                            CornerRadius="0,2,2,0" />
+                                    <ContentPresenter Margin="20,16,16,14" />
+                                </Grid>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <!-- 高亮 / 绿点只认“真正已连接”；HasActiveSession（任意活动）只用于行右键区分动作 -->
+                                <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Selected}" />
+                                </DataTrigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Subtle}" />
+                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Strong}" />
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Pressed}" />
+                                </Trigger>
+                                <!-- 右键菜单打开时行进入选中态：品牌色描边 + 浅蓝底，轻量表达目标行。 -->
+                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.RowSelected}" />
+                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
+                                </DataTrigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 首页「最近连接」是图标系统里唯一放大到 64 的例外，突显这块快捷入口 -->
+                        <Grid Grid.Column="0" VerticalAlignment="Center" Width="64" Height="64">
+                            <Border Style="{StaticResource IconTile.Background}"
+                                    Width="64" Height="64" CornerRadius="{StaticResource Radius.Large}"
+                                    Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                    Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                            <TextBlock Style="{StaticResource IconTile.Glyph}" FontSize="28"
+                                       Text="{Binding ProtocolIcon}"
+                                       Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                            <!-- 会话状态点：空闲隐藏，连接中琥珀 / 已连接绿 -->
+                            <Border Style="{StaticResource SessionStatusDot}" Width="18" Height="18" CornerRadius="9" Margin="0,0,-3,-3"
+                                    Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}">
+                                <Ellipse Style="{StaticResource SessionStatusDot.Fill}" Width="13" Height="13" />
+                            </Border>
+                        </Grid>
+
+                        <!-- 悬停浮出「连接 →」提示：整张卡片本身就是连接按钮，这里只作可见性引导 -->
+                        <TextBlock Grid.Column="1" Text="连接 &#x2192;" FontSize="12" FontWeight="SemiBold"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                                   IsHitTestVisible="False"
+                                   Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Opacity" Value="0" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True">
+                                            <Setter Property="Opacity" Value="1" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <StackPanel Grid.Column="1" Margin="18,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontWeight="SemiBold" FontSize="15"
+                                       TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" />
+                            <TextBlock Text="{Binding HostDisplay}" Style="{StaticResource Text.Caption}"
+                                       FontFamily="{StaticResource MonoFont}" Margin="0,4,0,0" HorizontalAlignment="Left" />
+                            <!-- 协议徽章紧跟主机，和图标 / 名称贴在一起 -->
+                            <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
+                                <Grid>
+                                    <Border CornerRadius="5"
+                                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                            Opacity="0.13" />
+                                    <TextBlock Text="{Binding ProtocolName}" FontSize="11" FontWeight="SemiBold" Margin="8,3"
+                                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                                </Grid>
+                                <Ellipse Width="7" Height="7" VerticalAlignment="Center" Margin="10,0,0,0"
+                                         Fill="{DynamicResource Status.Success}"
+                                         Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Text="已连接" Style="{StaticResource Text.Caption}" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Status.Success}" Margin="6,0,0,0" VerticalAlignment="Center"
+                                           Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Text="{Binding LastConnectedDisplay}" Style="{StaticResource Text.Caption}" Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Visibility="{Binding IsConnected, Converter={StaticResource InverseBoolToVisibility}}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Style="{StaticResource Button.Icon}"
+                        Width="26" Height="26" FontSize="12"
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,12,12,0"
+                        Content="{StaticResource Icon.More}"
+                        Click="OnItemMenuClick" Tag="{Binding}"
+                        ContextMenu="{StaticResource HomeRowMenu}" />
+            </Grid>
+        </DataTemplate>
+
+        <!-- 收藏 / 最近活动 卡片里的一行 -->
+        <DataTemplate x:Key="FavoriteRow" DataType="{x:Type vm:ConnectionItemViewModel}">
+            <!-- 手势与「我的连接」列表一致：单击选中（高亮），双击发起连接。
+                 悬停有底色、整行手型指针，避免“看着像行却没反馈”。 -->
+            <Grid Height="60" Cursor="Hand" MouseLeftButtonDown="OnFavoriteRowMouseDown"
+                  ContextMenu="{StaticResource HomeRowMenu}">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Background" Value="Transparent" />
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource Bg.Hover}" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource Bg.Selected}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="26" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 图标块显示协议（与收藏 / 连接列表同一套语言） -->
+                <Grid Grid.Column="0" VerticalAlignment="Center"
+                      Width="{StaticResource IconTile.Size}" Height="{StaticResource IconTile.Size}">
+                    <Border Style="{StaticResource IconTile.Background}"
+                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                            Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                    <TextBlock Style="{StaticResource IconTile.Glyph}"
+                               Text="{Binding ProtocolIcon}"
+                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    <Border Style="{StaticResource SessionStatusDot}"
+                            Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}">
+                        <Ellipse Style="{StaticResource SessionStatusDot.Fill}" />
+                    </Border>
+                </Grid>
+
+                <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding HostDisplay}" Style="{StaticResource Text.Caption}"
+                               FontFamily="{StaticResource MonoFont}" Margin="0,1,0,0" />
+                </StackPanel>
+
+                <!-- 悬停就地浮出「连接」：与「我的连接」列表一致，省去双击 -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                            VerticalAlignment="Center" Margin="0,0,4,0">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Opacity" Value="0" />
+                            <Setter Property="IsHitTestVisible" Value="False" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Grid}}" Value="True">
+                                    <Setter Property="Opacity" Value="1" />
+                                    <Setter Property="IsHitTestVisible" Value="True" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Button Style="{StaticResource Button.Subtle}" Height="26" Padding="10,0" FontSize="12"
+                            Content="连接" ToolTip="连接"
+                            Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}" />
+                </StackPanel>
+
+                <Grid Grid.Column="2" VerticalAlignment="Center" Margin="8,0">
+                    <Border CornerRadius="4"
+                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
+                    <TextBlock Text="{Binding ProtocolName}" FontSize="10" Margin="7,2"
+                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                </Grid>
+
+                <Button Grid.Column="3" Style="{StaticResource Button.Icon}"
+                        Width="24" Height="24" FontSize="11" VerticalAlignment="Center"
+                        Content="{StaticResource Icon.More}"
+                        Click="OnItemMenuClick" Tag="{Binding}"
+                        ContextMenu="{StaticResource HomeRowMenu}" />
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ActivityRow" DataType="{x:Type vm:HistoryItemViewModel}">
+            <Grid Height="60">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 图标块显示协议（与收藏 / 连接列表同一套语言）；
+                     只有失败或取消才在右下角打一个状态点，成功是常态不必强调。 -->
+                <Grid Grid.Column="0" VerticalAlignment="Center">
+                    <Border Style="{StaticResource IconTile.Background}"
+                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                            Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                    <TextBlock Style="{StaticResource IconTile.Glyph}"
+                               Text="{Binding ProtocolIcon}"
+                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    <Border Width="13" Height="13" CornerRadius="7"
+                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                            Margin="0,0,-2,-2"
+                            Background="{DynamicResource Bg.Layer}"
+                            Visibility="{Binding ShowResultBadge, Converter={StaticResource BoolToVisibility}}">
+                        <Ellipse Width="9" Height="9"
+                                 Fill="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}"
+                                 ToolTip="{Binding ResultText}" />
+                    </Border>
+                </Grid>
+
+                <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ActivityText}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding HostProtocolLine}" Style="{StaticResource Text.Caption}" Margin="0,1,0,0" />
+                </StackPanel>
+
+                <TextBlock Grid.Column="2" Text="{Binding StartedAtDisplay}" Style="{StaticResource Text.Caption}"
+                           VerticalAlignment="Center" Margin="12,0,4,0" />
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <!-- 内容铺满整个工作区：横向到页边距，纵向由「收藏 / 最近活动」行吃满。
+         直接用一个填充视口的 Grid，不套外层 ScrollViewer——套了会因为 MinHeight
+         与滚动条的相互作用把问候语顶出可视区。溢出交给两张卡片内部各自的 ScrollViewer。 -->
+    <Grid Margin="28,28,28,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" MinHeight="220" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+            <!-- 问候语 + 统一日期 + 统计行（N 个连接；有已连接会话时才追加「· M 个会话已连接」） -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,14">
+                <TextBlock Style="{StaticResource Text.PageTitle}" Text="{Binding Greeting, Mode=OneWay}" />
+                <TextBlock Text="{Binding DateLine, Mode=OneWay}" Style="{StaticResource Text.PageSubtitle}"
+                           Foreground="{DynamicResource Text.Tertiary}" Margin="0,3,0,0" />
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <TextBlock Style="{StaticResource Text.PageSubtitle}">
+                        <Run Text="{Binding TotalConnections, Mode=OneWay}" FontWeight="SemiBold"
+                             Foreground="{DynamicResource Text.Secondary}" />
+                        <Run Text=" 个连接" Foreground="{DynamicResource Text.Tertiary}" />
+                    </TextBlock>
+                    <!-- 没有已连接会话时「0 个会话已连接」是噪声——只在 >0 时显示 -->
+                    <TextBlock Style="{StaticResource Text.PageSubtitle}"
+                               Visibility="{Binding ConnectedSessions, Converter={StaticResource CountToVisibility}}">
+                        <Run Text=" · " Foreground="{DynamicResource Text.Tertiary}" />
+                        <Run Text="{Binding ConnectedSessions, Mode=OneWay}" FontWeight="SemiBold"
+                             Foreground="{DynamicResource Status.Success}" />
+                        <Run Text=" 个会话已连接" Foreground="{DynamicResource Text.Tertiary}" />
+                    </TextBlock>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- 首次使用引导 -->
+            <Border Grid.Row="1" Style="{StaticResource Surface.Card}" Padding="24" Margin="0,0,0,24"
+                    Visibility="{Binding IsFirstRun, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel>
+                    <TextBlock Text="欢迎使用 RemoteFlow" Style="{StaticResource Text.SectionTitle}" />
+                    <TextBlock Style="{StaticResource Text.BodySecondary}" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Text="把 RDP、SSH、VNC 连接统一到一个工作台。先创建一个连接，或从设置的「数据与备份」导入既有的服务器清单。" />
+                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,10,0,0"
+                               Text="密码与私钥由 Windows DPAPI 加密后单独保存，不会写入连接数据库，也不会随导出文件带走。" />
+                </StackPanel>
+            </Border>
+
+            <!-- 最近连接 -->
+            <StackPanel Grid.Row="2" Margin="0,0,0,24"
+                        Visibility="{Binding HasRecent, Converter={StaticResource BoolToVisibility}}">
+                <Grid Margin="0,0,0,12">
+                    <TextBlock Text="最近连接" Style="{StaticResource Text.SectionTitle}" />
+                    <Button Content="查看全部" Style="{StaticResource Home.LinkButton}"
+                            HorizontalAlignment="Right" Command="{Binding ViewAllRecentCommand}" />
+                </Grid>
+                <!-- 负右边距抵消最后一张卡片的 gutter，使卡片右缘与下方两列对齐 -->
+                <ItemsControl ItemsSource="{Binding RecentItems}" ItemTemplate="{StaticResource RecentCard}"
+                              Margin="0,0,-14,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="1" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- 收藏 + 最近活动：占据剩余竖向空间 -->
+            <Grid Grid.Row="3" Margin="0,0,0,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="24" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 收藏 -->
+                <Border Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="18,16">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{StaticResource Icon.Favorite}" FontFamily="{StaticResource IconFont}"
+                                           FontSize="15" Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
+                                <TextBlock Text="收藏" Style="{StaticResource Text.SectionTitle}" Margin="8,0,0,0" />
+                            </StackPanel>
+                            <Button Content="查看全部" Style="{StaticResource Home.LinkButton}"
+                                    HorizontalAlignment="Right" Command="{Binding ViewAllFavoritesCommand}" />
+                        </Grid>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Padding="0,0,4,0">
+                            <StackPanel>
+                                <ItemsControl ItemsSource="{Binding FavoriteItems}" ItemTemplate="{StaticResource FavoriteRow}"
+                                              Visibility="{Binding HasFavorites, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10" TextWrapping="Wrap"
+                                           Text="还没有收藏的连接。在「我的连接」里点星标即可加入。"
+                                           Visibility="{Binding HasFavorites, Converter={StaticResource InverseBoolToVisibility}}" />
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <StackPanel Grid.Row="2">
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,8" />
+                            <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Stretch"
+                                    Command="{Binding ViewAllFavoritesCommand}">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="{StaticResource Icon.Favorite}" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Text="管理收藏" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- 最近活动 -->
+                <Border Grid.Column="2" Style="{StaticResource Surface.Card}" Padding="18,16">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{StaticResource Icon.Recent}" FontFamily="{StaticResource IconFont}"
+                                           FontSize="15" Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
+                                <TextBlock Text="最近活动" Style="{StaticResource Text.SectionTitle}" Margin="8,0,0,0" />
+                            </StackPanel>
+                            <Button Content="查看全部" Style="{StaticResource Home.LinkButton}"
+                                    HorizontalAlignment="Right" Command="{Binding ViewAllActivityCommand}" />
+                        </Grid>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Padding="0,0,4,0">
+                            <StackPanel>
+                                <ItemsControl ItemsSource="{Binding RecentHistory}" ItemTemplate="{StaticResource ActivityRow}"
+                                              Visibility="{Binding HasActivity, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,10" TextWrapping="Wrap"
+                                           Text="还没有连接记录。"
+                                           Visibility="{Binding HasActivity, Converter={StaticResource InverseBoolToVisibility}}" />
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <StackPanel Grid.Row="2">
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,8" />
+                            <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Stretch"
+                                    Command="{Binding ViewAllActivityCommand}">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="{StaticResource Icon.Recent}" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Text="查看所有活动" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- 安全提示：保留自己的淡蓝底色识别，但边框颜色改成跟外框（内容区/
+                 其他卡片）同一套 Stroke.Subtle，不再用品牌色描边 -->
+            <Border Grid.Row="4" Background="{DynamicResource Brand.Subtle}"
+                    BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="1"
+                    CornerRadius="{StaticResource Radius.Large}" Padding="16,14"
+                    Visibility="{Binding ShowSecurityTip, Converter={StaticResource BoolToVisibility}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}"
+                               FontSize="16" Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Margin="12,0,12,0" VerticalAlignment="Center">
+                        <TextBlock Text="安全提示" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                        <TextBlock Text="为保障连接安全，请定期更新密码，并为关键账号启用双因素认证。"
+                                   Style="{StaticResource Text.Caption}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Style="{StaticResource Button.Secondary}" Content="了解更多"
+                            VerticalAlignment="Center" Command="{Binding ViewCredentialsCommand}" />
+                    <Button Grid.Column="3" Style="{StaticResource Button.Icon}"
+                            Width="28" Height="28" FontSize="10" Margin="6,0,0,0" VerticalAlignment="Center"
+                            Content="{StaticResource Icon.Close}" ToolTip="不再提示"
+                            Command="{Binding DismissSecurityTipCommand}" />
+                </Grid>
+            </Border>
+    </Grid>
+</UserControl>
