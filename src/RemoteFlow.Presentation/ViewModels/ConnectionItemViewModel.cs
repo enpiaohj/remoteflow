@@ -182,9 +182,9 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
     public string LastConnectedDisplay
         => Profile.LastConnectedAt is { } time ? DateTimeDisplay.RelativeRecent(time) : "从未连接";
 
-    /// <summary>列表「最近连接」列用的短时间（如 09-23 15:46），比相对时间更利于扫读。</summary>
+    /// <summary>列表「最近连接」列用的超短时间（09-23 15:46），固定数字格式利于扫读。</summary>
     public string LastConnectedCompact
-        => Profile.LastConnectedAt is { } time ? DateTimeDisplay.Compact(time) : "从未连接";
+        => Profile.LastConnectedAt is { } time ? DateTimeDisplay.ShortDateTime(time) : "从未连接";
 
     /// <summary>详情面板快捷宫格的收藏切换文案。</summary>
     public string FavoriteToggleText => IsFavorite ? "取消收藏" : "收藏";

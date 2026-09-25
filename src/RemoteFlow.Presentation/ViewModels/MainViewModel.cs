@@ -303,7 +303,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             case NavigationPage.Connections:
                 ConnectionsPage.Filter = ConnectionFilter.All;
                 WorkspaceTab.Page = ConnectionsPage;
-                WorkspaceTab.Title = "我的连接";
+                WorkspaceTab.Title = "连接工作台";
                 break;
 
             case NavigationPage.Favorites:

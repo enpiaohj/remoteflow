@@ -71,6 +71,10 @@ public static class DateTimeDisplay
     public static string Compact(DateTimeOffset value)
         => $"{Date(value)} {Time(value)}";
 
+    /// <summary>表格单元格用的超短“月-日 时:分”，固定数字格式不随日期样式变化。例：09-23 15:46。</summary>
+    public static string ShortDateTime(DateTimeOffset value)
+        => value.ToLocalTime().ToString("MM-dd HH:mm", CultureInfo.InvariantCulture);
+
     /// <summary>星期短名（周一～周日）。</summary>
     public static string Weekday(DateTimeOffset value)
         => WeekdayNames[(int)value.ToLocalTime().DayOfWeek];
