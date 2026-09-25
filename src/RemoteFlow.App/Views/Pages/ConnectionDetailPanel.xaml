@@ -170,9 +170,9 @@
                         <UniformGrid.Resources>
                             <Style TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
                                 <Setter Property="MinHeight" Value="30" />
-                                <Setter Property="Padding" Value="4,0" />
-                                <Setter Property="FontSize" Value="12" />
-                                <Setter Property="Margin" Value="0,0,6,6" />
+                                <Setter Property="Padding" Value="2,0" />
+                                <Setter Property="FontSize" Value="11" />
+                                <Setter Property="Margin" Value="0,0,4,6" />
                                 <Setter Property="HorizontalContentAlignment" Value="Center" />
                             </Style>
                         </UniformGrid.Resources>
@@ -207,22 +207,14 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{StaticResource Icon.FavoriteFilled}" FontFamily="{StaticResource IconFont}"
                                            FontSize="11" VerticalAlignment="Center" Foreground="#F2C037" />
-                                <TextBlock Text="{Binding FavoriteToggleText}" Margin="5,0,0,0" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding FavoriteToggleText}" Margin="4,0,0,0" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                         <Button IsEnabled="False" ToolTip="后续版本提供">
-                            <StackPanel Orientation="Horizontal" Opacity="0.55">
-                                <TextBlock Text="{StaticResource Icon.Connections}" FontFamily="{StaticResource IconFont}"
-                                           FontSize="11" VerticalAlignment="Center" />
-                                <TextBlock Text="Traceroute" Margin="5,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
+                            <TextBlock Text="Traceroute" VerticalAlignment="Center" Opacity="0.55" />
                         </Button>
                         <Button Margin="0" IsEnabled="False" ToolTip="后续版本提供">
-                            <StackPanel Orientation="Horizontal" Opacity="0.55">
-                                <TextBlock Text="{StaticResource Icon.Home}" FontFamily="{StaticResource IconFont}"
-                                           FontSize="11" VerticalAlignment="Center" />
-                                <TextBlock Text="打开 Web" Margin="5,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
+                            <TextBlock Text="打开 Web" VerticalAlignment="Center" Opacity="0.55" />
                         </Button>
                     </UniformGrid>
                 </StackPanel>

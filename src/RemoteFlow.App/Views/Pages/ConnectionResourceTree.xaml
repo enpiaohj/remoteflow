@@ -1,0 +1,156 @@
+<UserControl x:Class="RemoteFlow.App.Views.Pages.ConnectionResourceTree"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
+             xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:ConnectionsPageViewModel}"
+             Background="{DynamicResource Bg.Base}">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:DepthToMarginConverter x:Key="DepthToMargin" />
+
+        <!-- 分组右键菜单（原属连接页，随树移到本控件）-->
+        <ContextMenu x:Key="GroupMenu" x:Shared="False" Opened="OnGroupContextMenuOpened">
+            <MenuItem Header="新建连接" Click="OnGroupNewConnectionClick" />
+            <MenuItem Header="新建子分组" Click="OnGroupNewChildClick" />
+            <Separator />
+            <MenuItem Tag="rename" Header="重命名" Click="OnGroupRenameClick" />
+            <MenuItem Tag="setDefault" Header="设为默认分组" Click="OnGroupSetDefaultClick" />
+            <Separator />
+            <MenuItem Tag="delete" Header="删除分组" Click="OnGroupDeleteClick" />
+        </ContextMenu>
+
+        <!-- ── 智能视图行 ────────────────────────────────────── -->
+        <DataTemplate x:Key="SmartViewTemplate" DataType="{x:Type vm:ConnectionsPageViewModel+SmartViewOption}">
+            <StackPanel Orientation="Horizontal" Height="30" VerticalAlignment="Center">
+                <TextBlock Text="{Binding IconGlyph}" FontFamily="{StaticResource IconFont}" FontSize="13"
+                           Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Name}" FontSize="13" Margin="9,0,0,0"
+                           Foreground="{DynamicResource Text.Primary}" VerticalAlignment="Center" />
+                <Border Background="{DynamicResource Bg.Subtle}" BorderBrush="{DynamicResource Stroke.Subtle}"
+                        BorderThickness="1" CornerRadius="9" Padding="7,1" Margin="10,0,0,0" VerticalAlignment="Center">
+                    <TextBlock>
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Label}">
+                                <Setter Property="Text" Value="{Binding DataContext.AllCount, RelativeSource={RelativeSource AncestorType=ListBox}}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding FilterValue}" Value="Favorites">
+                                        <Setter Property="Text" Value="{Binding DataContext.FavoritesCount, RelativeSource={RelativeSource AncestorType=ListBox}}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding FilterValue}" Value="Recent">
+                                        <Setter Property="Text" Value="{Binding DataContext.RecentCount, RelativeSource={RelativeSource AncestorType=ListBox}}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Border>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- ── 分组节点行 ────────────────────────────────────── -->
+        <!-- 折叠箭头单独吃掉按下事件，避免「点箭头展开」同时把分组选成当前过滤 -->
+        <DataTemplate x:Key="GroupTreeNodeTemplate" DataType="{x:Type vm:ConnectionGroupNodeViewModel}">
+            <Grid Height="30" Background="Transparent"
+                  Margin="{Binding Depth, Converter={StaticResource DepthToMargin}}">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="ContextMenu" Value="{StaticResource GroupMenu}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsUngrouped}" Value="True">
+                                <Setter Property="ContextMenu" Value="{x:Null}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="18" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0" Width="18" Height="18" HorizontalAlignment="Left"
+                        Focusable="False" Background="Transparent" BorderThickness="0" Padding="0"
+                        Cursor="Hand"
+                        PreviewMouseLeftButtonDown="OnTreeChevronPreviewMouseDown"
+                        Command="{Binding ToggleExpandCommand}"
+                        Visibility="{Binding HasChildGroups, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Width="12" FontFamily="{StaticResource IconFont}" FontSize="9" TextAlignment="Center"
+                               Foreground="{DynamicResource Text.Tertiary}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="{StaticResource Icon.ChevronRight}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                        <Setter Property="Text" Value="{StaticResource Icon.ChevronDown}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Button>
+
+                <TextBlock Grid.Column="1" Text="{StaticResource Icon.Folder}" FontFamily="{StaticResource IconFont}"
+                           FontSize="13" Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="13" Margin="7,0,0,0"
+                           Foreground="{DynamicResource Text.Primary}" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+                <Border Grid.Column="3" Background="{DynamicResource Bg.Subtle}" BorderBrush="{DynamicResource Stroke.Subtle}"
+                        BorderThickness="1" CornerRadius="9" Padding="7,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding TotalCount}" Style="{StaticResource Text.Label}" />
+                </Border>
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <!-- 顶沿与窗口标题栏同一行：本控件在 MainWindow 中跨标题栏行与内容行放置，
+         头部「连接资源 + 新建」因此与产品名称置顶对齐（设计稿的树列形态）。
+         头部落在 chrome 区，交互件必须显式声明 IsHitTestVisibleInChrome。 -->
+    <Border Padding="14,0,8,0">
+        <DockPanel>
+            <Grid DockPanel.Dock="Top" Height="48">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="连接资源" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button Style="{StaticResource Button.Icon}" Width="28" Height="28"
+                            Content="{StaticResource Icon.Add}" ToolTip="新建分组" Click="OnNewGroupMenuClick">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="新建分组" Click="OnNewGroupMenuClick" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- 智能视图 -->
+            <ListBox DockPanel.Dock="Top" x:Name="SmartViewList"
+                     ItemsSource="{Binding SmartViews}"
+                     ItemTemplate="{StaticResource SmartViewTemplate}"
+                     SelectedItem="{Binding SelectedSmartView}"
+                     Margin="4,8,0,8"
+                     Style="{StaticResource List.Plain}" BorderThickness="0" Background="Transparent" />
+
+            <Border DockPanel.Dock="Top" Style="{StaticResource Surface.Divider}" Margin="2,4,2,8" />
+
+            <!-- 分组树（摊平渲染，缩进由 Depth 决定）-->
+            <ListBox x:Name="GroupTreeList"
+                     ItemsSource="{Binding FlatTreeNodes}"
+                     ItemTemplate="{StaticResource GroupTreeNodeTemplate}"
+                     SelectedItem="{Binding SelectedGroupNode}"
+                     Style="{StaticResource List.Plain}" BorderThickness="0" Background="Transparent"
+                     VirtualizingPanel.IsVirtualizing="False" />
+        </DockPanel>
+    </Border>
+</UserControl>

@@ -185,7 +185,7 @@ public sealed class EnumDisplayNameConverter : IValueConverter
         ["Ssh"] = "SSH",
         ["Vnc"] = "VNC",
         ["Home"] = "首页",
-        ["Connections"] = "我的连接",
+        ["Connections"] = "连接工作台",
         ["Favorites"] = "收藏",
         ["Recent"] = "最近连接",
         ["Credentials"] = "凭据",

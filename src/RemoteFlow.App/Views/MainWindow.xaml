@@ -154,13 +154,39 @@
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
+            <!-- 列：导航 | 连接资源树（跨标题栏行，头部与产品名称置顶同行）| 中央 | 详情。
+                 列宽与各区域内部分栏保持数值一致，保证跨行元素对位。 -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="ChromeNavColumn"
+                                  Width="{Binding IsSessionFullScreen, Converter={StaticResource FullScreenSize}, ConverterParameter=216}" />
+                <ColumnDefinition x:Name="ChromeTreeColumn" Width="216">
+                    <ColumnDefinition.Style>
+                        <Style TargetType="ColumnDefinition">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsConnectionListPage}" Value="False">
+                                    <Setter Property="Width" Value="0" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsSessionFullScreen}" Value="True">
+                                    <Setter Property="Width" Value="0" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ColumnDefinition.Style>
+                </ColumnDefinition>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
             <!-- ══ 标题栏 ══════════════════════════════════════════ -->
-            <Grid Grid.Row="0" Background="{DynamicResource Bg.Base}"
+            <Grid Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4"
+                  Background="{DynamicResource Bg.Base}"
                   Visibility="{Binding IsScreenFull, Converter={StaticResource InverseBoolToVisibility}}"
                   MouseRightButtonUp="OnTitleBarSystemMenu">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
+                    <!-- 与导航列同宽：logo 与左导航对位 -->
+                    <ColumnDefinition Width="{Binding IsSessionFullScreen, Converter={StaticResource FullScreenSize}, ConverterParameter=216}" />
+                    <!-- 与树列同宽：这一段留给跨行的 ConnectionResourceTree 头部 -->
+                    <ColumnDefinition Width="{Binding Width, ElementName=ChromeTreeColumn}" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -193,7 +219,7 @@
 
                 <!-- 全局搜索：标题栏两个高频动作之一 -->
                 <Border x:Name="SearchSurface"
-                        Grid.Column="1"
+                        Grid.Column="2"
                         MaxWidth="520"
                         Height="34"
                         Margin="24,0"
@@ -283,27 +309,9 @@
                     </Grid>
                 </Border>
 
-                <!-- 新建连接：标题栏两个高频动作之二 -->
-                <Button Grid.Column="2"
-                        Style="{StaticResource Button.Primary}"
-                        MinHeight="32"
-                        Margin="0,0,12,0"
-                        Padding="14,0"
-                        VerticalAlignment="Center"
-                        Command="{Binding NewConnectionCommand}"
-                        ToolTip="新建连接 (Ctrl+N)"
-                        shell:WindowChrome.IsHitTestVisibleInChrome="True">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{StaticResource Icon.Add}"
-                                   FontFamily="{StaticResource IconFont}"
-                                   FontSize="12"
-                                   VerticalAlignment="Center" />
-                        <TextBlock Text="新建连接" Margin="8,0,0,0" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
 
                 <!-- 窗口控制 -->
-                <StackPanel Grid.Column="3" Orientation="Horizontal">
+                <StackPanel Grid.Column="4" Orientation="Horizontal">
                     <Button Style="{StaticResource CaptionButton}" Content="&#xE921;"
                             Click="OnMinimizeClick" ToolTip="最小化" />
                     <Button x:Name="MaximizeButton" Style="{StaticResource CaptionButton}" Content="&#xE922;"
@@ -314,11 +322,13 @@
             </Grid>
 
             <!-- ══ 主体 ════════════════════════════════════════════ -->
-            <Grid Grid.Row="1">
+            <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4">
                 <Grid.ColumnDefinitions>
                     <!-- 全屏会话时把导航列宽收为 0，否则会在左侧留下一条空白带 -->
                     <ColumnDefinition x:Name="NavColumn"
                                       Width="{Binding IsSessionFullScreen, Converter={StaticResource FullScreenSize}, ConverterParameter=216}" />
+                    <!-- 树列空隙：ConnectionResourceTree 覆盖在其上（跨标题栏行） -->
+                    <ColumnDefinition Width="{Binding Width, ElementName=ChromeTreeColumn}" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition x:Name="DetailColumn" Width="Auto" />
                 </Grid.ColumnDefinitions>
@@ -421,7 +431,7 @@
                 </Border>
 
                 <!-- ── 中央工作区 ────────────────────────────────── -->
-                <Grid Grid.Column="1" Margin="0,0,0,0">
+                <Grid Grid.Column="2" Margin="0,0,0,0">
                     <Grid.RowDefinitions>
                         <!-- Auto：Tab 栏 Collapsed 时该行自然收为 0，全屏把整块屏幕
                              让给远程画面；会话工具条（带「退出全屏」按钮）保留为退出入口。 -->
@@ -592,8 +602,8 @@
                 </Grid>
 
                 <!-- ── 右侧详情面板：选中连接时显示，全屏会话时收起 ── -->
-                <Border Grid.Column="2"
-                        Width="304"
+                <Border Grid.Column="3"
+                        Width="272"
                         Background="{DynamicResource Bg.Sidebar}"
                         BorderBrush="{DynamicResource Stroke.Subtle}"
                         BorderThickness="1,0,0,0">
@@ -620,8 +630,29 @@
                 </Border>
             </Grid>
 
+            <!-- ══ 左栏连接资源树（窗口级）：跨标题栏行与内容行，
+                 「连接资源」头部因此与产品名称置顶同行（设计稿形态）。
+                 仅连接工作台页且非全屏时可见。 -->
+            <pages:ConnectionResourceTree Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                                          DataContext="{Binding ConnectionsPage}">
+                <pages:ConnectionResourceTree.Style>
+                    <Style TargetType="pages:ConnectionResourceTree">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding DataContext.IsConnectionListPage, RelativeSource={RelativeSource AncestorType=Window}}" Value="True" />
+                                    <Condition Binding="{Binding DataContext.IsSessionFullScreen, RelativeSource={RelativeSource AncestorType=Window}}" Value="False" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Visible" />
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </pages:ConnectionResourceTree.Style>
+            </pages:ConnectionResourceTree>
+
             <!-- ══ 底部状态栏：一条细条，与内容区拉开、给窗口一个明确的下边界 ══ -->
-            <Border Grid.Row="2" Height="24" Background="{DynamicResource Bg.Base}"
+            <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4" Height="24" Background="{DynamicResource Bg.Base}"
                     BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,1,0,0"
                     Visibility="{Binding IsSessionFullScreen, Converter={StaticResource InverseBoolToVisibility}}">
                 <Grid Margin="16,0,14,0">

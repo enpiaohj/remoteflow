@@ -654,9 +654,6 @@ public partial class ConnectionsPage : UserControl
     private void OnNewConnectionMenuClick(object sender, RoutedEventArgs e)
         => ViewModel?.CreateCommand.Execute(null);
 
-    private void OnNewGroupMenuClick(object sender, RoutedEventArgs e)
-        => ViewModel?.CreateGroupCommand.Execute(null);
-
     /// <summary>Ctrl+K 聚焦页内搜索框（与设计稿的工作台交互一致）。</summary>
     private void OnPageKeyDown(object sender, KeyEventArgs e)
     {
@@ -669,108 +666,6 @@ public partial class ConnectionsPage : UserControl
         }
     }
 
-    /// <summary>
-    /// 左树折叠箭头：把按下事件吃掉，阻止它冒泡给 ListBoxItem——
-    /// 点箭头只做展开 / 折叠，不把该分组选成当前过滤。
-    /// </summary>
-    private void OnTreeChevronPreviewMouseDown(object sender, MouseButtonEventArgs e)
-        => e.Handled = true;
-
-    // ── 分组右键菜单 ────────────────────────────────────────────
-
-    private void OnGroupMenuClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { ContextMenu: { } menu } button)
-        {
-            menu.DataContext = button.DataContext;
-            menu.PlacementTarget = button;
-            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
-            menu.IsOpen = true;
-        }
-    }
-
-    /// <summary>右键 / Shift+F10 与左键「⋯」都经 ContextMenu.Opened 统一应用分组菜单守卫。</summary>
-    private void OnGroupContextMenuOpened(object sender, RoutedEventArgs e)
-    {
-        if (sender is ContextMenu menu && menu.PlacementTarget is FrameworkElement owner)
-        {
-            ApplyGroupMenuGuards(menu, owner.DataContext as ConnectionGroupNodeViewModel);
-        }
-    }
-
-    /// <summary>按分组状态守卫右键菜单项：受保护组禁重命名 / 删除；默认组与未分组不出现「设为默认分组」。</summary>
-    private void ApplyGroupMenuGuards(ContextMenu menu, ConnectionGroupNodeViewModel? node)
-    {
-        foreach (var item in menu.Items.OfType<MenuItem>())
-        {
-            switch (item.Tag as string)
-            {
-                case "rename":
-                case "delete":
-                    item.IsEnabled = node is not null && !node.IsProtected;
-                    break;
-                case "setDefault":
-                    item.Visibility = node is { IsDefault: false, IsUngrouped: false }
-                        ? Visibility.Visible
-                        : Visibility.Collapsed;
-                    item.IsEnabled = !ViewModel!.HasProtectedDefault;
-                    break;
-            }
-        }
-    }
-
-    private static ConnectionGroupNodeViewModel? ResolveGroup(object sender)
-    {
-        if (sender is not MenuItem item)
-        {
-            return null;
-        }
-
-        var menu = item.Parent as ContextMenu;
-        return item.DataContext as ConnectionGroupNodeViewModel
-            ?? menu?.DataContext as ConnectionGroupNodeViewModel
-            ?? (menu?.PlacementTarget as FrameworkElement)?.DataContext as ConnectionGroupNodeViewModel;
-    }
-
-    private void OnGroupNewConnectionClick(object sender, RoutedEventArgs e)
-    {
-        if (ResolveGroup(sender) is { GroupId: { } groupId })
-        {
-            _ = ViewModel?.CreateConnectionAsync(defaultGroupId: groupId);
-        }
-    }
-
-    private void OnGroupNewChildClick(object sender, RoutedEventArgs e)
-    {
-        if (ResolveGroup(sender) is { } node)
-        {
-            ViewModel?.CreateChildGroupCommand.Execute(node);
-        }
-    }
-
-    private void OnGroupRenameClick(object sender, RoutedEventArgs e)
-    {
-        if (ResolveGroup(sender) is { } node)
-        {
-            ViewModel?.RenameGroupCommand.Execute(node);
-        }
-    }
-
-    private void OnGroupDeleteClick(object sender, RoutedEventArgs e)
-    {
-        if (ResolveGroup(sender) is { } node)
-        {
-            ViewModel?.DeleteGroupCommand.Execute(node);
-        }
-    }
-
-    private void OnGroupSetDefaultClick(object sender, RoutedEventArgs e)
-    {
-        if (ResolveGroup(sender) is { } node)
-        {
-            ViewModel?.SetDefaultGroupCommand.Execute(node);
-        }
-    }
 
     /// <summary>组头 CheckBox 按下 = 全选 / 取消全选该分组（含子分组）。拦截默认三态循环。</summary>
     private void OnGroupHeaderCheckMouseDown(object sender, MouseButtonEventArgs e)

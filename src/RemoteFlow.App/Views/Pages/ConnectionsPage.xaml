@@ -89,119 +89,26 @@
             <MenuItem Tag="locate" Header="管理连接" Click="OnLocateMenuClick" />
         </ContextMenu>
 
-        <ContextMenu x:Key="GroupMenu" x:Shared="False" Opened="OnGroupContextMenuOpened">
-            <MenuItem Header="新建连接" Click="OnGroupNewConnectionClick" />
-            <MenuItem Header="新建子分组" Click="OnGroupNewChildClick" />
-            <Separator />
-            <MenuItem Tag="rename" Header="重命名" Click="OnGroupRenameClick" />
-            <MenuItem Tag="setDefault" Header="设为默认分组" Click="OnGroupSetDefaultClick" />
-            <Separator />
-            <MenuItem Tag="delete" Header="删除分组" Click="OnGroupDeleteClick" />
-        </ContextMenu>
-
         <Style x:Key="ConnectionRow" TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">
             <Setter Property="ContextMenu" Value="{StaticResource ConnectionRowMenu}" />
             <EventSetter Event="ContextMenuOpening" Handler="OnRowContextMenuOpening" />
         </Style>
 
-        <!-- ── 左树：智能视图行 ──────────────────────────────── -->
-        <DataTemplate x:Key="SmartViewTemplate" DataType="{x:Type vm:ConnectionsPageViewModel+SmartViewOption}">
-            <StackPanel Orientation="Horizontal" Height="32" VerticalAlignment="Center">
-                <TextBlock Text="{Binding IconGlyph}" FontFamily="{StaticResource IconFont}" FontSize="13"
-                           Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding Name}" FontSize="13" Margin="9,0,0,0"
-                           Foreground="{DynamicResource Text.Primary}" VerticalAlignment="Center" />
-                <!-- 计数按视图取页面上对应属性；DataTrigger 切换绑定目标 -->
-                <Border Background="{DynamicResource Bg.Subtle}" BorderBrush="{DynamicResource Stroke.Subtle}"
-                        BorderThickness="1" CornerRadius="9" Padding="7,1" Margin="10,0,0,0" VerticalAlignment="Center">
-                    <TextBlock>
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Label}">
-                                <Setter Property="Text" Value="{Binding DataContext.AllCount, RelativeSource={RelativeSource AncestorType=ListBox}}" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding FilterValue}" Value="Favorites">
-                                        <Setter Property="Text" Value="{Binding DataContext.FavoritesCount, RelativeSource={RelativeSource AncestorType=ListBox}}" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding FilterValue}" Value="Recent">
-                                        <Setter Property="Text" Value="{Binding DataContext.RecentCount, RelativeSource={RelativeSource AncestorType=ListBox}}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </Border>
-            </StackPanel>
-        </DataTemplate>
-
-        <!-- ── 左树：分组节点行 ──────────────────────────────── -->
-        <!-- 折叠箭头单独吃掉按下事件，避免「点箭头展开」同时把分组选成当前过滤 -->
-        <DataTemplate x:Key="GroupTreeNodeTemplate" DataType="{x:Type vm:ConnectionGroupNodeViewModel}">
-            <Grid Height="32" Background="Transparent"
-                  Margin="{Binding Depth, Converter={StaticResource DepthToMargin}}">
-                <Grid.Style>
-                    <Style TargetType="Grid">
-                        <Setter Property="ContextMenu" Value="{StaticResource GroupMenu}" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsUngrouped}" Value="True">
-                                <Setter Property="ContextMenu" Value="{x:Null}" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Grid.Style>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="18" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <Button Grid.Column="0" Width="18" Height="18" HorizontalAlignment="Left"
-                        Focusable="False" Background="Transparent" BorderThickness="0" Padding="0"
-                        Cursor="Hand"
-                        PreviewMouseLeftButtonDown="OnTreeChevronPreviewMouseDown"
-                        Command="{Binding ToggleExpandCommand}"
-                        Visibility="{Binding HasChildGroups, Converter={StaticResource BoolToVisibility}}">
-                    <TextBlock Width="12" FontFamily="{StaticResource IconFont}" FontSize="9" TextAlignment="Center"
-                               Foreground="{DynamicResource Text.Tertiary}">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Text" Value="{StaticResource Icon.ChevronRight}" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                        <Setter Property="Text" Value="{StaticResource Icon.ChevronDown}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </Button>
-
-                <TextBlock Grid.Column="1" Text="{StaticResource Icon.Folder}" FontFamily="{StaticResource IconFont}"
-                           FontSize="13" Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="13" Margin="7,0,0,0"
-                           Foreground="{DynamicResource Text.Primary}" VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis" />
-                <Border Grid.Column="3" Background="{DynamicResource Bg.Subtle}" BorderBrush="{DynamicResource Stroke.Subtle}"
-                        BorderThickness="1" CornerRadius="9" Padding="7,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding TotalCount}" Style="{StaticResource Text.Label}" />
-                </Border>
-            </Grid>
-        </DataTemplate>
-
-        <!-- 连接行（扁平列表）-->
+        <!-- 连接行（扁平列表）。行高 40 对齐设计稿的紧凑密度；
+             设备图标在表格行内用 28 规格（44 规格保留给首页 / 详情大图标）。 -->
         <DataTemplate x:Key="ConnRowTemplate" DataType="{x:Type vm:ConnectionItemViewModel}">
-            <Grid Height="64">
+            <Grid Height="40">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="30" />
-                    <ColumnDefinition Width="Auto" MinWidth="200" MaxWidth="460" SharedSizeGroup="ColName" />
-                    <ColumnDefinition Width="Auto" MinWidth="140" SharedSizeGroup="ColHost" />
-                    <ColumnDefinition Width="Auto" MinWidth="56" SharedSizeGroup="ColProto" />
-                    <ColumnDefinition Width="Auto" MinWidth="80" SharedSizeGroup="ColTags" />
-                    <ColumnDefinition Width="Auto" MinWidth="64" SharedSizeGroup="ColPresence" />
-                    <ColumnDefinition Width="*" MinWidth="24" />
-                    <ColumnDefinition Width="Auto" MinWidth="96" SharedSizeGroup="ColRecent" />
-                    <ColumnDefinition Width="38" />
-                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="26" />
+                    <ColumnDefinition Width="Auto" MinWidth="120" MaxWidth="380" SharedSizeGroup="ColName" />
+                    <ColumnDefinition Width="Auto" MinWidth="100" SharedSizeGroup="ColHost" />
+                    <ColumnDefinition Width="Auto" MinWidth="42" SharedSizeGroup="ColProto" />
+                    <ColumnDefinition Width="Auto" MinWidth="48" SharedSizeGroup="ColTags" />
+                    <ColumnDefinition Width="*" MinWidth="0" />
+                    <ColumnDefinition Width="Auto" MinWidth="58" SharedSizeGroup="ColPresence" />
+                    <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="ColRecent" />
+                    <ColumnDefinition Width="26" />
+                    <ColumnDefinition Width="26" />
                 </Grid.ColumnDefinitions>
 
                 <!-- 首列：勾选框常驻可见，勾选即进入批量操作（勾选 ≥1 项浮现批量栏） -->
@@ -215,27 +122,28 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- 设备图标与首页「收藏 / 最近活动」行同一套规格：44 彩色淡色底 Tile +
                          协议 Glyph，全应用含协议的设备行统一 -->
-                    <Grid>
-                        <Border Style="{StaticResource IconTile.Background}"
+                    <Grid Width="28" Height="28">
+                        <Border CornerRadius="6"
                                 Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
                                 Opacity="{StaticResource IconTile.ColorBgOpacity}" />
-                        <TextBlock Style="{StaticResource IconTile.Glyph}"
-                                   Text="{Binding ProtocolIcon}"
-                                   Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                        <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="13"
+                                   Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
                         <!-- 会话状态点（右下角）：空闲隐藏，连接中琥珀 / 已连接绿 -->
                         <Border Style="{StaticResource SessionStatusDot}"
                                 Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}">
                             <Ellipse Style="{StaticResource SessionStatusDot.Fill}" />
                         </Border>
                     </Grid>
-                    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" Margin="14,0,8,0"
-                               MaxWidth="360" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontSize="12"
+                               Margin="8,0,6,0" MaxWidth="132" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
                 <TextBlock Grid.Column="2" Text="{Binding HostDisplay}" Style="{StaticResource Text.BodySecondary}"
-                           FontFamily="{StaticResource MonoFont}" FontSize="12" Margin="16,0,0,0" TextTrimming="CharacterEllipsis" />
+                           FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="12,0,0,0"
+                           MaxWidth="112" TextTrimming="CharacterEllipsis" />
                 <!-- 协议徽章与首页一致：协议色小徽章，替代 A+ 时的裸文字列 -->
-                <Grid Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="16,0,0,0">
+                <Grid Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="14,0,0,0">
                     <Border CornerRadius="4"
                             Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
                             Opacity="0.14" />
@@ -243,7 +151,7 @@
                                Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
                 </Grid>
 
-                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
                     <ItemsControl ItemsSource="{Binding Tags}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -272,7 +180,7 @@
 
                 <!-- 在线状态列：活动会话恒「已连接」，否则随 TCP 探测结果；
                      未探测（关闭开关且未手动跑过）显示中性「—」 -->
-                <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0"
+                <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0"
                             ToolTip="{Binding PresenceTooltip}">
                     <Ellipse Width="7" Height="7" VerticalAlignment="Center"
                              Fill="{Binding PresenceBrushKey, Converter={StaticResource KeyToBrush}}" />
@@ -281,7 +189,7 @@
                 </StackPanel>
 
                 <!-- 悬停快捷操作：鼠标移到行上时在弹性列里就地浮出「连接」，省去双击 / 走详情面板。 -->
-                <StackPanel Grid.Column="6" Orientation="Horizontal" HorizontalAlignment="Right"
+                <StackPanel Grid.Column="5" Orientation="Horizontal" HorizontalAlignment="Right"
                             VerticalAlignment="Center" Margin="0,0,8,0">
                     <StackPanel.Style>
                         <Style TargetType="StackPanel">
@@ -295,7 +203,7 @@
                             </Style.Triggers>
                         </Style>
                     </StackPanel.Style>
-                    <Button Style="{StaticResource Button.Subtle}" Height="28" Padding="10,0" FontSize="12"
+                    <Button Style="{StaticResource Button.Subtle}" Height="24" Padding="9,0" FontSize="12"
                             Content="连接" ToolTip="连接 (Enter)"
                             Click="OnRowConnectClick" />
                 </StackPanel>
@@ -314,7 +222,7 @@
                 </StackPanel>
 
                 <!-- 收藏列：星标常驻，点击切换 -->
-                <Button Grid.Column="8" Width="30" Height="30" FontSize="14" HorizontalAlignment="Center"
+                <Button Grid.Column="8" Width="24" Height="24" FontSize="12" HorizontalAlignment="Center"
                         ToolTip="收藏 / 取消收藏"
                         Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                         CommandParameter="{Binding}">
@@ -332,61 +240,16 @@
                     </Button.Style>
                 </Button>
 
-                <Button Grid.Column="9" Style="{StaticResource Button.Icon}" Width="30" Height="30"
+                <Button Grid.Column="9" Style="{StaticResource Button.Icon}" Width="26" Height="26"
                         Content="{StaticResource Icon.More}" ToolTip="更多操作" Click="OnMoreClick" />
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid Margin="24,20,24,0" Grid.IsSharedSizeScope="True">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="232" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-
-        <!-- ══ 左栏：连接资源树 ════════════════════════════════ -->
-        <Border Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="10,12" Margin="0,0,16,0">
-            <DockPanel>
-                <Grid DockPanel.Dock="Top" Margin="4,0,4,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="连接资源" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
-                               VerticalAlignment="Center" />
-                    <!-- 新建分组入口（新建连接在右侧主按钮）-->
-                    <Button Grid.Column="1" Style="{StaticResource Button.Icon}" Width="28" Height="28"
-                            Content="{StaticResource Icon.Add}" ToolTip="新建分组" Click="OnNewGroupMenuClick">
-                        <Button.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="新建分组" Click="OnNewGroupMenuClick" />
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
-                </Grid>
-
-                <!-- 智能视图 -->
-                <ListBox DockPanel.Dock="Top" x:Name="SmartViewList"
-                         ItemsSource="{Binding SmartViews}"
-                         ItemTemplate="{StaticResource SmartViewTemplate}"
-                         SelectedItem="{Binding SelectedSmartView}"
-                         Margin="0,0,0,8"
-                         Style="{StaticResource List.Plain}" BorderThickness="0" Background="Transparent" />
-
-                <Border DockPanel.Dock="Top" Style="{StaticResource Surface.Divider}" Margin="2,4,2,8" />
-
-                <!-- 分组树（摊平渲染，缩进由 Depth 决定）-->
-                <ListBox x:Name="GroupTreeList"
-                         ItemsSource="{Binding FlatTreeNodes}"
-                         ItemTemplate="{StaticResource GroupTreeNodeTemplate}"
-                         SelectedItem="{Binding SelectedGroupNode}"
-                         Style="{StaticResource List.Plain}" BorderThickness="0" Background="Transparent"
-                         VirtualizingPanel.IsVirtualizing="False" />
-            </DockPanel>
-        </Border>
-
-        <!-- ══ 中栏：搜索 / 筛选 / 动作条 / 列表 ═══════════════ -->
-        <Grid Grid.Column="1">
+    <!-- 左栏「连接资源」树已提升为窗口级列（ConnectionResourceTree，与产品名称置顶同行），
+         本页只承载中栏：搜索 / 筛选 / 动作条 / 列表。 -->
+    <Grid Margin="0,16,16,0" Grid.IsSharedSizeScope="True">
+        <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -728,7 +591,7 @@
                     </Grid>
 
                     <!-- ── 列头 ──────────────────────────────────────── -->
-                    <Grid Grid.Row="1" Height="30" Margin="4,0,4,0">
+                    <Grid Grid.Row="1" Height="26" Margin="4,0,4,0">
                         <Grid.Style>
                             <Style TargetType="Grid">
                                 <Setter Property="Visibility" Value="Collapsed" />
@@ -741,16 +604,16 @@
                         </Grid.Style>
 
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="30" />
-                            <ColumnDefinition Width="Auto" MinWidth="200" MaxWidth="460" SharedSizeGroup="ColName" />
-                            <ColumnDefinition Width="Auto" MinWidth="140" SharedSizeGroup="ColHost" />
-                            <ColumnDefinition Width="Auto" MinWidth="56" SharedSizeGroup="ColProto" />
-                            <ColumnDefinition Width="Auto" MinWidth="80" SharedSizeGroup="ColTags" />
-                            <ColumnDefinition Width="Auto" MinWidth="64" SharedSizeGroup="ColPresence" />
-                            <ColumnDefinition Width="*" MinWidth="24" />
-                            <ColumnDefinition Width="Auto" MinWidth="96" SharedSizeGroup="ColRecent" />
-                            <ColumnDefinition Width="38" />
-                            <ColumnDefinition Width="40" />
+                            <ColumnDefinition Width="26" />
+                            <ColumnDefinition Width="Auto" MinWidth="120" MaxWidth="380" SharedSizeGroup="ColName" />
+                            <ColumnDefinition Width="Auto" MinWidth="100" SharedSizeGroup="ColHost" />
+                            <ColumnDefinition Width="Auto" MinWidth="42" SharedSizeGroup="ColProto" />
+                            <ColumnDefinition Width="Auto" MinWidth="48" SharedSizeGroup="ColTags" />
+                            <ColumnDefinition Width="*" MinWidth="8" />
+                            <ColumnDefinition Width="Auto" MinWidth="58" SharedSizeGroup="ColPresence" />
+                            <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="ColRecent" />
+                            <ColumnDefinition Width="26" />
+                            <ColumnDefinition Width="26" />
                         </Grid.ColumnDefinitions>
 
                         <!-- 全选：勾选 / 取消当前可见全部 -->
@@ -764,7 +627,7 @@
                         <TextBlock Grid.Column="2" Text="IP / 主机" Style="{StaticResource Text.Label}" Margin="16,0,0,0" />
                         <TextBlock Grid.Column="3" Text="协议" Style="{StaticResource Text.Label}" Margin="16,0,0,0" />
                         <TextBlock Grid.Column="4" Text="标签" Style="{StaticResource Text.Label}" Margin="16,0,0,0" />
-                        <TextBlock Grid.Column="5" Text="在线状态" Style="{StaticResource Text.Label}" Margin="14,0,0,0" />
+                        <TextBlock Grid.Column="6" Text="在线状态" Style="{StaticResource Text.Label}" Margin="12,0,0,0" />
                         <TextBlock Grid.Column="7" Text="最近连接" Style="{StaticResource Text.Label}" />
                         <TextBlock Grid.Column="8" Text="收藏" Style="{StaticResource Text.Label}" />
                     </Grid>
