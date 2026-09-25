@@ -115,7 +115,16 @@
 > 由 `scripts/release-local.ps1` 构建后回填 Size / SHA-256（对应 GitHub Release 上传产物）。
 
 - `RemoteFlow-v0.19.0-win-x64.exe`
+  - Size：74,902,061 bytes
+  - SHA-256：`C4207A55ECBDB108D33A0A8C6A9C4D2744416C7203D03764044216A11C84D6EC`
 - `RemoteFlow-v0.19.0-win-x64.zip`
+  - Size：69,430,497 bytes
+  - SHA-256：`FCD9A99AF8FE20593A59FD4DF3F0B3BF57624BD7D3F60AB9ADA3271720D65049`
+
+> 上表是**实际对外发布**的产物哈希（`scripts/release-local.ps1` 构建并上传 GitHub
+> Releases，`--latest` 已设）。单文件自包含发布**不可字节复现**：Verification 中的
+> 首次实机走查用的是同源码树的另一份构建，仅构建元数据不同。对外发布的这一份已
+> **再次实机走查**（启动存活 8s、优雅退出 ExitCode 0），故以本表哈希为准。
 
 ## Git
 
