@@ -268,7 +268,7 @@
                 <TextBlock Text="{Binding WorkbenchSubtitle}" FontSize="12"
                            Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="10,1,0,0" />
                 <!-- 分组浏览提示：来自左树的选择，一键退出 -->
-                <Border Background="{DynamicResource Bg.Selected}"
+                <Border Background="{DynamicResource Bg.RowSelected}"
                         CornerRadius="9" Padding="8,2" Margin="12,0,0,0"
                         VerticalAlignment="Center"
                         Visibility="{Binding HasGroupFilter, Converter={StaticResource BoolToVisibility}}">
@@ -447,6 +447,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="216" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <Border Grid.Column="0" BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,0,1,0">
@@ -671,7 +672,33 @@
                     </Grid>
                 </Grid>
             </Grid>
+
             </Grid>
+                <!-- ── 右侧详情面板：工作台第三列，选中连接时显示 ── -->
+                <Border Grid.Column="2"
+                        Width="292"
+                        Background="{DynamicResource Bg.Base}"
+                        BorderBrush="{DynamicResource Stroke.Subtle}"
+                        BorderThickness="1,0,0,0">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <!-- 详情面板只在连接列表页出现：窗口够宽、未全屏、非会话 Tab。
+                                     批量勾选时保持常驻（对齐工作台设计稿），不再因多选收起。 -->
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding HasSelectedItem}" Value="True" />
+                                        <Condition Binding="{Binding DataContext.IsSessionFullScreen, RelativeSource={RelativeSource AncestorType=Window}}" Value="False" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+
+                    <pages:ConnectionDetailPanel />
+                </Border>
         </Grid>
     </Grid>
 </UserControl>
