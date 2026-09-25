@@ -252,7 +252,7 @@
 
     <!-- 连接工作台：上下文条（标题 + 统计 + 动作）→ 筛选条（搜索 + 筛选）→
          工作台（资源树 | 列表）。分区用发丝线，不再套卡片（概念设计 v0.2）。 -->
-    <Grid Grid.IsSharedSizeScope="True">
+    <Grid Grid.IsSharedSizeScope="True" Background="{DynamicResource Bg.Layer}">
         <Grid.RowDefinitions>
             <RowDefinition Height="50" />
             <RowDefinition Height="Auto" />
@@ -677,7 +677,7 @@
                 <!-- ── 右侧详情面板：工作台第三列，选中连接时显示 ── -->
                 <Border Grid.Column="2"
                         Width="292"
-                        Background="{DynamicResource Bg.Base}"
+                        Background="{DynamicResource Bg.Layer}"
                         BorderBrush="{DynamicResource Stroke.Subtle}"
                         BorderThickness="1,0,0,0">
                     <Border.Style>

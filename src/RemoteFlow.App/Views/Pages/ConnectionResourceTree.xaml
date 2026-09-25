@@ -8,7 +8,7 @@
              xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:ConnectionsPageViewModel}"
-             Background="{DynamicResource Bg.Base}">
+             Background="{DynamicResource Bg.Layer}">
 
     <UserControl.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
