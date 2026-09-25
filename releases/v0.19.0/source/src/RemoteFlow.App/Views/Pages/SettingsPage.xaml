@@ -1,0 +1,1426 @@
+<UserControl x:Class="RemoteFlow.App.Views.Pages.SettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
+             xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:SettingsPageViewModel}">
+
+    <UserControl.Resources>
+        <conv:EnumDisplayNameConverter x:Key="EnumDisplay" />
+        <conv:ColorStringToBrushConverter x:Key="ColorToBrush" />
+        <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <conv:EnumToBoolConverter x:Key="EnumToBool" />
+        <conv:EnumToVisibilityConverter x:Key="EnumToVisibility" />
+        <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
+        <conv:InverseBoolConverter x:Key="InverseBool" />
+
+        <!-- 设置项：左侧标题与说明，右侧控件 -->
+        <Style x:Key="SettingRow" TargetType="Grid">
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+
+        <!-- 顶部标签：文字 + 选中态下的下划线指示条 -->
+        <Style x:Key="Settings.Tab" TargetType="RadioButton">
+            <Setter Property="GroupName" Value="SettingsTabs" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+            <Setter Property="Margin" Value="0,0,2,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Border x:Name="Root" Background="Transparent" CornerRadius="6" Padding="12,7">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <Border x:Name="Indicator" Grid.Row="1" Height="2" Margin="12,3,12,0"
+                                    Background="{DynamicResource Brand.Default}" CornerRadius="1"
+                                    Visibility="Collapsed" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <Setter TargetName="Indicator" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 「数据与备份」里的可点击行：图标块 + 标题/说明 + 右侧内容（默认 V 形箭头） -->
+        <Style x:Key="Settings.LinkRow" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="Transparent" CornerRadius="8" Padding="10,13">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Pressed}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 卡片标题：小图标 + 名称 -->
+        <Style x:Key="Settings.CardHeader" TargetType="StackPanel">
+            <Setter Property="Orientation" Value="Horizontal" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+
+        <!-- 卡片内分区小标题：RDP/SSH 设置按 Section 归组用 -->
+        <Style x:Key="Settings.SectionHeader" TargetType="TextBlock" BasedOn="{StaticResource Text.Label}">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,4,0,8" />
+        </Style>
+    </UserControl.Resources>
+
+    <!-- 概念图中设置卡片铺满内容区（实测占内容宽 92%），标题靠左、控件靠右，
+         不做宽度封顶——窗口放大时卡片跟着变宽。左侧说明文字自身封顶 560，
+         保证行文长度可读，右侧控件始终贴齐卡片右缘。 -->
+    <Grid Margin="24,20,24,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="设置" Style="{StaticResource Text.PageTitle}" Margin="0,0,0,16" />
+
+        <!-- ══ 标签栏 ══ -->
+        <Grid Grid.Row="1" Margin="0,0,0,4">
+            <Border VerticalAlignment="Bottom" Height="1" Background="{DynamicResource Stroke.Subtle}" />
+            <StackPanel Orientation="Horizontal">
+                <RadioButton Style="{StaticResource Settings.Tab}" Content="常规"
+                             IsChecked="{Binding ActiveTab, Converter={StaticResource EnumToBool}, ConverterParameter=General, Mode=TwoWay}" />
+                <RadioButton Style="{StaticResource Settings.Tab}" Content="RDP"
+                             IsChecked="{Binding ActiveTab, Converter={StaticResource EnumToBool}, ConverterParameter=Rdp, Mode=TwoWay}" />
+                <RadioButton Style="{StaticResource Settings.Tab}" Content="SSH"
+                             IsChecked="{Binding ActiveTab, Converter={StaticResource EnumToBool}, ConverterParameter=Ssh, Mode=TwoWay}" />
+                <RadioButton Style="{StaticResource Settings.Tab}" Content="VNC"
+                             IsChecked="{Binding ActiveTab, Converter={StaticResource EnumToBool}, ConverterParameter=Vnc, Mode=TwoWay}" />
+                <RadioButton Style="{StaticResource Settings.Tab}" Content="安全"
+                             IsChecked="{Binding ActiveTab, Converter={StaticResource EnumToBool}, ConverterParameter=Security, Mode=TwoWay}" />
+                <RadioButton Style="{StaticResource Settings.Tab}" Content="云同步"
+                             IsChecked="{Binding ActiveTab, Converter={StaticResource EnumToBool}, ConverterParameter=Cloud, Mode=TwoWay}" />
+                <RadioButton Style="{StaticResource Settings.Tab}" Content="数据与备份"
+                             IsChecked="{Binding ActiveTab, Converter={StaticResource EnumToBool}, ConverterParameter=Data, Mode=TwoWay}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- ══ 标签内容 ══ -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,20,14,32">
+            <Grid>
+
+                <!-- ── 常规 ── -->
+                <StackPanel
+                            Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=General}">
+
+                    <!-- 外观与行为 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
+                        <StackPanel>
+                            <StackPanel Style="{StaticResource Settings.CardHeader}">
+                                <TextBlock Text="{StaticResource Icon.Appearance}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <TextBlock Text="外观与行为" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
+                            </StackPanel>
+
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="主题" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="更改应用外观主题，当前主题将应用到所有页面。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <RadioButton Style="{StaticResource Segment}" GroupName="Theme"
+                                                 IsChecked="{Binding SelectedTheme, Converter={StaticResource EnumToBool}, ConverterParameter=System, Mode=TwoWay}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE770;" FontFamily="{StaticResource IconFont}" FontSize="13" VerticalAlignment="Center" />
+                                            <TextBlock Text="跟随系统" Margin="7,0,0,0" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </RadioButton>
+                                    <RadioButton Style="{StaticResource Segment}" GroupName="Theme"
+                                                 IsChecked="{Binding SelectedTheme, Converter={StaticResource EnumToBool}, ConverterParameter=Light, Mode=TwoWay}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE706;" FontFamily="{StaticResource IconFont}" FontSize="13" VerticalAlignment="Center" />
+                                            <TextBlock Text="浅色" Margin="7,0,0,0" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </RadioButton>
+                                    <RadioButton Style="{StaticResource Segment}" GroupName="Theme" Margin="0"
+                                                 IsChecked="{Binding SelectedTheme, Converter={StaticResource EnumToBool}, ConverterParameter=Dark, Mode=TwoWay}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE708;" FontFamily="{StaticResource IconFont}" FontSize="13" VerticalAlignment="Center" />
+                                            <TextBlock Text="深色" Margin="7,0,0,0" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </RadioButton>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 日期与时间 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
+                        <StackPanel>
+                            <StackPanel Style="{StaticResource Settings.CardHeader}">
+                                <TextBlock Text="{StaticResource Icon.Recent}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <TextBlock Text="日期与时间" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
+                            </StackPanel>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="日期格式" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="首页完整日期、创建时间等使用此格式。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding DateFormatOptions}" SelectedItem="{Binding SelectedDateFormat}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="时间格式" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="列表与历史中的时间采用此格式。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding TimeFormatOptions}" SelectedItem="{Binding SelectedTimeFormat}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="320" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="首页时间行" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="首页标题下方那行的详略程度；下拉项即当前格式下的真实样例。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding HomeDateLineOptions}" SelectedItem="{Binding SelectedHomeDateLine}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Sample}" VerticalAlignment="Center" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 启动与托盘 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
+                        <StackPanel>
+                            <StackPanel Style="{StaticResource Settings.CardHeader}">
+                                <TextBlock Text="{StaticResource Icon.Power}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <TextBlock Text="启动与托盘" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
+                            </StackPanel>
+
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="开机时启动 RemoteFlow" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="登录 Windows 后自动运行。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" IsChecked="{Binding LaunchOnStartup}" />
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,18" />
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="关闭窗口时最小化到通知区域" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="关闭主窗口时，程序将最小化到系统托盘，方便快速访问。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" IsChecked="{Binding MinimizeToTrayOnClose}" />
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,18" />
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="默认进入页面" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="启动或新建连接后，默认打开的页面。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding LandingPageOptions}" SelectedItem="{Binding DefaultLandingPage}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Converter={StaticResource EnumDisplay}}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,18" />
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="并发会话上限" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="达到上限后将拒绝新建会话，防止异常情况下重复创建连接。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}" VerticalAlignment="Center"
+                                         Text="{Binding MaxConcurrentSessions, UpdateSourceTrigger=LostFocus}" />
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,18" />
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="连接工作台在线探测" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="进入「连接工作台」时自动用 TCP 探测当前列表的可达性（并发受限）。关闭后仍可用列表工具条的「探测」手动触发。"
+                                               Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
+                                          IsChecked="{Binding PresenceProbeEnabled}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 全屏悬浮工具条 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
+                        <StackPanel>
+                            <StackPanel Style="{StaticResource Settings.CardHeader}">
+                                <TextBlock Text="{StaticResource Icon.FullScreen}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <TextBlock Text="全屏悬浮工具条" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
+                            </StackPanel>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="窗口最大化档 · 显示延迟" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="鼠标移到内容区顶沿需停留多久才唤出工具条；「立即」为旧版行为。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding PillRevealDelayOptions}" SelectedItem="{Binding SelectedPillRevealDelayWindowFull}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="窗口最大化档 · 消失延迟" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="鼠标离开工具条后多久自动收起；「立即」为旧版行为。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding PillHideDelayOptions}" SelectedItem="{Binding SelectedPillHideDelayWindowFull}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="完全全屏档 · 显示延迟" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="顶沿即远端画面，悬停延迟可避免操作远端时误弹工具条。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding PillRevealDelayOptions}" SelectedItem="{Binding SelectedPillRevealDelayScreenFull}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="完全全屏档 · 消失延迟" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="鼠标离开工具条后多久自动收起；单击远端画面仍会立即收起。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding PillHideDelayOptions}" SelectedItem="{Binding SelectedPillHideDelayScreenFull}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 分组 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
+                        <StackPanel>
+                            <StackPanel Style="{StaticResource Settings.CardHeader}">
+                                <TextBlock Text="{StaticResource Icon.Folder}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <TextBlock Text="分组" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
+                            </StackPanel>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="{Binding DefaultGroupSwitchLabel}" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="{Binding DefaultGroupDescription}" Style="{StaticResource Text.Caption}"
+                                               TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
+                                          IsChecked="{Binding DefaultGroupProtected}"
+                                          IsEnabled="{Binding ProtectionSwitchEnabled}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 语言 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
+                        <StackPanel>
+                            <StackPanel Style="{StaticResource Settings.CardHeader}">
+                                <TextBlock Text="{StaticResource Icon.Language}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <TextBlock Text="语言" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
+                            </StackPanel>
+
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="界面语言" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="选择 RemoteFlow 的用户界面语言，重启后生效。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding LanguageOptions}" SelectedItem="{Binding Language}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Converter={StaticResource EnumDisplay}}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 关于 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="32" Height="32" CornerRadius="8" Background="{DynamicResource Brand.Default}">
+                                <TextBlock Text="{StaticResource Icon.Connect}" FontFamily="{StaticResource IconFont}"
+                                           FontSize="15" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="RemoteFlow" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0">
+                                    <Run Text="版本" /><Run Text=" " /><Run Text="{Binding AppVersion, Mode=OneWay}" />
+                                    <Run Text=" · 统一远程连接工作台" />
+                                </TextBlock>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ── RDP ── -->
+                <StackPanel
+                            Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Rdp}">
+                    <TextBlock Text="新建 RDP 连接时的默认值" Style="{StaticResource Text.BodySecondary}" Margin="0,0,0,12" />
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20">
+                        <StackPanel>
+                            <!-- 显示 -->
+                            <TextBlock Text="显示" Style="{StaticResource Settings.SectionHeader}" />
+                            <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding RdpFitToWindow}">
+                                <StackPanel>
+                                    <TextBlock Text="画面适应窗口" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="窗口尺寸变化时动态调整远程分辨率" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                            <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding RdpUseMultimon}" Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="使用全部显示器" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="增强项：部分服务器或控件版本可能不支持" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <!-- 本地资源 -->
+                            <TextBlock Text="本地资源" Style="{StaticResource Settings.SectionHeader}" />
+                            <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding RdpRedirectClipboard}"
+                                      Content="启用剪贴板重定向" />
+                            <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding RdpRedirectAudio}" Margin="0,10,0,0"
+                                      Content="将远程音频播放到本机" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ── SSH ── -->
+                <StackPanel
+                            Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Ssh}">
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20">
+                        <StackPanel>
+                            <!-- 终端外观 -->
+                            <TextBlock Text="终端外观" Style="{StaticResource Settings.SectionHeader}" />
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="终端字体" Style="{StaticResource Text.Body}" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}" Text="{Binding SshFontFamily, UpdateSourceTrigger=LostFocus}" />
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,12,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="字号" Style="{StaticResource Text.Body}" VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}"
+                                          ItemsSource="{Binding FontSizeOptions}" SelectedItem="{Binding SshFontSize}" />
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="终端主题" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="配色跟随选择的终端主题。" Style="{StaticResource Text.Caption}"
+                                               TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding SshTerminalThemeOptions}" SelectedItem="{Binding SelectedSshTerminalTheme}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <!-- 终端外观实时预览：仅用色块与文字近似，不承载真实终端。
+                                 背景 / 前景随所选主题刷新，字体与字号直接跟随「终端字体 / 字号」。 -->
+                            <TextBlock Text="实时预览（近似）" Style="{StaticResource Text.Caption}"
+                                       Margin="0,12,0,4" />
+                            <Border Padding="14,12"
+                                    CornerRadius="8"
+                                    BorderThickness="1"
+                                    BorderBrush="{DynamicResource Stroke.Subtle}"
+                                    Background="{Binding TerminalPreviewBackground, Converter={StaticResource ColorToBrush}}">
+                                <StackPanel>
+                                    <TextBlock Text="user@remote ~ $ ls -la"
+                                               FontFamily="{Binding SshFontFamily}"
+                                               FontSize="{Binding SshFontSize}"
+                                               Foreground="{Binding TerminalPreviewForeground, Converter={StaticResource ColorToBrush}}" />
+                                    <TextBlock Margin="0,3,0,0"
+                                               Text="drwxr-xr-x  5 root  staff   160  6月  6 11:02 RemoteFlow"
+                                               FontFamily="{Binding SshFontFamily}"
+                                               FontSize="{Binding SshFontSize}"
+                                               Foreground="{Binding TerminalPreviewForeground, Converter={StaticResource ColorToBrush}}"
+                                               Opacity="0.85" />
+                                    <ItemsControl ItemsSource="{Binding TerminalPreviewColors}" Margin="0,10,0,0">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <UniformGrid Columns="16" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Height="14"
+                                                        Margin="1,0"
+                                                        CornerRadius="2"
+                                                        BorderThickness="1"
+                                                        BorderBrush="#40FFFFFF"
+                                                        Background="{Binding Hex, Converter={StaticResource ColorToBrush}}"
+                                                        ToolTip="{Binding Hex}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <!-- 终端默认值 -->
+                            <TextBlock Text="终端默认值" Style="{StaticResource Settings.SectionHeader}" />
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="终端类型" Style="{StaticResource Text.Body}" VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}"
+                                          ItemsSource="{Binding TerminalTypeOptions}" SelectedItem="{Binding SshTerminalType}" />
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,12,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="字符编码" Style="{StaticResource Text.Body}" VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}"
+                                          ItemsSource="{Binding SshEncodingOptions}" SelectedItem="{Binding SshEncoding}" />
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="KeepAlive 间隔（秒）" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="0 表示关闭。用于避免空闲会话被网络设备断开" Style="{StaticResource Text.Caption}"
+                                               TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
+                                         Text="{Binding SshKeepAliveSeconds, UpdateSourceTrigger=LostFocus}" />
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <!-- 交互安全 -->
+                            <TextBlock Text="交互安全" Style="{StaticResource Settings.SectionHeader}" />
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="多行粘贴时确认" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="粘贴多行命令前先弹窗确认，避免误把多行命令直接执行。" Style="{StaticResource Text.Caption}"
+                                               TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
+                                          IsChecked="{Binding SshConfirmMultilinePaste}" />
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="大文本粘贴时警告" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="粘贴大量文本前先警告，防止误把超长内容刷进终端。" Style="{StaticResource Text.Caption}"
+                                               TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
+                                          IsChecked="{Binding SshWarnLargePaste}" />
+                            </Grid>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="粘贴时使用括号模式" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="告知远端「这是粘贴」：多行内容不会被逐行执行，bash 5.1+ 会以高亮显示粘贴的内容（按方向键即消失）。关闭后粘贴直接回显、无高亮，但多行内容会被立即逐行执行，有误执行风险。" Style="{StaticResource Text.Caption}"
+                                               TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
+                                          IsChecked="{Binding SshBracketedPaste}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ── VNC ── -->
+                <StackPanel
+                            Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Vnc}">
+                    <TextBlock Text="新建 VNC 连接时的默认值" Style="{StaticResource Text.BodySecondary}" Margin="0,0,0,12" />
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20">
+                        <StackPanel>
+                            <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding VncFitToWindow}">
+                                <StackPanel>
+                                    <TextBlock Text="画面适应窗口" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="缩放远程画面以铺满窗口；关闭则按 1:1 原始像素显示" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                            <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding VncViewOnly}" Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="只读模式" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="只观看，不向远端发送键盘和鼠标" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                            <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding VncSharedConnection}" Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="共享连接" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="允许其他客户端同时连接，不踢掉已有会话" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                            <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding VncClipboardToLocal}" Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="剪贴板同步（远端 → 本机）" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="接收远端复制内容到本机剪贴板；发送暂不支持" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                            </CheckBox>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ── 安全 ── -->
+                <StackPanel
+                            Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Security}">
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20">
+                        <StackPanel>
+                            <TextBlock Text="已信任的 SSH 主机密钥" Style="{StaticResource Text.Body}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,10"
+                                       Text="首次连接时记录指纹；若某台主机的指纹发生变化，连接会被中止并明确警告。移除记录后下次连接将重新确认。" />
+
+                            <TextBlock Margin="0,4,0,0" Text="暂无已信任的主机密钥。">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding TrustedHostKeys.Count}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <ItemsControl ItemsSource="{Binding TrustedHostKeys}"
+                                          Visibility="{Binding TrustedHostKeys.Count, Converter={StaticResource CountToVisibility}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:HostKeyItemViewModel}">
+                                        <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="{StaticResource Radius.Medium}" Padding="12,10" Margin="0,0,0,6">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding Host}" Style="{StaticResource Text.Body}" FontFamily="{StaticResource MonoFont}" FontSize="12" />
+                                                        <TextBlock Text="{Binding Algorithm}" Style="{StaticResource Text.Caption}" Margin="10,0,0,0" />
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding Fingerprint}" Style="{StaticResource Text.Caption}"
+                                                               FontFamily="{StaticResource MonoFont}" Margin="0,3,0,0" />
+                                                </StackPanel>
+                                                <Button Grid.Column="1" Style="{StaticResource Button.Icon}"
+                                                        Width="30" Height="30" FontSize="13"
+                                                        Content="{StaticResource Icon.Delete}"
+                                                        ToolTip="移除该主机密钥"
+                                                        Foreground="{DynamicResource Status.Danger}"
+                                                        Command="{Binding DataContext.RemoveHostKeyCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ── 云同步 ── -->
+                <StackPanel DataContext="{Binding Cloud}"
+                            Visibility="{Binding DataContext.ActiveTab, RelativeSource={RelativeSource AncestorType=UserControl},
+                                         Converter={StaticResource EnumToVisibility}, ConverterParameter=Cloud}">
+
+                    <!-- Recovery Key 一次性展示 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,12"
+                            Visibility="{Binding HasNewRecoveryKey, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <TextBlock Text="请立即保存 Recovery Key" Style="{StaticResource Text.SectionTitle}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,10"
+                                       Text="忘记主口令时用它恢复访问权。它只显示这一次，请复制或另存到安全的地方。" />
+                            <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="{StaticResource Radius.Medium}" Padding="14,12">
+                                <TextBlock Text="{Binding NewRecoveryKey}" FontFamily="{StaticResource MonoFont}"
+                                           FontSize="14" TextWrapping="Wrap" />
+                            </Border>
+                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                <Button Content="复制" Style="{StaticResource Button.Secondary}"
+                                        Command="{Binding CopyRecoveryKeyCommand}" />
+                                <Button Content="另存为文件…" Style="{StaticResource Button.Secondary}" Margin="8,0,0,0"
+                                        Command="{Binding SaveRecoveryKeyCommand}" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding InfoMessage}" Style="{StaticResource Text.Caption}"
+                                       Foreground="{DynamicResource Status.Success}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                       Visibility="{Binding InfoMessage, Converter={StaticResource NullToVisibility}}" />
+                            <Button Content="我已妥善保存" Style="{StaticResource Button.Primary}" HorizontalAlignment="Left"
+                                    Margin="0,12,0,0" Command="{Binding AcknowledgeRecoveryKeyCommand}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 未登录 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20"
+                            Visibility="{Binding State, Converter={StaticResource EnumToVisibility}, ConverterParameter=SignedOut}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding SubmitLabel}" Style="{StaticResource Text.SectionTitle}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,14"
+                                       Text="登录后，连接、分组、标签、凭据与密码将端到端加密同步；服务端看不到明文。本地优先不变——未登录也能完整使用。" />
+
+                            <TextBlock Text="服务地址" Style="{StaticResource Text.FieldLabel}" />
+                            <TextBox x:Name="CloudServerUrlBox" Style="{StaticResource Input.TextBox}" Margin="0,4,0,10"
+                                     Text="{Binding ServerUrl, UpdateSourceTrigger=PropertyChanged}"
+                                     IsReadOnly="{Binding ServerUrlEditable, Converter={StaticResource InverseBool}}"
+                                     PreviewMouseLeftButtonDown="CloudServerUrlBox_PreviewMouseLeftButtonDown" />
+
+                            <TextBlock Text="邮箱" Style="{StaticResource Text.FieldLabel}" />
+                            <TextBox Style="{StaticResource Input.TextBox}" Margin="0,4,0,10"
+                                     Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}" />
+
+                            <TextBlock Text="主口令" Style="{StaticResource Text.FieldLabel}" />
+                            <PasswordBox x:Name="CloudPasswordBox" Style="{StaticResource Input.PasswordBox}" Margin="0,4,0,4"
+                                         PasswordChanged="CloudPasswordBox_PasswordChanged" />
+
+                            <StackPanel Visibility="{Binding IsRegisterMode, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="确认主口令（至少 12 位）" Style="{StaticResource Text.FieldLabel}" Margin="0,6,0,0" />
+                                <PasswordBox x:Name="CloudPasswordConfirmBox" Style="{StaticResource Input.PasswordBox}" Margin="0,4,0,4"
+                                             PasswordChanged="CloudPasswordConfirmBox_PasswordChanged" />
+                                <CheckBox Style="{StaticResource Input.CheckBox}" Margin="0,6,0,0"
+                                          IsChecked="{Binding RegisterRequireApproval}">
+                                    <StackPanel>
+                                        <TextBlock Text="新设备登录需在已有设备上批准" Style="{StaticResource Text.Body}" />
+                                        <TextBlock Text="多一道设备信任因素；之后可在账号设置里调整。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </CheckBox>
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource Status.Danger}"
+                                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                       Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibility}}" />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                                <Button Content="{Binding SubmitLabel}" Style="{StaticResource Button.Primary}"
+                                        Command="{Binding ConnectCommand}"
+                                        IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                                <Button Content="没有账号？注册" Style="{StaticResource Button.Secondary}" Margin="8,0,0,0"
+                                        Command="{Binding ToggleAuthModeCommand}"
+                                        Visibility="{Binding IsRegisterMode, Converter={StaticResource InverseBoolToVisibility}}" />
+                                <Button Content="用已有账号登录" Style="{StaticResource Button.Secondary}" Margin="8,0,0,0"
+                                        Command="{Binding ToggleAuthModeCommand}"
+                                        Visibility="{Binding IsRegisterMode, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 需要初始化 Vault -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20"
+                            Visibility="{Binding State, Converter={StaticResource EnumToVisibility}, ConverterParameter=NeedsVaultSetup}">
+                        <StackPanel>
+                            <TextBlock Text="初始化加密 Vault" Style="{StaticResource Text.SectionTitle}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,14"
+                                       Text="本设备是这个账号的第一台设备。将在本机生成加密主密钥与 Recovery Key（只显示一次）。" />
+                            <Button Content="生成 Vault" Style="{StaticResource Button.Primary}" HorizontalAlignment="Left"
+                                    Command="{Binding CreateVaultCommand}"
+                                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 需要补输主口令 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20"
+                            Visibility="{Binding State, Converter={StaticResource EnumToVisibility}, ConverterParameter=NeedsPassword}">
+                        <StackPanel>
+                            <TextBlock Text="输入主口令解锁" Style="{StaticResource Text.SectionTitle}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,14"
+                                       Text="本机已登录，需要主口令解开加密数据。忘记了？用下方的 Recovery Key 恢复。" />
+                            <TextBlock Text="主口令" Style="{StaticResource Text.FieldLabel}" />
+                            <PasswordBox x:Name="CloudUnlockPasswordBox" Style="{StaticResource Input.PasswordBox}" Margin="0,4,0,4"
+                                         PasswordChanged="CloudUnlockPasswordBox_PasswordChanged" />
+                            <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource Status.Danger}"
+                                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                       Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibility}}" />
+                            <Button Content="解锁" Style="{StaticResource Button.Primary}" HorizontalAlignment="Left"
+                                    Margin="0,12,0,10" Command="{Binding UnlockCommand}"
+                                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,4,0,10" />
+                            <TextBlock Text="Recovery Key（忘记主口令时）" Style="{StaticResource Text.FieldLabel}" />
+                            <TextBox Style="{StaticResource Input.TextBox}" Margin="0,4,0,4"
+                                     Text="{Binding RecoveryKeyInput, UpdateSourceTrigger=PropertyChanged}" />
+                            <Button Content="用 Recovery Key 恢复" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Left"
+                                    Margin="0,8,0,0" Command="{Binding RestoreWithRecoveryKeyCommand}"
+                                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 等待批准 / Recovery -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20"
+                            Visibility="{Binding State, Converter={StaticResource EnumToVisibility}, ConverterParameter=NeedsApproval}">
+                        <StackPanel>
+                            <TextBlock Text="这台设备还需要获得 Vault 访问权" Style="{StaticResource Text.SectionTitle}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,14"
+                                       Text="本账号开启了「新设备需批准」。在另一台已登录的设备上「设置 → 云同步 → 待批准的设备」里批准本机，然后点「我已被批准」；或用 Recovery Key 恢复。" />
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                <Button Content="我已被批准，重试" Style="{StaticResource Button.Primary}"
+                                        Command="{Binding RetryUnlockCommand}"
+                                        IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding InfoMessage}" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                       Margin="0,0,0,10"
+                                       Visibility="{Binding InfoMessage, Converter={StaticResource NullToVisibility}}" />
+                            <TextBlock Text="Recovery Key" Style="{StaticResource Text.FieldLabel}" />
+                            <TextBox Style="{StaticResource Input.TextBox}" Margin="0,4,0,4"
+                                     Text="{Binding RecoveryKeyInput, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource Status.Danger}"
+                                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                       Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibility}}" />
+                            <Button Content="用 Recovery Key 恢复" Style="{StaticResource Button.Secondary}" HorizontalAlignment="Left"
+                                    Margin="0,12,0,0" Command="{Binding RestoreWithRecoveryKeyCommand}"
+                                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 已就绪 -->
+                    <StackPanel Visibility="{Binding State, Converter={StaticResource EnumToVisibility}, ConverterParameter=Ready}">
+                        <Border Style="{StaticResource Surface.Card}" Padding="24,20">
+                            <StackPanel>
+                                <TextBlock Text="同步状态" Style="{StaticResource Text.SectionTitle}" />
+                                <TextBlock Text="{Binding StatusLine}" Style="{StaticResource Text.Body}" Margin="0,6,0,2" />
+                                <TextBlock Style="{StaticResource Text.Caption}"
+                                           Text="{Binding PendingChangeCount, StringFormat='{}{0} 项本地改动待上传'}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,4,0,0"
+                                           Text="{Binding LastSyncSummary, StringFormat='上次同步：{0}'}"
+                                           Visibility="{Binding LastSyncSummary, Converter={StaticResource NullToVisibility}}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,4,0,0"
+                                           Text="{Binding SyncedSummary, StringFormat='云端已存：{0}'}" />
+                                <TextBlock Text="{Binding InfoMessage}" Style="{StaticResource Text.Caption}"
+                                           Foreground="{DynamicResource Status.Success}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Visibility="{Binding InfoMessage, Converter={StaticResource NullToVisibility}}" />
+                                <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource Status.Danger}"
+                                           Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibility}}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                    <Button Content="立即同步" Style="{StaticResource Button.Primary}"
+                                            Command="{Binding SyncNowCommand}" />
+                                    <Button Content="刷新" Style="{StaticResource Button.Secondary}" Margin="8,0,0,0"
+                                            Command="{Binding RefreshCommand}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 待批准设备 -->
+                        <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,12,0,0"
+                                Visibility="{Binding PendingDevices.Count, Converter={StaticResource CountToVisibility}}">
+                            <StackPanel>
+                                <TextBlock Text="待批准的设备" Style="{StaticResource Text.SectionTitle}" />
+                                <ItemsControl ItemsSource="{Binding PendingDevices}" Margin="0,8,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:CloudDeviceRow}">
+                                            <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="{StaticResource Radius.Medium}"
+                                                    Padding="12,10" Margin="0,0,0,6">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" />
+                                                        <TextBlock Text="{Binding Platform}" Style="{StaticResource Text.Caption}" />
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1" Content="批准" Style="{StaticResource Button.Primary}"
+                                                            Command="{Binding DataContext.ApproveDeviceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 冲突 -->
+                        <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,12,0,0"
+                                Visibility="{Binding Conflicts.Count, Converter={StaticResource CountToVisibility}}">
+                            <StackPanel>
+                                <TextBlock Text="需要处理的同步冲突" Style="{StaticResource Text.SectionTitle}" />
+                                <ItemsControl ItemsSource="{Binding Conflicts}" Margin="0,8,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:CloudConflictRow}">
+                                            <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="{StaticResource Radius.Medium}"
+                                                    Padding="12,10" Margin="0,0,0,6">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Label, Mode=OneWay}" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                                                    <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0">
+                                                        <Run Text="{Binding Kind, Mode=OneWay}" />
+                                                        <Run Text="·" />
+                                                        <Run Text="{Binding EntityId, Mode=OneWay}" FontFamily="{StaticResource MonoFont}" FontSize="11" />
+                                                    </TextBlock>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                        <Button Content="保留本机" Style="{StaticResource Button.Secondary}"
+                                                                Command="{Binding DataContext.KeepLocalCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}" />
+                                                        <Button Content="使用云端" Style="{StaticResource Button.Secondary}" Margin="8,0,0,0"
+                                                                Command="{Binding DataContext.UseRemoteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 安全 -->
+                        <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,12,0,0">
+                            <StackPanel>
+                                <TextBlock Text="安全" Style="{StaticResource Text.SectionTitle}" />
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                                MaxWidth="520" HorizontalAlignment="Left">
+                                        <TextBlock Text="新设备登录需在已有设备上批准" Style="{StaticResource Text.Body}" />
+                                        <TextBlock Text="开启后，即使输入正确主口令，新设备也要等一台已登录设备批准才能同步。" Style="{StaticResource Text.Caption}"
+                                                   TextWrapping="Wrap" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
+                                              IsChecked="{Binding RequireApproval}"
+                                              IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
+                                </Grid>
+                                <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                    <Button Content="更改主口令" Style="{StaticResource Button.Secondary}"
+                                            Command="{Binding ChangePasswordCommand}" />
+                                    <Button Content="重置 Recovery Key" Style="{StaticResource Button.Secondary}" Margin="8,0,0,0"
+                                            Command="{Binding ResetRecoveryKeyCommand}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 账号 -->
+                        <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,12,0,0">
+                            <StackPanel>
+                                <TextBlock Text="账号" Style="{StaticResource Text.SectionTitle}" />
+                                <TextBlock Text="退出仅撤销本机登录并停止同步，本地连接与凭据保留。" Style="{StaticResource Text.Caption}"
+                                           Margin="0,6,0,0" TextWrapping="Wrap" />
+                                <Button Content="退出云账号" Style="{StaticResource Button.Secondary}"
+                                        Margin="0,12,0,0" HorizontalAlignment="Left"
+                                        Command="{Binding DisconnectCommand}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 危险操作：默认折叠 + 需手动输入「清除」才启用，避免误点 -->
+                        <Expander Margin="0,12,0,0" Foreground="{DynamicResource Status.Danger}">
+                            <Expander.Header>
+                                <TextBlock Text="危险操作（清除数据）" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Status.Danger}" />
+                            </Expander.Header>
+                            <Border Style="{StaticResource Surface.Card}" Padding="24,20"
+                                    BorderBrush="{DynamicResource Status.Danger}" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                               Text="以下操作会删除数据且不可恢复。为避免误点，请先在下方输入「清除」以启用按钮。" />
+                                    <TextBox Style="{StaticResource Input.TextBox}" Margin="0,10,0,0" Width="220"
+                                             HorizontalAlignment="Left"
+                                             Text="{Binding DangerPhrase, UpdateSourceTrigger=PropertyChanged}" />
+
+                                    <Border Style="{StaticResource Surface.Divider}" Margin="0,16" />
+
+                                    <TextBlock Text="清除此设备云数据" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                               Text="退出登录，并清掉本机的同步状态与 Vault 密钥缓存；本地连接与凭据保留。" />
+                                    <Button Content="清除此设备云数据" Style="{StaticResource Button.Danger}"
+                                            Margin="0,8,0,0" HorizontalAlignment="Left"
+                                            Command="{Binding DisconnectAndWipeCommand}" />
+
+                                    <Border Style="{StaticResource Surface.Divider}" Margin="0,16" />
+
+                                    <TextBlock Text="清空本机数据并以云端为准" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,0"
+                                               Text="删除本机全部连接、凭据、分组、标签与密码，然后从云端重新拉取一份。本机未上云的改动会丢失。" />
+                                    <Button Content="清空本机数据并从云端恢复" Style="{StaticResource Button.Danger}"
+                                            Margin="0,8,0,0" HorizontalAlignment="Left"
+                                            Command="{Binding RestoreFromCloudCommand}" />
+                                </StackPanel>
+                            </Border>
+                        </Expander>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- ── 数据与备份 ── -->
+                <Grid HorizontalAlignment="Stretch"
+                      Visibility="{Binding ActiveTab, Converter={StaticResource EnumToVisibility}, ConverterParameter=Data}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="24" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 连接数据 -->
+                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,24">
+                        <StackPanel>
+                            <StackPanel Style="{StaticResource Settings.CardHeader}">
+                                <TextBlock Text="{StaticResource Icon.Database}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <TextBlock Text="连接数据" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
+                            </StackPanel>
+
+                            <Button Style="{StaticResource Settings.LinkRow}"
+                                    Command="{Binding ImportConnectionsCsvCommand}"
+                                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Download}" Style="{StaticResource IconTile.Glyph}"
+                                                   Foreground="{DynamicResource Brand.Default}" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="导入连接 CSV" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                                        <TextBlock Text="从 CSV 文件导入连接，快速批量添加服务器。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{StaticResource Icon.ChevronRight}" FontFamily="{StaticResource IconFont}"
+                                               FontSize="12" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                </Grid>
+                            </Button>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="8,2" />
+
+                            <Button Style="{StaticResource Settings.LinkRow}" Command="{Binding ExportConnectionsCsvCommand}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Upload}" Style="{StaticResource IconTile.Glyph}"
+                                                   Foreground="{DynamicResource Brand.Default}" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="导出连接 CSV" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                                        <TextBlock Text="将现有连接导出为 CSV 文件，便于备份或迁移。不含任何密码。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{StaticResource Icon.ChevronRight}" FontFamily="{StaticResource IconFont}"
+                                               FontSize="12" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 凭据备份 -->
+                    <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,24">
+                        <StackPanel>
+                            <StackPanel Style="{StaticResource Settings.CardHeader}">
+                                <TextBlock Text="{StaticResource Icon.Credential}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                           Foreground="{DynamicResource Status.Success}" VerticalAlignment="Center" />
+                                <TextBlock Text="凭据备份" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
+                            </StackPanel>
+
+                            <Button Style="{StaticResource Settings.LinkRow}" Command="{Binding ImportCredentialsCommand}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Download}" Style="{StaticResource IconTile.Glyph}"
+                                                   Foreground="{DynamicResource Status.Success}" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="导入 .rfbackup" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                                        <TextBlock Text="从 .rfbackup 文件导入凭据，恢复保存的登录信息。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{StaticResource Icon.ChevronRight}" FontFamily="{StaticResource IconFont}"
+                                               FontSize="12" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                </Grid>
+                            </Button>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="8,2" />
+
+                            <Button Style="{StaticResource Settings.LinkRow}" Command="{Binding ExportCredentialsCommand}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Upload}" Style="{StaticResource IconTile.Glyph}"
+                                                   Foreground="{DynamicResource Status.Success}" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="导出 .rfbackup" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                                        <TextBlock Text="将所有凭据导出为 .rfbackup 文件，口令加密，安全备份。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{StaticResource Icon.ChevronRight}" FontFamily="{StaticResource IconFont}"
+                                               FontSize="12" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 应用数据 -->
+                    <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,24">
+                        <StackPanel>
+                            <StackPanel Style="{StaticResource Settings.CardHeader}">
+                                <TextBlock Text="{StaticResource Icon.Database}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <TextBlock Text="应用数据" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
+                            </StackPanel>
+
+                            <Button Style="{StaticResource Settings.LinkRow}" Command="{Binding OpenDataDirectoryCommand}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.Folder}" Style="{StaticResource IconTile.Glyph}"
+                                                   Foreground="{DynamicResource Text.Secondary}" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="数据存储位置" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding DataDirectory}" Style="{StaticResource Text.Caption}"
+                                                   FontFamily="{StaticResource MonoFont}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{StaticResource Icon.ChevronRight}" FontFamily="{StaticResource IconFont}"
+                                               FontSize="12" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                </Grid>
+                            </Button>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="8,2" />
+
+                            <Button Style="{StaticResource Settings.LinkRow}" Command="{Binding OpenLogDirectoryCommand}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                        <TextBlock Text="{StaticResource Icon.ImportExport}" Style="{StaticResource IconTile.Glyph}"
+                                                   Foreground="{DynamicResource Text.Secondary}" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="打开日志目录" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                                        <TextBlock Text="在文件资源管理器中打开运行日志目录。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{StaticResource Icon.ChevronRight}" FontFamily="{StaticResource IconFont}"
+                                               FontSize="12" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                </Grid>
+                            </Button>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="8,2" />
+
+                            <Grid Margin="8,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                    <TextBlock Text="{StaticResource Icon.Database}" Style="{StaticResource IconTile.Glyph}"
+                                               Foreground="{DynamicResource Text.Secondary}" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
+                                    <TextBlock Text="备份数据" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                                    <TextBlock Text="把连接数据库、凭据保险库与设置复制到指定目录，保存在本地。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Button Grid.Column="2" Style="{StaticResource Button.Secondary}" Content="立即备份"
+                                        VerticalAlignment="Center"
+                                        IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}"
+                                        Command="{Binding BackupDataCommand}" />
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="8,2" />
+
+                            <Grid Margin="8,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                    <TextBlock Text="{StaticResource Icon.Delete}" Style="{StaticResource IconTile.Glyph}"
+                                               Foreground="{DynamicResource Status.Danger}" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
+                                    <TextBlock Text="清理连接历史" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                                    <TextBlock Text="删除不再需要的历史记录，释放存储空间。不影响连接与凭据。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Button Grid.Column="2" Style="{StaticResource Button.Secondary}" Content="清理历史"
+                                        VerticalAlignment="Center"
+                                        Command="{Binding ClearHistoryCommand}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 数据安全提示 -->
+                    <Border Grid.Row="1" Grid.Column="2" Background="{DynamicResource Bg.Subtle}"
+                            CornerRadius="{StaticResource Radius.Large}" Padding="20,18" Margin="0,0,0,24"
+                            VerticalAlignment="Top">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                           Foreground="{DynamicResource Status.Success}" VerticalAlignment="Center" />
+                                <TextBlock Text="数据安全提示" Style="{StaticResource Text.Body}" FontWeight="SemiBold" Margin="10,0,0,0" />
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,0,0,14"
+                                       Text="所有数据仅存储在本地设备上，不会上传或同步到云端。" />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="{StaticResource Icon.Lock}" FontFamily="{StaticResource IconFont}" FontSize="15"
+                                           Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
+                                <TextBlock Text="加密保护" Style="{StaticResource Text.Body}" FontWeight="SemiBold" Margin="10,0,0,0" />
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                       Text="凭据与私钥经 Windows DPAPI 加密后单独存放于 vault.dat，只能在当前 Windows 账户下解密；.rfbackup 使用 AES-256-GCM + PBKDF2 口令加密。" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 导入提示（跳过的重复项等）-->
+                    <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource Surface.Card}" Padding="24,20"
+                            Visibility="{Binding HasMessages, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <TextBlock Text="导入提示" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,10" />
+                            <ItemsControl ItemsSource="{Binding ImportMessages}" MaxHeight="220">
+                                <ItemsControl.Template>
+                                    <ControlTemplate TargetType="ItemsControl">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                            <ItemsPresenter />
+                                        </ScrollViewer>
+                                    </ControlTemplate>
+                                </ItemsControl.Template>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                            <TextBlock Text="{StaticResource Icon.Warning}"
+                                                       FontFamily="{StaticResource IconFont}" FontSize="11"
+                                                       Foreground="{DynamicResource Status.Warning}"
+                                                       VerticalAlignment="Top" Margin="0,2,0,0" />
+                                            <TextBlock Text="{Binding}" Style="{StaticResource Text.Caption}"
+                                                       TextWrapping="Wrap" Margin="8,0,0,0" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
