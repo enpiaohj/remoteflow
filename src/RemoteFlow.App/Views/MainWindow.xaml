@@ -355,6 +355,24 @@
                                 </StackPanel>
                             </RadioButton>
 
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Favorites, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Favorites}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Favorite}" Style="{StaticResource Nav.Icon}" />
+                                    <TextBlock Text="收藏" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Recent, Mode=TwoWay}"
+                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Recent}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{StaticResource Icon.Recent}" Style="{StaticResource Nav.Icon}" />
+                                    <TextBlock Text="最近连接" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </RadioButton>
+
                             <Border Style="{StaticResource Surface.Divider}" Margin="18,12" />
 
                             <TextBlock Text="管理" Style="{StaticResource Nav.SectionHeader}" />
@@ -583,15 +601,14 @@
                         <Style TargetType="Border">
                             <Setter Property="Visibility" Value="Collapsed" />
                             <Style.Triggers>
-                                <!-- 详情面板只在连接列表页出现：窗口够宽、未全屏、非会话 Tab、
-                                     且未处于多选模式（多选时隐藏详情，让列表占满 Workspace） -->
+                                <!-- 详情面板只在连接列表页出现：窗口够宽、未全屏、非会话 Tab。
+                                     批量勾选时保持常驻（对齐工作台设计稿），不再因多选收起。 -->
                                 <MultiDataTrigger>
                                     <MultiDataTrigger.Conditions>
                                         <Condition Binding="{Binding IsDetailPanelVisible}" Value="True" />
                                         <Condition Binding="{Binding IsSessionFullScreen}" Value="False" />
                                         <Condition Binding="{Binding IsSessionSelected}" Value="False" />
                                         <Condition Binding="{Binding IsConnectionListPage}" Value="True" />
-                                        <Condition Binding="{Binding ConnectionsPage.IsMultiSelect}" Value="False" />
                                     </MultiDataTrigger.Conditions>
                                     <Setter Property="Visibility" Value="Visible" />
                                 </MultiDataTrigger>
