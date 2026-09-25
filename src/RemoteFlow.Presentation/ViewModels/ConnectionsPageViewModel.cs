@@ -694,7 +694,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     private ConnectionItemViewModel CreateItem(ConnectionProfile profile)
     {
-        const int MaxVisibleTags = 3;
+        const int MaxVisibleTags = 2;
 
         var item = new ConnectionItemViewModel(profile)
         {
@@ -1456,6 +1456,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(OnlineCount));
         OnPropertyChanged(nameof(TotalConnectionsDisplay));
+        OnPropertyChanged(nameof(WorkbenchSubtitle));
     }
 
     /// <summary>状态栏 / 树徽章的全量计数。</summary>
@@ -1463,10 +1464,15 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     public int TotalConnectionCount => _allItems.Count;
 
-    /// <summary>底部状态栏的连接计数徽章。探测开启且已知有在线时带上在线数。</summary>
-    public string TotalConnectionsDisplay => PresenceProbeEnabled && OnlineCount > 0
-        ? $"共 {TotalConnectionCount} 个连接 · 在线 {OnlineCount}"
+    /// <summary>底部状态栏：探测开启时表达覆盖面（在线 X / N），关闭时只报总量。</summary>
+    public string TotalConnectionsDisplay => PresenceProbeEnabled
+        ? $"在线 {OnlineCount} / {TotalConnectionCount}"
         : $"共 {TotalConnectionCount} 个连接";
+
+    /// <summary>上下文条的副标题（概念稿 v0.2：标题右侧的全量统计）。</summary>
+    public string WorkbenchSubtitle => PresenceProbeEnabled
+        ? $"{TotalConnectionCount} 台设备 · {OnlineCount} 台在线"
+        : $"{TotalConnectionCount} 台设备";
 
     /// <summary>关闭探测时清空全部探测态（列回到「—」，状态筛选同步隐藏）。</summary>
     private void ClearAllProbes()

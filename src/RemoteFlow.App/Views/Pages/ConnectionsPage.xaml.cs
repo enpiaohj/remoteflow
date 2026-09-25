@@ -657,12 +657,20 @@ public partial class ConnectionsPage : UserControl
     /// <summary>Ctrl+K 聚焦页内搜索框（与设计稿的工作台交互一致）。</summary>
     private void OnPageKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control
-            && PageFilterBox is { IsVisible: true })
+        if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            FocusFilter();
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>聚焦页内搜索框（Ctrl+K / 全局焦点搜索的落点）。</summary>
+    public void FocusFilter()
+    {
+        if (PageFilterBox is { IsVisible: true })
         {
             PageFilterBox.Focus();
             PageFilterBox.SelectAll();
-            e.Handled = true;
         }
     }
 

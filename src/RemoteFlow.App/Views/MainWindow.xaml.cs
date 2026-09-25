@@ -8,6 +8,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Shell;
 using RemoteFlow.App.Services;
+using RemoteFlow.App.Views.Pages;
 using RemoteFlow.App.Views.Dialogs;
 using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Core.Models;
@@ -62,10 +63,21 @@ public partial class MainWindow : Window
 
         UpdateRootPadding();
 
+        // 全局 Ctrl+K：跳到连接工作台并聚焦页内搜索（标题栏搜索框已按概念稿 v0.2 移除）。
         viewModel.FocusSearchRequested += (_, _) =>
         {
-            SearchBox.Focus();
-            SearchBox.SelectAll();
+            if (viewModel.CurrentPage != NavigationPage.Connections)
+            {
+                viewModel.NavigateToCommand.Execute(NavigationPage.Connections);
+            }
+
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, () =>
+            {
+                if (FindDescendant<ConnectionsPage>(this) is { } page)
+                {
+                    page.FocusFilter();
+                }
+            });
         };
 
         // 会话工具条的按钮与 F11 都只改 ViewMode，真正的窗口形态在这里响应。
@@ -879,5 +891,27 @@ public partial class MainWindow : Window
             public int Right;
             public int Bottom;
         }
+    }
+
+    /// <summary>在可视树中查找指定类型的后代（用于跨 DataTemplate 触达页面视图）。</summary>
+    private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
+    {
+        var count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is T hit)
+            {
+                return hit;
+            }
+
+            var deep = FindDescendant<T>(child);
+            if (deep is not null)
+            {
+                return deep;
+            }
+        }
+
+        return null;
     }
 }

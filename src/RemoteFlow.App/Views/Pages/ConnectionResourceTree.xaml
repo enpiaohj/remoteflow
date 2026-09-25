@@ -32,9 +32,8 @@
                            Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding Name}" FontSize="13" Margin="9,0,0,0"
                            Foreground="{DynamicResource Text.Primary}" VerticalAlignment="Center" />
-                <Border Background="{DynamicResource Bg.Subtle}" BorderBrush="{DynamicResource Stroke.Subtle}"
-                        BorderThickness="1" CornerRadius="9" Padding="7,1" Margin="10,0,0,0" VerticalAlignment="Center">
-                    <TextBlock>
+                <Border VerticalAlignment="Center" Margin="10,0,0,0">
+                    <TextBlock HorizontalAlignment="Right">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Label}">
                                 <Setter Property="Text" Value="{Binding DataContext.AllCount, RelativeSource={RelativeSource AncestorType=ListBox}}" />
@@ -101,10 +100,8 @@
                 <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="13" Margin="7,0,0,0"
                            Foreground="{DynamicResource Text.Primary}" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" />
-                <Border Grid.Column="3" Background="{DynamicResource Bg.Subtle}" BorderBrush="{DynamicResource Stroke.Subtle}"
-                        BorderThickness="1" CornerRadius="9" Padding="7,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding TotalCount}" Style="{StaticResource Text.Label}" />
-                </Border>
+                <TextBlock Grid.Column="3" Text="{Binding TotalCount}" Style="{StaticResource Text.Label}"
+                           Margin="8,0,0,0" VerticalAlignment="Center" />
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
@@ -112,15 +109,15 @@
     <!-- 顶沿与窗口标题栏同一行：本控件在 MainWindow 中跨标题栏行与内容行放置，
          头部「连接资源 + 新建」因此与产品名称置顶对齐（设计稿的树列形态）。
          头部落在 chrome 区，交互件必须显式声明 IsHitTestVisibleInChrome。 -->
-    <Border Padding="14,0,8,0">
+    <Border Padding="10,8,6,8">
         <DockPanel>
-            <Grid DockPanel.Dock="Top" Height="48">
+            <Grid DockPanel.Dock="Top" Height="30">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="连接资源" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
-                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="0" Text="连接资源" FontSize="11" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True">
                     <Button Style="{StaticResource Button.Icon}" Width="28" Height="28"

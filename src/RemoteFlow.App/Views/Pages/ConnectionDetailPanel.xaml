@@ -133,14 +133,18 @@
                                FontFamily="{StaticResource MonoFont}"
                                Margin="0,4,0,0" />
 
-                    <!-- 连接状态：未连接 / 正在连接 / 已连接 / 连接失败 -->
-                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                        <Ellipse Width="7" Height="7" VerticalAlignment="Center"
-                                 Fill="{Binding DataContext.SelectedConnectionStatusBrushKey, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource KeyToBrush}}" />
-                        <TextBlock Text="{Binding DataContext.SelectedConnectionStatusText, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                   Style="{StaticResource Text.Caption}" FontWeight="SemiBold"
-                                   Margin="6,0,0,0" VerticalAlignment="Center" />
-                    </StackPanel>
+                    <!-- 连接状态胶囊：未连接 / 正在连接 / 已连接 / 连接失败 -->
+                    <Border HorizontalAlignment="Left" Margin="0,8,0,0"
+                            CornerRadius="10" Background="{DynamicResource Bg.Subtle}" Padding="9,3">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                     Fill="{Binding DataContext.SelectedConnectionStatusBrushKey, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource KeyToBrush}}" />
+                            <TextBlock Text="{Binding DataContext.SelectedConnectionStatusText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                       FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Text.Secondary}"
+                                       Margin="6,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
 
                     <!-- 主操作：连接 + 下拉（备选动作）。滚动时保持可见 -->
                     <Grid Margin="0,12,0,0">
@@ -461,18 +465,26 @@
                         </ItemsControl.Template>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:HistoryItemViewModel}">
-                                <Grid Height="32">
+                                <!-- 时间线形态：圆点 + 垂直连接线（最后一条不留线尾） -->
+                                <Grid Height="30">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="14" />
+                                        <ColumnDefinition Width="16" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Ellipse Grid.Column="0" Width="6" Height="6" VerticalAlignment="Center"
-                                             Fill="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding StartedAtDisplay}" Style="{StaticResource Text.Caption}"
-                                               VerticalAlignment="Center" Margin="4,0,0,0" />
+                                    <Border Grid.Column="0" Width="1" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                                            Background="{DynamicResource Stroke.Subtle}" Margin="0,4,0,-4" />
+                                    <Ellipse Grid.Column="0" Width="7" Height="7" VerticalAlignment="Top" Margin="0,5,0,0"
+                                             HorizontalAlignment="Center"
+                                             Fill="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}"
+                                             Panel.ZIndex="1" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="4,3,0,0">
+                                        <TextBlock Text="{Binding StartedAtDisplay}" Style="{StaticResource Text.Caption}" />
+                                        <TextBlock Text="{Binding ResultText}" Style="{StaticResource Text.Caption}"
+                                                   Foreground="{DynamicResource Text.Secondary}" Margin="8,0,0,0" />
+                                    </StackPanel>
                                     <TextBlock Grid.Column="2" Text="{Binding DurationDisplay}" Style="{StaticResource Text.Caption}"
-                                               VerticalAlignment="Center" />
+                                               VerticalAlignment="Top" Margin="0,3,0,0" />
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
