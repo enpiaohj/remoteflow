@@ -336,6 +336,23 @@
                                 <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}" VerticalAlignment="Center"
                                          Text="{Binding MaxConcurrentSessions, UpdateSourceTrigger=LostFocus}" />
                             </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,18" />
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="连接工作台在线探测" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="进入「连接工作台」时自动用 TCP 探测当前列表的可达性（并发受限）。关闭后仍可用列表工具条的「探测」手动触发。"
+                                               Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
+                                          IsChecked="{Binding PresenceProbeEnabled}" />
+                            </Grid>
                         </StackPanel>
                     </Border>
 

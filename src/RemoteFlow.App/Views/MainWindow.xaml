@@ -351,25 +351,7 @@
                                          Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Connections}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="{StaticResource Icon.Connections}" Style="{StaticResource Nav.Icon}" />
-                                    <TextBlock Text="我的连接" Margin="12,0,0,0" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </RadioButton>
-
-                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
-                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Favorites, Mode=TwoWay}"
-                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Favorites}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{StaticResource Icon.Favorite}" Style="{StaticResource Nav.Icon}" />
-                                    <TextBlock Text="收藏" Margin="12,0,0,0" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </RadioButton>
-
-                            <RadioButton Style="{StaticResource Nav.Item}" GroupName="Nav"
-                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Recent, Mode=TwoWay}"
-                                         Command="{Binding NavigateToCommand}" CommandParameter="{x:Static vm:NavigationPage.Recent}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{StaticResource Icon.Recent}" Style="{StaticResource Nav.Icon}" />
-                                    <TextBlock Text="最近连接" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="连接工作台" Margin="12,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </RadioButton>
 
@@ -632,6 +614,8 @@
                         <TextBlock Text="{Binding SessionStatusText}" Style="{StaticResource Text.Caption}" Margin="8,0,0,0" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding ConnectionsPage.TotalConnectionsDisplay}" Style="{StaticResource Text.Caption}"
+                                   Margin="0,0,14,0" />
                         <TextBlock Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}" FontSize="11"
                                    Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
                         <TextBlock Text="本地优先 · 凭据由 Windows DPAPI 保护"

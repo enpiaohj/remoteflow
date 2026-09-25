@@ -46,6 +46,17 @@ public enum ProtocolFilterOption
     Vnc
 }
 
+/// <summary>在线状态筛选选项（探测关闭时该筛选整体隐藏）。</summary>
+public enum PresenceFilterOption
+{
+    All,
+    Online,
+    Offline
+}
+
+/// <summary>标签筛选下拉的一项。<see cref="Id"/> 为 null 表示「全部标签」。</summary>
+public sealed record TagFilterOption(Guid? Id, string Name, string Color);
+
 /// <summary>「移动到分组」子菜单里的一个目标分组。</summary>
 /// <param name="GroupId">null 表示「未分组」。</param>
 public sealed record GroupTargetOption(Guid? GroupId, string Name, int Depth);
@@ -66,6 +77,12 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     private readonly JsonSettingsStore _settingsStore;
     private readonly ILogger<ConnectionsPageViewModel> _logger;
     private readonly IUiDispatcher _ui;
+
+    /// <summary>在线探测。可空以允许单元测试以 null 构造（不测探测）。</summary>
+    private readonly PresenceProbeService? _probe;
+
+    /// <summary>当前批量探测的取消令牌。新探测 / 重新加载都会取消上一批。</summary>
+    private CancellationTokenSource? _probeCts;
 
     /// <summary>只读会话管理：详情面板展示当前连接状态 / 刷新等用，不在此创建会话。
     /// 可空以允许单元测试以 null 构造（不测会话相关）。</summary>
@@ -92,9 +109,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     private IReadOnlyDictionary<Guid, string> _tagNames = new Dictionary<Guid, string>();
     private IReadOnlyDictionary<Guid, string> _tagColors = new Dictionary<Guid, string>();
 
-    /// <summary>搜索开始前的折叠分组集合。搜索期间临时全展开，清空后据此还原。</summary>
-    private HashSet<string>? _collapsedBeforeSearch;
-
     /// <summary>当前是否存在受保护默认组（决定「设为默认分组」菜单是否可用）。</summary>
     private bool _hasProtectedDefault;
 
@@ -109,7 +123,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         JsonSettingsStore settingsStore,
         ILogger<ConnectionsPageViewModel> logger,
         IUiDispatcher uiDispatcher,
-        SessionManager sessions)
+        SessionManager sessions,
+        PresenceProbeService? probe = null)
     {
         _connections = connections;
         _ui = uiDispatcher;
@@ -122,6 +137,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         _settingsStore = settingsStore;
         _logger = logger;
         _sessions = sessions;
+        _probe = probe;
 
         Items = [];
 
@@ -133,20 +149,106 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         }
     }
 
-    // ── 分组树（「我的连接」视图）─────────────────────────────────
+    // ── 连接资源树（左栏）────────────────────────────────────────
 
-    /// <summary>根级分组节点。仅 <see cref="ConnectionFilter.All"/> 视图使用。</summary>
+    /// <summary>根级分组节点（含末尾「未分组」）。树始终反映全量数据，计数不受筛选影响。</summary>
     public ObservableCollection<ConnectionGroupNodeViewModel> GroupNodes { get; } = [];
 
     /// <summary>
-    /// 「我的连接」视图渲染用的扁平行：<see cref="ConnectionGroupNodeViewModel"/>（分组标题）
-    /// 与 <see cref="ConnectionItemViewModel"/>（连接行）交替，折叠的分组不展开其内容。
-    /// 用一个 ListBox + DataTemplateSelector 承载，复用选中 / 双击 / 键盘逻辑。
+    /// 左树的摊平节点（折叠的分组不展开子级）。列表本身永远扁平——分组维度由左树承担，
+    /// 选中某个分组后中央列表只显示该分组子树内的连接。
     /// </summary>
-    public ObservableCollection<object> GroupedRows { get; } = [];
+    public ObservableCollection<ConnectionGroupNodeViewModel> FlatTreeNodes { get; } = [];
 
-    /// <summary>是否用分组树呈现（我的连接）。收藏 / 最近连接用扁平列表。</summary>
-    public bool IsGroupedView => Filter == ConnectionFilter.All;
+    /// <summary>智能视图（树顶部的快捷入口）。与 <see cref="ConnectionFilter"/> 一一对应。</summary>
+    public sealed record SmartViewOption(ConnectionFilter FilterValue, string Name, string IconGlyph);
+
+    public IReadOnlyList<SmartViewOption> SmartViews { get; } =
+    [
+        new(ConnectionFilter.All, "全部连接", "\uE968"),
+        new(ConnectionFilter.Favorites, "收藏", "\uE735"),
+        new(ConnectionFilter.Recent, "最近连接", "\uE81C"),
+    ];
+
+    /// <summary>左树当前选中的智能视图；选中分组时为 null。</summary>
+    [ObservableProperty]
+    private SmartViewOption? _selectedSmartView;
+
+    /// <summary>左树当前选中的分组（含子树过滤）；未选分组时为 null。</summary>
+    [ObservableProperty]
+    private ConnectionGroupNodeViewModel? _selectedGroupNode;
+
+    /// <summary>正在以代码同步 <see cref="SelectedSmartView"/>，抑制回写循环。</summary>
+    private bool _syncingSmartView;
+
+    partial void OnSelectedSmartViewChanged(SmartViewOption? value)
+    {
+        if (_syncingSmartView || value is null)
+        {
+            return;
+        }
+
+        _syncingSmartView = true;
+        SelectedGroupNode = null;
+        _syncingSmartView = false;
+
+        if (Filter != value.FilterValue)
+        {
+            Filter = value.FilterValue;
+        }
+    }
+
+    partial void OnSelectedGroupNodeChanged(ConnectionGroupNodeViewModel? value)
+    {
+        if (_syncingSmartView)
+        {
+            return;
+        }
+
+        _syncingSmartView = true;
+        SelectedSmartView = null;
+        _syncingSmartView = false;
+
+        OnPropertyChanged(nameof(HasGroupFilter));
+        OnPropertyChanged(nameof(ViewTitle));
+        ApplyFilter();
+    }
+
+    /// <summary>当前是否处于「按分组浏览」（左树选中了某个分组）。</summary>
+    public bool HasGroupFilter => SelectedGroupNode is not null;
+
+    /// <summary>列表标题：分组名优先，其次智能视图名。</summary>
+    public string ViewTitle => SelectedGroupNode?.Name
+        ?? Filter switch
+        {
+            ConnectionFilter.Favorites => "收藏",
+            ConnectionFilter.Recent => "最近连接",
+            _ => "全部连接"
+        };
+
+    /// <summary>清除分组过滤，回到「全部连接」。</summary>
+    [RelayCommand]
+    private void ClearGroupFilter()
+    {
+        SelectedGroupNode = null;
+        SelectedSmartView = SmartViews[0];
+    }
+
+    /// <summary>树计数徽章：各智能视图的全量计数（不受当前筛选影响）。</summary>
+    public int AllCount => _allItems.Count;
+
+    public int FavoritesCount => _allItems.Count(i => i.IsFavorite);
+
+    public int RecentCount => _allItems.Count(i => i.LastConnectedAt is not null);
+
+    private void RaiseViewCounts()
+    {
+        OnPropertyChanged(nameof(AllCount));
+        OnPropertyChanged(nameof(FavoritesCount));
+        OnPropertyChanged(nameof(RecentCount));
+        OnPropertyChanged(nameof(TotalConnectionCount));
+        OnPropertyChanged(nameof(TotalConnectionsDisplay));
+    }
 
     /// <summary>「移动到分组」子菜单用的扁平分组列表（含「未分组」）。</summary>
     [ObservableProperty]
@@ -295,6 +397,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             item.IsConnecting = _sessions.ActiveSessions.Any(
                 x => x.Profile.Id == item.Id && x.State == ConnectionState.Connecting);
         }
+
+        // 「已连接」也是在线数的一部分；会话状态跳变会影响状态栏在线计数。
+        RefreshPresenceCounts();
     }
 
     private void RaiseSelectedDetail()
@@ -366,6 +471,26 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     [ObservableProperty]
     private ProtocolFilterOption _protocolFilter = ProtocolFilterOption.All;
 
+    /// <summary>标签筛选（下拉首项「全部标签」= 不筛选）。</summary>
+    [ObservableProperty]
+    private TagFilterOption _tagFilter = new(null, "全部标签", "");
+
+    /// <summary>标签筛选选项。加载时由真实标签重建。</summary>
+    public IReadOnlyList<TagFilterOption> TagFilterOptions { get; private set; } = [new(null, "全部标签", "")];
+
+    /// <summary>在线状态筛选（探测关闭时该下拉整体隐藏）。</summary>
+    [ObservableProperty]
+    private PresenceFilterOption _presenceFilter = PresenceFilterOption.All;
+
+    public IReadOnlyList<PresenceFilterOption> PresenceFilterOptions { get; } =
+        [PresenceFilterOption.All, PresenceFilterOption.Online, PresenceFilterOption.Offline];
+
+    /// <summary>
+    /// 在线探测是否启用（设置项的页面内快照，随每次加载刷新）。
+    /// 关闭时隐藏状态筛选下拉与列内探测态，工具条保留手动「探测」入口。
+    /// </summary>
+    public bool PresenceProbeEnabled { get; private set; }
+
     /// <summary>排序方式。</summary>
     [ObservableProperty]
     private ConnectionSortMode _sortMode = ConnectionSortMode.Name;
@@ -425,29 +550,15 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// <summary>「最近连接」视图专属：日期分组 + 时间范围筛选。</summary>
     public bool IsRecentView => Filter == ConnectionFilter.Recent;
 
-    partial void OnSearchTextChanged(string value)
-    {
-        var searchingNow = !string.IsNullOrWhiteSpace(value);
-        if (searchingNow && !_isSearching)
-        {
-            // 进入搜索：记住当前折叠状态，搜索期间树临时全展开。
-            _collapsedBeforeSearch = [.. _settings.CollapsedGroupIds];
-        }
-        else if (!searchingNow && _isSearching && _collapsedBeforeSearch is not null)
-        {
-            // 退出搜索：还原用户原本的展开 / 折叠状态。
-            _settings.CollapsedGroupIds.Clear();
-            _settings.CollapsedGroupIds.AddRange(_collapsedBeforeSearch);
-            _collapsedBeforeSearch = null;
-        }
-        _isSearching = searchingNow;
-
-        ApplyFilter();
-    }
+    partial void OnSearchTextChanged(string value) => ApplyFilter();
 
     partial void OnPageFilterTextChanged(string value) => ApplyFilter();
 
     partial void OnProtocolFilterChanged(ProtocolFilterOption value) => ApplyFilter();
+
+    partial void OnTagFilterChanged(TagFilterOption value) => ApplyFilter();
+
+    partial void OnPresenceFilterChanged(PresenceFilterOption value) => ApplyFilter();
 
     partial void OnSortModeChanged(ConnectionSortMode value) => ApplyFilter();
 
@@ -456,9 +567,31 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     partial void OnFilterChanged(ConnectionFilter value)
     {
         OnPropertyChanged(nameof(IsRecentView));
-        OnPropertyChanged(nameof(IsGroupedView));
-        OnPropertyChanged(nameof(IsGroupedEmpty));
+        SyncSmartViewSelection();
         ApplyFilter();
+    }
+
+    /// <summary>让左树智能视图的选中态与 Filter / 分组过滤保持一致（分组浏览时无选中项）。</summary>
+    private void SyncSmartViewSelection()
+    {
+        if (HasGroupFilter)
+        {
+            if (SelectedSmartView is not null)
+            {
+                _syncingSmartView = true;
+                SelectedSmartView = null;
+                _syncingSmartView = false;
+            }
+            return;
+        }
+
+        var expected = SmartViews.FirstOrDefault(v => v.FilterValue == Filter);
+        if (!ReferenceEquals(SelectedSmartView, expected))
+        {
+            _syncingSmartView = true;
+            SelectedSmartView = expected;
+            _syncingSmartView = false;
+        }
     }
 
 
@@ -487,8 +620,34 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                 _allItems.Add(CreateItem(profile));
             }
 
+            // 标签筛选下拉重建；当前选中项若已被删除则回到「全部标签」。
+            var tagOptions = new List<TagFilterOption> { new(null, "全部标签", "") };
+            tagOptions.AddRange(tags
+                .OrderBy(t => t.Name, StringComparer.CurrentCultureIgnoreCase)
+                .Select(t => new TagFilterOption(t.Id, t.Name, t.Color)));
+            TagFilterOptions = tagOptions;
+            if (TagFilter.Id is { } currentTag && tagOptions.All(o => o.Id != currentTag))
+            {
+                TagFilter = tagOptions[0];
+            }
+
+            // 左树反映全量数据（计数不受筛选影响），只在数据变化时重建；
+            // 重建后按 GroupId 恢复分组选中（节点对象已换新）。
+            BuildGroupTree(_allItems);
+
+            PresenceProbeEnabled = _settings.PresenceProbeEnabled;
+            OnPropertyChanged(nameof(PresenceProbeEnabled));
+
             ApplyFilter();
             RefreshDefaultGroupState();
+            RaiseViewCounts();
+            SyncSmartViewSelection();
+
+            // 进入工作台自动探测当前视图（设置开关可关）；工具条「探测」随时手动重跑。
+            if (PresenceProbeEnabled)
+            {
+                _ = ProbePresenceAsync();
+            }
         }
         finally
         {
@@ -574,7 +733,16 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             source = source.Where(i => i.LastConnectedAt >= cutoff);
         }
 
-        // 「我的连接」页内筛选：协议 + 名称 / IP / 标签关键词（「最近连接」不用这套）。
+        // 左树选中分组：只显示该分组子树（含子孙分组）内的连接。「未分组」节点
+        // GroupId 为 null，与「GroupIds 为空的连接」用同一个 null 键对上。
+        if (SelectedGroupNode is { } groupNode)
+        {
+            var subtree = new HashSet<Guid?>();
+            CollectGroupIds(groupNode, subtree);
+            source = source.Where(i => subtree.Contains(EffectiveGroupId(i)));
+        }
+
+        // 「最近连接」不用页内筛选（协议 / 标签 / 关键词）。
         if (Filter != ConnectionFilter.Recent)
         {
             if (ProtocolFilter != ProtocolFilterOption.All)
@@ -596,6 +764,20 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                     || i.Host.Contains(q, StringComparison.CurrentCultureIgnoreCase)
                     || i.Tags.Any(t => t.Name.Contains(q, StringComparison.CurrentCultureIgnoreCase)));
             }
+
+            if (TagFilter.Id is { } tagId)
+            {
+                source = source.Where(i => i.Profile.TagIds.Contains(tagId));
+            }
+        }
+
+        // 在线状态筛选：探测关闭时下拉已隐藏，这里对 All 短路即可。
+        // 在线 = 存在活动会话，或最近一次探测可达。
+        if (PresenceProbeEnabled && PresenceFilter != PresenceFilterOption.All)
+        {
+            source = PresenceFilter == PresenceFilterOption.Online
+                ? source.Where(i => i.IsConnected || i.Presence == PresenceState.Online)
+                : source.Where(i => !i.IsConnected && i.Presence == PresenceState.Offline);
         }
 
         if (!string.IsNullOrWhiteSpace(SearchText))
@@ -636,20 +818,17 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             Items.Add(item);
         }
 
-        if (IsGroupedView)
-        {
-            BuildGroupTree(filtered);
-        }
-
-        EmptyMessage = _allItems.Count == 0
-            ? "还没有任何连接。点击「新建连接」开始。"
-            : Filter switch
-            {
-                ConnectionFilter.Favorites when string.IsNullOrWhiteSpace(SearchText) => "还没有收藏的连接。在列表中点击星标即可收藏。",
-                ConnectionFilter.Recent when string.IsNullOrWhiteSpace(SearchText) =>
-                    RecentRange == RecentRange.Today ? "今天还没有连接记录。" : "这段时间还没有连接记录。",
-                _ => $"没有找到匹配的连接。"
-            };
+        EmptyMessage = SelectedGroupNode is { } node && node.IsEmptyGroup
+            ? "该分组还没有连接。右键分组可新建连接。"
+            : _allItems.Count == 0
+                ? "还没有任何连接。点击「新建连接」开始。"
+                : Filter switch
+                {
+                    ConnectionFilter.Favorites when string.IsNullOrWhiteSpace(SearchText) => "还没有收藏的连接。在列表中点击星标即可收藏。",
+                    ConnectionFilter.Recent when string.IsNullOrWhiteSpace(SearchText) =>
+                        RecentRange == RecentRange.Today ? "今天还没有连接记录。" : "这段时间还没有连接记录。",
+                    _ => $"没有找到匹配的连接。"
+                };
 
         // 选中规则（产品约定）：
         // 1) 本次运行内曾选中 → 保留/恢复；2) 首次进入默认选“最近连接”最新；
@@ -710,18 +889,31 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     // ── 分组树构建 ────────────────────────────────────────────────
 
-    private bool _isSearching;
+    /// <summary>连接的归一化分组键：未归类 / 「未分组」桶统一映射为 null。</summary>
+    private static Guid? EffectiveGroupId(ConnectionItemViewModel item)
+        => item.Profile.GroupId is { } gid && gid != ConnectionGroup.UngroupedId ? gid : null;
 
-    /// <summary>「我的连接」视图下，分组树是否一条连接都没有。</summary>
-    public bool IsGroupedEmpty => IsGroupedView && GroupNodes.Count == 0;
+    private static void CollectGroupIds(ConnectionGroupNodeViewModel node, HashSet<Guid?> into)
+    {
+        into.Add(node.GroupId);
+        foreach (var child in node.ChildGroups)
+        {
+            CollectGroupIds(child, into);
+        }
+    }
 
-    private void BuildGroupTree(IReadOnlyList<ConnectionItemViewModel> visibleItems)
+    /// <summary>
+    /// 重建左树：从**全量**连接构建（计数不受筛选影响），空分组也保留——
+    /// 用户按结构组织分组，树不该随搜索结果伸缩。只在数据变化时调用；
+    /// 重建后按 GroupId 恢复左树的分组选中（节点对象已换新）。
+    /// </summary>
+    private void BuildGroupTree(IReadOnlyList<ConnectionItemViewModel> allItems)
     {
         var collapsed = _settings.CollapsedGroupIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var byGroup = new Dictionary<Guid, List<ConnectionItemViewModel>>();
         var ungroupedItems = new List<ConnectionItemViewModel>();
-        foreach (var item in visibleItems.OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase))
+        foreach (var item in allItems.OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase))
         {
             if (item.Profile.GroupId is { } gid && gid != ConnectionGroup.UngroupedId)
             {
@@ -744,7 +936,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                 Depth = depth,
                 IsDefault = group.IsDefault,
                 IsProtected = group.IsProtected,
-                IsExpanded = _isSearching || !collapsed.Contains(group.Id.ToString())
+                IsExpanded = !collapsed.Contains(group.Id.ToString())
             };
 
             foreach (var child in _groups
@@ -767,12 +959,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             }
 
             node.TotalCount = node.Connections.Count + node.ChildGroups.Sum(c => c.TotalCount);
-
-            // 搜索时：命中或子孙命中的分组自动展开；无命中的分组隐藏。
-            if (_isSearching && node.TotalCount == 0)
-            {
-                return null;
-            }
 
             return node;
         }
@@ -797,7 +983,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                 Name = "未分组",
                 Depth = 0,
                 IsUngrouped = true,
-                IsExpanded = _isSearching || !collapsed.Contains("ungrouped"),
+                IsExpanded = !collapsed.Contains("ungrouped"),
                 TotalCount = ungroupedItems.Count
             };
             foreach (var c in ungroupedItems)
@@ -808,18 +994,51 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         }
 
         WireExpandPersistence(GroupNodes);
-        FlattenGroupRows();
-        OnPropertyChanged(nameof(IsGroupedEmpty));
+        FlattenTree();
+
+        // 重建后按 GroupId 恢复分组选中（旧节点对象已失效）。
+        if (SelectedGroupNode is { } previous)
+        {
+            ConnectionGroupNodeViewModel? Find(IEnumerable<ConnectionGroupNodeViewModel> nodes)
+            {
+                foreach (var n in nodes)
+                {
+                    if (Nullable.Equals(n.GroupId, previous.GroupId))
+                    {
+                        return n;
+                    }
+
+                    var hit = Find(n.ChildGroups);
+                    if (hit is not null)
+                    {
+                        return hit;
+                    }
+                }
+
+                return null;
+            }
+
+            var restored = Find(GroupNodes);
+            _syncingSmartView = true;
+            SelectedGroupNode = restored; // 分组被删 → 回落 null，OnChanged 会回到全部视图
+            _syncingSmartView = false;
+            if (restored is null)
+            {
+                SelectedSmartView = SmartViews[0];
+                OnPropertyChanged(nameof(HasGroupFilter));
+                OnPropertyChanged(nameof(ViewTitle));
+            }
+        }
     }
 
-    /// <summary>把分组树摊平成 GroupedRows；折叠的分组只留标题行。</summary>
-    private void FlattenGroupRows()
+    /// <summary>把分组树按展开状态摊平成左树节点序列；折叠的分组不展开子级。</summary>
+    private void FlattenTree()
     {
-        GroupedRows.Clear();
+        FlatTreeNodes.Clear();
 
         void Emit(ConnectionGroupNodeViewModel node)
         {
-            GroupedRows.Add(node);
+            FlatTreeNodes.Add(node);
             if (!node.IsExpanded)
             {
                 return;
@@ -827,10 +1046,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             foreach (var child in node.ChildGroups)
             {
                 Emit(child);
-            }
-            foreach (var conn in node.Connections)
-            {
-                GroupedRows.Add(conn);
             }
         }
 
@@ -853,14 +1068,13 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     private void OnNodeExpandedChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(ConnectionGroupNodeViewModel.IsExpanded)
-            || sender is not ConnectionGroupNodeViewModel node
-            || _isSearching)
+            || sender is not ConnectionGroupNodeViewModel node)
         {
             return;
         }
 
-        // 展开 / 折叠即时反映到摊平列表。
-        FlattenGroupRows();
+        // 展开 / 折叠即时反映到左树摊平序列。
+        FlattenTree();
 
         var key = node.IsUngrouped ? "ungrouped" : node.GroupId?.ToString();
         if (key is null)
@@ -1127,6 +1341,118 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     [RelayCommand]
     private async Task RefreshAsync() => await LoadAsync();
 
+    // ── 在线探测（连接工作台）────────────────────────────────────
+
+    /// <summary>
+    /// 探测当前列表（受筛选影响）内全部连接的可达性：TCP 单步、并发 8、超时约 1.5s。
+    /// 重复调用会取消上一批再重跑；批量被取消时各连接保留原状态。
+    /// </summary>
+    [RelayCommand]
+    private async Task ProbePresenceAsync()
+    {
+        if (_probe is null || !PresenceProbeEnabled)
+        {
+            return;
+        }
+
+        var snapshot = Items.ToList();
+        if (snapshot.Count == 0)
+        {
+            return;
+        }
+
+        _probeCts?.Cancel();
+        _probeCts?.Dispose();
+        var cts = _probeCts = new CancellationTokenSource();
+        var ct = cts.Token;
+
+        foreach (var item in snapshot)
+        {
+            item.MarkProbing();
+        }
+
+        var gate = new SemaphoreSlim(8);
+        var tasks = snapshot.Select(async item =>
+        {
+            var acquired = false;
+            try
+            {
+                await gate.WaitAsync(ct);
+                acquired = true;
+
+                var state = await _probe.ProbeAsync(
+                    item.Host, item.Profile.Port, PresenceProbeService.DefaultTimeout, ct);
+
+                // 结果 marshal 回 UI 线程；批次已取消时丢弃，保留原状态。
+                _ui.Post(() =>
+                {
+                    if (ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    item.SetProbeResult(state == PresenceState.Online);
+                    RefreshPresenceCounts();
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // 批次取消 / 重跑：静默退出。
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "在线探测失败：{Host}:{Port}", item.Host, item.Profile.Port);
+            }
+            finally
+            {
+                if (acquired)
+                {
+                    gate.Release();
+                }
+            }
+        }).ToArray();
+
+        try
+        {
+            await Task.WhenAll(tasks);
+        }
+        catch
+        {
+            // 单项异常已在内部消化，聚合不会抛；这里兜底不打断调用方。
+        }
+    }
+
+    /// <summary>探测完成 / 会话状态变化后同步状态栏与树计数。</summary>
+    private void RefreshPresenceCounts()
+    {
+        OnPropertyChanged(nameof(OnlineCount));
+        OnPropertyChanged(nameof(TotalConnectionsDisplay));
+    }
+
+    /// <summary>状态栏 / 树徽章的全量计数。</summary>
+    public int OnlineCount => _allItems.Count(i => i.IsConnected || i.Presence == PresenceState.Online);
+
+    public int TotalConnectionCount => _allItems.Count;
+
+    /// <summary>底部状态栏的连接计数徽章。探测开启且已知有在线时带上在线数。</summary>
+    public string TotalConnectionsDisplay => PresenceProbeEnabled && OnlineCount > 0
+        ? $"共 {TotalConnectionCount} 个连接 · 在线 {OnlineCount}"
+        : $"共 {TotalConnectionCount} 个连接";
+
+    /// <summary>关闭探测时清空全部探测态（列回到「—」，状态筛选同步隐藏）。</summary>
+    private void ClearAllProbes()
+    {
+        _probeCts?.Cancel();
+        foreach (var item in _allItems)
+        {
+            item.ClearProbe();
+        }
+        if (PresenceFilter != PresenceFilterOption.All)
+        {
+            PresenceFilter = PresenceFilterOption.All;
+        }
+        RefreshPresenceCounts();
+    }
+
     // ── 多选模式与批量操作 ───────────────────────────────────────
 
     [RelayCommand]
@@ -1293,6 +1619,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             ApplyFilter();
         }
 
+        RaiseViewCounts();
         RefreshSelectionSummary();
     }
 
@@ -1591,21 +1918,25 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             ProtocolFilter = ProtocolFilterOption.All;
         }
 
+        // 左树若停在某分组上，目标行可能被组过滤挡住：清掉分组过滤回到全部。
+        if (SelectedGroupNode is not null)
+        {
+            SelectedGroupNode = null;
+            SyncSmartViewSelection();
+        }
+
         var target = _allItems.FirstOrDefault(i => i.Id == id);
         if (target is null)
         {
             return;
         }
 
-        // 分组视图下目标可能位于折叠分组：展开祖先链，让该行进入 GroupedRows 可见并可选中。
-        if (IsGroupedView)
+        // 左树目标所在分组若被折叠：展开祖先链，保持树的可达性（列表本身恒扁平）。
+        foreach (var root in GroupNodes)
         {
-            foreach (var root in GroupNodes)
+            if (ExpandToConnection(root, id))
             {
-                if (ExpandToConnection(root, id))
-                {
-                    break;
-                }
+                break;
             }
         }
 
@@ -1620,7 +1951,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
         if (found && !node.IsExpanded)
         {
-            node.IsExpanded = true; // 触发 WireExpandPersistence → FlattenGroupRows + 持久化折叠状态
+            node.IsExpanded = true; // 触发 OnNodeExpandedChanged → FlattenTree + 持久化折叠状态
         }
 
         return found;

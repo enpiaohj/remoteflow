@@ -28,9 +28,8 @@ public partial class ConnectionsPage : UserControl
     {
         InitializeComponent();
 
-        // 多选模式下行单击 = 切换勾选（不进详情）。挂在两个列表上统一处理。
+        // 多选模式下行单击 = 切换勾选（不进详情）。
         ConnectionList.PreviewMouseLeftButtonDown += OnListMouseDown;
-        GroupedList.PreviewMouseLeftButtonDown += OnListMouseDown;
 
         // VM 经 DataTemplate 注入、可整体切换；跟随其变化重建分组查看并把列表绑回。
         DataContextChanged += OnDataContextChanged;
@@ -559,23 +558,32 @@ public partial class ConnectionsPage : UserControl
         menu.IsOpen = true;
     }
 
-    // ── 新建 ▾ ──────────────────────────────────────────────────
-
-    private void OnNewMenuClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { ContextMenu: { } menu } button)
-        {
-            menu.PlacementTarget = button;
-            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
-            menu.IsOpen = true;
-        }
-    }
+    // ── 新建 / 页面快捷键 ────────────────────────────────────────
 
     private void OnNewConnectionMenuClick(object sender, RoutedEventArgs e)
         => ViewModel?.CreateCommand.Execute(null);
 
     private void OnNewGroupMenuClick(object sender, RoutedEventArgs e)
         => ViewModel?.CreateGroupCommand.Execute(null);
+
+    /// <summary>Ctrl+K 聚焦页内搜索框（与设计稿的工作台交互一致）。</summary>
+    private void OnPageKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.K && Keyboard.Modifiers == ModifierKeys.Control
+            && PageFilterBox is { IsVisible: true })
+        {
+            PageFilterBox.Focus();
+            PageFilterBox.SelectAll();
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// 左树折叠箭头：把按下事件吃掉，阻止它冒泡给 ListBoxItem——
+    /// 点箭头只做展开 / 折叠，不把该分组选成当前过滤。
+    /// </summary>
+    private void OnTreeChevronPreviewMouseDown(object sender, MouseButtonEventArgs e)
+        => e.Handled = true;
 
     // ── 分组右键菜单 ────────────────────────────────────────────
 

@@ -136,30 +136,53 @@
                                    Margin="6,0,0,0" VerticalAlignment="Center" />
                     </StackPanel>
 
-                    <!-- 主操作：连接 + 编辑。滚动时保持可见（测试连接入口在连接行右键菜单） -->
+                    <!-- 主操作：连接。编辑 / 复制 IP / Ping 在下方快捷动作区 -->
                     <Grid Margin="0,12,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
                         <Button Grid.Column="0"
                                 Style="{StaticResource Button.Primary}"
                                 Content="连接"
                                 Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                 CommandParameter="{Binding}" />
-
-                        <Button Grid.Column="1"
-                                Style="{StaticResource Button.Secondary}"
-                                MinWidth="40"
-                                Margin="8,0,0,0"
-                                Padding="0"
-                                FontFamily="{StaticResource IconFont}"
-                                Content="{StaticResource Icon.Edit}"
-                                ToolTip="编辑连接"
-                                Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                CommandParameter="{Binding}" />
                     </Grid>
+
+                    <!-- 快捷动作区：编辑 / 复制 IP / Ping（三步诊断） -->
+                    <UniformGrid Columns="3" Margin="0,8,0,0">
+                        <UniformGrid.Resources>
+                            <Style TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+                                <Setter Property="MinHeight" Value="30" />
+                                <Setter Property="Padding" Value="6,0" />
+                                <Setter Property="FontSize" Value="12" />
+                                <Setter Property="Margin" Value="0,0,6,0" />
+                                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                            </Style>
+                        </UniformGrid.Resources>
+                        <Button ToolTip="编辑连接"
+                                Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{StaticResource Icon.Edit}" FontFamily="{StaticResource IconFont}"
+                                           FontSize="11" VerticalAlignment="Center" />
+                                <TextBlock Text="编辑" Margin="5,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button ToolTip="复制主机 / IP"
+                                Click="OnCopyHostClick">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{StaticResource Icon.Copy}" FontFamily="{StaticResource IconFont}"
+                                           FontSize="11" VerticalAlignment="Center" />
+                                <TextBlock Text="复制 IP" Margin="5,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Margin="0" ToolTip="测试连接：DNS → Ping → TCP 三步诊断"
+                                Command="{Binding DataContext.TestConnectionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{StaticResource Icon.Refresh}" FontFamily="{StaticResource IconFont}"
+                                           FontSize="11" VerticalAlignment="Center" />
+                                <TextBlock Text="Ping" Margin="5,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </UniformGrid>
                 </StackPanel>
             </Border>
 

@@ -353,6 +353,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     [ObservableProperty]
     private int _maxConcurrentSessions;
 
+    /// <summary>连接工作台的在线探测开关（TCP 单步、并发受限、按需触发）。</summary>
+    [ObservableProperty]
+    private bool _presenceProbeEnabled;
+
     // ── 会话 → 全屏悬浮工具条 ─────────────────────────────────────
 
     /// <summary>顶沿悬停唤出延迟的可选值（两个全屏档共用一套刻度）。</summary>
@@ -448,6 +452,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         VncClipboardToLocal = _settings.VncDefaultClipboardToLocal;
 
         MaxConcurrentSessions = _settings.MaxConcurrentSessions;
+        PresenceProbeEnabled = _settings.PresenceProbeEnabled;
 
         SelectedPillRevealDelayWindowFull = NearestPillDelay(PillRevealDelayOptions, _settings.PillRevealDelayWindowFullMs);
         SelectedPillHideDelayWindowFull = NearestPillDelay(PillHideDelayOptions, _settings.PillHideDelayWindowFullMs);
@@ -654,6 +659,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     partial void OnVncSharedConnectionChanged(bool value) => Save();
     partial void OnVncClipboardToLocalChanged(bool value) => Save();
     partial void OnMaxConcurrentSessionsChanged(int value) => Save();
+    partial void OnPresenceProbeEnabledChanged(bool value) => Save();
     partial void OnSelectedPillRevealDelayWindowFullChanged(PillDelayOption value) => Save();
     partial void OnSelectedPillHideDelayWindowFullChanged(PillDelayOption value) => Save();
     partial void OnSelectedPillRevealDelayScreenFullChanged(PillDelayOption value) => Save();
@@ -697,6 +703,7 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         _settings.VncDefaultClipboardToLocal = VncClipboardToLocal;
 
         _settings.MaxConcurrentSessions = Math.Clamp(MaxConcurrentSessions, 1, 100);
+        _settings.PresenceProbeEnabled = PresenceProbeEnabled;
 
         _settings.PillRevealDelayWindowFullMs = SelectedPillRevealDelayWindowFull.Ms;
         _settings.PillHideDelayWindowFullMs = SelectedPillHideDelayWindowFull.Ms;
