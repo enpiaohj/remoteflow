@@ -216,13 +216,9 @@
 
             <!-- ══ 主体 ════════════════════════════════════════════ -->
             <Grid Grid.Row="1" Grid.Column="1">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition x:Name="DetailColumn" Width="Auto" />
-                </Grid.ColumnDefinitions>
 
                 <!-- ── 中央工作区 ────────────────────────────────── -->
-                <Grid Grid.Column="0" Margin="0,0,0,0">
+                <Grid Margin="0,0,0,0">
                     <Grid.RowDefinitions>
                         <!-- Auto：Tab 栏 Collapsed 时该行自然收为 0，全屏把整块屏幕
                              让给远程画面；会话工具条（带「退出全屏」按钮）保留为退出入口。 -->
@@ -405,33 +401,6 @@
                     </Border>
                 </Grid>
 
-                <!-- ── 右侧详情面板：选中连接时显示，全屏会话时收起 ── -->
-                <Border Grid.Column="1"
-                        Width="292"
-                        Background="{DynamicResource Bg.Sidebar}"
-                        BorderBrush="{DynamicResource Stroke.Subtle}"
-                        BorderThickness="1,0,0,0">
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <!-- 详情面板只在连接列表页出现：窗口够宽、未全屏、非会话 Tab。
-                                     批量勾选时保持常驻（对齐工作台设计稿），不再因多选收起。 -->
-                                <MultiDataTrigger>
-                                    <MultiDataTrigger.Conditions>
-                                        <Condition Binding="{Binding IsDetailPanelVisible}" Value="True" />
-                                        <Condition Binding="{Binding IsSessionFullScreen}" Value="False" />
-                                        <Condition Binding="{Binding IsSessionSelected}" Value="False" />
-                                        <Condition Binding="{Binding IsConnectionListPage}" Value="True" />
-                                    </MultiDataTrigger.Conditions>
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </MultiDataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-
-                    <pages:ConnectionDetailPanel DataContext="{Binding ConnectionsPage}" />
-                </Border>
             </Grid>
 
                 <!-- ── 模块图标栏：只承担「换页面」。收藏 / 最近连接降为
