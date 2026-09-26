@@ -68,6 +68,7 @@
     <!-- 结构与状态 -->
     <sys:String x:Key="Icon.Folder">&#xE8B7;</sys:String>
     <sys:String x:Key="Icon.ChevronRight">&#xE76C;</sys:String>
+    <sys:String x:Key="Icon.ChevronLeft">&#xE76B;</sys:String>
     <sys:String x:Key="Icon.ChevronDown">&#xE70D;</sys:String>
     <sys:String x:Key="Icon.Warning">&#xE7BA;</sys:String>
     <sys:String x:Key="Icon.Shield">&#xEA18;</sys:String>

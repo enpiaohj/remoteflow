@@ -897,6 +897,8 @@ public partial class SessionHostView : UserControl
         }
 
         flyout.Closed -= OnQualityFlyoutClosed;
+        // 解除 owned 关系再关闭：避免关闭时激活转移把宿主窗口最小化（WPF 已知行为）。
+        flyout.Owner = null;
         flyout.Close();
         _flyout = null;
         _flyoutAnchor = null;

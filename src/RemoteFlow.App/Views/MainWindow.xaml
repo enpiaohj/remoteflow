@@ -209,7 +209,8 @@
                   Visibility="{Binding IsScreenFull, Converter={StaticResource InverseBoolToVisibility}}"
                   MouseRightButtonUp="OnTitleBarSystemMenu">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
+                    <!-- Tab 条列用 *：受剩余宽度约束，会话多时内部横向滚动，
+                         不再把工具条 / 窗口按钮挤出视口 -->
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -231,7 +232,24 @@
                                 </Style.Triggers>
                             </Style>
                         </Border.Style>
-                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <!-- 左右滚动箭头：会话 Tab 多到溢出时出现（滚动条不雅观），
+                             点击按页滚动，到头自动禁用。 -->
+<DockPanel>
+                            <Button x:Name="TabScrollLeftButton"
+                                    DockPanel.Dock="Left" Width="20" Height="24" Margin="0,0,2,0"
+                                    Style="{StaticResource Button.Icon}" FontSize="9"
+                                    Content="{StaticResource Icon.ChevronLeft}"
+                                    ToolTip="向左滚动标签"
+                                    Visibility="Collapsed"
+                                    Click="OnTabScrollLeftClick" />
+                            <Button x:Name="TabScrollRightButton"
+                                    DockPanel.Dock="Right" Width="20" Height="24" Margin="2,0,0,0"
+                                    Style="{StaticResource Button.Icon}" FontSize="9"
+                                    Content="{StaticResource Icon.ChevronRight}"
+                                    ToolTip="向右滚动标签"
+                                    Visibility="Collapsed"
+                                    Click="OnTabScrollRightClick" />
+                            <ScrollViewer x:Name="TabScrollViewer" ScrollChanged="OnTabScrollChanged" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
                             <ItemsControl ItemsSource="{Binding Tabs}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
@@ -298,17 +316,18 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </ScrollViewer>
+                            </DockPanel>
                     </Border>
 
                 <!-- 会话工具条：会话 Tab 激活时在窗口按钮左侧显示状态与操作（单行标题栏） -->
-                <ContentControl Grid.Column="2"
+                <ContentControl Grid.Column="1"
                                 Content="{Binding SelectedTab}"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center"
                                 Focusable="False" />
 
                 <!-- 窗口控制 -->
-                <StackPanel Grid.Column="3" Orientation="Horizontal">
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <Button Style="{StaticResource CaptionButton}" Content="&#xE921;"
                             Click="OnMinimizeClick" ToolTip="最小化" />
                     <Button x:Name="MaximizeButton" Style="{StaticResource CaptionButton}" Content="&#xE922;"
