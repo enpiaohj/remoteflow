@@ -154,6 +154,15 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     /// <summary>请求宿主视图执行某个操作（全屏、发送 Ctrl+Alt+Del 等）。</summary>
     public event EventHandler<SessionAction>? ActionRequested;
 
+    /// <summary>
+    /// 标题栏工具条的状态入口被点击：宿主视图据此打开连接质量详情 Flyout
+    /// （Flyout 的定位与生命周期由会话视图管理，ViewModel 只转发请求）。
+    /// </summary>
+    public event EventHandler? StatusEntryRequested;
+
+    /// <summary>由视图层调用以触发 <see cref="StatusEntryRequested"/>。</summary>
+    public void RaiseStatusEntryRequested() => StatusEntryRequested?.Invoke(this, EventArgs.Empty);
+
     /// <summary>逐档进：常规 → 窗口最大化 → 完全全屏 → 常规。</summary>
     [RelayCommand]
     private void AdvanceFullScreen() => ActionRequested?.Invoke(this, SessionAction.AdvanceFullScreen);

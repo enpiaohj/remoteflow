@@ -17,7 +17,7 @@ namespace RemoteFlow.App.Views.Sessions;
 /// <summary>
 /// 会话 Tab 的外壳：工具条 + 协议视图 + 状态层。
 /// <para>
-/// 非全屏：顶部常驻一条工具条（<c>DockedBar</c>）。
+/// 会话工具条显示在标题栏行（Tab 条右侧），见 SessionToolsBar。
 /// 全屏：应用标题栏与 Tab 栏都隐藏了，工具条改为一条<b>悬浮药丸</b>
 /// （<c>ToolbarPopup</c>），承担会话切换、最小化 / 关闭 / 退出全屏；默认自动隐藏——
 /// 鼠标离开后按设置延迟淡出，移到屏幕顶沿需悬停片刻（延迟可配）再淡入，
@@ -241,6 +241,8 @@ public partial class SessionHostView : UserControl
 
         _tab = tab;
         ShowToolsFor(tab.Protocol);
+        // 标题栏工具条的状态入口 → 打开质量详情 Flyout（锚定在会话内容顶沿）
+        tab.StatusEntryRequested += OnStatusEntryRequested;
 
         // 协议视图只创建一次；Tab 切换靠可见性，不重建视图，
         // 否则会话会被反复销毁重连。
@@ -254,16 +256,13 @@ public partial class SessionHostView : UserControl
         SessionContent.Content = _protocolView;
     }
 
-    /// <summary>按协议显示对应的工具条分组（常驻条与悬浮药丸各一套）。</summary>
+    /// <summary>按协议显示悬浮药丸的工具分组（标题栏工具条由 SessionToolsBar 自行处理）。</summary>
     private void ShowToolsFor(ProtocolType protocol)
     {
         var rdp = protocol == ProtocolType.Rdp ? Visibility.Visible : Visibility.Collapsed;
         var ssh = protocol == ProtocolType.Ssh ? Visibility.Visible : Visibility.Collapsed;
         var vnc = protocol == ProtocolType.Vnc ? Visibility.Visible : Visibility.Collapsed;
 
-        RdpToolsDock.Visibility = rdp;
-        SshToolsDock.Visibility = ssh;
-        VncToolsDock.Visibility = vnc;
         RdpToolsPill.Visibility = rdp;
         SshToolsPill.Visibility = ssh;
         VncToolsPill.Visibility = vnc;
@@ -800,6 +799,11 @@ public partial class SessionHostView : UserControl
     private DateTime _lastStatusClick = DateTime.MinValue;
 
     /// <summary>常驻条 / 全屏药丸的状态入口点击 → 打开 Flyout。</summary>
+    private void OnStatusEntryRequested(object? sender, EventArgs e)
+    {
+        OpenQualityFlyout(QualityFlyoutAnchor);
+    }
+
     private void OnStatusEntryClick(object sender, RoutedEventArgs e)
     {
         // 双击这里会触发 Flyout 开→（第二击令主窗激活、Flyout 失活关闭）→开 的竞态；

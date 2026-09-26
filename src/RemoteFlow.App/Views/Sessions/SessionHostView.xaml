@@ -26,120 +26,9 @@
     </UserControl.Resources>
 
     <Grid x:Name="RootGrid" Background="{DynamicResource Bg.Session}">
-        <Grid.RowDefinitions>
-            <!-- 非全屏：常驻顶部工具条；全屏：整行收为 0，工具条改用悬浮药丸 -->
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-
-        <!-- ══ 常驻工具条（仅非全屏）══════════════════════════════════
-             只保留当前协议真正需要的操作。全屏时隐藏，改用悬浮药丸。 -->
-        <Border x:Name="DockedBar"
-                Grid.Row="0"
-                Height="38"
-                Background="{DynamicResource Bg.Layer}"
-                BorderBrush="{DynamicResource Stroke.Subtle}"
-                BorderThickness="0,0,0,1"
-                Visibility="{Binding DataContext.IsSessionFullScreen, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource InverseBoolToVisibility}}">
-            <Grid Margin="10,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <!-- 状态入口：只有「状态图标 + 状态文字」是按钮（打开质量详情 Flyout）；
-                     主机名只作展示，不再是点击热区——那截长，容易误触。 -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal"
-                            HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-6,0,0,0">
-                    <Button Style="{StaticResource Button.Subtle}"
-                            Height="30"
-                            Padding="8,0"
-                            Click="OnStatusEntryClick"
-                            ToolTip="连接状态 · 查看质量详情">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding StateIcon}"
-                                       FontFamily="{StaticResource IconFont}"
-                                       FontSize="12"
-                                       VerticalAlignment="Center"
-                                       Foreground="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}" />
-                            <TextBlock Text="{Binding StateText}"
-                                       Style="{StaticResource Text.Caption}"
-                                       VerticalAlignment="Center"
-                                       Margin="7,0,0,0" />
-                        </StackPanel>
-                    </Button>
-                    <Border Width="1" Height="16" Margin="10,0"
-                            Background="{DynamicResource Stroke.Default}"
-                            IsHitTestVisible="False" />
-                    <TextBlock Text="{Binding Profile.Host}"
-                               Style="{StaticResource Text.Caption}"
-                               FontFamily="{StaticResource MonoFont}"
-                               VerticalAlignment="Center"
-                               IsHitTestVisible="False" />
-                </StackPanel>
-
-                <StackPanel Grid.Column="2" Orientation="Horizontal">
-                    <StackPanel x:Name="RdpToolsDock" Orientation="Horizontal" Visibility="Collapsed">
-                        <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                                Content="{StaticResource Icon.Scale}"
-                                ToolTip="缩放 / 适应窗口"
-                                Command="{Binding ToggleScalingCommand}" />
-                        <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                                Content="{StaticResource Icon.Keyboard}"
-                                ToolTip="发送 Ctrl+Alt+Del"
-                                Command="{Binding SendCtrlAltDeleteCommand}" />
-                        <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                                Content="{StaticResource Icon.TaskManager}"
-                                ToolTip="启动任务管理器"
-                                Command="{Binding SendTaskManagerCommand}" />
-                    </StackPanel>
-
-                    <StackPanel x:Name="SshToolsDock" Orientation="Horizontal" Visibility="Collapsed">
-                        <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                                Content="{StaticResource Icon.Copy}"
-                                ToolTip="复制选中内容 (Ctrl+Shift+C)"
-                                Command="{Binding CopySelectionCommand}" />
-                        <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                                Content="{StaticResource Icon.Paste}"
-                                ToolTip="粘贴 (Ctrl+Shift+V)"
-                                Command="{Binding PasteClipboardCommand}" />
-                        <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                                Content="{StaticResource Icon.Clear}"
-                                ToolTip="清屏"
-                                Command="{Binding ClearTerminalCommand}" />
-                        <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                                Content="{StaticResource Icon.Search}"
-                                ToolTip="在输出中查找"
-                                Command="{Binding SearchTerminalCommand}" />
-                    </StackPanel>
-
-                    <StackPanel x:Name="VncToolsDock" Orientation="Horizontal" Visibility="Collapsed">
-                        <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                                Content="{StaticResource Icon.Scale}"
-                                ToolTip="{Binding VncScalingLabel}"
-                                Command="{Binding CycleVncScalingCommand}" />
-                    </StackPanel>
-
-                    <Border Width="1" Height="16" Margin="6,0"
-                            Background="{DynamicResource Stroke.Default}" />
-
-                    <!-- 两颗并列：窗口最大化档（逐档进的第一档）与直达完全全屏。
-                         只靠一颗「逐档进」会让用户没法一下进全屏，故保留直达入口。 -->
-                    <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                            Content="{StaticResource Icon.WindowMaximize}"
-                            ToolTip="窗口最大化（收起侧边，会话铺满窗口）"
-                            Command="{Binding AdvanceFullScreenCommand}" />
-                    <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                            Content="{StaticResource Icon.FullScreen}"
-                            ToolTip="完全全屏 (F11)"
-                            Command="{Binding ToggleScreenFullCommand}" />
-                </StackPanel>
-            </Grid>
-        </Border>
 
         <!-- ══ 会话内容 ═════════════════════════════════════════════ -->
-        <Grid Grid.Row="1">
+        <Grid>
             <!-- 协议视图由代码后置按会话类型注入；必须拉伸填满，否则全屏后
                  RDP/VNC 画面会缩在左上角、四周留黑边。 -->
             <ContentControl x:Name="SessionContent"
@@ -147,6 +36,12 @@
                             VerticalContentAlignment="Stretch"
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch" />
+
+            <!-- 质量详情 Flyout 的定位锚：标题栏工具条的状态入口点击后，Flyout 弹在此下方 -->
+            <Border x:Name="QualityFlyoutAnchor"
+                    Height="1" Width="120"
+                    HorizontalAlignment="Center" VerticalAlignment="Top"
+                    Margin="0,2,0,0" />
 
             <!-- 连接中：轻量遮罩，不打断用户 -->
             <Border Background="{DynamicResource Bg.Session}"

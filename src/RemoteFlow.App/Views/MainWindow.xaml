@@ -58,6 +58,14 @@
             <pages:AboutPage />
         </DataTemplate>
 
+        <!-- 标题栏会话工具条：会话 Tab 激活时显示，页面 Tab（连接工作台 / 首页等）为空 -->
+        <DataTemplate DataType="{x:Type vm:SessionTabViewModel}">
+            <sessions:SessionToolsBar />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:PageTabViewModel}">
+            <Grid Width="0" />
+        </DataTemplate>
+
         <!-- 标题栏窗口按钮：不使用系统按钮，以便跟随应用主题 -->
         <Style x:Key="CaptionButton" TargetType="Button">
             <Setter Property="Width" Value="46" />
@@ -202,6 +210,7 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                     <!-- 标签条：常驻标题栏行（浏览器式），无会话 / 有会话统一；
@@ -289,8 +298,15 @@
                         </ScrollViewer>
                     </Border>
 
+                <!-- 会话工具条：会话 Tab 激活时在窗口按钮左侧显示状态与操作（单行标题栏） -->
+                <ContentControl Grid.Column="2"
+                                Content="{Binding SelectedTab}"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Focusable="False" />
+
                 <!-- 窗口控制 -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <StackPanel Grid.Column="3" Orientation="Horizontal">
                     <Button Style="{StaticResource CaptionButton}" Content="&#xE921;"
                             Click="OnMinimizeClick" ToolTip="最小化" />
                     <Button x:Name="MaximizeButton" Style="{StaticResource CaptionButton}" Content="&#xE922;"
