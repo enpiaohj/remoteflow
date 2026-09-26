@@ -1,0 +1,113 @@
+<UserControl x:Class="RemoteFlow.App.Views.Sessions.SessionToolsBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
+             xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:SessionTabViewModel}">
+
+    <!-- 会话工具条：原会话视图内的常驻条，v0.19.1 起迁到标题栏行（Tab 条右侧），
+         与标签条合并为浏览器式单行标题栏。DataContext = 选中的 SessionTabViewModel。 -->
+
+    <UserControl.Resources>
+        <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
+    </UserControl.Resources>
+
+    <Grid Margin="10,0">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <!-- 状态入口：点击打开连接质量详情 Flyout -->
+        <StackPanel Grid.Column="0" Orientation="Horizontal"
+                    HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-6,0,0,0">
+            <Button Style="{StaticResource Button.Subtle}"
+                    Height="30"
+                    Padding="8,0"
+                    Click="OnStatusEntryClick"
+                    ToolTip="连接状态 · 查看质量详情">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding StateIcon}"
+                               FontFamily="{StaticResource IconFont}"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               Foreground="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    <TextBlock Text="{Binding StateText}"
+                               Style="{StaticResource Text.Caption}"
+                               VerticalAlignment="Center"
+                               Margin="7,0,0,0" />
+                </StackPanel>
+            </Button>
+            <Border Width="1" Height="16" Margin="10,0,0,0"
+                    Background="{DynamicResource Stroke.Default}"
+                    IsHitTestVisible="False" />
+            <TextBlock Text="{Binding Profile.Host}"
+                       Style="{StaticResource Text.Caption}"
+                       FontFamily="{StaticResource MonoFont}"
+                       VerticalAlignment="Center"
+                       IsHitTestVisible="False"
+                       MaxWidth="220"
+                       TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+            <StackPanel x:Name="RdpToolsDock" Orientation="Horizontal" Visibility="Collapsed">
+                <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                        Content="{StaticResource Icon.Scale}"
+                        ToolTip="缩放 / 适应窗口"
+                        Command="{Binding ToggleScalingCommand}" />
+                <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                        Content="{StaticResource Icon.Keyboard}"
+                        ToolTip="发送 Ctrl+Alt+Del"
+                        Command="{Binding SendCtrlAltDeleteCommand}" />
+                <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                        Content="{StaticResource Icon.TaskManager}"
+                        ToolTip="启动任务管理器"
+                        Command="{Binding SendTaskManagerCommand}" />
+            </StackPanel>
+
+            <StackPanel x:Name="SshToolsDock" Orientation="Horizontal" Visibility="Collapsed">
+                <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                        Content="{StaticResource Icon.Copy}"
+                        ToolTip="复制选中内容 (Ctrl+Shift+C)"
+                        Command="{Binding CopySelectionCommand}" />
+                <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                        Content="{StaticResource Icon.Paste}"
+                        ToolTip="粘贴 (Ctrl+Shift+V)"
+                        Command="{Binding PasteClipboardCommand}" />
+                <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                        Content="{StaticResource Icon.Clear}"
+                        ToolTip="清屏"
+                        Command="{Binding ClearTerminalCommand}" />
+                <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                        Content="{StaticResource Icon.Search}"
+                        ToolTip="在输出中查找"
+                        Command="{Binding SearchTerminalCommand}" />
+            </StackPanel>
+
+            <StackPanel x:Name="VncToolsDock" Orientation="Horizontal" Visibility="Collapsed">
+                <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                        Content="{StaticResource Icon.Scale}"
+                        ToolTip="{Binding VncScalingLabel}"
+                        Command="{Binding CycleVncScalingCommand}" />
+            </StackPanel>
+
+            <Border Width="1" Height="16" Margin="6,0"
+                    Background="{DynamicResource Stroke.Default}" />
+
+            <!-- 窗口最大化档与完全全屏的切换入口（与 F11 等价） -->
+            <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                    Content="{StaticResource Icon.WindowMaximize}"
+                    ToolTip="窗口最大化（收起侧边，会话铺满窗口）"
+                    Command="{Binding AdvanceFullScreenCommand}" />
+            <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                    Content="{StaticResource Icon.FullScreen}"
+                    ToolTip="完全全屏 (F11)"
+                    Command="{Binding ToggleScreenFullCommand}" />
+        </StackPanel>
+    </Grid>
+</UserControl>
