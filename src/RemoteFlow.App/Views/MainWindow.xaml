@@ -188,7 +188,7 @@
             <!-- 列：模块图标栏 | 内容。图标栏跨标题栏行（logo 在栏顶，见下方 Rail）。 -->
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="RailColumn"
-                                  Width="{Binding IsSessionFullScreen, Converter={StaticResource FullScreenSize}, ConverterParameter=48}" />
+                                  Width="{Binding IsScreenFull, Converter={StaticResource FullScreenSize}, ConverterParameter=48}" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
@@ -214,7 +214,7 @@
                             <Style TargetType="Border">
                                 <Setter Property="Visibility" Value="Visible" />
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsSessionFullScreen}" Value="True">
+                                    <DataTrigger Binding="{Binding IsScreenFull}" Value="True">
                                         <Setter Property="Visibility" Value="Collapsed" />
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -323,7 +323,7 @@
                                 <Setter Property="BorderThickness" Value="1,1,1,0" />
                                 <Setter Property="CornerRadius" Value="12,12,0,0" />
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsSessionFullScreen}" Value="True">
+                                    <DataTrigger Binding="{Binding IsScreenFull}" Value="True">
                                         <Setter Property="BorderThickness" Value="0" />
                                         <Setter Property="CornerRadius" Value="0" />
                                     </DataTrigger>

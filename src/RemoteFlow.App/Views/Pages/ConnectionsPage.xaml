@@ -208,17 +208,10 @@
                             Click="OnRowConnectClick" />
                 </StackPanel>
 
-                <!-- 「最近连接」列：短时间格式（09-23 15:46），真正已连接时显示绿点 +「已连接」 -->
+                <!-- 「最近连接」列：短时间格式（09-23 15:46）。连接状态已由「在线状态」列表达，
+                     此处不再重复显示「已连接」，避免两列相邻出现双份文案。 -->
                 <StackPanel Grid.Column="7" Orientation="Horizontal" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal"
-                                Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}">
-                        <Ellipse Width="6" Height="6" VerticalAlignment="Center"
-                                 Fill="{DynamicResource Status.Success}" />
-                        <TextBlock Text="已连接" Style="{StaticResource Text.Caption}" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource Status.Success}" Margin="6,0,0,0" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <TextBlock Text="{Binding LastConnectedCompact}" Style="{StaticResource Text.Caption}"
-                               Visibility="{Binding IsConnected, Converter={StaticResource InverseBoolToVisibility}}" />
+                    <TextBlock Text="{Binding LastConnectedCompact}" Style="{StaticResource Text.Caption}" />
                 </StackPanel>
 
                 <!-- 收藏列：星标常驻，点击切换 -->
