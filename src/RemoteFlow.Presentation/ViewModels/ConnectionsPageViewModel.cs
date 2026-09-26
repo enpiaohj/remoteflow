@@ -209,6 +209,18 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         SelectedSmartView = null;
         _syncingSmartView = false;
 
+        // 分组是独立的过滤域：不继承智能视图的过滤（收藏 / 最近连接）与时间范围
+        // （今天 / 7 天），否则三层过滤叠加会让分组内容显示错误——例如从
+        // 「最近连接（今天）」点进分组，今天没连过的机器全部消失（v0.19.0 回归）。
+        if (Filter != ConnectionFilter.All)
+        {
+            Filter = ConnectionFilter.All;
+        }
+        if (RecentRange != RecentRange.All)
+        {
+            RecentRange = RecentRange.All;
+        }
+
         OnPropertyChanged(nameof(HasGroupFilter));
         OnPropertyChanged(nameof(ViewTitle));
         ApplyFilter();
