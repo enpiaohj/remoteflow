@@ -193,10 +193,12 @@
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <!-- 列：模块图标栏 | 内容。图标栏跨标题栏行（logo 在栏顶，见下方 Rail）。 -->
+            <!-- 列：模块图标栏 | 内容。图标栏跨标题栏行（logo 在栏顶，见下方 Rail）。
+                 会话的窗口最大化 / 完全全屏两档都收起本列（会话铺满）；
+                 标题栏行的 Tab 条与工具条不受影响（单行标题栏）。 -->
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="RailColumn"
-                                  Width="{Binding IsScreenFull, Converter={StaticResource FullScreenSize}, ConverterParameter=48}" />
+                                  Width="{Binding IsSessionFullScreen, Converter={StaticResource FullScreenSize}, ConverterParameter=48}" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
