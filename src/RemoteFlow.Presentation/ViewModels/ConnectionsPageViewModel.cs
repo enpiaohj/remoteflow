@@ -161,7 +161,12 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     public ObservableCollection<ConnectionGroupNodeViewModel> FlatTreeNodes { get; } = [];
 
     /// <summary>智能视图（树顶部的快捷入口）。与 <see cref="ConnectionFilter"/> 一一对应。</summary>
-    public sealed record SmartViewOption(ConnectionFilter FilterValue, string Name, string IconGlyph);
+    /// <remarks>重写 <see cref="object.ToString"/> 返回名称：ListBoxItem 的 UIA Name
+    /// 取自该项的 ToString，屏幕阅读器与自动化工具读到的应是友好名而非属性转储。</remarks>
+    public sealed record SmartViewOption(ConnectionFilter FilterValue, string Name, string IconGlyph)
+    {
+        public override string ToString() => Name;
+    }
 
     public IReadOnlyList<SmartViewOption> SmartViews { get; } =
     [
