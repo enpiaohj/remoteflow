@@ -170,7 +170,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     public IReadOnlyList<SmartViewOption> SmartViews { get; } =
     [
-        new(ConnectionFilter.All, "全部连接", "\uE968"),
+        new(ConnectionFilter.All, "所有设备", "\uE968"),
         new(ConnectionFilter.Favorites, "收藏", "\uE735"),
         new(ConnectionFilter.Recent, "最近连接", "\uE81C"),
     ];
@@ -201,6 +201,13 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         {
             Filter = value.FilterValue;
         }
+        else
+        {
+            // Filter 未变（如从分组切回「所有设备」），但分组选中刚被清空，
+            // 过滤结果仍是分组残留——必须重跑 ApplyFilter 才能恢复全量。
+            ApplyFilter();
+        }
+        TriggerPresenceProbeIfEnabled();
     }
 
     partial void OnSelectedGroupNodeChanged(ConnectionGroupNodeViewModel? value)
@@ -229,6 +236,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         OnPropertyChanged(nameof(HasGroupFilter));
         OnPropertyChanged(nameof(ViewTitle));
         ApplyFilter();
+        TriggerPresenceProbeIfEnabled();
     }
 
     /// <summary>当前是否处于「按分组浏览」（左树选中了某个分组）。</summary>
@@ -240,7 +248,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         {
             ConnectionFilter.Favorites => "收藏",
             ConnectionFilter.Recent => "最近连接",
-            _ => "全部连接"
+            _ => "所有设备"
         };
 
     /// <summary>清除分组过滤，回到「全部连接」。</summary>
@@ -586,7 +594,11 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     partial void OnSortModeChanged(ConnectionSortMode value) => ApplyFilter();
 
-    partial void OnRecentRangeChanged(RecentRange value) => ApplyFilter();
+    partial void OnRecentRangeChanged(RecentRange value)
+    {
+        ApplyFilter();
+        TriggerPresenceProbeIfEnabled();
+    }
 
     partial void OnFilterChanged(ConnectionFilter value)
     {
@@ -737,6 +749,15 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     }
 
     // ── 搜索与筛选 ────────────────────────────────────────────────
+
+    /// <summary>视图 / 分组 / 时间范围切换后自动刷新在线状态（设置开关控制；加载期间跳过）。</summary>
+    private void TriggerPresenceProbeIfEnabled()
+    {
+        if (PresenceProbeEnabled && !IsLoading)
+        {
+            _ = ProbePresenceAsync();
+        }
+    }
 
     private void ApplyFilter()
     {

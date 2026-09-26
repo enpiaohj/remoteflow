@@ -5,8 +5,10 @@
              xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
              mc:Ignorable="d"
-             d:DataContext="{d:DesignInstance Type=vm:SessionTabViewModel}">
+             d:DataContext="{d:DesignInstance Type=vm:SessionTabViewModel}"
+             shell:WindowChrome.IsHitTestVisibleInChrome="True">
 
     <!-- 会话工具条：原会话视图内的常驻条，v0.19.1 起迁到标题栏行（Tab 条右侧），
          与标签条合并为浏览器式单行标题栏。DataContext = 选中的 SessionTabViewModel。 -->

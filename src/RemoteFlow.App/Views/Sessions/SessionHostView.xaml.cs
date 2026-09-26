@@ -801,26 +801,43 @@ public partial class SessionHostView : UserControl
     /// <summary>常驻条 / 全屏药丸的状态入口点击 → 打开 Flyout。</summary>
     private void OnStatusEntryRequested(object? sender, EventArgs e)
     {
+        if (DebounceStatusEntry())
+        {
+            return;
+        }
+
         OpenQualityFlyout(QualityFlyoutAnchor);
     }
 
     private void OnStatusEntryClick(object sender, RoutedEventArgs e)
     {
-        // 双击这里会触发 Flyout 开→（第二击令主窗激活、Flyout 失活关闭）→开 的竞态；
-        // owned + ShowInTaskbar=False 的无边框窗口在这种反复激活/关闭中会把宿主窗口
-        // 最小化（已知 WPF 问题）。250ms 内的第二次点击直接吞掉。
-        var now = DateTime.UtcNow;
-        if (now - _lastStatusClick < TimeSpan.FromMilliseconds(250))
+        if (DebounceStatusEntry())
         {
             return;
         }
-
-        _lastStatusClick = now;
 
         if (sender is FrameworkElement anchor)
         {
             OpenQualityFlyout(anchor);
         }
+    }
+
+    /// <summary>
+    /// 状态入口点击防抖：双击会触发 Flyout 开→（第二击令主窗激活、Flyout 失活关闭）→开
+    /// 的竞态；owned + ShowInTaskbar=False 的无边框窗口在这种反复激活/关闭中会把宿主
+    /// 窗口最小化（已知 WPF 问题）。系统双击间隔默认 500ms，窗口内的第二次点击直接吞掉。
+    /// 标题栏工具条与悬浮药丸两个入口共用同一防抖。
+    /// </summary>
+    private bool DebounceStatusEntry()
+    {
+        var now = DateTime.UtcNow;
+        if (now - _lastStatusClick < TimeSpan.FromMilliseconds(500))
+        {
+            return true;
+        }
+
+        _lastStatusClick = now;
+        return false;
     }
 
     /// <summary>
