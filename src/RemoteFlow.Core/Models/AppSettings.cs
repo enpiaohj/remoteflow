@@ -115,7 +115,7 @@ public sealed class AppSettings
     public int PillHideDelayScreenFullMs { get; set; } = 900;
 
     /// <summary>启动或新建连接后默认打开的页面。</summary>
-    public LandingPage DefaultLandingPage { get; set; } = LandingPage.Home;
+    public LandingPage DefaultLandingPage { get; set; } = LandingPage.Connections;
 
     /// <summary>用户是否已关闭首页底部的安全提示横幅。</summary>
     public bool HomeSecurityTipDismissed { get; set; }
