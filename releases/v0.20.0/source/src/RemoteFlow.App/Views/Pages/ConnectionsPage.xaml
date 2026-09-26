@@ -1,0 +1,719 @@
+<UserControl x:Class="RemoteFlow.App.Views.Pages.ConnectionsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
+             xmlns:pages="clr-namespace:RemoteFlow.App.Views.Pages"
+             xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
+             d:DataContext="{d:DesignInstance Type=vm:ConnectionsPageViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             Background="Transparent"
+             KeyDown="OnPageKeyDown">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
+        <conv:ColorStringToBrushConverter x:Key="ColorToBrush" />
+        <conv:CountToVisibilityConverter x:Key="CountToVisibility" />
+        <conv:EnumToBoolConverter x:Key="EnumToBool" />
+        <conv:EnumDisplayNameConverter x:Key="EnumDisplay" />
+        <conv:IsGroupNodeConverter x:Key="IsGroupNode" />
+        <conv:DepthToMarginConverter x:Key="DepthToMargin" />
+        <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
+
+        <!-- 顶部「多选」Toggle 的样式。注意不能用 Button.* 系列（TargetType=Button），
+             否则应用到 ToggleButton 上会抛 “TargetType does not match” 运行时异常崩溃。 -->
+        <Style x:Key="MultiSelectToggle" TargetType="ToggleButton">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+            <Setter Property="FontSize" Value="12" />
+            <!-- 低强调的“幽灵”按钮：无边框盒、次级文字；让「+ 新建连接」保持唯一 Primary。 -->
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Chrome"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="{StaticResource Radius.Medium}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Bg.Selected}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 连接行的右键 / 「更多」菜单。ContextMenu 不在主可视树内，
+             菜单项动作统一用 Click 在代码后置分发（ResolveItem 从 DataContext 取行 VM）。
+             分组布局：主操作组=连接(无活动)/切换到会话+断开连接(有活动) + 编辑；
+             第二组=测试连接与收藏切换（我的连接里夹着复制连接）；
+             第三组按视图裁切——「我的连接」（Filter=All）放 移动到分组 / 删除，
+             收藏 / 最近连接快捷视图放「管理连接」。
+             connect / disconnect 项 Header 与显隐在 OnRowContextMenuOpened 按行会话状态守卫；
+             收藏项 Header 按视图与行状态设为 收藏 / 取消收藏；
+             被隐藏项夹出的空分隔组由 NormalizeSeparators 一并隐藏（菜单 Tag 定位）。 -->
+        <ContextMenu x:Key="ConnectionRowMenu" x:Shared="False" Opened="OnRowContextMenuOpened">
+            <!-- 主操作组首项按行会话状态在守卫里改名：无活动=「连接」；有活动=「切换到会话」；
+                 同时按状态显隐第二项「断开连接」（连接行与首页快捷菜单同一套约定）。 -->
+            <MenuItem Tag="connect" Header="连接" InputGestureText="Enter" Click="OnConnectMenuClick" />
+            <MenuItem Tag="disconnect" Header="断开连接" Click="OnDisconnectMenuClick" />
+            <MenuItem Tag="edit" Header="编辑" Click="OnEditMenuClick" />
+            <Separator />
+            <MenuItem Tag="duplicate" Header="复制连接" Click="OnDuplicateMenuClick" />
+            <MenuItem Tag="test" Header="测试连接" Click="OnTestMenuClick" />
+            <!-- 收藏 / 取消收藏：Header 随行当前收藏状态切换，打开时由守卫写入 -->
+            <MenuItem Tag="favorite" Header="收藏" IsCheckable="True"
+                      IsChecked="{Binding IsFavorite, Mode=OneWay}"
+                      Click="OnToggleFavoriteMenuClick" />
+            <Separator />
+            <MenuItem Tag="move" Header="移动到分组" SubmenuOpened="OnMoveToGroupSubmenuOpened">
+                <MenuItem Header="加载分组…" IsEnabled="False" />
+            </MenuItem>
+            <MenuItem Tag="delete" Header="删除" Click="OnDeleteMenuClick" />
+            <MenuItem Tag="locate" Header="管理连接" Click="OnLocateMenuClick" />
+        </ContextMenu>
+
+        <Style x:Key="ConnectionRow" TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">
+            <Setter Property="ContextMenu" Value="{StaticResource ConnectionRowMenu}" />
+            <EventSetter Event="ContextMenuOpening" Handler="OnRowContextMenuOpening" />
+        </Style>
+
+        <!-- 连接行（扁平列表）。行高 40 对齐设计稿的紧凑密度；
+             设备图标在表格行内用 28 规格（44 规格保留给首页 / 详情大图标）。 -->
+        <DataTemplate x:Key="ConnRowTemplate" DataType="{x:Type vm:ConnectionItemViewModel}">
+            <Grid Height="40">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="26" />
+                    <ColumnDefinition Width="Auto" MinWidth="120" MaxWidth="380" SharedSizeGroup="ColName" />
+                    <ColumnDefinition Width="Auto" MinWidth="100" SharedSizeGroup="ColHost" />
+                    <ColumnDefinition Width="Auto" MinWidth="42" SharedSizeGroup="ColProto" />
+                    <ColumnDefinition Width="Auto" MinWidth="48" SharedSizeGroup="ColTags" />
+                    <ColumnDefinition Width="*" MinWidth="0" />
+                    <ColumnDefinition Width="Auto" MinWidth="58" SharedSizeGroup="ColPresence" />
+                    <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="ColRecent" />
+                    <ColumnDefinition Width="26" />
+                    <ColumnDefinition Width="26" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 首列：勾选框常驻可见，勾选即进入批量操作（勾选 ≥1 项浮现批量栏） -->
+                <CheckBox Grid.Column="0" Width="26" Height="26" HorizontalAlignment="Left" Margin="2,0,0,0"
+                          VerticalAlignment="Center"
+                          IsChecked="{Binding IsSelected, Mode=OneWay}"
+                          Click="OnRowCheckBoxClick"
+                          ToolTip="勾选以进行批量操作"
+                          Tag="{Binding}" />
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- 设备图标与首页「收藏 / 最近活动」行同一套规格：44 彩色淡色底 Tile +
+                         协议 Glyph，全应用含协议的设备行统一 -->
+                    <Grid Width="28" Height="28">
+                        <Border CornerRadius="6"
+                                Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                        <TextBlock Text="{Binding ProtocolIcon}" FontFamily="{StaticResource IconFont}" FontSize="13"
+                                   Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <!-- 会话状态点（右下角）：空闲隐藏，连接中琥珀 / 已连接绿 -->
+                        <Border Style="{StaticResource SessionStatusDot}"
+                                Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}">
+                            <Ellipse Style="{StaticResource SessionStatusDot.Fill}" />
+                        </Border>
+                    </Grid>
+                    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontSize="12"
+                               Margin="9,0,7,0" MaxWidth="210" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+
+                <TextBlock Grid.Column="2" Text="{Binding HostDisplay}" Style="{StaticResource Text.BodySecondary}"
+                           FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="12,0,0,0"
+                           MaxWidth="170" TextTrimming="CharacterEllipsis" />
+                <!-- 协议徽章与首页一致：协议色小徽章，替代 A+ 时的裸文字列 -->
+                <Grid Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="14,0,0,0">
+                    <Border CornerRadius="4"
+                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                            Opacity="0.14" />
+                    <TextBlock Text="{Binding ProtocolName}" FontSize="10" Margin="7,2"
+                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                </Grid>
+
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
+                    <ItemsControl ItemsSource="{Binding Tags}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border CornerRadius="5" Margin="0,0,5,0"
+                                        Background="{DynamicResource Bg.Subtle}">
+                                    <StackPanel Orientation="Horizontal" Margin="6,3">
+                                        <Ellipse Width="6" Height="6" VerticalAlignment="Center"
+                                                 Fill="{Binding Color, Converter={StaticResource ColorToBrush}}" />
+                                        <TextBlock Text="{Binding Name}" FontSize="11" Margin="5,0,1,0"
+                                                   Foreground="{DynamicResource Text.Secondary}"
+                                                   MaxWidth="80" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="{Binding OverflowTagCount, StringFormat=+{0}}" Style="{StaticResource Text.Caption}"
+                               VerticalAlignment="Center"
+                               Visibility="{Binding OverflowTagCount, Converter={StaticResource CountToVisibility}}" />
+                </StackPanel>
+
+                <!-- 在线状态列：活动会话恒「已连接」，否则随 TCP 探测结果；
+                     未探测（关闭开关且未手动跑过）显示中性「—」 -->
+                <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0"
+                            ToolTip="{Binding PresenceTooltip}">
+                    <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                             Fill="{Binding PresenceBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    <TextBlock Text="{Binding PresenceDisplay}" FontSize="12"
+                               Foreground="{Binding PresenceBrushKey, Converter={StaticResource KeyToBrush}}"
+                               Margin="6,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- 悬停快捷操作：鼠标移到行上时在弹性列里就地浮出「连接」，省去双击 / 走详情面板。 -->
+                <StackPanel Grid.Column="5" Orientation="Horizontal" HorizontalAlignment="Right"
+                            VerticalAlignment="Center" Margin="0,0,8,0">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Opacity" Value="0" />
+                            <Setter Property="IsHitTestVisible" Value="False" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                    <Setter Property="Opacity" Value="1" />
+                                    <Setter Property="IsHitTestVisible" Value="True" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Button Style="{StaticResource Button.Subtle}" Height="24" Padding="9,0" FontSize="12"
+                            Content="连接" ToolTip="连接 (Enter)"
+                            Click="OnRowConnectClick" />
+                </StackPanel>
+
+                <!-- 「最近连接」列：短时间格式（09-23 15:46）。连接状态已由「在线状态」列表达，
+                     此处不再重复显示「已连接」，避免两列相邻出现双份文案。 -->
+                <StackPanel Grid.Column="7" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding LastConnectedCompact}" Style="{StaticResource Text.Caption}" />
+                </StackPanel>
+
+                <!-- 收藏列：星标常驻，点击切换 -->
+                <Button Grid.Column="8" Width="24" Height="24" FontSize="12" HorizontalAlignment="Center"
+                        ToolTip="收藏 / 取消收藏"
+                        Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                        CommandParameter="{Binding}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource Button.Icon}">
+                            <Setter Property="Content" Value="{StaticResource Icon.Favorite}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text.Tertiary}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                    <Setter Property="Content" Value="{StaticResource Icon.FavoriteFilled}" />
+                                    <Setter Property="Foreground" Value="#F2C037" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+                <Button Grid.Column="9" Style="{StaticResource Button.Icon}" Width="26" Height="26"
+                        Content="{StaticResource Icon.More}" ToolTip="更多操作" Click="OnMoreClick" />
+
+                <!-- 行底发丝分隔线（概念稿 v0.2 的表格节奏） -->
+                <Border HorizontalAlignment="Stretch" Height="1" VerticalAlignment="Bottom"
+                        Background="{DynamicResource Stroke.Subtle}" Opacity="0.55" />
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <!-- 连接工作台：上下文条（标题 + 统计 + 动作）→ 筛选条（搜索 + 筛选）→
+         工作台（资源树 | 列表）。分区用发丝线，不再套卡片（概念设计 v0.2）。 -->
+    <Grid Grid.IsSharedSizeScope="True" Background="{DynamicResource Bg.Layer}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="50" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ── 上下文条：标题 + 全量统计 | 探测 / 刷新 / 批量操作 / 新建 ── -->
+        <Grid Grid.Row="0" Margin="16,0,16,0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="连接工作台" FontSize="16" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Text.Primary}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding WorkbenchSubtitle}" FontSize="12"
+                           Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="10,1,0,0" />
+                <!-- 分组浏览提示：来自左树的选择，一键退出 -->
+                <Border Background="{DynamicResource Bg.RowSelected}"
+                        CornerRadius="9" Padding="8,2" Margin="12,0,0,0"
+                        VerticalAlignment="Center"
+                        Visibility="{Binding HasGroupFilter, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding ViewTitle}" FontSize="11"
+                                   Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                        <Button Style="{StaticResource Button.Subtle}" MinHeight="18" Padding="4,0"
+                                FontSize="11" Margin="5,0,0,0" Content="退出"
+                                Command="{Binding ClearGroupFilterCommand}" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button Style="{StaticResource Button.Icon}" Width="30" Height="30"
+                        Content="{StaticResource Icon.Scale}"
+                        ToolTip="探测当前列表的可达性"
+                        Command="{Binding ProbePresenceCommand}"
+                        Visibility="{Binding PresenceProbeEnabled, Converter={StaticResource BoolToVisibility}}" />
+                <Button Style="{StaticResource Button.Icon}" Width="30" Height="30" Margin="6,0,0,0"
+                        Content="{StaticResource Icon.Refresh}"
+                        ToolTip="刷新列表"
+                        Command="{Binding RefreshCommand}" />
+                <Button Style="{StaticResource Button.Secondary}" MinHeight="30" Padding="12,0" Margin="10,0,0,0"
+                        Click="OnBatchOperationsClick">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="批量操作" VerticalAlignment="Center" />
+                        <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
+                                   FontSize="9" Margin="6,0,0,0"
+                                   Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource Button.Primary}" MinHeight="30" Padding="14,0" Margin="8,0,0,0"
+                        Command="{Binding CreateCommand}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{StaticResource Icon.Add}" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" />
+                        <TextBlock Text="新建连接" Margin="7,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- ── 筛选条：搜索（Ctrl+K）+ 筛选 ── -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="16,0,16,10">
+                <Border Width="320" Height="34" VerticalAlignment="Center"
+                        Background="{DynamicResource Bg.Layer}" BorderBrush="{DynamicResource Stroke.Default}"
+                        BorderThickness="1" CornerRadius="{StaticResource Radius.Medium}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{StaticResource Icon.Search}" FontFamily="{StaticResource IconFont}"
+                                   FontSize="13" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                        <TextBox x:Name="PageFilterBox" Grid.Column="1"
+                                 Text="{Binding PageFilterText, UpdateSourceTrigger=PropertyChanged, Delay=120}"
+                                 Background="Transparent" BorderThickness="0" FontSize="13"
+                                 VerticalContentAlignment="Center" Margin="8,0,10,0" />
+                        <TextBlock Grid.Column="1" Text="搜索名称、IP、标签、备注… (Ctrl+K)" IsHitTestVisible="False"
+                                   Foreground="{DynamicResource Text.Tertiary}" FontSize="12" VerticalAlignment="Center" Margin="9,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=PageFilterBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <Border Grid.Column="2" Background="{DynamicResource Bg.Subtle}" CornerRadius="4"
+                                Padding="6,2" Margin="0,0,12,0" VerticalAlignment="Center">
+                            <TextBlock Text="Ctrl+K" FontSize="10" Foreground="{DynamicResource Text.Tertiary}" />
+                        </Border>
+                    </Grid>
+                </Border>
+                <!-- 下拉筛选：最近连接视图隐藏（换成时间范围 chip） -->
+                <StackPanel Orientation="Horizontal" Margin="10,0,0,0"
+                            Visibility="{Binding IsRecentView, Converter={StaticResource InverseBoolToVisibility}}">
+                <ComboBox Style="{StaticResource Input.ComboBox}" MinWidth="120" Height="34"
+                          ItemsSource="{Binding ProtocolFilterOptions}" SelectedItem="{Binding ProtocolFilter}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock>
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="{Binding Converter={StaticResource EnumDisplay}}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding}" Value="All">
+                                                <Setter Property="Text" Value="全部协议" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <ComboBox Style="{StaticResource Input.ComboBox}" MinWidth="120" Height="34" Margin="8,0,0,0"
+                          ItemsSource="{Binding TagFilterOptions}" SelectedItem="{Binding TagFilter}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                                         Visibility="{Binding Id, Converter={StaticResource NullToVisibility}}"
+                                         Fill="{Binding Color, Converter={StaticResource ColorToBrush}}" />
+                                <TextBlock Text="{Binding Name}" Margin="6,0,0,0" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <ComboBox Style="{StaticResource Input.ComboBox}" MinWidth="110" Height="34" Margin="8,0,0,0"
+                          ItemsSource="{Binding PresenceFilterOptions}" SelectedItem="{Binding PresenceFilter}"
+                          Visibility="{Binding PresenceProbeEnabled, Converter={StaticResource BoolToVisibility}}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock>
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="全部状态" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding}" Value="Online">
+                                                <Setter Property="Text" Value="仅在线" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding}" Value="Offline">
+                                                <Setter Property="Text" Value="仅离线" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <ComboBox Style="{StaticResource Input.ComboBox}" MinWidth="132" Height="34" Margin="8,0,0,0"
+                          ItemsSource="{Binding SortModeOptions}" SelectedItem="{Binding SortMode}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock>
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="按名称排序" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding}" Value="LastConnected">
+                                                <Setter Property="Text" Value="按最近连接排序" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding}" Value="Protocol">
+                                                <Setter Property="Text" Value="按协议排序" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </StackPanel>
+
+            <!-- 最近连接：时间范围 chip（与搜索框同行，左留间距、垂直居中对齐） -->
+            <StackPanel Orientation="Horizontal" Margin="14,0,0,0" VerticalAlignment="Center"
+                        Visibility="{Binding IsRecentView, Converter={StaticResource BoolToVisibility}}">
+                <RadioButton Style="{StaticResource Segment}" GroupName="RecentRange" Content="今天"
+                             IsChecked="{Binding RecentRange, Converter={StaticResource EnumToBool}, ConverterParameter=Today, Mode=TwoWay}" />
+                <RadioButton Style="{StaticResource Segment}" GroupName="RecentRange" Content="7 天"
+                             IsChecked="{Binding RecentRange, Converter={StaticResource EnumToBool}, ConverterParameter=Week, Mode=TwoWay}" />
+                <RadioButton Style="{StaticResource Segment}" GroupName="RecentRange" Content="全部" Margin="0"
+                             IsChecked="{Binding RecentRange, Converter={StaticResource EnumToBool}, ConverterParameter=All, Mode=TwoWay}" />
+            </StackPanel>
+        </StackPanel>
+
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <!-- 全屏两档（窗口最大化 / 完全全屏）下树列宽收为 0，与树折叠联动 -->
+                    <ColumnDefinition Width="216">
+                        <ColumnDefinition.Style>
+                            <Style TargetType="ColumnDefinition">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.IsSessionFullScreen, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                        <Setter Property="Width" Value="0" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ColumnDefinition.Style>
+                    </ColumnDefinition>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,0,1,0">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Style.Triggers>
+                                <!-- 窗口最大化 / 完全全屏两档都折掉资源树（侧边元素随档位收起），
+                                     最大化档下列表独占内容区。 -->
+                                <DataTrigger Binding="{Binding DataContext.IsSessionFullScreen, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <pages:ConnectionResourceTree />
+                </Border>
+
+                <Grid Grid.Column="1" Margin="12,0,0,0">
+            <!-- ── 搜索结果提示 ──────────────────────────────── -->
+            <Border
+                    Background="{DynamicResource Brand.Subtle}"
+                    CornerRadius="{StaticResource Radius.Medium}"
+                    Padding="12,8"
+                    Margin="0,0,0,12"
+                    Visibility="{Binding SearchText.Length, Converter={StaticResource CountToVisibility}}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{StaticResource Icon.Search}"
+                               FontFamily="{StaticResource IconFont}"
+                               FontSize="12"
+                               Foreground="{DynamicResource Brand.Default}"
+                               VerticalAlignment="Center" />
+                    <TextBlock Style="{StaticResource Text.Body}" Margin="8,0,0,0">
+                        <Run Text="正在搜索" />
+                        <Run Text="{Binding SearchText, Mode=OneWay}" FontWeight="SemiBold" />
+                        <Run Text="，找到" />
+                        <Run Text="{Binding Items.Count, Mode=OneWay}" FontWeight="SemiBold" />
+                        <Run Text="条结果" />
+                    </TextBlock>
+                    <Button Style="{StaticResource Button.Subtle}"
+                            Content="清除"
+                            MinHeight="24"
+                            Padding="8,0"
+                            FontSize="12"
+                            Margin="12,0,0,0"
+                            Command="{Binding ClearSearchCommand}" />
+                </StackPanel>
+            </Border>
+
+            <!-- 列表卡片：机身与内容同一基色（Windows 11 默认配色思路）之后，
+                 列表需要一个显式的白卡片边界才不会跟机身糊在一起。列头 / 分隔线 /
+                 列表都装进这一张卡片。 -->
+            <Grid Margin="6,8,4,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- ── 多选状态条：勾选 ≥1 项时出现（勾选框常驻，无独立模式开关）── -->
+                    <Grid Grid.Row="0" MinHeight="34" Margin="4,0,4,8"
+                          Visibility="{Binding IsBatchBarVisible, Converter={StaticResource BoolToVisibility}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" Text="{Binding SelectionSummary}" />
+                        <Button Grid.Column="1" Style="{StaticResource Button.Subtle}" MinHeight="24" Padding="6,0"
+                                Margin="10,0,0,0" Content="取消选择" FontSize="12" VerticalAlignment="Center"
+                                Command="{Binding ClearSelectionCommand}" />
+
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                    FontSize="12" Click="OnBatchMoveClick" Tag="move">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="移动到分组" VerticalAlignment="Center" />
+                                    <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
+                                               FontSize="9" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                    Margin="6,0,0,0" FontSize="12" Click="OnBatchTagClick" Tag="tag">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="添加标签" VerticalAlignment="Center" />
+                                    <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
+                                               FontSize="9" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                    Margin="6,0,0,0" FontSize="12"
+                                    Content="{Binding FavoriteActionText}"
+                                    Command="{Binding ToggleFavoriteSelectedCommand}" />
+                            <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                    Margin="6,0,0,0" FontSize="12" Click="OnBatchMoreClick" Tag="more">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="更多" VerticalAlignment="Center" />
+                                    <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
+                                               FontSize="9" Margin="6,0,0,0"
+                                               Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource Button.Secondary}" MinHeight="28" Padding="10,0"
+                                    Margin="10,0,0,0" FontSize="12"
+                                    Content="删除" Foreground="{DynamicResource Status.Danger}"
+                                    Command="{Binding DeleteSelectedCommand}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ── 列头 ──────────────────────────────────────── -->
+                    <Grid Grid.Row="1" Height="26" Margin="4,0,4,0">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsEmpty}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="26" />
+                            <ColumnDefinition Width="Auto" MinWidth="120" MaxWidth="380" SharedSizeGroup="ColName" />
+                            <ColumnDefinition Width="Auto" MinWidth="100" SharedSizeGroup="ColHost" />
+                            <ColumnDefinition Width="Auto" MinWidth="42" SharedSizeGroup="ColProto" />
+                            <ColumnDefinition Width="Auto" MinWidth="48" SharedSizeGroup="ColTags" />
+                            <ColumnDefinition Width="*" MinWidth="8" />
+                            <ColumnDefinition Width="Auto" MinWidth="58" SharedSizeGroup="ColPresence" />
+                            <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="ColRecent" />
+                            <ColumnDefinition Width="26" />
+                            <ColumnDefinition Width="26" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 全选：勾选 / 取消当前可见全部 -->
+                        <CheckBox Grid.Column="0" Width="24" Height="24" Margin="3,0,0,0"
+                                  VerticalAlignment="Center"
+                                  IsChecked="{Binding IsAllSelected, Mode=OneWay}"
+                                  ToolTip="全选当前列表"
+                                  Click="OnSelectAllHeaderClick" />
+
+                        <TextBlock Grid.Column="1" Text="名称" Style="{StaticResource Text.Label}" Margin="38,0,0,0" />
+                        <TextBlock Grid.Column="2" Text="IP / 主机" Style="{StaticResource Text.Label}" Margin="16,0,0,0" />
+                        <TextBlock Grid.Column="3" Text="协议" Style="{StaticResource Text.Label}" Margin="16,0,0,0" />
+                        <TextBlock Grid.Column="4" Text="标签" Style="{StaticResource Text.Label}" Margin="16,0,0,0" />
+                        <TextBlock Grid.Column="6" Text="在线状态" Style="{StaticResource Text.Label}" Margin="12,0,0,0" />
+                        <TextBlock Grid.Column="7" Text="最近连接" Style="{StaticResource Text.Label}" />
+                        <TextBlock Grid.Column="8" Text="收藏" Style="{StaticResource Text.Label}" />
+                    </Grid>
+
+                    <Border Grid.Row="2" VerticalAlignment="Bottom" Margin="4,0">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource Surface.Divider}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsEmpty}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
+
+                    <!-- ── 连接列表（恒扁平；分组维度在左树）──────────────── -->
+                    <Grid Grid.Row="3">
+                        <ListBox x:Name="ConnectionList"
+                                 ItemContainerStyle="{StaticResource ConnectionRow}"
+                                 ItemTemplate="{StaticResource ConnRowTemplate}"
+                                 SelectedItem="{Binding SelectedItem}"
+                                 Margin="0,4,0,0"
+                                 MouseDoubleClick="OnListDoubleClick"
+                                 KeyDown="OnListKeyDown">
+                            <ListBox.Style>
+                                <Style TargetType="ListBox" BasedOn="{StaticResource List.Plain}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsEmpty}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ListBox.Style>
+                            <ListBox.GroupStyle>
+                                <GroupStyle>
+                                    <GroupStyle.ContainerStyle>
+                                        <Style TargetType="GroupItem">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="GroupItem">
+                                                        <Expander IsExpanded="True" Background="Transparent" BorderThickness="0">
+                                                            <Expander.Header>
+                                                                <StackPanel Orientation="Horizontal" Margin="0,6,0,2">
+                                                                    <TextBlock Text="{StaticResource Icon.Recent}"
+                                                                               FontFamily="{StaticResource IconFont}" FontSize="13"
+                                                                               Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
+                                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13"
+                                                                               Foreground="{DynamicResource Text.Primary}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                                                    <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="9" Padding="7,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                                        <TextBlock Text="{Binding ItemCount}" FontSize="11" Foreground="{DynamicResource Text.Tertiary}" />
+                                                                    </Border>
+                                                                </StackPanel>
+                                                            </Expander.Header>
+                                                            <ItemsPresenter />
+                                                        </Expander>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </GroupStyle.ContainerStyle>
+                                </GroupStyle>
+                            </ListBox.GroupStyle>
+                        </ListBox>
+
+                        <!-- ── 空状态：无数据、无搜索结果或分组下无连接 ── -->
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="380"
+                                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
+                            <Border Width="56" Height="56" CornerRadius="16" Background="{DynamicResource Bg.Subtle}" HorizontalAlignment="Center">
+                                <TextBlock Text="{StaticResource Icon.Connections}" FontFamily="{StaticResource IconFont}" FontSize="24"
+                                           Foreground="{DynamicResource Text.Tertiary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <TextBlock Text="{Binding EmptyMessage}" Style="{StaticResource Text.BodySecondary}"
+                                       TextWrapping="Wrap" TextAlignment="Center" Margin="0,16,0,0" />
+                            <Button Style="{StaticResource Button.Primary}" Content="新建连接" HorizontalAlignment="Center"
+                                    Margin="0,20,0,0" Command="{Binding CreateCommand}" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Grid>
+
+            </Grid>
+                <!-- ── 右侧详情面板：工作台第三列，选中连接时显示 ── -->
+                <Border Grid.Column="2"
+                        Width="292"
+                        Background="{DynamicResource Bg.Layer}"
+                        BorderBrush="{DynamicResource Stroke.Subtle}"
+                        BorderThickness="1,0,0,0">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <!-- 详情面板只在连接列表页出现：窗口够宽、未全屏、非会话 Tab。
+                                     批量勾选时保持常驻（对齐工作台设计稿），不再因多选收起。 -->
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding HasSelectedItem}" Value="True" />
+                                        <Condition Binding="{Binding DataContext.IsSessionFullScreen, RelativeSource={RelativeSource AncestorType=Window}}" Value="False" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+
+                    <pages:ConnectionDetailPanel />
+                </Border>
+        </Grid>
+    </Grid>
+</UserControl>
