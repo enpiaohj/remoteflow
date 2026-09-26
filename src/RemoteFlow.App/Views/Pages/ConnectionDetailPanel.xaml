@@ -217,7 +217,7 @@
                         <Button IsEnabled="False" ToolTip="后续版本提供">
                             <TextBlock Text="Traceroute" VerticalAlignment="Center" Opacity="0.55" />
                         </Button>
-                        <Button Margin="0" IsEnabled="False" ToolTip="后续版本提供">
+                        <Button IsEnabled="False" ToolTip="后续版本提供">
                             <TextBlock Text="打开 Web" VerticalAlignment="Center" Opacity="0.55" />
                         </Button>
                     </UniformGrid>
