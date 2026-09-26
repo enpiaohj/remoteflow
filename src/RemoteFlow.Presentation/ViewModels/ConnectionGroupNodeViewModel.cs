@@ -59,4 +59,7 @@ public sealed partial class ConnectionGroupNodeViewModel : ObservableObject
 
     [RelayCommand]
     private void ToggleExpand() => IsExpanded = !IsExpanded;
+
+    /// <summary>ListBoxItem 的 UIA Name 取自 ToString，屏幕阅读器应读到分组名而非类型转储。</summary>
+    public override string ToString() => Name;
 }

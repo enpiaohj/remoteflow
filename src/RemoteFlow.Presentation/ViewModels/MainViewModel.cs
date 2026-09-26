@@ -204,6 +204,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             _credentialsPage.ExitMultiSelectCommand.Execute(null);
         }
+
+        // 页面切换统一由 CurrentPage 驱动：导航钮以 TwoWay 绑定回写 CurrentPage，
+        // 这里负责落位——这样 UIA SelectionItemPattern / 键盘激活等不经过鼠标
+        // Click 的路径也能正确切换页面（此前只挂在 Click 的 Command 上，编程
+        // 选中只改高亮不切内容，辅助工具与自动化无法切换页面）。
+        ShowWorkspacePage(value);
     }
 
     /// <summary>状态栏文案。</summary>
