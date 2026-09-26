@@ -34,8 +34,11 @@ public partial class ConnectionQualityFlyout : Window
         Deactivated += (_, _) =>
         {
             // 点击窗口以外（含 RDP ActiveX / 常驻工具条）会令本窗失活 → 视为关闭。
+            // 关闭前先解除 owned 关系：owned 无边框窗口关闭时 Windows 偶发把宿主
+            // 窗口最小化（激活转移的已知行为），解除后关闭不再牵连宿主。
             if (_activatedOnce && !_closed)
             {
+                Owner = null;
                 Close();
             }
         };

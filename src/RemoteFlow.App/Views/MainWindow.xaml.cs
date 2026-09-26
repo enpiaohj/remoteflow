@@ -609,6 +609,40 @@ public partial class MainWindow : Window
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
+    // ── 标题栏 Tab 条左右滚动箭头：会话 Tab 溢出时出现，点击按页滚动 ──
+
+    private void OnTabScrollLeftClick(object sender, RoutedEventArgs e) => ScrollTabStrip(-1);
+
+    private void OnTabScrollRightClick(object sender, RoutedEventArgs e) => ScrollTabStrip(1);
+
+    private void ScrollTabStrip(int direction)
+    {
+        if (FindName("TabScrollViewer") is not ScrollViewer viewer)
+        {
+            return;
+        }
+
+        viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset + direction * 160);
+    }
+
+    private void UpdateTabScrollArrows(object sender, RoutedEventArgs e)
+    {
+        if (FindName("TabScrollViewer") is not ScrollViewer viewer ||
+            FindName("TabScrollLeftButton") is not System.Windows.Controls.Button left ||
+            FindName("TabScrollRightButton") is not System.Windows.Controls.Button right)
+        {
+            return;
+        }
+
+        var atStart = viewer.HorizontalOffset <= 1;
+        var atEnd = viewer.HorizontalOffset >= viewer.ScrollableWidth - 1;
+        left.Visibility = atEnd ? Visibility.Collapsed : Visibility.Visible;
+        right.Visibility = atStart ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void OnTabScrollChanged(object sender, System.Windows.Controls.ScrollChangedEventArgs e)
+        => UpdateTabScrollArrows(sender, e);
+
     private void OnWindowStateChanged(object? sender, EventArgs e)
     {
         // 最大化后按钮语义变为「还原」，图标需要同步切换。
