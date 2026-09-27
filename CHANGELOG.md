@@ -158,11 +158,17 @@ SSH 终端与连接工作台体验更新：单行标题栏、右键菜单、括�
 
 ### Artifacts
 - `RemoteFlow-v0.20.0-win-x64.exe`
-  - Size：（构建后回填）
-  - SHA-256：（构建后回填）
+  - Size：74,902,861 bytes
+  - SHA-256：`F83266195751A560192F0C7B2C3BF1D756B8D2017A101CF8B1B071DE4BA1B982`
 - `RemoteFlow-v0.20.0-win-x64.zip`
-  - Size：（构建后回填）
-  - SHA-256：（构建后回填）
+  - Size：69,431,965 bytes
+  - SHA-256：`1DCF32B0EFE543B9B23FFF9EFA22650198C10CE41B79646CADC6268B19F46A07`
+
+> 补发说明（2026-09-27）：v0.20.0 于 2026-09-26 完成构建与源码快照（`releases/v0.20.0/`，
+> 提交 `10ab8fb`），但当时未创建 Git Tag 与 GitHub Release，上表哈希也未回填。
+> 本次补建 Tag `v0.20.0`（指向 `10ab8fb`）并以当时留存的原始产物补发 GitHub Release；
+> 产物未重新构建。exe 的 ProductVersion 为 `0.20.0+449fa304c1d446b57507d9d3d6da795fcc11ad41`，
+> 即快照源码提交 `449fa30`；zip 内的 `RemoteFlow.exe` 与独立 exe 字节一致。
 
 ## [0.19.0] — 2026-09-26
 ## [0.19.0] — 2026-09-26
