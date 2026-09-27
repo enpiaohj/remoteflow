@@ -93,11 +93,12 @@
 
                         <!-- 图标系统标准尺寸（44）。首页大卡片与收藏/活动行继续用，此处保留 -->
                         <Border Grid.Column="0" Style="{StaticResource IconTile.Background}"
-                                Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                Background="{Binding DeviceBrushKey, Converter={StaticResource KeyToBrush}}"
                                 Opacity="{StaticResource IconTile.ColorBgOpacity}" />
-                        <TextBlock Grid.Column="0" Style="{StaticResource IconTile.Glyph}"
-                                   Text="{Binding ProtocolIcon}"
-                                   Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                        <Image Grid.Column="0"
+                               Style="{StaticResource DeviceIcon.Image}"
+                               Width="30" Height="30"
+                               Source="{Binding DeviceIconKey, Converter={StaticResource KeyToImageSource}}" />
 
                         <TextBlock Grid.Column="1"
                                    Text="{Binding Name}"
@@ -133,20 +134,13 @@
                                FontFamily="{StaticResource MonoFont}"
                                Margin="0,4,0,0" />
 
-                    <!-- 连接状态胶囊：未连接 / 正在连接 / 已连接 / 连接失败 -->
-                    <Border HorizontalAlignment="Left" Margin="0,8,0,0"
-                            CornerRadius="10" Background="{DynamicResource Bg.Subtle}" Padding="9,3">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="7" Height="7" VerticalAlignment="Center"
-                                     Fill="{Binding DataContext.SelectedConnectionStatusBrushKey, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource KeyToBrush}}" />
-                            <TextBlock Text="{Binding DataContext.SelectedConnectionStatusText, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                       FontSize="11" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource Text.Secondary}"
-                                       Margin="6,0,0,0" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Border>
+                    <!-- 统一状态指示：会话状态优先，空闲时回退到在线探测。 -->
+                    <ContentControl Content="{Binding}"
+                                    ContentTemplate="{StaticResource ConnectionStatus.Template}"
+                                    HorizontalAlignment="Left" Margin="0,8,0,0" />
 
-                    <!-- 主操作：连接 + 下拉（备选动作）。滚动时保持可见 -->
+                    <!-- 主操作：无活动会话 = 「连接」；有活动会话 = 「打开会话」（聚焦既有 Tab）。
+                         下拉按会话状态给 新建会话 / 重新连接 / 断开连接。滚动时保持可见 -->
                     <Grid Margin="0,12,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -154,7 +148,7 @@
                         </Grid.ColumnDefinitions>
                         <Button Grid.Column="0"
                                 Style="{StaticResource Button.Primary}"
-                                Content="连接"
+                                Content="{Binding QuickActionText}"
                                 Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                 CommandParameter="{Binding}" />
                         <Button Grid.Column="1"
@@ -169,18 +163,23 @@
                                 Click="OnConnectMoreClick" />
                     </Grid>
 
-                    <!-- 快捷动作宫格：2 行 × 3 列（Traceroute / 打开 Web 为后续版本预留） -->
-                    <UniformGrid Columns="3" Margin="0,8,0,0">
-                        <UniformGrid.Resources>
+                    <!-- 高频动作行：编辑 / Ping / 更多。低频动作（复制 IP、收藏、复制连接、
+                         Traceroute、打开 Web）收进「更多」，减少按钮堆叠 -->
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.Resources>
                             <Style TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
                                 <Setter Property="MinHeight" Value="30" />
-                                <Setter Property="Padding" Value="2,0" />
                                 <Setter Property="FontSize" Value="11" />
-                                <Setter Property="Margin" Value="0,0,4,6" />
                                 <Setter Property="HorizontalContentAlignment" Value="Center" />
                             </Style>
-                        </UniformGrid.Resources>
-                        <Button ToolTip="编辑连接"
+                        </Grid.Resources>
+                        <Button Grid.Column="0" Margin="0,0,4,0"
+                                ToolTip="编辑连接"
                                 Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                 CommandParameter="{Binding}">
                             <StackPanel Orientation="Horizontal">
@@ -189,15 +188,8 @@
                                 <TextBlock Text="编辑" Margin="5,0,0,0" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button ToolTip="复制主机 / IP"
-                                Click="OnCopyHostClick">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.Copy}" FontFamily="{StaticResource IconFont}"
-                                           FontSize="11" VerticalAlignment="Center" />
-                                <TextBlock Text="复制 IP" Margin="5,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Button ToolTip="测试连接：DNS → Ping → TCP 三步诊断"
+                        <Button Grid.Column="1" Margin="0,0,4,0"
+                                ToolTip="测试连接：DNS → Ping → TCP 三步诊断"
                                 Command="{Binding DataContext.TestConnectionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                 CommandParameter="{Binding}">
                             <StackPanel Orientation="Horizontal">
@@ -206,21 +198,12 @@
                                 <TextBlock Text="Ping" Margin="5,0,0,0" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                CommandParameter="{Binding}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.FavoriteFilled}" FontFamily="{StaticResource IconFont}"
-                                           FontSize="11" VerticalAlignment="Center" Foreground="#F2C037" />
-                                <TextBlock Text="{Binding FavoriteToggleText}" Margin="4,0,0,0" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Button IsEnabled="False" ToolTip="路由跟踪诊断：SSH 连接可用，后续版本提供">
-                            <TextBlock Text="Traceroute" VerticalAlignment="Center" Opacity="0.55" />
-                        </Button>
-                        <Button IsEnabled="False" ToolTip="打开设备的 Web 管理页：后续版本提供">
-                            <TextBlock Text="打开 Web" VerticalAlignment="Center" Opacity="0.55" />
-                        </Button>
-                    </UniformGrid>
+                        <Button Grid.Column="2" MinWidth="34" Padding="0"
+                                FontFamily="{StaticResource IconFont}" FontSize="10"
+                                Content="{StaticResource Icon.More}"
+                                ToolTip="更多操作"
+                                Click="OnActionsMoreClick" />
+                    </Grid>
                 </StackPanel>
             </Border>
 
@@ -241,7 +224,7 @@
                             <ColumnDefinition Width="76" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="主机" Style="{StaticResource Text.Label}" VerticalAlignment="Top" />
+                        <TextBlock Grid.Column="0" Text="主机" Style="{StaticResource Text.Label}" VerticalAlignment="Center" />
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
                             <TextBlock Text="{Binding HostDisplay}"
                                        Style="{StaticResource Text.Body}"
@@ -272,14 +255,10 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="协议" Style="{StaticResource Text.Label}" />
-                        <!-- 协议色小徽章：与列表 / 首页同一套视觉语言 -->
-                        <Grid Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center">
-                            <Border CornerRadius="4"
-                                    Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
-                                    Opacity="0.14" />
-                            <TextBlock Text="{Binding ProtocolName}" FontSize="11" FontWeight="SemiBold" Margin="8,3"
-                                       Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
-                        </Grid>
+                        <!-- 协议色图标 + 协议缩写，与列表 / 首页共用同一模板。 -->
+                        <ContentControl Grid.Column="1" Content="{Binding}"
+                                        ContentTemplate="{StaticResource ProtocolBadge.Template}"
+                                        HorizontalAlignment="Left" VerticalAlignment="Center" />
                     </Grid>
 
                     <Grid Style="{StaticResource FieldRow}">
@@ -311,8 +290,9 @@
                                             BorderBrush="{DynamicResource Stroke.Subtle}"
                                             BorderThickness="1">
                                         <StackPanel Orientation="Horizontal" Margin="6,3">
-                                            <Ellipse Width="6" Height="6" VerticalAlignment="Center"
-                                                     Fill="{Binding Color, Converter={StaticResource ColorToBrush}}" />
+                                            <Path Style="{StaticResource OrganizationIcon.Path}" Width="10" Height="10"
+                                                  Data="{Binding Icon, Converter={StaticResource KeyToGeometry}, ConverterParameter=TagIcon.Tag}"
+                                                  Fill="{Binding Color, Converter={StaticResource ColorToBrush}}" />
                                             <TextBlock Text="{Binding Name}" FontSize="11" Margin="5,0,1,0"
                                                        Foreground="{DynamicResource Text.Secondary}" />
                                         </StackPanel>
@@ -455,14 +435,10 @@
 
                     <TextBlock Text="连接历史" Style="{StaticResource Text.Label}" Margin="0,14,0,8"
                                Visibility="{Binding DataContext.SelectedItemHasHistory, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                    <!-- 连接历史：最多展示 10 条，不再自带内层 ScrollViewer——
+                         内层滚动会把鼠标滚轮吞在半路，导致外层详情滚不动；统一交给外层滚动 -->
                     <ItemsControl ItemsSource="{Binding DataContext.SelectedItemHistory, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                  MaxHeight="240"
                                   Visibility="{Binding DataContext.SelectedItemHasHistory, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}">
-                        <ItemsControl.Template>
-                            <ControlTemplate TargetType="ItemsControl">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto"><ItemsPresenter /></ScrollViewer>
-                            </ControlTemplate>
-                        </ItemsControl.Template>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:HistoryItemViewModel}">
                                 <!-- 时间线形态：圆点 + 垂直连接线（最后一条不留线尾） -->

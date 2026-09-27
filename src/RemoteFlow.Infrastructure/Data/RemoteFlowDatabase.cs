@@ -17,7 +17,7 @@ namespace RemoteFlow.Infrastructure.Data;
 public sealed class RemoteFlowDatabase
 {
     /// <summary>当前 Schema 版本。新增迁移时递增，并在 <see cref="Migrations"/> 中追加脚本。</summary>
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 7;
 
     private readonly string _connectionString;
     private readonly ILogger<RemoteFlowDatabase> _logger;
@@ -372,6 +372,19 @@ public sealed class RemoteFlowDatabase
         // v5：sync_entity_state 增加 content_hash，用于崩溃后对账（业务写已提交但 Outbox 未入队时补登记）。
         [5] = """
         ALTER TABLE sync_entity_state ADD COLUMN content_hash TEXT NOT NULL DEFAULT '';
+        """,
+
+        // v6：设备类型（图标套系）。与协议正交的主视觉维度；
+        // Unknown=0 为默认值，存量连接界面按协议推断显示，行为与升级前一致。
+        [6] = """
+        ALTER TABLE connections ADD COLUMN device_type INTEGER NOT NULL DEFAULT 0;
+        """,
+
+        // v7：组织图标与永久内置“我的设备”。具体选择哪个存量默认组升级为内置组，
+        // 由 GroupService.EnsureSeedAsync 在启动时无损校正，避免迁移脚本改动实体 Id。
+        [7] = """
+        ALTER TABLE connection_groups ADD COLUMN is_built_in INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE tags ADD COLUMN icon TEXT NOT NULL DEFAULT 'TagIcon.Tag';
         """
     };
 }

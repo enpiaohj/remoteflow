@@ -319,6 +319,9 @@ public sealed class ConnectionEditorSheet : NSWindowController
                 TranslatesAutoresizingMaskIntoConstraints = false,
             };
             chip.SetButtonType(NSButtonType.PushOnPushOff);
+            chip.Image = OrganizationStyle.TagSymbol(tag.Icon);
+            chip.ImagePosition = NSCellImagePosition.ImageLeading;
+            chip.ContentTintColor = OrganizationStyle.ColorFromHex(tag.Color);
             chip.State = tag.IsSelected ? NSCellStateValue.On : NSCellStateValue.Off;
             var captured = tag;
             chip.Activated += (_, _) => captured.IsSelected = chip.State == NSCellStateValue.On;

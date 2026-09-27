@@ -351,11 +351,17 @@ public sealed class ConnectionListPane : NSViewController
 
         private void BuildGroupMenu(NSMenu menu, ConnectionGroupNodeViewModel group)
         {
-            menu.AddItem(Item("新建子分组…", () => _pane.RunGroupItem(_pane._vm.CreateChildGroupCommand, group)));
-            menu.AddItem(Item("重命名…", () => _pane.RunGroupItem(_pane._vm.RenameGroupCommand, group)));
-            menu.AddItem(Item("设为默认分组", () => _pane.RunGroupItem(_pane._vm.SetDefaultGroupCommand, group)));
-            menu.AddItem(NSMenuItem.SeparatorItem);
-            menu.AddItem(Item("删除…", () => _pane.RunGroupItem(_pane._vm.DeleteGroupCommand, group)));
+            if (!group.IsUngrouped)
+            {
+                menu.AddItem(Item("新建子分组…", () => _pane.RunGroupItem(_pane._vm.CreateChildGroupCommand, group)));
+            }
+
+            if (!group.IsBuiltIn && !group.IsUngrouped)
+            {
+                menu.AddItem(Item("编辑分组…", () => _pane.RunGroupItem(_pane._vm.RenameGroupCommand, group)));
+                menu.AddItem(NSMenuItem.SeparatorItem);
+                menu.AddItem(Item("删除…", () => _pane.RunGroupItem(_pane._vm.DeleteGroupCommand, group)));
+            }
         }
 
         private static NSMenuItem Item(string title, Action action)

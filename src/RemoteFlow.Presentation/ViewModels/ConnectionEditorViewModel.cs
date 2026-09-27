@@ -79,7 +79,7 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
                      .OrderBy(g => g.SortOrder).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
                      .Select(g => new GroupOption(g.Id, g.Name))];
 
-        AvailableTags = [.. tags.Select(t => new TagSelection(t.Id, t.Name, t.Color)
+        AvailableTags = [.. tags.Select(t => new TagSelection(t.Id, t.Name, t.Color, t.Icon)
         {
             IsSelected = _profile.TagIds.Contains(t.Id)
         })];
@@ -88,6 +88,7 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         _host = _profile.Host;
         _port = _profile.Port;
         _protocol = _profile.Protocol;
+        _selectedDeviceType = _profile.DeviceType;
         _notes = _profile.Notes;
         _portManuallyEdited = !_isNew;
 
@@ -225,6 +226,16 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
 
     [ObservableProperty]
     private ProtocolType _protocol;
+
+    /// <summary>设备类型（图标套系）。Unknown = 自动（按协议推断显示）。</summary>
+    [ObservableProperty]
+    private DeviceType _selectedDeviceType;
+
+    public IReadOnlyList<DeviceType> AvailableDeviceTypes { get; } =
+    [
+        DeviceType.Unknown,
+        .. DeviceTypeCatalog.All.Select(i => i.Type),
+    ];
 
     [ObservableProperty]
     private string _notes;
@@ -477,6 +488,7 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         _profile.Host = Host.Trim();
         _profile.Port = Port;
         _profile.Protocol = Protocol;
+        _profile.DeviceType = SelectedDeviceType;
         _profile.Notes = Notes;
         _profile.CredentialId = SelectedCredential.Id;
         _profile.GroupId = SelectedGroup.Id;
@@ -505,7 +517,7 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         AvailableTags.Clear();
         foreach (var tag in tags)
         {
-            AvailableTags.Add(new TagSelection(tag.Id, tag.Name, tag.Color)
+            AvailableTags.Add(new TagSelection(tag.Id, tag.Name, tag.Color, tag.Icon)
             {
                 IsSelected = selectedIds.Contains(tag.Id)
             });
@@ -526,13 +538,15 @@ public sealed record GroupOption(Guid? Id, string Name)
 }
 
 /// <summary>可勾选的标签。</summary>
-public sealed partial class TagSelection(Guid id, string name, string color) : ObservableObject
+public sealed partial class TagSelection(Guid id, string name, string color, string icon) : ObservableObject
 {
     public Guid Id { get; } = id;
 
     public string Name { get; } = name;
 
     public string Color { get; } = color;
+
+    public string Icon { get; } = TagIconCatalog.Normalize(icon);
 
     [ObservableProperty]
     private bool _isSelected;

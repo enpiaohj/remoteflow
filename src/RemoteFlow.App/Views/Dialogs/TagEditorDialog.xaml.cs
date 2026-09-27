@@ -1,15 +1,17 @@
+using System.ComponentModel;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using RemoteFlow.App.Services;
+using RemoteFlow.Core.Models;
 using RemoteFlow.Presentation.Services;
 
 namespace RemoteFlow.App.Views.Dialogs;
 
 /// <summary>新建 / 编辑标签的小对话框——名称、颜色（预设色板 + 自定义 Hex）、可选描述。</summary>
-public partial class TagEditorDialog : Window
+public partial class TagEditorDialog : Window, INotifyPropertyChanged
 {
     /// <summary>预设色板，覆盖常见的标签语义色，同时给一个可以随手点的选项。</summary>
     private static readonly string[] PresetColors =
@@ -22,12 +24,18 @@ public partial class TagEditorDialog : Window
     private static readonly Regex HexColorPattern = new("^#[0-9A-Fa-f]{6}$", RegexOptions.Compiled);
 
     private readonly List<Border> _swatches = [];
+    private OrganizationIconInfo _selectedIcon = TagIconCatalog.All[0];
     private string _selectedColor;
     private bool _suppressColorInputSync;
 
     private TagEditorDialog(TagEditorPrompt prompt)
     {
         InitializeComponent();
+
+        IconOptions = TagIconCatalog.All;
+        SelectedIcon = IconOptions.FirstOrDefault(x => x.Key == TagIconCatalog.Normalize(prompt.InitialIcon))
+            ?? IconOptions[0];
+        DataContext = this;
 
         TitleText.Text = prompt.Title;
         NameInput.Text = prompt.InitialName;
@@ -51,6 +59,25 @@ public partial class TagEditorDialog : Window
             NameInput.SelectAll();
         };
     }
+
+    public IReadOnlyList<OrganizationIconInfo> IconOptions { get; }
+
+    public OrganizationIconInfo SelectedIcon
+    {
+        get => _selectedIcon;
+        set
+        {
+            if (Equals(_selectedIcon, value))
+            {
+                return;
+            }
+
+            _selectedIcon = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectedIcon)));
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>用户填写的结果。<c>null</c> 表示取消。</summary>
     public TagEditorResult? Result { get; private set; }
@@ -178,7 +205,11 @@ public partial class TagEditorDialog : Window
             return;
         }
 
-        Result = new TagEditorResult(name, color, DescriptionInput.Text.Trim());
+        Result = new TagEditorResult(
+            name,
+            color,
+            DescriptionInput.Text.Trim(),
+            TagIconCatalog.Normalize(SelectedIcon.Key));
         DialogResult = true;
         Close();
     }

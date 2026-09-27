@@ -13,26 +13,35 @@
     <UserControl.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:DepthToMarginConverter x:Key="DepthToMargin" />
+        <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
 
         <!-- 分组右键菜单（原属连接页，随树移到本控件）-->
         <ContextMenu x:Key="GroupMenu" x:Shared="False" Opened="OnGroupContextMenuOpened">
-            <MenuItem Header="新建连接" Click="OnGroupNewConnectionClick" />
-            <MenuItem Header="新建子分组" Click="OnGroupNewChildClick" />
+            <MenuItem Tag="newConnection" Header="新建连接" Click="OnGroupNewConnectionClick" />
+            <MenuItem Tag="newChild" Header="新建子分组" Click="OnGroupNewChildClick" />
             <Separator />
-            <MenuItem Tag="rename" Header="重命名" Click="OnGroupRenameClick" />
-            <MenuItem Tag="setDefault" Header="设为默认分组" Click="OnGroupSetDefaultClick" />
+            <MenuItem Tag="rename" Header="编辑分组" Click="OnGroupRenameClick" />
             <Separator />
             <MenuItem Tag="delete" Header="删除分组" Click="OnGroupDeleteClick" />
         </ContextMenu>
 
         <!-- ── 智能视图行 ────────────────────────────────────── -->
         <DataTemplate x:Key="SmartViewTemplate" DataType="{x:Type vm:ConnectionsPageViewModel+SmartViewOption}">
-            <StackPanel Orientation="Horizontal" Height="30" VerticalAlignment="Center">
-                <TextBlock Text="{Binding IconGlyph}" FontFamily="{StaticResource IconFont}" FontSize="13"
-                           Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding Name}" FontSize="13" Margin="9,0,0,0"
-                           Foreground="{DynamicResource Text.Primary}" VerticalAlignment="Center" />
-                <Border VerticalAlignment="Center" Margin="10,0,0,0">
+            <!-- 图标 18：比分组图标（16）略大以体现主入口层级，又不至于压过文字；
+                 计数与分组计数同样右对齐成一列 -->
+            <Grid VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Image Grid.Column="0" Style="{StaticResource DeviceIcon.Image}" Width="18" Height="18"
+                       Source="{Binding IconResourceKey, Converter={StaticResource KeyToImageSource}}"
+                       VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13" Margin="10,0,0,0"
+                           Foreground="{DynamicResource Text.Primary}" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+                <Border Grid.Column="2" VerticalAlignment="Center" Margin="8,0,0,0">
                     <TextBlock HorizontalAlignment="Right">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Label}">
@@ -49,13 +58,13 @@
                         </TextBlock.Style>
                     </TextBlock>
                 </Border>
-            </StackPanel>
+            </Grid>
         </DataTemplate>
 
         <!-- ── 分组节点行 ────────────────────────────────────── -->
         <!-- 折叠箭头单独吃掉按下事件，避免「点箭头展开」同时把分组选成当前过滤 -->
         <DataTemplate x:Key="GroupTreeNodeTemplate" DataType="{x:Type vm:ConnectionGroupNodeViewModel}">
-            <Grid Height="30" Background="Transparent"
+            <Grid Height="22" Background="Transparent"
                   Margin="{Binding Depth, Converter={StaticResource DepthToMargin}}">
                 <Grid.Style>
                     <Style TargetType="Grid">
@@ -68,13 +77,13 @@
                     </Style>
                 </Grid.Style>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="18" />
+                    <ColumnDefinition Width="16" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <Button Grid.Column="0" Width="18" Height="18" HorizontalAlignment="Left"
+                <Button Grid.Column="0" Width="16" Height="18" HorizontalAlignment="Left"
                         Focusable="False" Background="Transparent" BorderThickness="0" Padding="0"
                         Cursor="Hand"
                         PreviewMouseLeftButtonDown="OnTreeChevronPreviewMouseDown"
@@ -95,9 +104,12 @@
                     </TextBlock>
                 </Button>
 
-                <TextBlock Grid.Column="1" Text="{StaticResource Icon.Folder}" FontFamily="{StaticResource IconFont}"
-                           FontSize="13" Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="13" Margin="7,0,0,0"
+                <!-- 组织图标：内置分组固定语义，自定义分组可选择；颜色沿用稳定分组色板。 -->
+                <Path Grid.Column="1" Style="{StaticResource OrganizationIcon.Path}"
+                      Width="16" Height="16"
+                      Data="{Binding IconResourceKey, Converter={StaticResource KeyToGeometry}, ConverterParameter=GroupIcon.Folder}"
+                      Fill="{Binding FolderBrushKey, Converter={StaticResource KeyToBrush}}" />
+                <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="13" Margin="8,0,0,0"
                            Foreground="{DynamicResource Text.Primary}" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" />
                 <TextBlock Grid.Column="3" Text="{Binding TotalCount}" Style="{StaticResource Text.Label}"
@@ -131,23 +143,41 @@
                 </StackPanel>
             </Grid>
 
-            <!-- 智能视图 -->
+            <!-- 智能视图：所有设备 / 收藏 / 最近连接。主入口行高 32，分组行 28：层级有差但节奏一致 -->
             <ListBox DockPanel.Dock="Top" x:Name="SmartViewList"
                      ItemsSource="{Binding SmartViews}"
                      ItemTemplate="{StaticResource SmartViewTemplate}"
                      SelectedItem="{Binding SelectedSmartView}"
-                     Margin="4,8,0,8"
-                     Style="{StaticResource List.Plain}" BorderThickness="0" Background="Transparent" />
+                     Margin="0,6,0,6"
+                     Style="{StaticResource List.Plain}" BorderThickness="0" Background="Transparent">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">
+                        <Setter Property="MinHeight" Value="32" />
+                        <Setter Property="Margin" Value="4,0" />
+                    </Style>
+                </ListBox.ItemContainerStyle>
+            </ListBox>
 
             <Border DockPanel.Dock="Top" Style="{StaticResource Surface.Divider}" Margin="2,4,2,8" />
 
-            <!-- 分组树（摊平渲染，缩进由 Depth 决定）-->
+            <!-- 分组树（摊平渲染，缩进由 Depth 决定）：与快捷访问两类明确区分 -->
+            <TextBlock DockPanel.Dock="Top" Text="分组" FontSize="11" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Text.Tertiary}" Margin="4,0,0,4" />
             <ListBox x:Name="GroupTreeList"
                      ItemsSource="{Binding FlatTreeNodes}"
                      ItemTemplate="{StaticResource GroupTreeNodeTemplate}"
                      SelectedItem="{Binding SelectedGroupNode}"
                      Style="{StaticResource List.Plain}" BorderThickness="0" Background="Transparent"
-                     VirtualizingPanel.IsVirtualizing="False" />
+                     VirtualizingPanel.IsVirtualizing="False">
+                <ListBox.ItemContainerStyle>
+                    <!-- 覆盖 List.Row 的 MinHeight=40：分组行 28px，比智能视图（32）紧凑一档，
+                         行间不再拥挤，也保住足够的点击目标 -->
+                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">
+                        <Setter Property="MinHeight" Value="28" />
+                        <Setter Property="Margin" Value="4,0" />
+                    </Style>
+                </ListBox.ItemContainerStyle>
+            </ListBox>
         </DockPanel>
     </Border>
 </UserControl>

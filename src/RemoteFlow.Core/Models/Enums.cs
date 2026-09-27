@@ -11,6 +11,28 @@ public enum ProtocolType
 }
 
 /// <summary>
+/// 主机设备类型。决定列表中的设备主图标与配色（图标套系），
+/// 与协议类型正交——例如用 VNC 连的可能是数据库主机，用 SSH 连的可能是云主机。
+/// Unknown 表示未指定，界面按协议推断显示。
+/// </summary>
+public enum DeviceType
+{
+    Unknown = 0,
+    WindowsPc,
+    WindowsServer,
+    Linux,
+    DomainController,
+    FileServer,
+    Mac,
+    WebHost,
+    Database,
+    NetworkDevice,
+    VirtualMachine,
+    Container,
+    CloudHost
+}
+
+/// <summary>
 /// 凭据类型。决定 Vault 中实际存放的 Secret 形态与协议层的使用方式。
 /// </summary>
 public enum CredentialType

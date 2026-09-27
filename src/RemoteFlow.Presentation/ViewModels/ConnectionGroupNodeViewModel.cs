@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using RemoteFlow.Core.Models;
 
 namespace RemoteFlow.Presentation.ViewModels;
 
@@ -14,6 +15,30 @@ public sealed partial class ConnectionGroupNodeViewModel : ObservableObject
     public Guid? GroupId { get; init; }
 
     public string Name { get; init; } = string.Empty;
+
+    /// <summary>分组语义矢量图标资源键。</summary>
+    public string IconResourceKey { get; init; } = GroupIconCatalog.DefaultCustomKey;
+
+    /// <summary>是否永久内置“我的设备”。</summary>
+    public bool IsBuiltIn { get; init; }
+
+    /// <summary>分组图标的颜色资源键：自定义分组按 GroupId 稳定散列；
+    /// “我的设备”固定品牌蓝，“未分组”固定中性灰。</summary>
+    public string FolderBrushKey => IsUngrouped
+        ? "Status.Idle"
+        : IsBuiltIn
+            ? "Brand.Default"
+            : FolderPalette[Math.Abs((GroupId ?? Guid.Empty).GetHashCode()) % FolderPalette.Count];
+
+    /// <summary>侧边栏彩色文件夹调色板（蓝 / 紫 / 绿 / 橙 / 灰），与主题语义色共用资源键。</summary>
+    private static readonly IReadOnlyList<string> FolderPalette =
+    [
+        "Brand.Default",
+        "Protocol.Vnc",
+        "Status.Success",
+        "Status.Warning",
+        "Status.Idle",
+    ];
 
     /// <summary>嵌套层级，根级为 0。用于缩进。</summary>
     public int Depth { get; init; }

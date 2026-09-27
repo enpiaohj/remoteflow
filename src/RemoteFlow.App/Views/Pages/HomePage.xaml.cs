@@ -90,6 +90,7 @@ public partial class HomePage : UserControl
             favorite.Header = item?.IsFavorite == true ? "取消收藏" : "收藏";
         }
 
+        ContextMenuSeparators.Normalize(menu);
         ViewModel?.SelectInContext(item);
     }
 

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using RemoteFlow.Core.Models;
 using RemoteFlow.Presentation.ViewModels;
 
 namespace RemoteFlow.App.Views.Pages;
@@ -37,26 +38,28 @@ public partial class ConnectionResourceTree : UserControl
         }
     }
 
-    /// <summary>按分组状态守卫右键菜单项：受保护组禁重命名 / 删除；默认组与未分组不出现「设为默认分组」。</summary>
+    /// <summary>按永久内置身份守卫分组菜单：未分组不能建子组，两个内置组都不能编辑或删除。</summary>
     private void ApplyGroupMenuGuards(ContextMenu menu, ConnectionGroupNodeViewModel? node)
     {
         foreach (var item in menu.Items.OfType<MenuItem>())
         {
             switch (item.Tag)
             {
+                case "newChild":
+                    item.Visibility = node is { IsUngrouped: true } ? Visibility.Collapsed : Visibility.Visible;
+                    break;
                 case "rename":
                 case "delete":
-                    item.Visibility = node is { IsUngrouped: true } ? Visibility.Collapsed : Visibility.Visible;
-                    item.IsEnabled = node is { IsProtected: false };
-                    break;
-                case "setDefault":
-                    // 默认组与「未分组」不出现「设为默认分组」；受保护默认组也不需要再设。
-                    item.Visibility = node is { IsDefault: true } or { IsUngrouped: true }
+                    item.Visibility = node is { IsUngrouped: true } or { IsBuiltIn: true }
                         ? Visibility.Collapsed
                         : Visibility.Visible;
+                    item.IsEnabled = node is { IsProtected: false };
                     break;
             }
         }
+
+        // 内置分组隐藏编辑 / 删除后，底部两条分隔线会悬空，统一整理。
+        ContextMenuSeparators.Normalize(menu);
     }
 
     private static ConnectionGroupNodeViewModel? ResolveGroup(object sender)
@@ -74,9 +77,10 @@ public partial class ConnectionResourceTree : UserControl
 
     private void OnGroupNewConnectionClick(object sender, RoutedEventArgs e)
     {
-        if (ResolveGroup(sender) is { GroupId: { } groupId })
+        if (ResolveGroup(sender) is { } node)
         {
-            _ = ViewModel?.CreateConnectionAsync(defaultGroupId: groupId);
+            _ = ViewModel?.CreateConnectionAsync(
+                defaultGroupId: node.IsUngrouped ? ConnectionGroup.UngroupedId : node.GroupId);
         }
     }
 
@@ -101,14 +105,6 @@ public partial class ConnectionResourceTree : UserControl
         if (ResolveGroup(sender) is { } node)
         {
             ViewModel?.DeleteGroupCommand.Execute(node);
-        }
-    }
-
-    private void OnGroupSetDefaultClick(object sender, RoutedEventArgs e)
-    {
-        if (ResolveGroup(sender) is { } node)
-        {
-            ViewModel?.SetDefaultGroupCommand.Execute(node);
         }
     }
 }

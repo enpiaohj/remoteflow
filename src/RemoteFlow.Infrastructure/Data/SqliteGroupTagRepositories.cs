@@ -12,7 +12,7 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
         await using var connection = database.OpenConnection();
         await using var command = connection.CreateCommand();
         command.CommandText =
-            "SELECT id, name, parent_id, sort_order, icon, is_system, is_default, is_protected FROM connection_groups ORDER BY sort_order, name COLLATE NOCASE;";
+            "SELECT id, name, parent_id, sort_order, icon, is_system, is_built_in, is_default, is_protected FROM connection_groups ORDER BY sort_order, name COLLATE NOCASE;";
 
         var groups = new List<ConnectionGroup>();
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -26,6 +26,7 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
                 SortOrder = reader.GetInt32(3),
                 Icon = reader.GetString(4),
                 IsSystem = reader.GetInt32(5) != 0,
+                IsBuiltIn = reader.GetInt32(6) != 0,
                 IsDefault = reader.GetBoolean(reader.GetOrdinal("is_default")),
                 IsProtected = reader.GetBoolean(reader.GetOrdinal("is_protected"))
             });
@@ -38,8 +39,8 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
         await using var connection = database.OpenConnection();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            INSERT INTO connection_groups (id, name, parent_id, sort_order, icon, is_system, is_default, is_protected)
-            VALUES ($id, $name, $parentId, $sortOrder, $icon, $isSystem, $isDefault, $isProtected);
+            INSERT INTO connection_groups (id, name, parent_id, sort_order, icon, is_system, is_built_in, is_default, is_protected)
+            VALUES ($id, $name, $parentId, $sortOrder, $icon, $isSystem, $isBuiltIn, $isDefault, $isProtected);
             """;
         Bind(command, group);
         await command.ExecuteNonQueryAsync(ct);
@@ -52,7 +53,8 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
         command.CommandText = """
             UPDATE connection_groups
             SET name = $name, parent_id = $parentId, sort_order = $sortOrder, icon = $icon,
-                is_system = $isSystem, is_default = $isDefault, is_protected = $isProtected
+                is_system = $isSystem, is_built_in = $isBuiltIn,
+                is_default = $isDefault, is_protected = $isProtected
             WHERE id = $id;
             """;
         Bind(command, group);
@@ -106,7 +108,7 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
         {
             delete.Transaction = transaction;
             // 系统分组永不删除，这里加一道防线。
-            delete.CommandText = "DELETE FROM connection_groups WHERE id = $id AND is_system = 0;";
+            delete.CommandText = "DELETE FROM connection_groups WHERE id = $id AND is_system = 0 AND is_built_in = 0;";
             delete.Parameters.AddWithValue("$id", id.ToString());
             await delete.ExecuteNonQueryAsync(ct);
         }
@@ -122,6 +124,7 @@ public sealed class SqliteGroupRepository(RemoteFlowDatabase database) : IGroupR
         command.Parameters.AddWithValue("$sortOrder", group.SortOrder);
         command.Parameters.AddWithValue("$icon", group.Icon);
         command.Parameters.AddWithValue("$isSystem", group.IsSystem ? 1 : 0);
+        command.Parameters.AddWithValue("$isBuiltIn", group.IsBuiltIn ? 1 : 0);
         command.Parameters.AddWithValue("$isDefault", group.IsDefault ? 1 : 0);
         command.Parameters.AddWithValue("$isProtected", group.IsProtected ? 1 : 0);
     }
@@ -134,7 +137,7 @@ public sealed class SqliteTagRepository(RemoteFlowDatabase database) : ITagRepos
     {
         await using var connection = database.OpenConnection();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id, name, description, color FROM tags ORDER BY name COLLATE NOCASE;";
+        command.CommandText = "SELECT id, name, description, color, icon FROM tags ORDER BY name COLLATE NOCASE;";
 
         var tags = new List<Tag>();
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -145,7 +148,8 @@ public sealed class SqliteTagRepository(RemoteFlowDatabase database) : ITagRepos
                 Id = Guid.Parse(reader.GetString(0)),
                 Name = reader.GetString(1),
                 Description = reader.GetString(2),
-                Color = reader.GetString(3)
+                Color = reader.GetString(3),
+                Icon = TagIconCatalog.Normalize(reader.GetString(4))
             });
         }
         return tags;
@@ -155,7 +159,7 @@ public sealed class SqliteTagRepository(RemoteFlowDatabase database) : ITagRepos
     {
         await using var connection = database.OpenConnection();
         await using var command = connection.CreateCommand();
-        command.CommandText = "INSERT INTO tags (id, name, description, color) VALUES ($id, $name, $desc, $color);";
+        command.CommandText = "INSERT INTO tags (id, name, description, color, icon) VALUES ($id, $name, $desc, $color, $icon);";
         Bind(command, tag);
         await command.ExecuteNonQueryAsync(ct);
     }
@@ -164,7 +168,7 @@ public sealed class SqliteTagRepository(RemoteFlowDatabase database) : ITagRepos
     {
         await using var connection = database.OpenConnection();
         await using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE tags SET name = $name, description = $desc, color = $color WHERE id = $id;";
+        command.CommandText = "UPDATE tags SET name = $name, description = $desc, color = $color, icon = $icon WHERE id = $id;";
         Bind(command, tag);
         await command.ExecuteNonQueryAsync(ct);
     }
@@ -185,5 +189,6 @@ public sealed class SqliteTagRepository(RemoteFlowDatabase database) : ITagRepos
         command.Parameters.AddWithValue("$name", tag.Name);
         command.Parameters.AddWithValue("$desc", tag.Description);
         command.Parameters.AddWithValue("$color", tag.Color);
+        command.Parameters.AddWithValue("$icon", TagIconCatalog.Normalize(tag.Icon));
     }
 }

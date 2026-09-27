@@ -40,7 +40,33 @@
                          Style="{StaticResource Input.TextBox}"
                          MaxLength="30" />
 
-                <TextBlock Text="颜色" Style="{StaticResource Text.Caption}" Margin="0,14,0,6" />
+                <TextBlock Text="图标" Style="{StaticResource Text.Caption}" Margin="0,14,0,6" />
+                <ListBox ItemsSource="{Binding IconOptions}" SelectedItem="{Binding SelectedIcon}"
+                         BorderThickness="0" Background="Transparent"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate><UniformGrid Columns="5" /></ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">
+                            <Setter Property="MinHeight" Value="42" />
+                            <Setter Property="Margin" Value="0,0,6,6" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="ToolTip" Value="{Binding Name}" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="38" Height="34" CornerRadius="7" Background="{DynamicResource Bg.Subtle}">
+                                <Path Style="{StaticResource OrganizationIcon.Path}" Width="17" Height="17"
+                                      Data="{Binding Key, Converter={StaticResource KeyToGeometry}, ConverterParameter=TagIcon.Tag}"
+                                      Fill="{DynamicResource Brand.Default}" />
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <TextBlock Text="颜色" Style="{StaticResource Text.Caption}" Margin="0,8,0,6" />
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -53,12 +79,14 @@
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
-                    <Border Grid.Column="1" Width="26" Height="26" CornerRadius="13"
+                    <Border Grid.Column="1" Width="32" Height="32" CornerRadius="7"
                             VerticalAlignment="Center" Margin="8,0,0,0"
                             BorderBrush="{DynamicResource Stroke.Default}" BorderThickness="1">
                         <Border.Background>
                             <SolidColorBrush x:Name="PreviewBrush" Color="#0F6CBD" />
                         </Border.Background>
+                        <Path Style="{StaticResource OrganizationIcon.Path}" Width="16" Height="16" Fill="White"
+                              Data="{Binding SelectedIcon.Key, Converter={StaticResource KeyToGeometry}, ConverterParameter=TagIcon.Tag}" />
                     </Border>
                 </Grid>
 

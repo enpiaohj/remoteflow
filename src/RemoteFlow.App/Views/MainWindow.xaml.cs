@@ -89,6 +89,13 @@ public partial class MainWindow : Window
 
         SizeChanged += OnWindowSizeChanged;
         StateChanged += OnWindowStateChanged;
+        Loaded += (_, _) =>
+        {
+            TabStripHost.SizeChanged += OnTabStripHostSizeChanged;
+            Dispatcher.BeginInvoke(
+                EvaluateSessionTabLayout,
+                System.Windows.Threading.DispatcherPriority.Loaded);
+        };
 
         // RDP / VNC 会话内嵌原生 HWND，键盘焦点在里面时会把普通按键（含 F11）
         // 直接转发给远端，WPF 的 OnPreviewKeyDown 与线程消息预处理都拦不到。
@@ -254,9 +261,20 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainViewModel.ViewMode))
+        switch (e.PropertyName)
         {
-            ApplyViewMode(_viewModel.ViewMode);
+            case nameof(MainViewModel.ViewMode):
+                ApplyViewMode(_viewModel.ViewMode);
+                break;
+
+            case nameof(MainViewModel.SelectedTab):
+                // 新建 / 右键 / Ctrl+Tab / 关闭回退都可能选中视口外的标签。
+                // 等容器生成和布局完成后再请求 BringIntoView，原生滚动条保持隐藏，
+                // 两侧箭头会由随后触发的 ScrollChanged 自动刷新。
+                Dispatcher.BeginInvoke(
+                    EnsureSelectedTabVisible,
+                    System.Windows.Threading.DispatcherPriority.Loaded);
+                break;
         }
     }
 
@@ -273,6 +291,11 @@ public partial class MainWindow : Window
         {
             _viewModel.ResetSessionView();
         }
+
+        // 会话数量变化可能跨过紧凑阈值；等布局稳定后再判定模式。
+        Dispatcher.BeginInvoke(
+            EvaluateSessionTabLayout,
+            System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     /// <summary>正在以代码把全屏窗口按回显示器边界，抑制 <see cref="Window.LocationChanged"/> 递归。</summary>
@@ -593,11 +616,38 @@ public partial class MainWindow : Window
             return; // 完全全屏（无边框）没有标题栏，不需要系统菜单；窗口最大化档仍有标题栏。
         }
 
+        // Tab 条上的交互元素（会话 Tab / 会话选择器头部）自带右键菜单，
+        // 这里不能抢：命中点向上若存在已设置 ContextMenu 的元素则放行，
+        // 否则系统菜单弹出会抢走鼠标，元素自己的菜单永远打不开。
+        if (e.OriginalSource is DependencyObject source
+            && HasContextMenuAncestor(source, (DependencyObject)sender))
+        {
+            return;
+        }
+
         if (e.ButtonState == MouseButtonState.Released)
         {
             var point = PointToScreen(e.GetPosition(this));
             SystemCommands.ShowSystemMenu(this, point);
         }
+    }
+
+    private static bool HasContextMenuAncestor(DependencyObject? start, DependencyObject? boundary)
+    {
+        var current = start;
+        while (current is not null && !ReferenceEquals(current, boundary))
+        {
+            if (current is System.Windows.FrameworkElement { ContextMenu: not null })
+            {
+                return true;
+            }
+
+            current = current is System.Windows.Media.Visual
+                ? System.Windows.Media.VisualTreeHelper.GetParent(current)
+                : null;
+        }
+
+        return false;
     }
 
     // ── 标题栏按钮 ────────────────────────────────────────────────
@@ -609,39 +659,79 @@ public partial class MainWindow : Window
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
-    // ── 标题栏 Tab 条左右滚动箭头：会话 Tab 溢出时出现，点击按页滚动 ──
+    // ── 标题栏 Tab 条模式：普通 Tab ↔ 紧凑会话选择器 ─────────────
 
-    private void OnTabScrollLeftClick(object sender, RoutedEventArgs e) => ScrollTabStrip(-1);
+    /// <summary>当前是否处于紧凑模式（工作台 Tab + 会话选择器）。</summary>
+    private bool _isCompactTabMode;
 
-    private void OnTabScrollRightClick(object sender, RoutedEventArgs e) => ScrollTabStrip(1);
-
-    private void ScrollTabStrip(int direction)
+    private void OnTabStripScrollChanged(object sender, System.Windows.Controls.ScrollChangedEventArgs e)
     {
-        if (FindName("TabScrollViewer") is not ScrollViewer viewer)
+        // 会话标题等变化会改变普通 Tab 的需求宽度（ExtentWidth），需重判模式。
+        if (e.ExtentWidthChange != 0)
+        {
+            Dispatcher.BeginInvoke(
+                EvaluateSessionTabLayout,
+                System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+    }
+
+    private void OnTabStripHostSizeChanged(object sender, SizeChangedEventArgs e)
+        => Dispatcher.BeginInvoke(
+            EvaluateSessionTabLayout,
+            System.Windows.Threading.DispatcherPriority.Loaded);
+
+    /// <summary>
+    /// 按会话数量与普通 Tab 实测宽度判定呈现模式。
+    /// 紧凑态下 NormalTabStrip 保持 Hidden（不可点击）以持续提供 ExtentWidth 测量，
+    /// 窗口重新变宽 / 会话减少后能自动切回普通 Tab。
+    /// </summary>
+    private void EvaluateSessionTabLayout()
+    {
+        if (!IsLoaded)
         {
             return;
         }
 
-        viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset + direction * 160);
-    }
+        var sessionCount = _viewModel.Tabs.OfType<SessionTabViewModel>().Count();
+        var available = Math.Max(
+            0,
+            TabStripHost.ActualWidth - TabStripHost.Padding.Left - TabStripHost.Padding.Right);
+        var compact = SessionTabLayoutPolicy.ShouldUseCompactMode(
+            sessionCount,
+            TabScrollViewer.ExtentWidth,
+            available);
 
-    private void UpdateTabScrollArrows(object sender, RoutedEventArgs e)
-    {
-        if (FindName("TabScrollViewer") is not ScrollViewer viewer ||
-            FindName("TabScrollLeftButton") is not System.Windows.Controls.Button left ||
-            FindName("TabScrollRightButton") is not System.Windows.Controls.Button right)
+        if (_isCompactTabMode == compact)
         {
             return;
         }
 
-        var atStart = viewer.HorizontalOffset <= 1;
-        var atEnd = viewer.HorizontalOffset >= viewer.ScrollableWidth - 1;
-        left.Visibility = atEnd ? Visibility.Collapsed : Visibility.Visible;
-        right.Visibility = atStart ? Visibility.Collapsed : Visibility.Visible;
+        _isCompactTabMode = compact;
+        NormalTabStrip.Visibility = compact ? Visibility.Hidden : Visibility.Visible;
+        CompactTabStrip.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
+
+        if (!compact)
+        {
+            Dispatcher.BeginInvoke(
+                EnsureSelectedTabVisible,
+                System.Windows.Threading.DispatcherPriority.Loaded);
+        }
     }
 
-    private void OnTabScrollChanged(object sender, System.Windows.Controls.ScrollChangedEventArgs e)
-        => UpdateTabScrollArrows(sender, e);
+    private void EnsureSelectedTabVisible()
+    {
+        if (_isCompactTabMode || _viewModel.SelectedTab is not { } selected)
+        {
+            return;
+        }
+
+        TabHeadersItemsControl.UpdateLayout();
+        if (TabHeadersItemsControl.ItemContainerGenerator.ContainerFromItem(selected)
+            is FrameworkElement container)
+        {
+            container.BringIntoView();
+        }
+    }
 
     private void OnWindowStateChanged(object? sender, EventArgs e)
     {
@@ -697,6 +787,20 @@ public partial class MainWindow : Window
     /// Tab 头被选中。由于内容区采用「常驻可视树 + 切换可见性」，
     /// 这里只需把选中项写回 ViewModel，由它统一更新各 Tab 的 IsActive。
     /// </summary>
+    /// <summary>
+    /// 导航钮点在「已是当前页」的项上：RadioButton 已选中，点击不会改 CurrentPage，
+    /// 属性 hook 不触发。此时（例如正显示会话 Tab）显式导航，回到工作区并刷新当前页。
+    /// PreviewMouseLeftButtonUp 时 RadioButton 尚未处理点击，IsChecked 仍是点击前的状态，
+    /// 因此切换到其它页的正常点击不会走这里，不会重复加载。
+    /// </summary>
+    private void OnNavRailSameItemClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is RadioButton { IsChecked: true, Tag: NavigationPage page } button && button.IsMouseOver)
+        {
+            _viewModel.NavigateTo(page);
+        }
+    }
+
     private void OnTabHeaderChecked(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: WorkspaceTabViewModel tab })
@@ -748,7 +852,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private static SessionTabViewModel? ResolveTab(object sender)
+    private SessionTabViewModel? ResolveTab(object sender)
     {
         var menuItem = sender as MenuItem;
         var menu = sender as ContextMenu ?? menuItem?.Parent as ContextMenu;
@@ -756,7 +860,10 @@ public partial class MainWindow : Window
         return menuItem?.DataContext as SessionTabViewModel
             ?? menu?.DataContext as SessionTabViewModel
             ?? (menu?.PlacementTarget as FrameworkElement)?
-                .DataContext as SessionTabViewModel;
+                .DataContext as SessionTabViewModel
+            // 选择器头部（ToggleButton）的 DataContext 是工作台 Tab，
+            // 此时退回当前选中会话——右键菜单里的会话动作仍有着落。
+            ?? _viewModel.SelectedTab as SessionTabViewModel;
     }
 
     private void OnTabReconnectClick(object sender, RoutedEventArgs e)

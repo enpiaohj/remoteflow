@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
+using RemoteFlow.Core.Models;
 using RemoteFlow.Presentation.ViewModels;
 
 namespace RemoteFlow.App.Converters;
@@ -73,6 +74,69 @@ public sealed class ResourceKeyToBrushConverter : IValueConverter
         }
 
         return System.Windows.Application.Current?.TryFindResource("Text.Secondary") as Brush ?? Brushes.Gray;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
+/// 把语义图标资源键解析为 WPF 矢量 <see cref="ImageSource"/>。
+/// 坏键或空值回退到 <c>ConverterParameter</c> 指定的资源；未指定时使用 Windows 电脑图标。
+/// </summary>
+public sealed class ResourceKeyToImageSourceConverter : IValueConverter
+{
+    private const string DefaultFallbackKey = "DeviceIcon.WindowsPc";
+
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is string key
+            && System.Windows.Application.Current?.TryFindResource(key) is ImageSource source)
+        {
+            return source;
+        }
+
+        var fallbackKey = parameter as string ?? DefaultFallbackKey;
+        return System.Windows.Application.Current?.TryFindResource(fallbackKey) as ImageSource;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>把组织图标语义键解析为 WPF <see cref="Geometry"/>；坏键回退到参数指定资源。</summary>
+public sealed class ResourceKeyToGeometryConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is string key
+            && System.Windows.Application.Current?.TryFindResource(key) is Geometry geometry)
+        {
+            return geometry;
+        }
+
+        var fallbackKey = parameter as string ?? GroupIconCatalog.DefaultCustomKey;
+        return System.Windows.Application.Current?.TryFindResource(fallbackKey) as Geometry;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>设备类型枚举 → 正式矢量图标，供编辑器下拉预览；Unknown 不显示图标。</summary>
+public sealed class DeviceTypeToImageSourceConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not DeviceType type || type == DeviceType.Unknown)
+        {
+            return null;
+        }
+
+        var key = DeviceTypeCatalog.Resolve(type)?.IconResourceKey;
+        return key is not null
+            ? System.Windows.Application.Current?.TryFindResource(key) as ImageSource
+            : null;
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

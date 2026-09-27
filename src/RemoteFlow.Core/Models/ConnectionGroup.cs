@@ -9,6 +9,9 @@ namespace RemoteFlow.Core.Models;
 /// </summary>
 public sealed class ConnectionGroup
 {
+    /// <summary>内置默认分组的固定名称。</summary>
+    public const string MyDevicesName = "我的设备";
+
     /// <summary>系统兜底分组「未分组」的固定 Id。不可删除、不可重命名，无连接时隐藏。</summary>
     public static readonly Guid UngroupedId = new("00000000-0000-0000-0000-0000000000FF");
 
@@ -31,7 +34,13 @@ public sealed class ConnectionGroup
     /// </summary>
     public bool IsSystem { get; set; }
 
-    /// <summary>是否默认新建连接分组。仅用户分组可为默认；至多一个，0 个 = 回落未分组。</summary>
+    /// <summary>
+    /// 是否产品内置分组。当前唯一内置用户分组是“我的设备”：参与同步，但名称、图标、
+    /// 删除、移动和默认身份均不可修改。与仅本机存在的 <see cref="IsSystem"/> 分工。
+    /// </summary>
+    public bool IsBuiltIn { get; set; }
+
+    /// <summary>是否默认新建连接分组。内置“我的设备”始终为默认。</summary>
     public bool IsDefault { get; set; }
 
     /// <summary>是否受保护 / 锁定（仅默认组有意义）。系统组保护由 GroupService 强制，不依赖本列。</summary>
@@ -48,6 +57,9 @@ public sealed class Tag
     public string Name { get; set; } = string.Empty;
 
     public string Description { get; set; } = string.Empty;
+
+    /// <summary>标签语义图标键。颜色仍独立保存，用于同图标标签之间区分。</summary>
+    public string Icon { get; set; } = TagIconCatalog.DefaultKey;
 
     /// <summary>标签色（#RRGGBB）。用于 UI 区分，不单独承担信息传达职责。</summary>
     public string Color { get; set; } = "#0F6CBD";

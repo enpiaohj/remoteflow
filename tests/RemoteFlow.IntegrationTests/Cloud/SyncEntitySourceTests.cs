@@ -90,6 +90,83 @@ public sealed class SyncEntitySourceTests : IDisposable
     }
 
     [Fact]
+    public async Task Group_source_preserves_built_in_identity_against_legacy_payload()
+    {
+        var group = new ConnectionGroup
+        {
+            Name = "我的设备",
+            Icon = GroupIconCatalog.MyDevicesKey,
+            IsBuiltIn = true,
+            IsDefault = true,
+            IsProtected = true
+        };
+        await _groups.AddAsync(group);
+        var source = new GroupSyncSource(_groups);
+
+        var legacy = new ConnectionGroup
+        {
+            Name = "被旧客户端改名",
+            Icon = GroupIconCatalog.CloudKey,
+            IsDefault = false,
+            IsProtected = false
+        };
+        await source.ApplyAsync(
+            SyncEntityTypes.Group, group.Id.ToString(), SyncSerializer.Serialize(legacy, 1), false, 1);
+
+        var saved = Assert.Single(await _groups.GetAllAsync(), g => g.Id == group.Id);
+        Assert.True(saved.IsBuiltIn);
+        Assert.True(saved.IsDefault);
+        Assert.True(saved.IsProtected);
+        Assert.Equal("我的设备", saved.Name);
+        Assert.Equal(GroupIconCatalog.MyDevicesKey, saved.Icon);
+    }
+
+    [Fact]
+    public async Task Group_source_does_not_promote_a_plain_group_just_because_of_its_name()
+    {
+        // 已被内置规则降级的同名组，远端 payload 不带内置/默认声明时不得再被按名称提升，
+        // 否则“提升 → 本地降级 → 推送 → 再提升”会让同步来回翻转。
+        var source = new GroupSyncSource(_groups);
+        var id = Guid.NewGuid();
+        var plain = new ConnectionGroup { Name = "我的设备", IsBuiltIn = false, IsDefault = false };
+
+        await source.ApplyAsync(SyncEntityTypes.Group, id.ToString(), SyncSerializer.Serialize(plain, 2), false, 1);
+
+        var saved = Assert.Single(await _groups.GetAllAsync(), g => g.Id == id);
+        Assert.False(saved.IsBuiltIn);
+        Assert.False(saved.IsDefault);
+    }
+
+    [Fact]
+    public async Task Group_and_tag_sources_round_trip_custom_icons()
+    {
+        var group = new ConnectionGroup { Name = "云环境", Icon = GroupIconCatalog.CloudKey };
+        var tag = new Tag { Name = "安全", Icon = TagIconCatalog.SecurityKey, Color = "#C4342A" };
+        await _groups.AddAsync(group);
+        await _tags.AddAsync(tag);
+
+        var groupSource = new GroupSyncSource(_groups);
+        var tagSource = new TagSyncSource(_tags);
+        var groupPayload = await groupSource.GetPlaintextAsync(SyncEntityTypes.Group, group.Id.ToString());
+        var tagPayload = await tagSource.GetPlaintextAsync(SyncEntityTypes.Tag, tag.Id.ToString());
+
+        using var otherWorkspace = new TempWorkspace();
+        var otherDb = new RemoteFlowDatabase(otherWorkspace.DatabasePath, NullLogger<RemoteFlowDatabase>.Instance);
+        otherDb.Initialize();
+        var otherGroups = new SqliteGroupRepository(otherDb);
+        var otherTags = new SqliteTagRepository(otherDb);
+        await new GroupSyncSource(otherGroups).ApplyAsync(
+            SyncEntityTypes.Group, group.Id.ToString(), groupPayload, false, 2);
+        await new TagSyncSource(otherTags).ApplyAsync(
+            SyncEntityTypes.Tag, tag.Id.ToString(), tagPayload, false, 2);
+
+        Assert.Equal(GroupIconCatalog.CloudKey,
+            Assert.Single(await otherGroups.GetAllAsync(), g => g.Id == group.Id).Icon);
+        Assert.Equal(TagIconCatalog.SecurityKey,
+            Assert.Single(await otherTags.GetAllAsync(), t => t.Id == tag.Id).Icon);
+    }
+
+    [Fact]
     public async Task Credential_source_payload_carries_no_local_secret_references()
     {
         var source = new CredentialSyncSource(_credentials);

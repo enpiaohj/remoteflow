@@ -36,6 +36,9 @@
     -->
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
+    <!-- 产品 LOGO（RemoteFlow.ico 提取的 PNG 帧）。WPF SDK 不自动把图片打包为 Resource，
+         必须显式声明，否则 pack URI 在运行时报 Cannot locate resource。 -->
+    <Resource Include="Assets\RemoteFlow-logo.png" />
   </ItemGroup>
 
   <!-- 发布配置：win-x64 Self-contained 单文件 -->

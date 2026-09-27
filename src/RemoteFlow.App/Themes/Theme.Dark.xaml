@@ -24,7 +24,9 @@
     <SolidColorBrush x:Key="Text.Primary" Color="#F2F4F8" />
     <SolidColorBrush x:Key="Text.Secondary" Color="#A8B1C1" />
     <SolidColorBrush x:Key="Text.Tertiary" Color="#78818F" />
-    <SolidColorBrush x:Key="Text.OnAccent" Color="#FFFFFF" />
+    <!-- 深色主题的品牌色较亮（#8098F5），白字对比度仅约 2.6:1；改用深靛字，对比度约 6:1。
+         Text.OnAccent 只用于品牌色实底（主按钮 / 勾选框 / 步骤序号）。 -->
+    <SolidColorBrush x:Key="Text.OnAccent" Color="#0E1433" />
     <SolidColorBrush x:Key="Text.Disabled" Color="#5A6270" />
 
     <SolidColorBrush x:Key="Stroke.Subtle" Color="#282D36" />
@@ -44,6 +46,9 @@
     <SolidColorBrush x:Key="Status.DangerHover" Color="#F58F88" />
     <SolidColorBrush x:Key="Status.Info" Color="#8098F5" />
     <SolidColorBrush x:Key="Status.Idle" Color="#78818F" />
+
+    <!-- 强调色：收藏星（与行内收藏星同色，双主题恒定琥珀） -->
+    <SolidColorBrush x:Key="Accent.Favorite" Color="#F2C037" />
 
     <SolidColorBrush x:Key="Protocol.Rdp" Color="#8098F5" />
     <SolidColorBrush x:Key="Protocol.Ssh" Color="#35BE8C" />

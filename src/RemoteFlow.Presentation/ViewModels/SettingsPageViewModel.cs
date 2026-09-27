@@ -106,7 +106,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     private readonly ImportExportService _importExport;
     private readonly CredentialBackupService _credentialBackup;
     private readonly LocalBackupService _localBackup;
-    private readonly GroupService _groupService;
     private readonly ILogger<SettingsPageViewModel> _logger;
 
     /// <summary>加载期间抑制自动保存，避免初始化赋值触发一连串写盘。</summary>
@@ -127,7 +126,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         ImportExportService importExport,
         CredentialBackupService credentialBackup,
         LocalBackupService localBackup,
-        GroupService groupService,
         CloudSyncViewModel cloudSync,
         ILogger<SettingsPageViewModel> logger)
     {
@@ -143,7 +141,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         _importExport = importExport;
         _credentialBackup = credentialBackup;
         _localBackup = localBackup;
-        _groupService = groupService;
         _logger = logger;
 
         LoadFromSettings();
@@ -203,35 +200,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     [ObservableProperty]
     private string _language = "zh-CN";
-
-    // ── 常规 → 分组 ────────────────────────────────────────────────
-
-    /// <summary>正在从库加载默认分组信息（抑制切换回调回写，避免回声）。</summary>
-    private bool _loadingGroups;
-
-    [ObservableProperty]
-    private string _defaultGroupLabel = "";
-
-    [ObservableProperty]
-    private bool _defaultGroupProtected;
-
-    [ObservableProperty]
-    private bool _hasDefaultGroup;
-
-    /// <summary>开关是否可操作：存在默认用户组才可。</summary>
-    public bool ProtectionSwitchEnabled => HasDefaultGroup;
-
-    /// <summary>开关标题（对齐设计文档 §6：保护默认分组「{默认组名}」）。</summary>
-    public string DefaultGroupSwitchLabel =>
-        HasDefaultGroup ? $"保护默认分组「{DefaultGroupLabel}」" : "保护默认分组";
-
-    /// <summary>分组卡片副文案（跟随状态，不再重复组名）。</summary>
-    public string DefaultGroupDescription =>
-        !HasDefaultGroup
-            ? "当前没有默认分组，新建连接默认进入「未分组」。"
-            : (DefaultGroupProtected
-                ? "已受保护：不可重命名 / 删除 / 移动层级，但仍可增删连接、建子分组。"
-                : "未受保护：可重命名 / 删除 / 移动层级。");
 
     // ── 日期与时间 ────────────────────────────────────────────────
 
@@ -472,52 +440,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         foreach (var record in await _hostKeys.GetAllAsync(ct))
         {
             TrustedHostKeys.Add(new HostKeyItemViewModel(record));
-        }
-    }
-
-    /// <summary>进入设置页时读取默认分组名与保护态（分组卡片）。</summary>
-    public async Task LoadGroupsAsync(CancellationToken ct = default)
-    {
-        _loadingGroups = true;
-        try
-        {
-            var def = await _groupService.GetDefaultGroupAsync(ct);
-            HasDefaultGroup = def is not null;
-            DefaultGroupLabel = def?.Name ?? "";
-            DefaultGroupProtected = def is { IsProtected: true };
-            OnPropertyChanged(nameof(DefaultGroupDescription));
-            OnPropertyChanged(nameof(ProtectionSwitchEnabled));
-            OnPropertyChanged(nameof(DefaultGroupSwitchLabel));
-        }
-        finally
-        {
-            _loadingGroups = false;
-        }
-    }
-
-    partial void OnDefaultGroupProtectedChanged(bool value)
-    {
-        if (_loadingGroups || _isLoading)
-        {
-            return;
-        }
-
-        _ = ApplyDefaultGroupProtectionAsync(value);
-    }
-
-    private async Task ApplyDefaultGroupProtectionAsync(bool value)
-    {
-        try
-        {
-            await _groupService.SetDefaultProtectionAsync(value);
-            await LoadGroupsAsync();
-            DataChanged?.Invoke(this, EventArgs.Empty);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "切换默认分组保护失败");
-            StatusMessage = "切换默认分组保护失败，请查看日志。";
-            await LoadGroupsAsync(); // 回滚到真实状态
         }
     }
 

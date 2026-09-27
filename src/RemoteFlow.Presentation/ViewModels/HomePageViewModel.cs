@@ -28,6 +28,9 @@ public sealed partial class HomePageViewModel : ObservableObject
     private readonly JsonSettingsStore _settingsStore;
     private readonly ILogger<HomePageViewModel> _logger;
     private readonly IUiDispatcher _ui;
+    private readonly PresenceProbeService? _probe;
+    private CancellationTokenSource? _probeCts;
+    private int _probeVersion;
 
     /// <summary>会话状态去抖全量刷新的版本号：每次收到 <see cref="SessionManager.SessionsChanged"/> 自增，
     /// 延迟结束比对版本，期间再有新事件则放弃本次刷新，保证最终以最后一次状态为准。</summary>
@@ -43,10 +46,12 @@ public sealed partial class HomePageViewModel : ObservableObject
         AppSettings settings,
         JsonSettingsStore settingsStore,
         IUiDispatcher uiDispatcher,
-        ILogger<HomePageViewModel> logger)
+        ILogger<HomePageViewModel> logger,
+        PresenceProbeService? probe = null)
     {
         _connections = connections;
         _ui = uiDispatcher;
+        _probe = probe;
         _history = history;
         _sessions = sessions;
         _settings = settings;
@@ -115,8 +120,32 @@ public sealed partial class HomePageViewModel : ObservableObject
 
     public bool IsFirstRun => TotalConnections == 0;
 
-    public async Task LoadAsync(CancellationToken ct = default)
+    /// <summary>最近一次在线探测结果（按 Profile Id）。会话变化触发的刷新会重建行对象，据此恢复状态而不重新探测。</summary>
+    private readonly Dictionary<Guid, (bool Online, DateTimeOffset ProbedAt)> _presenceCache = [];
+
+    /// <summary>当前批次仍在探测中的 Profile Id：重建行时保持「探测中」，结果回来后按 Id 写入当前行。</summary>
+    private readonly HashSet<Guid> _probingIds = [];
+
+    /// <summary>页面导航 / 手动刷新：重建数据并重新探测在线状态。</summary>
+    public Task LoadAsync(CancellationToken ct = default) => LoadCoreAsync(probe: true, ct);
+
+    /// <summary>轻量刷新（如从会话标签切回首页）：重读列表与会话状态，在线状态沿用上次探测结果。</summary>
+    public Task RefreshAsync(CancellationToken ct = default) => LoadCoreAsync(probe: false, ct);
+
+    /// <param name="probe">
+    /// true：导航进入首页，重新探测；false：停留首页时随会话状态变化刷新，只同步会话与列表，
+    /// 在线状态沿用上次探测结果——否则连接一次（连接中 → 已连接）就会连发多轮 TCP 探测，卡片还会闪回「探测中」。
+    /// </param>
+    private async Task LoadCoreAsync(bool probe, CancellationToken ct)
     {
+        var probeVersion = _probeVersion;
+        if (probe)
+        {
+            _probeCts?.Cancel();
+            _probingIds.Clear();
+            probeVersion = ++_probeVersion;
+        }
+
         Greeting = DateTime.Now.Hour switch
         {
             >= 5 and < 12 => "上午好",
@@ -133,12 +162,7 @@ public sealed partial class HomePageViewModel : ObservableObject
         TotalConnections = profiles.Count;
         ShowSecurityTip = !_settings.HomeSecurityTipDismissed && profiles.Count > 0;
 
-        // 卡片高亮只认“真正已连接”的会话（IsConnected）：正在连接 / 失败不点亮“已连接”标签。
-        // HasActiveSession（任意活动）单独维护，供行右键区分「连接 / 切换到会话 / 断开连接」。
-        var connectedProfileIds = _sessions.ActiveSessions
-            .Where(s => s.State == ConnectionState.Connected)
-            .Select(s => s.Profile.Id)
-            .ToHashSet();
+        // 卡片状态以 SessionManager 的实时快照为准，不持久化。
 
         RecentItems.Clear();
         foreach (var profile in profiles
@@ -147,10 +171,7 @@ public sealed partial class HomePageViewModel : ObservableObject
                      .Take(RecentCardLimit))
         {
             var item = BuildItem(profile, groups);
-            item.HasActiveSession = _sessions.HasActiveSession(profile.Id);
-            item.IsConnected = connectedProfileIds.Contains(profile.Id);
-            item.IsConnecting = _sessions.ActiveSessions.Any(
-                x => x.Profile.Id == profile.Id && x.State == ConnectionState.Connecting);
+            ApplyRealtimeState(item);
             RecentItems.Add(item);
         }
 
@@ -161,10 +182,7 @@ public sealed partial class HomePageViewModel : ObservableObject
                      .Take(SectionLimit))
         {
             var item = BuildItem(profile, groups);
-            item.HasActiveSession = _sessions.HasActiveSession(profile.Id);
-            item.IsConnected = connectedProfileIds.Contains(profile.Id);
-            item.IsConnecting = _sessions.ActiveSessions.Any(
-                x => x.Profile.Id == profile.Id && x.State == ConnectionState.Connecting);
+            ApplyRealtimeState(item);
             FavoriteItems.Add(item);
         }
 
@@ -179,9 +197,142 @@ public sealed partial class HomePageViewModel : ObservableObject
         OnPropertyChanged(nameof(HasActivity));
         OnPropertyChanged(nameof(IsFirstRun));
 
-        // 返回首页时重算统计行：卡片绿点读会话实时状态，这里显式通知计数刷新，
+        // 返回首页时重算统计行：卡片会话状态读实时快照，这里显式通知计数刷新，
         // 避免「统计行 0 已连接」与「卡片仍点绿」两者矛盾。
         OnPropertyChanged(nameof(ConnectedSessions));
+
+        if (probe)
+        {
+            await ProbePresenceAsync(probeVersion, ct);
+        }
+        else
+        {
+            RestorePresence();
+        }
+    }
+
+    /// <summary>把缓存的探测结果 / 进行中状态套到新建的行对象上。</summary>
+    private void RestorePresence()
+    {
+        if (!_settings.PresenceProbeEnabled)
+        {
+            return;
+        }
+
+        foreach (var item in RecentItems.Concat(FavoriteItems))
+        {
+            if (_probingIds.Contains(item.Id))
+            {
+                item.MarkProbing();
+            }
+            else if (_presenceCache.TryGetValue(item.Id, out var cached))
+            {
+                item.SetProbeResult(cached.Online, cached.ProbedAt);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 对首页最近连接与收藏按 Profile Id 去重探测。同一设备即使同时出现在两个分区，
+    /// 也只建立一次 TCP 探测，并把结果同步到两个独立的行 ViewModel。
+    /// </summary>
+    private async Task ProbePresenceAsync(int version, CancellationToken outerCt)
+    {
+        if (_probe is null || !_settings.PresenceProbeEnabled)
+        {
+            return;
+        }
+
+        var targets = RecentItems
+            .Concat(FavoriteItems)
+            .GroupBy(item => item.Id)
+            .Select(group => group.First())
+            .ToArray();
+        if (targets.Length == 0)
+        {
+            return;
+        }
+
+        var batchCts = CancellationTokenSource.CreateLinkedTokenSource(outerCt);
+        _probeCts = batchCts;
+        var ct = batchCts.Token;
+
+        foreach (var item in RecentItems.Concat(FavoriteItems))
+        {
+            item.MarkProbing();
+            _probingIds.Add(item.Id);
+        }
+
+        using var gate = new SemaphoreSlim(8);
+        var tasks = targets.Select(async target =>
+        {
+            var acquired = false;
+            try
+            {
+                await gate.WaitAsync(ct);
+                acquired = true;
+                var state = await _probe.ProbeAsync(
+                    target.Host,
+                    target.Profile.Port,
+                    PresenceProbeService.DefaultTimeout,
+                    ct);
+
+                var online = state == PresenceState.Online;
+                var probedAt = DateTimeOffset.Now;
+                _ui.Post(() =>
+                {
+                    if (ct.IsCancellationRequested || version != _probeVersion)
+                    {
+                        return;
+                    }
+
+                    // 结果按 Id 写入「当前」集合：期间若因会话变化重建过行对象，新行同样得到结果。
+                    _probingIds.Remove(target.Id);
+                    _presenceCache[target.Id] = (online, probedAt);
+                    foreach (var current in RecentItems.Concat(FavoriteItems).Where(item => item.Id == target.Id))
+                    {
+                        current.SetProbeResult(online, probedAt);
+                    }
+                });
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // 页面重载 / 快速切页会取消旧批次；旧结果不得覆盖当前集合。
+                // 新批次开始时已清空 _probingIds，这里无需回收。
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "首页在线探测失败：{Host}:{Port}", target.Host, target.Profile.Port);
+                _ui.Post(() =>
+                {
+                    if (version == _probeVersion)
+                    {
+                        _probingIds.Remove(target.Id);
+                    }
+                });
+            }
+            finally
+            {
+                if (acquired)
+                {
+                    gate.Release();
+                }
+            }
+        }).ToArray();
+
+        try
+        {
+            await Task.WhenAll(tasks);
+        }
+        finally
+        {
+            if (ReferenceEquals(_probeCts, batchCts))
+            {
+                _probeCts = null;
+            }
+
+            batchCts.Dispose();
+        }
     }
 
     // ── 实时状态同步：订阅 SessionManager.SessionsChanged ─────────
@@ -209,7 +360,7 @@ public sealed partial class HomePageViewModel : ObservableObject
 
     /// <summary>
     /// 遍历最近 / 收藏行，按 SessionManager 实时快照点亮 / 熄灭「已连接」并刷新“任意活动”标记：
-    /// <see cref="ConnectionItemViewModel.IsConnected"/> 走 HasConnectedSession（真正已连，点亮绿点），
+    /// <see cref="ConnectionItemViewModel.IsConnected"/> 走 HasConnectedSession（真正已连，显示蓝色状态），
     /// <see cref="ConnectionItemViewModel.HasActiveSession"/> 走 HasActiveSession（任意活动，供右键区分）。
     /// 让 Connecting→Connected 即时点亮、关闭后即时熄灭。仅在 UI 线程调用（改写行的 ObservableProperty）。
     /// 行不在当前两列表（如连接的 Profile 尚未进入最近 / 收藏）时由去抖的 LoadAsync 重建列表补齐。
@@ -218,15 +369,22 @@ public sealed partial class HomePageViewModel : ObservableObject
     {
         foreach (var item in RecentItems)
         {
-            item.IsConnected = _sessions.HasConnectedSession(item.Id);
-            item.HasActiveSession = _sessions.HasActiveSession(item.Id);
+            ApplyRealtimeState(item);
         }
 
         foreach (var item in FavoriteItems)
         {
-            item.IsConnected = _sessions.HasConnectedSession(item.Id);
-            item.HasActiveSession = _sessions.HasActiveSession(item.Id);
+            ApplyRealtimeState(item);
         }
+    }
+
+    private void ApplyRealtimeState(ConnectionItemViewModel item)
+    {
+        var matches = _sessions.ActiveSessions.Where(x => x.Profile.Id == item.Id).ToArray();
+        item.IsConnected = matches.Any(x => x.State == ConnectionState.Connected);
+        item.HasActiveSession = _sessions.HasActiveSession(item.Id);
+        item.IsConnecting = matches.Any(x => x.State is ConnectionState.Connecting or ConnectionState.Reconnecting);
+        item.IsFailed = matches.Any(x => x.State == ConnectionState.Failed);
     }
 
     /// <summary>发起一次去抖全量刷新。必须在 UI 线程调用。</summary>
@@ -248,7 +406,8 @@ public sealed partial class HomePageViewModel : ObservableObject
                 return; // 去抖窗口内又收到新事件：本次已过期，由最新一次负责刷新。
             }
 
-            await LoadAsync();
+            // 会话变化只影响会话状态 / 最近排序 / 最近活动，不改变主机可达性：沿用上次探测结果。
+            await LoadCoreAsync(probe: false, CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -382,6 +541,14 @@ public sealed class HistoryItemViewModel(ConnectionHistoryEntry entry)
         var d => $"{(int)d!.Value.TotalHours} 小时 {d.Value.Minutes} 分"
     };
 
+    /// <summary>首页活动行的短结果标签：失败原因可能很长，行内只写「失败 / 已取消」，完整原因在悬停提示。</summary>
+    public string ResultShortText => entry.Result switch
+    {
+        ConnectionResult.Success => "成功",
+        ConnectionResult.Cancelled => "已取消",
+        _ => "失败"
+    };
+
     public string ResultText => entry.Result switch
     {
         ConnectionResult.Success => "成功",
@@ -419,6 +586,14 @@ public sealed class HistoryItemViewModel(ConnectionHistoryEntry entry)
         ProtocolType.Ssh => "Protocol.Ssh",
         _ => "Protocol.Vnc"
     };
+
+    // 历史快照目前不持久化设备类型，明确按协议推断正式设备图标，
+    // 避免 XAML 绑定到不存在的 ConnectionItemViewModel 属性而静默显示空白。
+    private DeviceTypeInfo DeviceVisual => DeviceTypeCatalog.InferFromProtocol(entry.Protocol);
+
+    public string DeviceIconKey => DeviceVisual.IconResourceKey;
+
+    public string DeviceBrushKey => DeviceVisual.AccentBrushKey;
 
     /// <summary>失败 / 取消才需要在图标块上打状态点，成功是常态不必强调。</summary>
     public bool ShowResultBadge => entry.Result != ConnectionResult.Success;

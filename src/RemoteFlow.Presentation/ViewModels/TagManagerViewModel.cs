@@ -16,6 +16,8 @@ public sealed partial class TagRowViewModel(Tag tag) : ObservableObject
 
     public string Color { get; } = tag.Color;
 
+    public string Icon { get; } = TagIconCatalog.Normalize(tag.Icon);
+
     public string Description { get; } = tag.Description;
 
     public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
@@ -56,7 +58,8 @@ public sealed partial class TagManagerViewModel : ObservableObject
 
         try
         {
-            await _connections.CreateTagAsync(result.Name, result.Color, result.Description);
+            await _connections.CreateTagAsync(
+                result.Name, result.Color, result.Description, result.Icon);
             await ReloadAsync();
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
@@ -73,7 +76,8 @@ public sealed partial class TagManagerViewModel : ObservableObject
             return;
         }
 
-        var prompt = new TagEditorPrompt("编辑标签", row.Name, row.Color, row.Description);
+        var prompt = new TagEditorPrompt(
+            "编辑标签", row.Name, row.Color, row.Description, row.Icon);
         if (await _dialogs.EditTagAsync(prompt) is not { } result)
         {
             return;
@@ -81,7 +85,8 @@ public sealed partial class TagManagerViewModel : ObservableObject
 
         try
         {
-            await _connections.UpdateTagAsync(row.Id, result.Name, result.Color, result.Description);
+            await _connections.UpdateTagAsync(
+                row.Id, result.Name, result.Color, result.Description, result.Icon);
             await ReloadAsync();
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)

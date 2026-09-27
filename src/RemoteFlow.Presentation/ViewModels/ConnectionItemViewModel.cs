@@ -41,12 +41,33 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
         _ => "\uE7F8"
     };
 
+    public string ProtocolIconKey => Profile.Protocol switch
+    {
+        ProtocolType.Rdp => "ProtocolIcon.Rdp",
+        ProtocolType.Ssh => "ProtocolIcon.Ssh",
+        _ => "ProtocolIcon.Vnc"
+    };
+
     public string ProtocolBrushKey => Profile.Protocol switch
     {
         ProtocolType.Rdp => "Protocol.Rdp",
         ProtocolType.Ssh => "Protocol.Ssh",
         _ => "Protocol.Vnc"
     };
+
+    // ── 设备主图标（正式多色矢量套系）：显式指定设备类型时用对应资源键，
+    //    未指定（Unknown）按协议推断——与升级前行为兼容。 ──
+    private readonly DeviceTypeInfo _deviceVisual = DeviceTypeCatalog.Resolve(profile.DeviceType)
+        ?? DeviceTypeCatalog.InferFromProtocol(profile.Protocol);
+
+    /// <summary>设备类型矢量图标资源键。列表 / 详情 / 首页共用。</summary>
+    public string DeviceIconKey => _deviceVisual.IconResourceKey;
+
+    /// <summary>设备类型配色资源键。列表 / 详情 / 首页共用。</summary>
+    public string DeviceBrushKey => _deviceVisual.AccentBrushKey;
+
+    /// <summary>设备类型显示名（详情面板）。未指定时显示「自动（按协议）」。</summary>
+    public string DeviceTypeDisplay => DeviceTypeCatalog.DisplayName(Profile.DeviceType);
 
     public string Notes => Profile.Notes;
 
@@ -84,7 +105,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
     /// <summary>
     /// 该连接是否存在「真正已连接」（State == Connected）的会话。
     /// 与 <see cref="HasActiveSession"/>（任意活动）语义区分：列表「最近连接」列
-    /// 的绿色“已连接”点只认本属性。由页面 VM 在会话集合变化时按
+    /// 的蓝色“已连接”点只认本属性。由页面 VM 在会话集合变化时按
     /// SessionManager.HasConnectedSession 统一写入，不落库。
     /// </summary>
     [ObservableProperty]
@@ -97,6 +118,10 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
     /// </summary>
     [ObservableProperty]
     private bool _isConnecting;
+
+    /// <summary>该连接是否有仍保留在活动集合中的失败会话。</summary>
+    [ObservableProperty]
+    private bool _isFailed;
 
     /// <summary>多选模式下是否被勾选。</summary>
     [ObservableProperty]
@@ -120,52 +145,99 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
 
     partial void OnIsConnectedChanged(bool value) => RaisePresenceDisplays();
 
-    /// <summary>状态列文字：有活动会话一律「已连接」，否则随探测状态。</summary>
-    public string PresenceDisplay => IsConnected
-        ? "已连接"
-        : Presence switch
-        {
-            PresenceState.Probing => "探测中",
-            PresenceState.Online => "在线",
-            PresenceState.Offline => "离线",
-            _ => "—"
-        };
+    partial void OnIsConnectingChanged(bool value) => RaisePresenceDisplays();
 
-    /// <summary>状态点 / 文字的颜色语义键。离线用中性灰——「现在不通」不是错误，别渲染成红色告警。</summary>
-    public string PresenceBrushKey => IsConnected
-        ? "Status.Success"
-        : Presence switch
-        {
-            PresenceState.Probing => "Status.Warning",
-            PresenceState.Online => "Status.Success",
-            _ => "Text.Tertiary"
-        };
+    partial void OnIsFailedChanged(bool value) => RaisePresenceDisplays();
+
+    partial void OnHasActiveSessionChanged(bool value)
+        => OnPropertyChanged(nameof(QuickActionText));
+
+    /// <summary>
+    /// 行 / 详情主按钮文案：无活动会话 = 「连接」；有活动会话（含连接中）= 「打开会话」
+    /// （点击走统一漏斗聚焦既有 Tab，不再二次发起连接）。
+    /// </summary>
+    public string QuickActionText => HasActiveSession ? "打开会话" : "连接";
+
+    /// <summary>
+    /// 原始在线探测文字。列表统一展示使用 <see cref="ConnectionStatusDisplay"/>，
+    /// 会话状态为空时才回退到此值。
+    /// </summary>
+    public string PresenceDisplay => Presence switch
+    {
+        PresenceState.Probing => "探测中",
+        PresenceState.Online => "在线",
+        PresenceState.Offline => "离线",
+        _ => "—"
+    };
+
+    /// <summary>探测状态点 / 文字的颜色语义键。离线与未知均使用中性灰。</summary>
+    public string PresenceBrushKey => Presence switch
+    {
+        PresenceState.Probing => "Status.Warning",
+        PresenceState.Online => "Status.Success",
+        _ => "Status.Idle"
+    };
+
+    /// <summary>
+    /// 列表统一状态：会话实时状态优先，未启动会话时回退到主机在线探测。
+    /// 已连接使用蓝色，与绿色「在线」明确区分。
+    /// </summary>
+    public string ConnectionStatusDisplay => IsConnected
+        ? "已连接"
+        : IsConnecting
+            ? "连接中"
+            : IsFailed
+                ? "异常"
+                : PresenceDisplay;
+
+    public string ConnectionStatusBrushKey => IsConnected
+        ? "Status.Info"
+        : IsConnecting
+            ? "Status.Warning"
+            : IsFailed
+                ? "Status.Danger"
+                : PresenceBrushKey;
+
+    public string ConnectionStatusTooltip => IsConnected
+        ? "存在已连接会话，双击或“打开会话”可聚焦"
+        : IsConnecting
+            ? "会话正在建立连接"
+            : IsFailed
+                ? "最近的活动会话连接异常"
+                : PresenceTooltip;
 
     /// <summary>状态列 tooltip：说明数据来自什么时候，避免把陈旧结果当实时。</summary>
-    public string PresenceTooltip => IsConnected
-        ? "存在活动会话"
-        : Presence switch
-        {
-            PresenceState.Probing => "正在探测…",
-            PresenceState.Online or PresenceState.Offline when _lastProbedAt is { } at
-                => $"探测于 {DateTimeDisplay.Compact(at)}",
-            _ => "尚未探测，点击工具条「探测」立即检查"
-        };
+    public string PresenceTooltip => Presence switch
+    {
+        PresenceState.Probing => "正在探测…",
+        PresenceState.Online or PresenceState.Offline when _lastProbedAt is { } at
+            => $"探测于 {DateTimeDisplay.Compact(at)}",
+        _ => "尚未探测，点击工具条「探测」立即检查"
+    };
 
     private void RaisePresenceDisplays()
     {
         OnPropertyChanged(nameof(PresenceDisplay));
         OnPropertyChanged(nameof(PresenceBrushKey));
         OnPropertyChanged(nameof(PresenceTooltip));
+        OnPropertyChanged(nameof(ConnectionStatusDisplay));
+        OnPropertyChanged(nameof(ConnectionStatusBrushKey));
+        OnPropertyChanged(nameof(ConnectionStatusTooltip));
     }
 
     /// <summary>标记进入探测中（发起批量探测前统一置位）。</summary>
     public void MarkProbing() => Presence = PresenceState.Probing;
 
     /// <summary>写入一次探测结果并记录探测时间。</summary>
-    public void SetProbeResult(bool online)
+    public void SetProbeResult(bool online) => SetProbeResult(online, DateTimeOffset.Now);
+
+    /// <summary>
+    /// 写入一次探测结果并保留原始探测时间。行对象重建（如首页随会话变化刷新）时复用上次结果，
+    /// 提示里的「探测于」仍是真实探测时刻。
+    /// </summary>
+    public void SetProbeResult(bool online, DateTimeOffset probedAt)
     {
-        _lastProbedAt = DateTimeOffset.Now;
+        _lastProbedAt = probedAt;
         Presence = online ? PresenceState.Online : PresenceState.Offline;
     }
 
@@ -205,7 +277,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
 }
 
 /// <summary>标签展示单元。</summary>
-public sealed record TagChip(string Name, string Color);
+public sealed record TagChip(string Name, string Color, string Icon = TagIconCatalog.DefaultKey);
 
 /// <summary>
 /// 详情面板迷你柱状图的一根柱子。

@@ -242,49 +242,7 @@ public partial class ConnectionsPage : UserControl
             }
         }
 
-        NormalizeSeparators(menu);
-    }
-
-    /// <summary>
-    /// 隐藏某菜单项后，它夹住的分隔线可能变成空组（悬空 / 相邻 Separator）。
-    /// 规则：Separator 只在两侧都还有可见菜单项时保留，其余折叠，保证视觉不出现空分组。
-    /// </summary>
-    private static void NormalizeSeparators(ContextMenu menu)
-    {
-        var items = menu.Items.Cast<object>().ToList();
-        var n = items.Count;
-
-        var hasBefore = false;
-        var visibleBefore = new bool[n];
-        for (var i = 0; i < n; i++)
-        {
-            visibleBefore[i] = hasBefore;
-            if (items[i] is MenuItem { Visibility: Visibility.Visible })
-            {
-                hasBefore = true;
-            }
-        }
-
-        var hasAfter = false;
-        var visibleAfter = new bool[n];
-        for (var i = n - 1; i >= 0; i--)
-        {
-            visibleAfter[i] = hasAfter;
-            if (items[i] is MenuItem { Visibility: Visibility.Visible })
-            {
-                hasAfter = true;
-            }
-        }
-
-        for (var i = 0; i < n; i++)
-        {
-            if (items[i] is Separator sep)
-            {
-                sep.Visibility = visibleBefore[i] && visibleAfter[i]
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
-            }
-        }
+        ContextMenuSeparators.Normalize(menu);
     }
 
     private void PopulateMoveToGroup(ContextMenu menu, ConnectionItemViewModel? connection)
@@ -521,8 +479,8 @@ public partial class ConnectionsPage : UserControl
     }
 
     /// <summary>
-    /// 动作条「批量操作 ▾」：选择与批量的统一入口（勾选框常驻可见后，
-    /// 这里把原「多选开关」的能力全部收进菜单）。
+    /// 动作条「批量操作 ▾」：全选 / 清空选择与批量动作的快捷菜单
+    /// （多选模式的开关在筛选行末的图标 ToggleButton 上）。
     /// </summary>
     private async void OnBatchOperationsClick(object sender, RoutedEventArgs e)
     {

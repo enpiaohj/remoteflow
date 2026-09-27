@@ -123,6 +123,85 @@ public sealed class GroupServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task 多个内置候选时按Id确定性收敛到同一个我的设备()
+    {
+        // 两台设备各自种子过“我的设备”并经云同步汇合：无论本地读取顺序如何，
+        // 各端都必须选中同一个 Id，否则会互相降级、同步来回翻转。
+        var higher = new ConnectionGroup
+        {
+            Id = Guid.Parse("20000000-0000-0000-0000-000000000000"),
+            Name = GroupService.DefaultGroupName,
+            IsBuiltIn = true, IsDefault = true, IsProtected = true, SortOrder = 0
+        };
+        var lower = new ConnectionGroup
+        {
+            Id = Guid.Parse("10000000-0000-0000-0000-000000000000"),
+            Name = GroupService.DefaultGroupName,
+            IsBuiltIn = true, IsDefault = true, IsProtected = true, SortOrder = 5
+        };
+        await _groups.AddAsync(higher);
+        await _groups.AddAsync(lower);
+
+        var chosen = await _service.EnsureSeedAsync();
+
+        Assert.Equal(lower.Id, chosen);
+        var all = await _groups.GetAllAsync();
+        Assert.True(all.Single(g => g.Id == lower.Id).IsBuiltIn);
+        // 落选的同名组按规则并入内置组，不再作为第二个“我的设备”存在。
+        Assert.Single(all, g => g.IsBuiltIn);
+        Assert.DoesNotContain(all, g => g.Id == higher.Id);
+    }
+
+    [Fact]
+    public async Task 根级重复的同名我的设备并入内置组且不丢连接()
+    {
+        var builtIn = new ConnectionGroup
+        {
+            Id = Guid.Parse("10000000-0000-0000-0000-000000000000"),
+            Name = GroupService.DefaultGroupName,
+            IsBuiltIn = true, IsDefault = true, IsProtected = true
+        };
+        var duplicate = new ConnectionGroup
+        {
+            Id = Guid.Parse("20000000-0000-0000-0000-000000000000"),
+            Name = GroupService.DefaultGroupName
+        };
+        await _groups.AddAsync(builtIn);
+        await _groups.AddAsync(duplicate);
+        var existingChild = new ConnectionGroup { Name = "实验", ParentId = builtIn.Id };
+        var movedChild = new ConnectionGroup { Name = "实验", ParentId = duplicate.Id };
+        var otherChild = new ConnectionGroup { Name = "办公室", ParentId = duplicate.Id };
+        await _groups.AddAsync(existingChild);
+        await _groups.AddAsync(movedChild);
+        await _groups.AddAsync(otherChild);
+        var connectionId = await AddConnectionAsync("笔记本", duplicate.Id);
+
+        var chosen = await _service.EnsureSeedAsync();
+
+        Assert.Equal(builtIn.Id, chosen);
+        var all = await _groups.GetAllAsync();
+        Assert.DoesNotContain(all, g => g.Id == duplicate.Id);
+        Assert.Single(all, g => g.ParentId is null && g.Name == GroupService.DefaultGroupName);
+        Assert.Equal(builtIn.Id, (await _connections.GetByIdAsync(connectionId))!.GroupId);
+        Assert.Equal(builtIn.Id, all.Single(g => g.Id == otherChild.Id).ParentId);
+        var renamed = all.Single(g => g.Id == movedChild.Id);
+        Assert.Equal(builtIn.Id, renamed.ParentId);
+        Assert.Equal("实验 (2)", renamed.Name);
+    }
+
+    [Fact]
+    public async Task 未分组下不能创建子分组但我的设备可以()
+    {
+        var mine = await _service.EnsureSeedAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service.CreateAsync("不该出现", ConnectionGroup.UngroupedId));
+
+        var child = await _service.CreateAsync("办公室", mine);
+        Assert.Equal(mine, child.ParentId);
+    }
+
+    [Fact]
     public async Task 同级同名分组被拒绝()
     {
         await _service.CreateAsync("公司", null);
@@ -234,30 +313,32 @@ public sealed class GroupServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task 种子标记已种时删光分组不再复活()
+    public async Task 已种过仍保证内置我的设备存在且不会因旧标记消失()
     {
         var first = await _service.EnsureSeedAsync(createIfEmpty: true);
         Assert.NotNull(first);
-        await _service.SetDefaultProtectionAsync(false);
-        await _service.DeleteAsync(first!.Value);
 
         var again = await _service.EnsureSeedAsync(createIfEmpty: false);
-        Assert.Null(again);
-        Assert.DoesNotContain(await _groups.GetAllAsync(), g => !g.IsSystem);
+        Assert.Equal(first, again);
+        var builtIn = Assert.Single(await _groups.GetAllAsync(), g => g.IsBuiltIn);
+        Assert.Equal(first, builtIn.Id);
+        Assert.Equal(GroupService.DefaultGroupName, builtIn.Name);
     }
 
     [Fact]
-    public async Task 已种过且有普通分组但无默认时不回填返回null()
+    public async Task 有普通分组但无旧默认时补建内置我的设备且不改普通组()
     {
-        // 已种过（createIfEmpty:false）代表用户曾经历过种子：此时无默认组 = 用户自己删了默认组。
-        // 不借用现有分组顶上，也不复活「我的设备」，返回 null（新连接回落未分组）。
-        await _service.CreateAsync("首个分组", null);
-        await _service.CreateAsync("第二个分组", null);
+        var first = await _service.CreateAsync("首个分组", null);
+        var second = await _service.CreateAsync("第二个分组", null);
 
         var defaultId = await _service.EnsureSeedAsync(createIfEmpty: false);
 
-        Assert.Null(defaultId);
-        Assert.DoesNotContain(await _groups.GetAllAsync(), g => !g.IsSystem && g.IsDefault);
+        Assert.NotNull(defaultId);
+        var all = await _groups.GetAllAsync();
+        var builtIn = Assert.Single(all, g => g.IsBuiltIn);
+        Assert.Equal(defaultId, builtIn.Id);
+        Assert.Contains(all, g => g.Id == first.Id && !g.IsBuiltIn);
+        Assert.Contains(all, g => g.Id == second.Id && !g.IsBuiltIn);
     }
 
     [Fact]
@@ -270,20 +351,19 @@ public sealed class GroupServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task 关保护后可改默认并删除()
+    public async Task 内置默认组不可解除保护不可替换不可删除()
     {
         var defaultId = (await _service.EnsureSeedAsync())!.Value;
-        await _service.SetDefaultProtectionAsync(false);
-
         var other = (await _service.CreateAsync("服务器", null)).Id;
-        await _service.SetDefaultAsync(other);
 
-        var def = (await _groups.GetAllAsync()).Single(g => !g.IsSystem && g.IsDefault);
-        Assert.Equal(other, def.Id);
-        Assert.False(def.IsProtected);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.SetDefaultProtectionAsync(false));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.SetDefaultAsync(other));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.DeleteAsync(defaultId));
 
-        await _service.DeleteAsync(other);
-        Assert.Null(await _service.GetDefaultGroupAsync());
+        var def = Assert.Single(await _groups.GetAllAsync(), g => g.IsBuiltIn);
+        Assert.Equal(defaultId, def.Id);
+        Assert.True(def.IsDefault);
+        Assert.True(def.IsProtected);
     }
 
     [Fact]
@@ -294,5 +374,60 @@ public sealed class GroupServiceTests : IDisposable
         await Assert.ThrowsAsync<InvalidOperationException>(() => _service.SetDefaultAsync(other));
         var all = await _groups.GetAllAsync();
         Assert.True(all.Single(g => g.Id == defaultId).IsDefault);
+    }
+
+    [Fact]
+    public async Task 我的设备升级为永久内置分组并保留原Id()
+    {
+        var legacy = await _service.CreateAsync("旧默认名称", null, GroupIconCatalog.CloudKey);
+        legacy.IsDefault = true;
+        legacy.IsProtected = false;
+        await _groups.UpdateAsync(legacy);
+
+        var resolved = await _service.EnsureSeedAsync(createIfEmpty: false);
+        var builtIn = Assert.Single(await _groups.GetAllAsync(), g => g.IsBuiltIn);
+
+        Assert.Equal(legacy.Id, resolved);
+        Assert.Equal(legacy.Id, builtIn.Id);
+        Assert.Equal(GroupService.DefaultGroupName, builtIn.Name);
+        Assert.Equal(GroupIconCatalog.MyDevicesKey, builtIn.Icon);
+        Assert.True(builtIn.IsDefault);
+        Assert.True(builtIn.IsProtected);
+        Assert.Null(builtIn.ParentId);
+    }
+
+    [Fact]
+    public async Task 我的设备不能改名删除移动更换图标或替换默认身份()
+    {
+        var builtInId = (await _service.EnsureSeedAsync())!.Value;
+        var custom = await _service.CreateAsync("生产", null, GroupIconCatalog.DataCenterKey);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.RenameAsync(builtInId, "新名称"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.DeleteAsync(builtInId));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.MoveAsync(builtInId, custom.Id));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.UpdateAsync(builtInId, GroupService.DefaultGroupName, GroupIconCatalog.CloudKey));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.SetDefaultAsync(custom.Id));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _service.SetDefaultProtectionAsync(false));
+    }
+
+    [Fact]
+    public async Task 自定义分组图标创建编辑并持久化()
+    {
+        var group = await _service.CreateAsync("生产", null, GroupIconCatalog.DataCenterKey);
+        Assert.Equal(GroupIconCatalog.DataCenterKey, group.Icon);
+
+        await _service.UpdateAsync(group.Id, "生产环境", GroupIconCatalog.CloudKey);
+        var saved = Assert.Single(await _groups.GetAllAsync(), g => g.Id == group.Id);
+        Assert.Equal("生产环境", saved.Name);
+        Assert.Equal(GroupIconCatalog.CloudKey, saved.Icon);
+        Assert.False(saved.IsBuiltIn);
+    }
+
+    [Fact]
+    public async Task 自定义分组非法图标回退文件夹()
+    {
+        var group = await _service.CreateAsync("生产", null, "not-a-real-icon");
+        Assert.Equal(GroupIconCatalog.DefaultCustomKey, group.Icon);
     }
 }

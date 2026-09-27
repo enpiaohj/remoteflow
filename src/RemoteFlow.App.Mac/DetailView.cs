@@ -534,12 +534,24 @@ public sealed class DetailView : NSView
                 TextColor = NSColor.SecondaryLabel,
                 TranslatesAutoresizingMaskIntoConstraints = false,
             };
+            var tagIcon = new NSImageView
+            {
+                Image = OrganizationStyle.TagSymbol(t.Icon),
+                ContentTintColor = OrganizationStyle.ColorFromHex(t.Color) ?? NSColor.SecondaryLabel,
+                ImageScaling = NSImageScale.ProportionallyUpOrDown,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
             var box = new CardView(() => NSColor.QuaternaryLabel.ColorWithAlphaComponent(0.4f),
                 () => NSColor.Separator, 4);
+            box.AddSubview(tagIcon);
             box.AddSubview(chip);
             NSLayoutConstraint.ActivateConstraints(new[]
             {
-                chip.LeadingAnchor.ConstraintEqualTo(box.LeadingAnchor, 6),
+                tagIcon.LeadingAnchor.ConstraintEqualTo(box.LeadingAnchor, 5),
+                tagIcon.CenterYAnchor.ConstraintEqualTo(box.CenterYAnchor),
+                tagIcon.WidthAnchor.ConstraintEqualTo(10),
+                tagIcon.HeightAnchor.ConstraintEqualTo(10),
+                chip.LeadingAnchor.ConstraintEqualTo(tagIcon.TrailingAnchor, 3),
                 chip.TrailingAnchor.ConstraintEqualTo(box.TrailingAnchor, -6),
                 chip.TopAnchor.ConstraintEqualTo(box.TopAnchor, 2),
                 chip.BottomAnchor.ConstraintEqualTo(box.BottomAnchor, -2),

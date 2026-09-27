@@ -25,7 +25,7 @@ public sealed class GroupService(
     private readonly ISyncChangeTracker _sync = syncTracker ?? NoOpSyncChangeTracker.Instance;
 
     /// <summary>首次启动时自动创建的默认用户分组名。</summary>
-    public const string DefaultGroupName = "我的设备";
+    public const string DefaultGroupName = ConnectionGroup.MyDevicesName;
 
     private Task TrackGroupAsync(Guid id, CancellationToken ct) =>
         _sync.TrackUpsertAsync(SyncEntityTypes.Group, id.ToString(), ct);
@@ -75,72 +75,195 @@ public sealed class GroupService(
     }
 
     /// <summary>
-    /// 保证「未分组」存在，并返回默认新建连接分组（is_default=true 的用户组）。
+    /// 保证两个内置分组语义成立，并返回永久默认分组“我的设备”。
     /// <para>
-    /// <paramref name="createIfEmpty"/> = true（首启，App 层按 <c>DefaultGroupSeedDone</c> 决定）：
-    /// 库里没有默认组时，<b>始终新建（或复用同名的）「我的设备」</b>作为默认 + 保护，
-    /// <b>不借用户已有分组顶上</b>——老用户升级也照建，现有分组一个不动。
+    /// 升级旧库时不更换实体 Id：优先沿用已标记内置的组，其次沿用旧默认组，再次复用同名组，
+    /// 最后才新建。这样连接与子分组引用无需迁移。<paramref name="createIfEmpty"/> 仅为旧调用兼容，
+    /// 新规则下“我的设备”始终存在，因此不再允许通过 false 阻止创建。
     /// </para>
-    /// <para>
-    /// <paramref name="createIfEmpty"/> = false（已种过）：无默认组时直接返回 null——
-    /// 说明用户自己删掉了默认组（删默认组时已强制改选或回落未分组），不再自动复活。
-    /// </para>
-    /// 返回 null 表示无默认组（新连接回落未分组）。
     /// </summary>
     public async Task<Guid?> EnsureSeedAsync(CancellationToken ct = default, bool createIfEmpty = true)
     {
-        var all = await groups.GetAllAsync(ct);
+        var all = (await groups.GetAllAsync(ct)).ToList();
 
         if (all.All(g => g.Id != ConnectionGroup.UngroupedId))
         {
-            await groups.AddAsync(new ConnectionGroup
+            var ungrouped = new ConnectionGroup
             {
                 Id = ConnectionGroup.UngroupedId,
                 Name = "未分组",
                 SortOrder = int.MaxValue,
-                // 系统组保护由 GroupService 按 IsSystem 强制，不需要也不能依赖本列。
+                Icon = GroupIconCatalog.UngroupedKey,
                 IsSystem = true
-            }, ct);
+            };
+            await groups.AddAsync(ungrouped, ct);
+            all.Add(ungrouped);
         }
-
-        // 之后的判断都基于同一份快照：上面的 Add 只影响系统「未分组」，
-        // 不会改变「非系统组」集合，故无需再查库。
-        var existingDefault = all.FirstOrDefault(g => !g.IsSystem && g.IsDefault);
-        if (existingDefault is not null)
+        else if (all.First(g => g.Id == ConnectionGroup.UngroupedId) is { } ungrouped
+                 && (ungrouped.Name != "未分组"
+                     || ungrouped.Icon != GroupIconCatalog.UngroupedKey
+                     || !ungrouped.IsSystem))
         {
-            return existingDefault.Id;
+            ungrouped.Name = "未分组";
+            ungrouped.Icon = GroupIconCatalog.UngroupedKey;
+            ungrouped.IsSystem = true;
+            ungrouped.IsBuiltIn = false;
+            ungrouped.IsDefault = false;
+            ungrouped.IsProtected = true;
+            ungrouped.ParentId = null;
+            ungrouped.SortOrder = int.MaxValue;
+            await groups.UpdateAsync(ungrouped, ct);
         }
 
-        if (!createIfEmpty)
-        {
-            return null;
-        }
-
-        // 首次为该库补默认组。用户可能碰巧已有一个叫「我的设备」的普通组——复用它，别造重名。
-        var existingMine = all.FirstOrDefault(g => !g.IsSystem
-            && string.Equals(g.Name, DefaultGroupName, StringComparison.CurrentCultureIgnoreCase));
-        if (existingMine is not null)
-        {
-            existingMine.IsDefault = true;
-            existingMine.IsProtected = true;
-            await groups.UpdateAsync(existingMine, ct);
-            return existingMine.Id;
-        }
-
-        // 新建「我的设备」，排在所有现有分组之前，现有分组不动。
         var userGroups = all.Where(g => !g.IsSystem).ToList();
-        var defaultGroup = new ConnectionGroup
+
+        // 同一层级内按 Id 排序取第一个：多台设备各自种子的“我的设备”经云同步汇合后，
+        // 各端独立运行本方法也会选中同一个 Id，避免互相降级导致同步来回翻转。
+        var byId = userGroups.OrderBy(g => g.Id.ToString("D"), StringComparer.Ordinal).ToList();
+        var builtIn = byId.FirstOrDefault(g => g.IsBuiltIn)
+            ?? byId.FirstOrDefault(g => g.IsDefault)
+            ?? byId.FirstOrDefault(g =>
+                string.Equals(g.Name, DefaultGroupName, StringComparison.CurrentCultureIgnoreCase));
+
+        if (builtIn is null)
         {
-            Name = DefaultGroupName,
-            SortOrder = userGroups.Count > 0 ? userGroups.Min(g => g.SortOrder) - 1 : 0,
-            IsDefault = true,
-            IsProtected = true
-        };
-        await groups.AddAsync(defaultGroup, ct);
-        return defaultGroup.Id;
+            builtIn = new ConnectionGroup
+            {
+                Name = DefaultGroupName,
+                SortOrder = userGroups.Count > 0 ? userGroups.Min(g => g.SortOrder) - 1 : 0,
+                Icon = GroupIconCatalog.MyDevicesKey,
+                IsBuiltIn = true,
+                IsDefault = true,
+                IsProtected = true
+            };
+            await groups.AddAsync(builtIn, ct);
+            await TrackGroupAsync(builtIn.Id, ct);
+            userGroups.Add(builtIn);
+        }
+
+        foreach (var group in userGroups)
+        {
+            var isBuiltIn = group.Id == builtIn.Id;
+            var changed = false;
+
+            if (group.IsBuiltIn != isBuiltIn)
+            {
+                group.IsBuiltIn = isBuiltIn;
+                changed = true;
+            }
+            if (group.IsDefault != isBuiltIn)
+            {
+                group.IsDefault = isBuiltIn;
+                changed = true;
+            }
+            if (group.IsProtected != isBuiltIn)
+            {
+                group.IsProtected = isBuiltIn;
+                changed = true;
+            }
+
+            if (isBuiltIn)
+            {
+                if (group.Name != DefaultGroupName)
+                {
+                    group.Name = DefaultGroupName;
+                    changed = true;
+                }
+                if (group.Icon != GroupIconCatalog.MyDevicesKey)
+                {
+                    group.Icon = GroupIconCatalog.MyDevicesKey;
+                    changed = true;
+                }
+                if (group.ParentId is not null)
+                {
+                    group.ParentId = null;
+                    changed = true;
+                }
+            }
+            else
+            {
+                var normalizedIcon = GroupIconCatalog.NormalizeCustom(group.Icon);
+                if (group.Icon != normalizedIcon)
+                {
+                    group.Icon = normalizedIcon;
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                await groups.UpdateAsync(group, ct);
+                await TrackGroupAsync(group.Id, ct);
+            }
+        }
+
+        await MergeDuplicateMyDevicesAsync(builtIn, userGroups, ct);
+
+        return builtIn.Id;
     }
 
-    public async Task<ConnectionGroup> CreateAsync(string name, Guid? parentId, CancellationToken ct = default)
+    /// <summary>
+    /// 多台设备各自种子过“我的设备”并经云同步汇合时，根级会出现同名普通组。
+    /// 按“只有一个内置我的设备”规则并入：连接与子分组移入内置组（子分组同名时加序号），
+    /// 再删除已清空的重复组。连接只改归属、绝不删除；每一步都登记同步，其它设备随之收敛。
+    /// </summary>
+    private async Task MergeDuplicateMyDevicesAsync(
+        ConnectionGroup builtIn, List<ConnectionGroup> userGroups, CancellationToken ct)
+    {
+        var duplicates = userGroups
+            .Where(g => g.Id != builtIn.Id
+                        && g.ParentId is null
+                        && string.Equals(g.Name.Trim(), DefaultGroupName, StringComparison.CurrentCultureIgnoreCase))
+            .ToList();
+        if (duplicates.Count == 0)
+        {
+            return;
+        }
+
+        var allConnections = await connections.GetAllAsync(ct);
+        foreach (var duplicate in duplicates)
+        {
+            foreach (var profile in allConnections.Where(c => c.GroupId == duplicate.Id))
+            {
+                profile.GroupId = builtIn.Id;
+                profile.UpdatedAt = DateTimeOffset.Now;
+                await connections.UpdateAsync(profile, ct);
+                await _sync.TrackUpsertAsync(SyncEntityTypes.Connection, profile.Id.ToString(), ct);
+            }
+
+            foreach (var child in userGroups.Where(g => g.ParentId == duplicate.Id).ToList())
+            {
+                child.ParentId = builtIn.Id;
+                child.Name = UniqueSiblingName(userGroups, builtIn.Id, child.Name, child.Id);
+                await groups.UpdateAsync(child, ct);
+                await TrackGroupAsync(child.Id, ct);
+            }
+
+            // 已清空：仓储删除时不会再有连接需要迁移。
+            await groups.DeleteAsync(duplicate.Id, moveConnectionsTo: builtIn.Id, ct);
+            await _sync.TrackDeleteAsync(SyncEntityTypes.Group, duplicate.Id.ToString(), ct);
+            userGroups.Remove(duplicate);
+        }
+    }
+
+    private static string UniqueSiblingName(
+        IEnumerable<ConnectionGroup> all, Guid parentId, string name, Guid selfId)
+    {
+        var candidate = name;
+        for (var n = 2; HasSiblingNamed(all, parentId, candidate, selfId); n++)
+        {
+            candidate = $"{name} ({n})";
+        }
+
+        return candidate;
+    }
+
+    public Task<ConnectionGroup> CreateAsync(
+        string name, Guid? parentId, CancellationToken ct = default)
+        => CreateAsync(name, parentId, GroupIconCatalog.DefaultCustomKey, ct);
+
+    public async Task<ConnectionGroup> CreateAsync(
+        string name, Guid? parentId, string? icon, CancellationToken ct = default)
     {
         var trimmed = (name ?? string.Empty).Trim();
         if (trimmed.Length == 0)
@@ -155,6 +278,11 @@ public sealed class GroupService(
             throw new InvalidOperationException("上级分组不存在。");
         }
 
+        if (parentId is { } systemParent && all.Any(g => g.Id == systemParent && g.IsSystem))
+        {
+            throw new InvalidOperationException("「未分组」是系统内置分组，不能在其下创建子分组。");
+        }
+
         if (HasSiblingNamed(all, parentId, trimmed, excludeId: null))
         {
             throw new InvalidOperationException($"同一层级下已存在分组「{trimmed}」。");
@@ -165,13 +293,23 @@ public sealed class GroupService(
             .DefaultIfEmpty(-1)
             .Max() + 1;
 
-        var group = new ConnectionGroup { Name = trimmed, ParentId = parentId, SortOrder = nextOrder };
+        var group = new ConnectionGroup
+        {
+            Name = trimmed,
+            ParentId = parentId,
+            SortOrder = nextOrder,
+            Icon = GroupIconCatalog.NormalizeCustom(icon)
+        };
         await groups.AddAsync(group, ct);
         await TrackGroupAsync(group.Id, ct);
         return group;
     }
 
-    public async Task RenameAsync(Guid id, string newName, CancellationToken ct = default)
+    public Task RenameAsync(Guid id, string newName, CancellationToken ct = default)
+        => UpdateAsync(id, newName, icon: null, ct: ct);
+
+    /// <summary>更新自定义分组名称与图标。内置 / 系统分组不可编辑。</summary>
+    public async Task UpdateAsync(Guid id, string newName, string? icon, CancellationToken ct = default)
     {
         var trimmed = (newName ?? string.Empty).Trim();
         if (trimmed.Length == 0)
@@ -183,14 +321,14 @@ public sealed class GroupService(
         var group = all.FirstOrDefault(g => g.Id == id)
             ?? throw new InvalidOperationException("分组不存在。");
 
-        if (group.IsSystem)
+        if (group.IsSystem || group.IsBuiltIn)
         {
-            throw new InvalidOperationException("系统分组不能重命名。");
+            throw new InvalidOperationException("内置分组不能编辑名称或图标。");
         }
 
         if (group.IsProtected)
         {
-            throw new InvalidOperationException("默认分组受保护，无法重命名。请先在「设置 → 常规 → 分组」关闭保护。");
+            throw new InvalidOperationException("受保护分组无法编辑。");
         }
 
         if (HasSiblingNamed(all, group.ParentId, trimmed, excludeId: id))
@@ -199,6 +337,9 @@ public sealed class GroupService(
         }
 
         group.Name = trimmed;
+        group.Icon = icon is null
+            ? GroupIconCatalog.NormalizeCustom(group.Icon)
+            : GroupIconCatalog.NormalizeCustom(icon);
         await groups.UpdateAsync(group, ct);
         await TrackGroupAsync(group.Id, ct);
     }
@@ -210,14 +351,14 @@ public sealed class GroupService(
         var group = all.FirstOrDefault(g => g.Id == id)
             ?? throw new InvalidOperationException("分组不存在。");
 
-        if (group.IsSystem)
+        if (group.IsSystem || group.IsBuiltIn)
         {
-            throw new InvalidOperationException("系统分组不能删除。");
+            throw new InvalidOperationException("内置分组不能删除。");
         }
 
         if (group.IsProtected)
         {
-            throw new InvalidOperationException("默认分组受保护，无法删除。请先在「设置 → 常规 → 分组」关闭保护。");
+            throw new InvalidOperationException("该分组受保护，无法删除。");
         }
 
         // 「未分组」以 group_id = null 表示；传 null 让仓储把组内连接置空。
@@ -237,14 +378,14 @@ public sealed class GroupService(
         var group = all.FirstOrDefault(g => g.Id == id)
             ?? throw new InvalidOperationException("分组不存在。");
 
-        if (group.IsSystem)
+        if (group.IsSystem || group.IsBuiltIn)
         {
-            throw new InvalidOperationException("系统分组不能移动。");
+            throw new InvalidOperationException("内置分组不能移动。");
         }
 
         if (group.IsProtected)
         {
-            throw new InvalidOperationException("默认分组受保护，无法移动。请先在「设置 → 常规 → 分组」关闭保护。");
+            throw new InvalidOperationException("该分组受保护，无法移动。");
         }
 
         if (newParentId is { } target)
@@ -252,6 +393,11 @@ public sealed class GroupService(
             if (all.All(g => g.Id != target))
             {
                 throw new InvalidOperationException("目标分组不存在。");
+            }
+
+            if (all.Any(g => g.Id == target && g.IsSystem))
+            {
+                throw new InvalidOperationException("「未分组」是系统内置分组，不能包含子分组。");
             }
 
             if (IsDescendant(all, ancestorId: id, candidateId: target))
@@ -287,7 +433,7 @@ public sealed class GroupService(
     {
         var all = await groups.GetAllAsync(ct);
         var group = all.FirstOrDefault(g => g.Id == id);
-        if (group is null || group.IsSystem)
+        if (group is null || group.IsSystem || group.IsBuiltIn)
         {
             return;
         }
@@ -297,60 +443,36 @@ public sealed class GroupService(
         await TrackGroupAsync(group.Id, ct);
     }
 
-    /// <summary>返回默认新建连接分组（is_default=true 的非系统组）；无则 null。</summary>
+    /// <summary>返回永久默认内置分组“我的设备”。启动校正前兼容读取旧 is_default。</summary>
     public async Task<ConnectionGroup?> GetDefaultGroupAsync(CancellationToken ct = default)
     {
         var all = await groups.GetAllAsync(ct);
-        return all.FirstOrDefault(g => !g.IsSystem && g.IsDefault);
+        return all.FirstOrDefault(g => !g.IsSystem && g.IsBuiltIn)
+            ?? all.FirstOrDefault(g => !g.IsSystem && g.IsDefault);
     }
 
-    /// <summary>
-    /// 把默认身份移给另一普通组。若当前存在受保护默认组则拒绝（防止借换默认绕过保护）；
-    /// 成功后旧默认组 is_default/is_protected 均清 0，目标组 is_default=true 且 is_protected=false。
-    /// </summary>
+    /// <summary>默认身份已固定为“我的设备”；保留方法只为旧调用提供明确错误。</summary>
     public async Task SetDefaultAsync(Guid groupId, CancellationToken ct = default)
     {
-        var all = await groups.GetAllAsync(ct);
-        var target = all.FirstOrDefault(g => g.Id == groupId)
+        var target = (await groups.GetAllAsync(ct)).FirstOrDefault(g => g.Id == groupId)
             ?? throw new InvalidOperationException("分组不存在。");
-        if (target.IsSystem)
-        {
-            throw new InvalidOperationException("系统分组不能作为默认分组。");
-        }
-
-        var currentDefault = all.FirstOrDefault(g => !g.IsSystem && g.IsDefault);
-        if (currentDefault is { IsProtected: true })
-        {
-            throw new InvalidOperationException("当前默认分组受保护，请先在「设置 → 常规 → 分组」关闭保护后再更换默认分组。");
-        }
-
-        if (currentDefault is not null && currentDefault.Id != groupId)
-        {
-            currentDefault.IsDefault = false;
-            currentDefault.IsProtected = false;
-            await groups.UpdateAsync(currentDefault, ct);
-            await TrackGroupAsync(currentDefault.Id, ct);
-        }
-
-        target.IsDefault = true;
-        target.IsProtected = false;
-        await groups.UpdateAsync(target, ct);
-        await TrackGroupAsync(target.Id, ct);
-    }
-
-    /// <summary>开 / 关当前默认分组的保护。无默认组时无操作。</summary>
-    public async Task SetDefaultProtectionAsync(bool isProtected, CancellationToken ct = default)
-    {
-        // GetDefaultGroupAsync 已过滤系统组，无需再判 IsSystem。
-        var currentDefault = await GetDefaultGroupAsync(ct);
-        if (currentDefault is null)
+        if (target.IsBuiltIn)
         {
             return;
         }
 
-        currentDefault.IsProtected = isProtected;
-        await groups.UpdateAsync(currentDefault, ct);
-        await TrackGroupAsync(currentDefault.Id, ct);
+        throw new InvalidOperationException("“我的设备”是固定默认分组，不能替换。");
+    }
+
+    /// <summary>内置默认分组永久受保护；保留方法用于兼容旧设置调用。</summary>
+    public async Task SetDefaultProtectionAsync(bool isProtected, CancellationToken ct = default)
+    {
+        if (!isProtected)
+        {
+            throw new InvalidOperationException("内置分组“我的设备”不能解除保护。");
+        }
+
+        await EnsureSeedAsync(ct);
     }
 
     private static bool HasSiblingNamed(IEnumerable<ConnectionGroup> all, Guid? parentId, string name, Guid? excludeId)

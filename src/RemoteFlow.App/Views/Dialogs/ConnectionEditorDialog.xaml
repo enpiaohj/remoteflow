@@ -161,6 +161,78 @@
                                TextWrapping="Wrap"
                                Margin="12,14,6,0"
                                Text="VNC 也用于连接 macOS 的「屏幕共享」。" />
+
+                    <!-- 设备类型：决定列表中的设备主图标（图标套系），与协议正交 -->
+                    <TextBlock Text="设备类型" Style="{StaticResource Text.Label}" Margin="12,16,0,6" />
+                    <ComboBox Style="{StaticResource Input.ComboBox}"
+                              MinWidth="124" HorizontalAlignment="Left"
+                              ItemsSource="{Binding AvailableDeviceTypes}"
+                              SelectedItem="{Binding SelectedDeviceType}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Width="20" Height="20" Margin="0,0,8,0"
+                                           Source="{Binding Converter={StaticResource DeviceTypeToImageSource}}">
+                                        <Image.Style>
+                                            <Style TargetType="Image" BasedOn="{StaticResource DeviceIcon.Image}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding}" Value="Unknown">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Setter Property="Margin" Value="0" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Image.Style>
+                                    </Image>
+                                    <TextBlock VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="自动（按协议）" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding}" Value="WindowsPc">
+                                                        <Setter Property="Text" Value="Windows 电脑" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="WindowsServer">
+                                                        <Setter Property="Text" Value="Windows 服务器" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="Linux">
+                                                        <Setter Property="Text" Value="Linux 服务器" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="DomainController">
+                                                        <Setter Property="Text" Value="域控" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="FileServer">
+                                                        <Setter Property="Text" Value="文件服务器" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="Mac">
+                                                        <Setter Property="Text" Value="macOS 设备" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="WebHost">
+                                                        <Setter Property="Text" Value="Web / 应用主机" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="Database">
+                                                        <Setter Property="Text" Value="数据库服务器" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="NetworkDevice">
+                                                        <Setter Property="Text" Value="网络设备" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="VirtualMachine">
+                                                        <Setter Property="Text" Value="虚拟机" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="Container">
+                                                        <Setter Property="Text" Value="容器" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="CloudHost">
+                                                        <Setter Property="Text" Value="云主机" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
                 </StackPanel>
 
                 <Border Grid.Column="0" Width="1" HorizontalAlignment="Right"
@@ -250,8 +322,15 @@
                                                                 Background="{DynamicResource Bg.Subtle}"
                                                                 BorderBrush="{DynamicResource Stroke.Default}"
                                                                 BorderThickness="1">
-                                                            <TextBlock x:Name="Label" Text="{Binding Name}" FontSize="12"
-                                                                       Foreground="{DynamicResource Text.Secondary}" />
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <Path x:Name="TagIcon" Style="{StaticResource OrganizationIcon.Path}"
+                                                                      Width="11" Height="11"
+                                                                      Data="{Binding Icon, Converter={StaticResource KeyToGeometry}, ConverterParameter=TagIcon.Tag}"
+                                                                      Fill="{Binding Color, Converter={StaticResource ColorToBrush}}" />
+                                                                <TextBlock x:Name="Label" Text="{Binding Name}" FontSize="12"
+                                                                           Margin="5,0,0,0"
+                                                                           Foreground="{DynamicResource Text.Secondary}" />
+                                                            </StackPanel>
                                                         </Border>
                                                         <ControlTemplate.Triggers>
                                                             <Trigger Property="IsChecked" Value="True">
@@ -260,6 +339,7 @@
                                                                 <Setter TargetName="Root" Property="BorderBrush"
                                                                         Value="{Binding Color, Converter={StaticResource ColorToBrush}}" />
                                                                 <Setter TargetName="Label" Property="Foreground" Value="White" />
+                                                                <Setter TargetName="TagIcon" Property="Fill" Value="White" />
                                                             </Trigger>
                                                         </ControlTemplate.Triggers>
                                                     </ControlTemplate>

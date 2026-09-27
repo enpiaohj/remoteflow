@@ -143,8 +143,11 @@ public sealed class TagManagerSheet : NSWindowController
             const string id = "tag";
             if (tableView.MakeView(id, _o) is not NSTableCellView cell)
             {
-                var swatch = new NSView { TranslatesAutoresizingMaskIntoConstraints = false, WantsLayer = true };
-                swatch.Layer!.CornerRadius = 4;
+                var swatch = new NSImageView
+                {
+                    ImageScaling = NSImageScale.ProportionallyUpOrDown,
+                    TranslatesAutoresizingMaskIntoConstraints = false,
+                };
                 var name = Lbl(13, NSColor.Label);
                 var desc = Lbl(11, NSColor.SecondaryLabel);
                 var col = new NSStackView
@@ -172,8 +175,9 @@ public sealed class TagManagerSheet : NSWindowController
                 });
             }
 
-            var sw = cell.Subviews[0];
-            sw.Layer!.BackgroundColor = (ColorFromHex(tag.Color) ?? NSColor.SystemGray).CGColor;
+            var sw = (NSImageView)cell.Subviews[0];
+            sw.Image = OrganizationStyle.TagSymbol(tag.Icon);
+            sw.ContentTintColor = ColorFromHex(tag.Color) ?? NSColor.SystemGray;
             var stack = (NSStackView)cell.Subviews[1];
             ((NSTextField)stack.ArrangedSubviews[0]).StringValue = tag.Name;
             ((NSTextField)stack.ArrangedSubviews[1]).StringValue = tag.Description;

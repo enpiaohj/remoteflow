@@ -2,6 +2,7 @@ using System.Linq;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using RemoteFlow.Application.Services;
+using RemoteFlow.Core.Models;
 using RemoteFlow.Infrastructure.Data;
 using Xunit;
 
@@ -99,6 +100,25 @@ public sealed class ConnectionServiceTagTests : IDisposable
     {
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => _service.UpdateTagAsync(Guid.NewGuid(), "任意名字", "#0F6CBD", ""));
+    }
+
+    [Fact]
+    public async Task 新建和更新标签图标会校验并持久化()
+    {
+        var tag = await _service.CreateTagAsync(
+            "生产", "#C4342A", "生产环境", TagIconCatalog.ProductionKey);
+        Assert.Equal(TagIconCatalog.ProductionKey, tag.Icon);
+
+        await _service.UpdateTagAsync(
+            tag.Id, "生产", "#C4342A", "生产环境", TagIconCatalog.SecurityKey);
+        Assert.Equal(TagIconCatalog.SecurityKey, Assert.Single(await _service.GetTagsAsync()).Icon);
+    }
+
+    [Fact]
+    public async Task 标签非法图标回退普通标签()
+    {
+        var tag = await _service.CreateTagAsync("测试", "#0F6CBD", "", "bad-key");
+        Assert.Equal(TagIconCatalog.DefaultKey, tag.Icon);
     }
 
     [Fact]

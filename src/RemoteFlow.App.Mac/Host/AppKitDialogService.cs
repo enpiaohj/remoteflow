@@ -180,6 +180,48 @@ public sealed class AppKitDialogService : IDialogService
         return tcs.Task;
     }
 
+    public Task<GroupEditorResult?> EditGroupAsync(GroupEditorPrompt prompt)
+    {
+        var tcs = new TaskCompletionSource<GroupEditorResult?>();
+        NSApplication.SharedApplication.InvokeOnMainThread(() =>
+        {
+            var options = GroupIconCatalog.CustomOptions;
+            var name = new AppKit.NSTextField(new CoreGraphics.CGRect(0, 0, 220, 24)) { StringValue = prompt.InitialName };
+            var icon = OrganizationStyle.IconPopup(
+                options, GroupIconCatalog.NormalizeCustom(prompt.InitialIcon), OrganizationStyle.GroupSymbol);
+
+            var grid = AppKit.NSGridView.Create(new AppKit.NSView[][]
+            {
+                new AppKit.NSView[] { Label("名称"), name },
+                new AppKit.NSView[] { Label("图标"), icon },
+            });
+            grid.RowSpacing = 8;
+            grid.ColumnSpacing = 10;
+            grid.SetFrameSize(new CoreGraphics.CGSize(300, 64));
+
+            var alert = new NSAlert
+            {
+                MessageText = prompt.Title,
+                InformativeText = prompt.ParentName is { Length: > 0 } p ? $"上级分组：{p}" : string.Empty,
+                AccessoryView = grid,
+            };
+            alert.AddButton("确定");
+            alert.AddButton("取消");
+            alert.Window.InitialFirstResponder = name;
+
+            var trimmed = name.StringValue.Trim();
+            if (alert.RunModal() != (nint)NSAlertButtonReturn.First || trimmed.Length == 0)
+            {
+                tcs.SetResult(null);
+                return;
+            }
+
+            var selected = options[Math.Max(0, (int)icon.IndexOfSelectedItem)];
+            tcs.SetResult(new GroupEditorResult(trimmed, GroupIconCatalog.NormalizeCustom(selected.Key)));
+        });
+        return tcs.Task;
+    }
+
     public Task<DefaultGroupOption?> PickDefaultGroupAsync(
         string deletedDefaultName, IReadOnlyList<DefaultGroupOption> options)
     {
@@ -226,15 +268,20 @@ public sealed class AppKitDialogService : IDialogService
                 Color = ColorFromHex(prompt.InitialColor) ?? AppKit.NSColor.SystemBlue,
             };
 
+            var iconOptions = TagIconCatalog.All;
+            var icon = OrganizationStyle.IconPopup(
+                iconOptions, TagIconCatalog.Normalize(prompt.InitialIcon), OrganizationStyle.TagSymbol);
+
             var grid = AppKit.NSGridView.Create(new AppKit.NSView[][]
             {
                 new AppKit.NSView[] { Label("名称"), name },
+                new AppKit.NSView[] { Label("图标"), icon },
                 new AppKit.NSView[] { Label("颜色"), well },
                 new AppKit.NSView[] { Label("描述"), desc },
             });
             grid.RowSpacing = 8;
             grid.ColumnSpacing = 10;
-            grid.SetFrameSize(new CoreGraphics.CGSize(340, 96));
+            grid.SetFrameSize(new CoreGraphics.CGSize(340, 128));
 
             var alert = new NSAlert { MessageText = prompt.Title, AccessoryView = grid };
             alert.AddButton("保存");
@@ -250,7 +297,8 @@ public sealed class AppKitDialogService : IDialogService
             tcs.SetResult(new TagEditorResult(
                 name.StringValue.Trim(),
                 HexFromColor(well.Color),
-                desc.StringValue.Trim()));
+                desc.StringValue.Trim(),
+                TagIconCatalog.Normalize(iconOptions[Math.Max(0, (int)icon.IndexOfSelectedItem)].Key)));
         });
         return tcs.Task;
     }

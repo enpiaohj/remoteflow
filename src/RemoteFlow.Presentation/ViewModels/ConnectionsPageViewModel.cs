@@ -55,7 +55,7 @@ public enum PresenceFilterOption
 }
 
 /// <summary>标签筛选下拉的一项。<see cref="Id"/> 为 null 表示「全部标签」。</summary>
-public sealed record TagFilterOption(Guid? Id, string Name, string Color);
+public sealed record TagFilterOption(Guid? Id, string Name, string Color, string Icon = TagIconCatalog.DefaultKey);
 
 /// <summary>「移动到分组」子菜单里的一个目标分组。</summary>
 /// <param name="GroupId">null 表示「未分组」。</param>
@@ -108,9 +108,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     private IReadOnlyDictionary<Guid, string> _groupNames = new Dictionary<Guid, string>();
     private IReadOnlyDictionary<Guid, string> _tagNames = new Dictionary<Guid, string>();
     private IReadOnlyDictionary<Guid, string> _tagColors = new Dictionary<Guid, string>();
-
-    /// <summary>当前是否存在受保护默认组（决定「设为默认分组」菜单是否可用）。</summary>
-    private bool _hasProtectedDefault;
+    private IReadOnlyDictionary<Guid, string> _tagIcons = new Dictionary<Guid, string>();
 
     public ConnectionsPageViewModel(
         ConnectionService connections,
@@ -163,16 +161,16 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// <summary>智能视图（树顶部的快捷入口）。与 <see cref="ConnectionFilter"/> 一一对应。</summary>
     /// <remarks>重写 <see cref="object.ToString"/> 返回名称：ListBoxItem 的 UIA Name
     /// 取自该项的 ToString，屏幕阅读器与自动化工具读到的应是友好名而非属性转储。</remarks>
-    public sealed record SmartViewOption(ConnectionFilter FilterValue, string Name, string IconGlyph)
+    public sealed record SmartViewOption(ConnectionFilter FilterValue, string Name, string IconResourceKey)
     {
         public override string ToString() => Name;
     }
 
     public IReadOnlyList<SmartViewOption> SmartViews { get; } =
     [
-        new(ConnectionFilter.All, "所有设备", "\uE968"),
-        new(ConnectionFilter.Favorites, "收藏", "\uE735"),
-        new(ConnectionFilter.Recent, "最近连接", "\uE81C"),
+        new(ConnectionFilter.All, "所有设备", "ResourceIcon.AllDevices"),
+        new(ConnectionFilter.Favorites, "收藏", "ResourceIcon.Favorites"),
+        new(ConnectionFilter.Recent, "最近连接", "ResourceIcon.Recent"),
     ];
 
     /// <summary>左树当前选中的智能视图；选中分组时为 null。</summary>
@@ -279,19 +277,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     [ObservableProperty]
     private IReadOnlyList<GroupTargetOption> _groupTargets = [];
 
-    /// <summary>新建连接对话框「分组」的默认值——默认落在「我的设备」。</summary>
+    /// <summary>新建连接对话框「分组」的默认值——固定落在内置“我的设备”。</summary>
     public Guid? DefaultGroupId { get; private set; }
-
-    /// <summary>当前是否存在受保护默认组（决定「设为默认分组」菜单是否可用）。</summary>
-    public bool HasProtectedDefault => _hasProtectedDefault;
-
-    /// <summary>重算默认组保护状态，供右键菜单「设为默认分组」可用性判断。</summary>
-    private void RefreshDefaultGroupState()
-    {
-        var def = _groups.FirstOrDefault(g => !g.IsSystem && g.IsDefault);
-        _hasProtectedDefault = def is { IsProtected: true };
-        OnPropertyChanged(nameof(HasProtectedDefault));
-    }
 
     // ── 详情面板：按连接的历史与迷你图表 ─────────────────────────
 
@@ -421,14 +408,25 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
         foreach (var item in _allItems)
         {
-            item.IsConnected = _sessions.HasConnectedSession(item.Id);
-            item.HasActiveSession = _sessions.HasActiveSession(item.Id);
-            item.IsConnecting = _sessions.ActiveSessions.Any(
-                x => x.Profile.Id == item.Id && x.State == ConnectionState.Connecting);
+            ApplyRealtimeState(item);
         }
 
         // 「已连接」也是在线数的一部分；会话状态跳变会影响状态栏在线计数。
         RefreshPresenceCounts();
+    }
+
+    private void ApplyRealtimeState(ConnectionItemViewModel item)
+    {
+        if (_sessions is null)
+        {
+            return;
+        }
+
+        var matches = _sessions.ActiveSessions.Where(x => x.Profile.Id == item.Id).ToArray();
+        item.IsConnected = matches.Any(x => x.State == ConnectionState.Connected);
+        item.HasActiveSession = _sessions.HasActiveSession(item.Id);
+        item.IsConnecting = matches.Any(x => x.State is ConnectionState.Connecting or ConnectionState.Reconnecting);
+        item.IsFailed = matches.Any(x => x.State == ConnectionState.Failed);
     }
 
     private void RaiseSelectedDetail()
@@ -442,12 +440,12 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         if (matches.Any(s => s.State == ConnectionState.Connected))
         {
             _selectedStatusText = "已连接";
-            _selectedStatusBrushKey = "Status.Success";
-        }
-        else if (matches.Any(s => s.State == ConnectionState.Connecting))
-        {
-            _selectedStatusText = "正在连接";
             _selectedStatusBrushKey = "Status.Info";
+        }
+        else if (matches.Any(s => s.State is ConnectionState.Connecting or ConnectionState.Reconnecting))
+        {
+            _selectedStatusText = "连接中";
+            _selectedStatusBrushKey = "Status.Warning";
         }
         else if (matches.Any(s => s.State == ConnectionState.Failed))
         {
@@ -648,6 +646,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             _groupNames = groups.ToDictionary(g => g.Id, g => g.Name);
             _tagNames = tags.ToDictionary(t => t.Id, t => t.Name);
             _tagColors = tags.ToDictionary(t => t.Id, t => t.Color);
+            _tagIcons = tags.ToDictionary(t => t.Id, t => TagIconCatalog.Normalize(t.Icon));
             RebuildGroupTargets();
 
             _allItems.Clear();
@@ -660,7 +659,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             var tagOptions = new List<TagFilterOption> { new(null, "全部标签", "") };
             tagOptions.AddRange(tags
                 .OrderBy(t => t.Name, StringComparer.CurrentCultureIgnoreCase)
-                .Select(t => new TagFilterOption(t.Id, t.Name, t.Color)));
+                .Select(t => new TagFilterOption(t.Id, t.Name, t.Color, TagIconCatalog.Normalize(t.Icon))));
             TagFilterOptions = tagOptions;
             if (TagFilter.Id is { } currentTag && tagOptions.All(o => o.Id != currentTag))
             {
@@ -675,7 +674,6 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             OnPropertyChanged(nameof(PresenceProbeEnabled));
 
             ApplyFilter();
-            RefreshDefaultGroupState();
             RaiseViewCounts();
             SyncSmartViewSelection();
 
@@ -710,15 +708,24 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         GroupTargets = options;
     }
 
-    /// <summary>凭据名称由外部注入，避免本页面直接依赖凭据服务。</summary>
+    /// <summary>凭据名称由外部注入，避免本页面直接依赖凭据服务。
+    /// 缓存最近一次注入的映射：页内 LoadAsync 重建条目时复用，否则编辑/新建后会回落为「未指定」。</summary>
+    private IReadOnlyDictionary<Guid, string> _credentialNames = new Dictionary<Guid, string>();
+
     public void ApplyCredentialNames(IReadOnlyDictionary<Guid, string> credentialNames)
     {
+        _credentialNames = credentialNames;
         foreach (var item in _allItems)
         {
-            item.CredentialName = item.Profile.CredentialId is { } id && credentialNames.TryGetValue(id, out var name)
-                ? name
-                : "未指定";
+            ApplyCredentialName(item);
         }
+    }
+
+    private void ApplyCredentialName(ConnectionItemViewModel item)
+    {
+        item.CredentialName = item.Profile.CredentialId is { } id && _credentialNames.TryGetValue(id, out var name)
+            ? name
+            : "未指定";
     }
 
     private ConnectionItemViewModel CreateItem(ConnectionProfile profile)
@@ -732,18 +739,21 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                 : "未分组",
             GroupPath = BuildGroupPath(profile.GroupId)
         };
+        ApplyCredentialName(item);
 
         var chips = profile.TagIds
             .Where(_tagNames.ContainsKey)
-            .Select(id => new TagChip(_tagNames[id], _tagColors.GetValueOrDefault(id, "#0F6CBD")))
+            .Select(id => new TagChip(
+                _tagNames[id],
+                _tagColors.GetValueOrDefault(id, "#0F6CBD"),
+                _tagIcons.GetValueOrDefault(id, TagIconCatalog.DefaultKey)))
             .ToList();
 
         item.Tags = chips.Take(MaxVisibleTags).ToList();
         item.OverflowTagCount = Math.Max(0, chips.Count - MaxVisibleTags);
 
         // 行级实时状态：以 SessionManager 为唯一事实来源（可能为 null 以支持单元测试）。
-        item.IsConnected = _sessions?.HasConnectedSession(profile.Id) ?? false;
-        item.HasActiveSession = _sessions?.HasActiveSession(profile.Id) ?? false;
+        ApplyRealtimeState(item);
 
         return item;
     }
@@ -1001,6 +1011,10 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             {
                 GroupId = group.Id,
                 Name = group.Name,
+                IconResourceKey = group.IsBuiltIn
+                    ? GroupIconCatalog.MyDevicesKey
+                    : GroupIconCatalog.NormalizeCustom(group.Icon),
+                IsBuiltIn = group.IsBuiltIn,
                 Depth = depth,
                 IsDefault = group.IsDefault,
                 IsProtected = group.IsProtected,
@@ -1049,6 +1063,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             {
                 GroupId = null,
                 Name = "未分组",
+                IconResourceKey = GroupIconCatalog.UngroupedKey,
                 Depth = 0,
                 IsUngrouped = true,
                 IsExpanded = !collapsed.Contains("ungrouped"),
@@ -1190,6 +1205,36 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
         OpenConnectionRequested?.Invoke(this, item.Profile);
         return Task.CompletedTask;
+    }
+
+    /// <summary>详情「打开会话 ▾ → 新建会话」：跳过去重聚焦，强制为该设备再开一个会话。</summary>
+    public event EventHandler<ConnectionProfile>? NewSessionRequested;
+
+    [RelayCommand]
+    private Task NewSessionAsync(ConnectionItemViewModel? item)
+    {
+        item ??= SelectedItem;
+        if (item is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        NewSessionRequested?.Invoke(this, item.Profile);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>详情「打开会话 ▾ → 重新连接」：断开该设备的全部活动会话后重新发起连接。</summary>
+    [RelayCommand]
+    private async Task ReconnectItemAsync(ConnectionItemViewModel? item)
+    {
+        item ??= SelectedItem;
+        if (item is null)
+        {
+            return;
+        }
+
+        await DisconnectItemAsync(item);
+        await ConnectAsync(item);
     }
 
     /// <summary>右键「断开连接」：关闭该连接 Profile 的全部活动会话（含连接中 / 失败尚未移除的）。
@@ -1818,15 +1863,15 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     private async Task CreateGroupUnderAsync(Guid? parentId, string? parentName)
     {
-        var name = await _dialogs.EditGroupNameAsync(new GroupNamePrompt("新建分组", ParentName: parentName));
-        if (string.IsNullOrWhiteSpace(name))
+        var result = await _dialogs.EditGroupAsync(new GroupEditorPrompt("新建分组", ParentName: parentName));
+        if (result is null)
         {
             return;
         }
 
         try
         {
-            await _groupService.CreateAsync(name, parentId);
+            await _groupService.CreateAsync(result.Name, parentId, result.Icon);
             await LoadAsync();
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
@@ -1838,20 +1883,22 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     [RelayCommand]
     private async Task RenameGroupAsync(ConnectionGroupNodeViewModel? node)
     {
-        if (node?.GroupId is not { } groupId)
+        if (node?.GroupId is not { } groupId || node.IsBuiltIn || node.IsUngrouped)
         {
             return;
         }
 
-        var name = await _dialogs.EditGroupNameAsync(new GroupNamePrompt("重命名分组", node.Name));
-        if (string.IsNullOrWhiteSpace(name) || name == node.Name)
+        var result = await _dialogs.EditGroupAsync(new GroupEditorPrompt(
+            "编辑分组", node.Name, node.IconResourceKey));
+        if (result is null
+            || (result.Name == node.Name && result.Icon == node.IconResourceKey))
         {
             return;
         }
 
         try
         {
-            await _groupService.RenameAsync(groupId, name);
+            await _groupService.UpdateAsync(groupId, result.Name, result.Icon);
             await LoadAsync();
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
@@ -1860,50 +1907,18 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         }
     }
 
-    /// <summary>把某分组设为默认新建连接分组（分组右键「设为默认分组」）。</summary>
-    [RelayCommand]
-    private async Task SetDefaultGroupAsync(ConnectionGroupNodeViewModel? node)
-    {
-        if (node?.GroupId is not { } groupId)
-        {
-            return;
-        }
-
-        try
-        {
-            await _groupService.SetDefaultAsync(groupId);
-            await LoadAsync();
-        }
-        catch (InvalidOperationException ex)
-        {
-            await _dialogs.ShowMessageAsync("无法设为默认分组", ex.Message, DialogKind.Warning);
-        }
-    }
-
     [RelayCommand]
     private async Task DeleteGroupAsync(ConnectionGroupNodeViewModel? node)
     {
-        if (node?.GroupId is not { } groupId)
+        if (node?.GroupId is not { } groupId || node.IsBuiltIn || node.IsUngrouped)
         {
             return;
-        }
-
-        // 候选默认分组提前算好：确认文案只有确实存在可选的其它分组时才提示“需要指定新的默认分组”。
-        List<DefaultGroupOption>? candidates = null;
-        if (node.IsDefault)
-        {
-            candidates = _groups
-                .Where(g => !g.IsSystem && g.Id != groupId)
-                .OrderBy(g => g.SortOrder).ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
-                .Select(g => new DefaultGroupOption(g.Id, g.Name))
-                .ToList();
         }
 
         var confirmed = await _dialogs.ConfirmAsync(
             "删除分组",
             $"确定要删除分组「{node.Name}」吗？\n\n" +
-            "组内连接会移动到「未分组」，子分组会提升到上一级——不会删除任何连接。" +
-            (candidates is { Count: > 0 } ? "\n\n这是当前默认新建连接分组，删除后需要指定新的默认分组。" : ""),
+            "组内连接会移动到「未分组」，子分组会提升到上一级——不会删除任何连接。",
             "删除",
             isDanger: true);
 
@@ -1912,24 +1927,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             return;
         }
 
-        Guid? newDefault = null;
-        if (candidates is { Count: > 0 })
-        {
-            var picked = await _dialogs.PickDefaultGroupAsync(node.Name, candidates);
-            if (picked is null)
-            {
-                return; // 用户取消选默认 → 中止删除
-            }
-            newDefault = picked.Id;
-        }
-
         try
         {
             await _groupService.DeleteAsync(groupId);
-            if (newDefault is { } targetId)
-            {
-                await _groupService.SetDefaultAsync(targetId);
-            }
             await LoadAsync();
         }
         catch (InvalidOperationException ex)

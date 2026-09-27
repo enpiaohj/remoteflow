@@ -41,16 +41,14 @@
 
                 <!-- 协议图标 + 名称 / Host:Port 两行 -->
                 <StackPanel Orientation="Horizontal">
-                    <Grid>
-                        <Border Width="44" Height="44" CornerRadius="8"
-                                Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
-                                Opacity="0.12" />
-                        <TextBlock Width="44" Height="44"
-                                   Text="{Binding ProtocolIcon}"
-                                   FontFamily="{StaticResource IconFont}"
-                                   FontSize="19"
-                                   Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <!-- 设备主图标：与连接列表 / 详情 / 首页同一套淡色 Tile + 多色矢量 -->
+                    <Grid Width="44" Height="44">
+                        <Border Style="{StaticResource IconTile.Background}"
+                                Width="44" Height="44"
+                                Background="{Binding DeviceBrushKey, Converter={StaticResource KeyToBrush}}"
+                                Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                        <Image Style="{StaticResource DeviceIcon.Image}" Width="30" Height="30"
+                               Source="{Binding DeviceIconKey, Converter={StaticResource KeyToImageSource}}" />
                     </Grid>
                     <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
                         <TextBlock Text="{Binding ConnectionName}"

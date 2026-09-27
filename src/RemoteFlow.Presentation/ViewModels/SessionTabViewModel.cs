@@ -72,6 +72,30 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
 
     public ConnectionProfile Profile => Session.Profile;
 
+    // ── 标签头：主机设备图标（与列表 / 详情 / 首页同一套规则），协议与状态进悬停提示 ──
+
+    private DeviceTypeInfo DeviceVisual => DeviceTypeCatalog.Resolve(Profile.DeviceType)
+        ?? DeviceTypeCatalog.InferFromProtocol(Profile.Protocol);
+
+    /// <summary>设备类型矢量图标资源键：同类会话多开时靠设备形状一眼区分。</summary>
+    public string DeviceIconKey => DeviceVisual.IconResourceKey;
+
+    /// <summary>设备类型配色资源键。</summary>
+    public string DeviceBrushKey => DeviceVisual.AccentBrushKey;
+
+    public string ProtocolName => Protocol switch
+    {
+        ProtocolType.Rdp => "RDP",
+        ProtocolType.Ssh => "SSH",
+        _ => "VNC"
+    };
+
+    /// <summary>会话选择器第二行：主机 · 协议。</summary>
+    public string TabHostLine => $"{Profile.Host} · {ProtocolName}";
+
+    /// <summary>标签悬停提示：名称 · 协议 · 状态。图标不再表达协议，协议由这里补足。</summary>
+    public string TabToolTip => $"{Title} · {ProtocolName} · {StateText}";
+
     /// <summary>连接质量详情状态（Flyout 绑定源）。</summary>
     public SessionQualityState Quality { get; }
 
@@ -101,6 +125,7 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
 
     /// <summary>面向用户的状态短语，如「已连接」「正在连接…」。</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TabToolTip))]
     private string _stateText = "准备中";
 
     /// <summary>
@@ -335,23 +360,24 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
             case ConnectionState.Connecting:
                 StateText = "正在连接…";
                 StateIcon = "\uE895";
-                StateBrushKey = "Status.Info";
+                StateBrushKey = "Status.Warning";
                 break;
 
             case ConnectionState.Connected:
                 StateText = "已连接";
                 StateIcon = "\uE930";
-                StateBrushKey = "Status.Success";
+                // 全应用统一：已连接 = 蓝；绿色只用于「在线（可达）」。
+                StateBrushKey = "Status.Info";
                 InterruptionMessage = string.Empty;
                 RequestStartFullScreenIfConfigured();
                 break;
 
             case ConnectionState.Reconnecting:
-                // 自动重连中：表现对齐 Connecting（IsConnecting/图标/Info 色），
+                // 自动重连中：表现对齐 Connecting（IsConnecting/图标/琥珀色），
                 // 不再让状态栏停留在「已连接」造成「已连却断」的观感矛盾。
                 StateText = "重新连接中…";
                 StateIcon = "\uE895";
-                StateBrushKey = "Status.Info";
+                StateBrushKey = "Status.Warning";
                 InterruptionMessage = string.Empty;
                 break;
 
@@ -364,7 +390,8 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
             case ConnectionState.Disconnected:
                 StateText = "已断开";
                 StateIcon = "\uE7BA";
-                StateBrushKey = "Status.Warning";
+                // 琥珀已表示「连接中」；断开用中性灰，由会话内断线状态层提示重连。
+                StateBrushKey = "Status.Idle";
                 InterruptionMessage = "会话已断开。";
                 break;
 

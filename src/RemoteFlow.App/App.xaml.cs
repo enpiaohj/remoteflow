@@ -277,8 +277,7 @@ public partial class App : System.Windows.Application
     /// </summary>
     private async Task SeedDefaultsIfEmptyAsync()
     {
-        // 首启种子经 DefaultGroupResolver：由它决定 createIfEmpty（真·首启 true，
-        // 之后 false），并在首启成功后落 DefaultGroupSeedDone 标记，避免删光分组后每次启动又复活。
+        // 每次启动经 DefaultGroupResolver 校正永久内置分组：“我的设备”与“未分组”始终存在且身份固定。
         await Services.GetRequiredService<DefaultGroupResolver>().ResolveDefaultAsync();
 
         var tags = Services.GetRequiredService<ITagRepository>();

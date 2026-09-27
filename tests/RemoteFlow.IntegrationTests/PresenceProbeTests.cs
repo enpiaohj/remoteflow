@@ -75,7 +75,7 @@ public sealed class PresenceProbeTests
 
         // 未探测：中性占位
         Assert.Equal("—", item.PresenceDisplay);
-        Assert.Equal("Text.Tertiary", item.PresenceBrushKey);
+        Assert.Equal("Status.Idle", item.PresenceBrushKey);
 
         // 探测在线：绿
         item.SetProbeResult(true);
@@ -86,15 +86,23 @@ public sealed class PresenceProbeTests
         // 探测离线：灰（「现在不通」不是错误，不用告警色）
         item.SetProbeResult(false);
         Assert.Equal("离线", item.PresenceDisplay);
-        Assert.Equal("Text.Tertiary", item.PresenceBrushKey);
+        Assert.Equal("Status.Idle", item.PresenceBrushKey);
 
-        // 有活动会话：无论探测结果一律「已连接」+ 绿
+        // 原始探测维度保持离线；统一状态展示由已连接会话覆盖为蓝色。
         item.IsConnected = true;
-        Assert.Equal("已连接", item.PresenceDisplay);
-        Assert.Equal("Status.Success", item.PresenceBrushKey);
+        Assert.Equal("离线", item.PresenceDisplay);
+        Assert.Equal("Status.Idle", item.PresenceBrushKey);
+        Assert.Equal("已连接", item.ConnectionStatusDisplay);
+        Assert.Equal("Status.Info", item.ConnectionStatusBrushKey);
+
+        // 行快捷动作按活动会话切换：无会话 = 连接；有会话（含连接中）= 打开会话。
+        Assert.Equal("连接", item.QuickActionText);
+        item.HasActiveSession = true;
+        Assert.Equal("打开会话", item.QuickActionText);
 
         // 清空探测态回到未探测
         item.IsConnected = false;
+        item.HasActiveSession = false;
         item.ClearProbe();
         Assert.Equal(PresenceState.Unknown, item.Presence);
         Assert.Equal("—", item.PresenceDisplay);

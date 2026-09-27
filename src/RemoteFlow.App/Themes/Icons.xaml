@@ -34,6 +34,7 @@
     <sys:String x:Key="Icon.Close">&#xE711;</sys:String>
     <sys:String x:Key="Icon.More">&#xE712;</sys:String>
     <sys:String x:Key="Icon.Refresh">&#xE72C;</sys:String>
+    <sys:String x:Key="Icon.Checklist">&#xE9D5;</sys:String>
     <sys:String x:Key="Icon.Connect">&#xE8AF;</sys:String>
     <sys:String x:Key="Icon.Save">&#xE74E;</sys:String>
     <sys:String x:Key="Icon.Accept">&#xE73E;</sys:String>

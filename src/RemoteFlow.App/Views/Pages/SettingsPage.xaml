@@ -103,7 +103,7 @@
     <!-- 概念图中设置卡片铺满内容区（实测占内容宽 92%），标题靠左、控件靠右，
          不做宽度封顶——窗口放大时卡片跟着变宽。左侧说明文字自身封顶 560，
          保证行文长度可读，右侧控件始终贴齐卡片右缘。 -->
-    <Grid Margin="24,20,24,0">
+    <Grid Margin="16,20,16,0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -347,7 +347,7 @@
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
                                             MaxWidth="560" HorizontalAlignment="Left">
                                     <TextBlock Text="连接工作台在线探测" Style="{StaticResource Text.Body}" />
-                                    <TextBlock Text="进入「连接工作台」时自动用 TCP 探测当前列表的可达性（并发受限）。关闭后仍可用列表工具条的「探测」手动触发。"
+                                    <TextBlock Text="进入「首页」或「连接工作台」时自动用 TCP 探测主机可达性（并发受限）。关闭后仍可用列表工具条的「探测」手动触发。"
                                                Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,0" />
                                 </StackPanel>
                                 <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
@@ -453,33 +453,6 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- 分组 -->
-                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
-                        <StackPanel>
-                            <StackPanel Style="{StaticResource Settings.CardHeader}">
-                                <TextBlock Text="{StaticResource Icon.Folder}" FontFamily="{StaticResource IconFont}" FontSize="15"
-                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
-                                <TextBlock Text="分组" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
-                            </StackPanel>
-
-                            <Grid Style="{StaticResource SettingRow}" Margin="0,10,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
-                                            MaxWidth="560" HorizontalAlignment="Left">
-                                    <TextBlock Text="{Binding DefaultGroupSwitchLabel}" Style="{StaticResource Text.Body}" />
-                                    <TextBlock Text="{Binding DefaultGroupDescription}" Style="{StaticResource Text.Caption}"
-                                               TextWrapping="Wrap" Margin="0,2,0,0" />
-                                </StackPanel>
-                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
-                                          IsChecked="{Binding DefaultGroupProtected}"
-                                          IsEnabled="{Binding ProtectionSwitchEnabled}" />
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-
                     <!-- 语言 -->
                     <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
                         <StackPanel>
@@ -514,11 +487,9 @@
                     <!-- 关于 -->
                     <Border Style="{StaticResource Surface.Card}" Padding="24,20">
                         <StackPanel Orientation="Horizontal">
-                            <Border Width="32" Height="32" CornerRadius="8" Background="{DynamicResource Brand.Default}">
-                                <TextBlock Text="{StaticResource Icon.Connect}" FontFamily="{StaticResource IconFont}"
-                                           FontSize="15" Foreground="White"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
+                            <!-- 产品图标与标题栏 / 任务栏同源（Assets/RemoteFlow-logo.png） -->
+                            <Image Width="32" Height="32" Source="pack://application:,,,/Assets/RemoteFlow-logo.png"
+                                   RenderOptions.BitmapScalingMode="HighQuality" />
                             <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
                                 <TextBlock Text="RemoteFlow" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
                                 <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0">

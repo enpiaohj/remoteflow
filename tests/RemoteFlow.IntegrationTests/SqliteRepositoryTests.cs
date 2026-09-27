@@ -60,6 +60,7 @@ public sealed class SqliteRepositoryTests : IDisposable
             Host = "10.10.1.10",
             Port = 3389,
             Protocol = ProtocolType.Rdp,
+            DeviceType = DeviceType.DomainController,
             Notes = "主域控制器",
             Favorite = true
         };
@@ -73,6 +74,7 @@ public sealed class SqliteRepositoryTests : IDisposable
         Assert.Equal("DC01", loaded!.Name);
         Assert.Equal("10.10.1.10", loaded.Host);
         Assert.Equal(ProtocolType.Rdp, loaded.Protocol);
+        Assert.Equal(DeviceType.DomainController, loaded.DeviceType);
         Assert.True(loaded.Favorite);
         // 协议参数以 JSON 存 options_json 列，需正确往返
         Assert.True(loaded.Rdp.RedirectClipboard);
@@ -80,11 +82,13 @@ public sealed class SqliteRepositoryTests : IDisposable
 
         loaded.Name = "DC01-renamed";
         loaded.Favorite = false;
+        loaded.DeviceType = DeviceType.WindowsServer;
         await repo.UpdateAsync(loaded);
 
         var updated = await repo.GetByIdAsync(profile.Id);
         Assert.Equal("DC01-renamed", updated!.Name);
         Assert.False(updated.Favorite);
+        Assert.Equal(DeviceType.WindowsServer, updated.DeviceType);
 
         await repo.DeleteAsync(profile.Id);
         Assert.Null(await repo.GetByIdAsync(profile.Id));
@@ -114,6 +118,44 @@ public sealed class SqliteRepositoryTests : IDisposable
         var survivor = await connections.GetByIdAsync(profile.Id);
         Assert.NotNull(survivor);
         Assert.Null(survivor!.GroupId); // 迁移到「未分组」
+    }
+
+    [Fact]
+    public async Task 分组内置身份与图标往返且仓储拒绝删除内置组()
+    {
+        var groups = new SqliteGroupRepository(_database);
+        var group = new ConnectionGroup
+        {
+            Name = "我的设备",
+            Icon = GroupIconCatalog.MyDevicesKey,
+            IsBuiltIn = true,
+            IsDefault = true,
+            IsProtected = true
+        };
+
+        await groups.AddAsync(group);
+        var loaded = Assert.Single(await groups.GetAllAsync(), g => g.Id == group.Id);
+        Assert.True(loaded.IsBuiltIn);
+        Assert.Equal(GroupIconCatalog.MyDevicesKey, loaded.Icon);
+
+        await groups.DeleteAsync(group.Id, moveConnectionsTo: null, CancellationToken.None);
+        Assert.Contains(await groups.GetAllAsync(), g => g.Id == group.Id);
+    }
+
+    [Fact]
+    public async Task 标签图标增查改往返一致()
+    {
+        var tags = new SqliteTagRepository(_database);
+        var tag = new Tag { Name = "生产", Color = "#C4342A", Icon = TagIconCatalog.ProductionKey };
+
+        await tags.AddAsync(tag);
+        var loaded = Assert.Single(await tags.GetAllAsync(), t => t.Id == tag.Id);
+        Assert.Equal(TagIconCatalog.ProductionKey, loaded.Icon);
+
+        loaded.Icon = TagIconCatalog.SecurityKey;
+        await tags.UpdateAsync(loaded);
+        Assert.Equal(TagIconCatalog.SecurityKey,
+            Assert.Single(await tags.GetAllAsync(), t => t.Id == tag.Id).Icon);
     }
 
     [Fact]

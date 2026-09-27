@@ -36,8 +36,12 @@ public interface IDialogService
     /// <summary>新建或编辑凭据。返回 null 表示用户取消。</summary>
     Task<CredentialEditorResult?> EditCredentialAsync(Credential? existing);
 
+    /// <summary>新建 / 编辑自定义分组（名称 + 图标）。返回 null 表示取消。</summary>
+    Task<GroupEditorResult?> EditGroupAsync(GroupEditorPrompt prompt)
+        => Task.FromResult<GroupEditorResult?>(null);
+
     /// <summary>
-    /// 新建 / 重命名分组的小对话框。返回用户填写的分组名（已 Trim），取消返回 null。
+    /// 旧版仅名称分组对话框。保留给尚未迁移的平台调用；新代码使用 <see cref="EditGroupAsync"/>。
     /// </summary>
     Task<string?> EditGroupNameAsync(GroupNamePrompt prompt);
 
@@ -85,6 +89,16 @@ public interface IDialogService
 /// </summary>
 public sealed record ConnectionEditorResult(ConnectionProfile Profile, bool ConnectImmediately);
 
+/// <summary>分组编辑器上下文。图标键为空或非法时回退为文件夹。</summary>
+public sealed record GroupEditorPrompt(
+    string Title,
+    string InitialName = "",
+    string InitialIcon = GroupIconCatalog.DefaultCustomKey,
+    string? ParentName = null);
+
+/// <summary>分组编辑结果，名称已 Trim，图标键已规范化。</summary>
+public sealed record GroupEditorResult(string Name, string Icon);
+
 /// <summary>分组名输入对话框的上下文。</summary>
 /// <param name="Title">对话框标题，如「新建分组」/「重命名分组」。</param>
 /// <param name="InitialName">重命名时的原名；新建时为空。</param>
@@ -100,10 +114,18 @@ public sealed record DefaultGroupOption(Guid Id, string Name);
 /// <param name="InitialColor">初始颜色（#RRGGBB）；新建时给一个默认色。</param>
 /// <param name="InitialDescription">初始描述；新建时为空。</param>
 public sealed record TagEditorPrompt(
-    string Title, string InitialName = "", string InitialColor = "#0F6CBD", string InitialDescription = "");
+    string Title,
+    string InitialName = "",
+    string InitialColor = "#0F6CBD",
+    string InitialDescription = "",
+    string InitialIcon = TagIconCatalog.DefaultKey);
 
-/// <summary>标签编辑结果，均已 Trim。</summary>
-public sealed record TagEditorResult(string Name, string Color, string Description);
+/// <summary>标签编辑结果，均已 Trim；图标键已规范化。</summary>
+public sealed record TagEditorResult(
+    string Name,
+    string Color,
+    string Description,
+    string Icon = TagIconCatalog.DefaultKey);
 
 /// <summary>
 /// 凭据编辑结果。

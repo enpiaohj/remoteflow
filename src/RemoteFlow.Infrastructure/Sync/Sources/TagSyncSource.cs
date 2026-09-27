@@ -7,7 +7,7 @@ namespace RemoteFlow.Infrastructure.Sync.Sources;
 /// <summary>tag 实体的同步源。</summary>
 public sealed class TagSyncSource(ITagRepository tags) : ISyncEntitySource
 {
-    public int SchemaVersion => 1;
+    public int SchemaVersion => 2;
 
     public IReadOnlyList<string> EntityTypes => [SyncEntityTypes.Tag];
 
@@ -36,6 +36,7 @@ public sealed class TagSyncSource(ITagRepository tags) : ISyncEntitySource
 
         var (_, tag) = SyncSerializer.Deserialize<Tag>(plaintext!);
         tag.Id = id;
+        tag.Icon = TagIconCatalog.Normalize(tag.Icon);
         if ((await tags.GetAllAsync(ct)).Any(t => t.Id == id))
         {
             await tags.UpdateAsync(tag, ct);

@@ -63,8 +63,8 @@
                         CommandParameter="{Binding}">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <!-- 左缘一条协议色竖条：一眼分辨 RDP / SSH / VNC，
-                                 也给这张卡片一个视觉锚点，不再是一块空白方框。 -->
+                            <!-- 左缘一条设备色竖条：与左侧设备图标同色，
+                                 给这张卡片一个视觉锚点，不再是一块空白方框。 -->
                             <Border x:Name="Root"
                                     Background="{DynamicResource Bg.Layer}"
                                     BorderBrush="{DynamicResource Stroke.Subtle}"
@@ -73,13 +73,13 @@
                                     SnapsToDevicePixels="True">
                                 <Grid>
                                     <Border Width="3" HorizontalAlignment="Left" Margin="0,16"
-                                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                            Background="{Binding DeviceBrushKey, Converter={StaticResource KeyToBrush}}"
                                             CornerRadius="0,2,2,0" />
                                     <ContentPresenter Margin="20,16,16,14" />
                                 </Grid>
                             </Border>
                             <ControlTemplate.Triggers>
-                                <!-- 高亮 / 绿点只认“真正已连接”；HasActiveSession（任意活动）只用于行右键区分动作 -->
+                                <!-- 高亮 / 蓝点只认“真正已连接”；HasActiveSession（任意活动）只用于行右键区分动作 -->
                                 <DataTrigger Binding="{Binding IsConnected}" Value="True">
                                     <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
                                     <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Selected}" />
@@ -110,12 +110,12 @@
                         <Grid Grid.Column="0" VerticalAlignment="Center" Width="64" Height="64">
                             <Border Style="{StaticResource IconTile.Background}"
                                     Width="64" Height="64" CornerRadius="{StaticResource Radius.Large}"
-                                    Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                                    Background="{Binding DeviceBrushKey, Converter={StaticResource KeyToBrush}}"
                                     Opacity="{StaticResource IconTile.ColorBgOpacity}" />
-                            <TextBlock Style="{StaticResource IconTile.Glyph}" FontSize="28"
-                                       Text="{Binding ProtocolIcon}"
-                                       Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
-                            <!-- 会话状态点：空闲隐藏，连接中琥珀 / 已连接绿 -->
+                            <Image Style="{StaticResource DeviceIcon.Image}"
+                                   Width="46" Height="46"
+                                   Source="{Binding DeviceIconKey, Converter={StaticResource KeyToImageSource}}" />
+                            <!-- 会话状态点：连接中琥珀 / 异常红 / 已连接蓝 -->
                             <Border Style="{StaticResource SessionStatusDot}" Width="18" Height="18" CornerRadius="9" Margin="0,0,-3,-3"
                                     Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}">
                                 <Ellipse Style="{StaticResource SessionStatusDot.Fill}" Width="13" Height="13" />
@@ -126,7 +126,7 @@
                         <TextBlock Grid.Column="1" Text="连接 &#x2192;" FontSize="12" FontWeight="SemiBold"
                                    HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
                                    IsHitTestVisible="False"
-                                   Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}">
+                                   Foreground="{Binding DeviceBrushKey, Converter={StaticResource KeyToBrush}}">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Opacity" Value="0" />
@@ -144,24 +144,14 @@
                                        TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" />
                             <TextBlock Text="{Binding HostDisplay}" Style="{StaticResource Text.Caption}"
                                        FontFamily="{StaticResource MonoFont}" Margin="0,4,0,0" HorizontalAlignment="Left" />
-                            <!-- 协议徽章紧跟主机，和图标 / 名称贴在一起 -->
+                            <!-- 协议徽章与实时状态采用全应用统一组件。 -->
                             <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
-                                <Grid>
-                                    <Border CornerRadius="5"
-                                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
-                                            Opacity="0.13" />
-                                    <TextBlock Text="{Binding ProtocolName}" FontSize="11" FontWeight="SemiBold" Margin="8,3"
-                                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
-                                </Grid>
-                                <Ellipse Width="7" Height="7" VerticalAlignment="Center" Margin="10,0,0,0"
-                                         Fill="{DynamicResource Status.Success}"
-                                         Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}" />
-                                <TextBlock Text="已连接" Style="{StaticResource Text.Caption}" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource Status.Success}" Margin="6,0,0,0" VerticalAlignment="Center"
-                                           Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}" />
-                                <TextBlock Text="{Binding LastConnectedDisplay}" Style="{StaticResource Text.Caption}" Margin="10,0,0,0"
-                                           VerticalAlignment="Center"
-                                           Visibility="{Binding IsConnected, Converter={StaticResource InverseBoolToVisibility}}" />
+                                <ContentControl Content="{Binding}"
+                                                ContentTemplate="{StaticResource ProtocolBadge.Template}" />
+                                <ContentControl Content="{Binding}" Margin="8,0,0,0"
+                                                ContentTemplate="{StaticResource ConnectionStatus.Template}" />
+                                <TextBlock Text="{Binding LastConnectedDisplay}" Style="{StaticResource Text.Caption}"
+                                           Margin="10,0,0,0" VerticalAlignment="Center" />
                             </StackPanel>
                         </StackPanel>
                     </Grid>
@@ -206,11 +196,11 @@
                 <Grid Grid.Column="0" VerticalAlignment="Center"
                       Width="{StaticResource IconTile.Size}" Height="{StaticResource IconTile.Size}">
                     <Border Style="{StaticResource IconTile.Background}"
-                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                            Background="{Binding DeviceBrushKey, Converter={StaticResource KeyToBrush}}"
                             Opacity="{StaticResource IconTile.ColorBgOpacity}" />
-                    <TextBlock Style="{StaticResource IconTile.Glyph}"
-                               Text="{Binding ProtocolIcon}"
-                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    <Image Style="{StaticResource DeviceIcon.Image}"
+                           Width="30" Height="30"
+                           Source="{Binding DeviceIconKey, Converter={StaticResource KeyToImageSource}}" />
                     <Border Style="{StaticResource SessionStatusDot}"
                             Visibility="{Binding HasActiveSession, Converter={StaticResource BoolToVisibility}}">
                         <Ellipse Style="{StaticResource SessionStatusDot.Fill}" />
@@ -244,12 +234,14 @@
                             CommandParameter="{Binding}" />
                 </StackPanel>
 
-                <Grid Grid.Column="2" VerticalAlignment="Center" Margin="8,0">
-                    <Border CornerRadius="4"
-                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" Opacity="0.14" />
-                    <TextBlock Text="{Binding ProtocolName}" FontSize="10" Margin="7,2"
-                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
-                </Grid>
+                <!-- 协议与状态同一行横排，并各占固定宽度槽位：上下行的徽章与状态纵向对齐，
+                     不再上下叠放挤占行高。 -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,4,0">
+                    <ContentControl Content="{Binding}" Width="56"
+                                    ContentTemplate="{StaticResource ProtocolBadge.Template}" />
+                    <ContentControl Content="{Binding}" Width="62" Margin="6,0,0,0"
+                                    ContentTemplate="{StaticResource ConnectionStatus.Template}" />
+                </StackPanel>
 
                 <Button Grid.Column="3" Style="{StaticResource Button.Icon}"
                         Width="24" Height="24" FontSize="11" VerticalAlignment="Center"
@@ -267,33 +259,37 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- 图标块显示协议（与收藏 / 连接列表同一套语言）；
-                     只有失败或取消才在右下角打一个状态点，成功是常态不必强调。 -->
+                <!-- 图标块显示设备（与收藏 / 连接列表同一套语言） -->
                 <Grid Grid.Column="0" VerticalAlignment="Center">
                     <Border Style="{StaticResource IconTile.Background}"
-                            Background="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}"
+                            Background="{Binding DeviceBrushKey, Converter={StaticResource KeyToBrush}}"
                             Opacity="{StaticResource IconTile.ColorBgOpacity}" />
-                    <TextBlock Style="{StaticResource IconTile.Glyph}"
-                               Text="{Binding ProtocolIcon}"
-                               Foreground="{Binding ProtocolBrushKey, Converter={StaticResource KeyToBrush}}" />
-                    <Border Width="13" Height="13" CornerRadius="7"
-                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                            Margin="0,0,-2,-2"
-                            Background="{DynamicResource Bg.Layer}"
-                            Visibility="{Binding ShowResultBadge, Converter={StaticResource BoolToVisibility}}">
-                        <Ellipse Width="9" Height="9"
-                                 Fill="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}"
-                                 ToolTip="{Binding ResultText}" />
-                    </Border>
+                    <Image Style="{StaticResource DeviceIcon.Image}"
+                           Width="30" Height="30"
+                           Source="{Binding DeviceIconKey, Converter={StaticResource KeyToImageSource}}" />
                 </Grid>
 
+                <!-- 分区标题已是「最近活动」，行内直接显示连接名，不再逐行重复「连接到」 -->
                 <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding ActivityText}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding ConnectionName}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{Binding HostProtocolLine}" Style="{StaticResource Text.Caption}" Margin="0,1,0,0" />
                 </StackPanel>
 
-                <TextBlock Grid.Column="2" Text="{Binding StartedAtDisplay}" Style="{StaticResource Text.Caption}"
-                           VerticalAlignment="Center" Margin="12,0,4,0" />
+                <!-- 成功是常态不标注；失败 / 取消用语义色胶囊明确写出，比图标角落的小点更易发现 -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,4,0">
+                    <Border CornerRadius="10" Margin="0,0,10,0" VerticalAlignment="Center"
+                            ToolTip="{Binding ResultText}"
+                            Visibility="{Binding ShowResultBadge, Converter={StaticResource BoolToVisibility}}">
+                        <Grid>
+                            <Border CornerRadius="10" Opacity="0.11"
+                                    Background="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" />
+                            <TextBlock Text="{Binding ResultShortText}" FontSize="10" FontWeight="SemiBold" Margin="8,2"
+                                       Foreground="{Binding ResultBrushKey, Converter={StaticResource KeyToBrush}}" />
+                        </Grid>
+                    </Border>
+                    <TextBlock Text="{Binding StartedAtDisplay}" Style="{StaticResource Text.Caption}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
@@ -326,7 +322,7 @@
                                Visibility="{Binding ConnectedSessions, Converter={StaticResource CountToVisibility}}">
                         <Run Text=" · " Foreground="{DynamicResource Text.Tertiary}" />
                         <Run Text="{Binding ConnectedSessions, Mode=OneWay}" FontWeight="SemiBold"
-                             Foreground="{DynamicResource Status.Success}" />
+                             Foreground="{DynamicResource Status.Info}" />
                         <Run Text=" 个会话已连接" Foreground="{DynamicResource Text.Tertiary}" />
                     </TextBlock>
                 </StackPanel>

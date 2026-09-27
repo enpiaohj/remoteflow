@@ -71,10 +71,10 @@ public sealed class SqliteConnectionRepository(RemoteFlowDatabase database) : IC
             command.Transaction = transaction;
             command.CommandText = """
                 INSERT INTO connections
-                    (id, name, host, port, protocol, group_id, credential_id, favorite, notes,
+                    (id, name, host, port, protocol, device_type, group_id, credential_id, favorite, notes,
                      created_at, updated_at, last_connected_at, options_json)
                 VALUES
-                    ($id, $name, $host, $port, $protocol, $groupId, $credentialId, $favorite, $notes,
+                    ($id, $name, $host, $port, $protocol, $deviceType, $groupId, $credentialId, $favorite, $notes,
                      $createdAt, $updatedAt, $lastConnectedAt, $optionsJson);
                 """;
             BindProfile(command, profile);
@@ -98,6 +98,7 @@ public sealed class SqliteConnectionRepository(RemoteFlowDatabase database) : IC
             command.CommandText = """
                 UPDATE connections SET
                     name = $name, host = $host, port = $port, protocol = $protocol,
+                    device_type = $deviceType,
                     group_id = $groupId, credential_id = $credentialId, favorite = $favorite,
                     notes = $notes, updated_at = $updatedAt, last_connected_at = $lastConnectedAt,
                     options_json = $optionsJson
@@ -175,6 +176,7 @@ public sealed class SqliteConnectionRepository(RemoteFlowDatabase database) : IC
         command.Parameters.AddWithValue("$host", profile.Host);
         command.Parameters.AddWithValue("$port", profile.Port);
         command.Parameters.AddWithValue("$protocol", (int)profile.Protocol);
+        command.Parameters.AddWithValue("$deviceType", (int)profile.DeviceType);
         command.Parameters.AddWithValue("$groupId", (object?)profile.GroupId?.ToString() ?? DBNull.Value);
         command.Parameters.AddWithValue("$credentialId", (object?)profile.CredentialId?.ToString() ?? DBNull.Value);
         command.Parameters.AddWithValue("$favorite", profile.Favorite ? 1 : 0);
@@ -206,6 +208,7 @@ public sealed class SqliteConnectionRepository(RemoteFlowDatabase database) : IC
             Host = reader.GetString(reader.GetOrdinal("host")),
             Port = reader.GetInt32(reader.GetOrdinal("port")),
             Protocol = (ProtocolType)reader.GetInt32(reader.GetOrdinal("protocol")),
+            DeviceType = (DeviceType)reader.GetInt32(reader.GetOrdinal("device_type")),
             GroupId = ReadNullableGuid(reader, "group_id"),
             CredentialId = ReadNullableGuid(reader, "credential_id"),
             Favorite = reader.GetInt32(reader.GetOrdinal("favorite")) != 0,

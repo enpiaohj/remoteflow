@@ -47,6 +47,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly ILogger<MainViewModel> _logger;
     private readonly IUiDispatcher _ui;
     private readonly IUiTimerFactory _timerFactory;
+    private CancellationTokenSource? _pageReloadCts;
+    private Task _pageReloadTask = Task.CompletedTask;
+    private int _pageReloadVersion;
+    private bool _activatingWorkspacePage;
 
     /// <summary>正在创建会话的连接 Profile.Id。用于连点去重：会话 Tab 建出前，第二次请求不重复建。</summary>
     private readonly HashSet<Guid> _openingProfileIds = [];
@@ -99,6 +103,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // 首页 / 连接页所有「点设备→开会话」都收敛到这里统一处理：去重、聚焦、失败提示。
         HomePage.OpenConnectionRequested += async (_, profile) => await OpenSessionAsync(profile);
         ConnectionsPage.OpenConnectionRequested += async (_, profile) => await OpenSessionAsync(profile);
+
+        // 详情「打开会话 ▾ → 新建会话」：跳过去重聚焦，强制为同一设备再开一个会话。
+        ConnectionsPage.NewSessionRequested += async (_, profile) => await OpenSessionAsync(profile, forceNew: true);
 
         // 首页行右键动作（连接 / 编辑 / 测试连接 / 收藏 / 定位）桥接到「我的连接」既有命令。
         HomePage.ConnectionActionRequested += async (_, args) => await HandleHomeConnectionActionAsync(args);
@@ -206,10 +213,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         // 页面切换统一由 CurrentPage 驱动：导航钮以 TwoWay 绑定回写 CurrentPage，
-        // 这里负责落位——这样 UIA SelectionItemPattern / 键盘激活等不经过鼠标
-        // Click 的路径也能正确切换页面（此前只挂在 Click 的 Command 上，编程
-        // 选中只改高亮不切内容，辅助工具与自动化无法切换页面）。
-        ShowWorkspacePage(value);
+        // 这里同时负责落位和刷新——鼠标、键盘、UI Automation 与程序导航走同一条链。
+        ActivateWorkspacePage(value);
+        RequestPageReload(value);
     }
 
     /// <summary>状态栏文案。</summary>
@@ -217,10 +223,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ? "无活动会话"
         : $"已连接 {_sessions.ConnectedSessionCount} 个会话";
 
-    /// <summary>会话状态圆点的语义色键：有已连接会话时用成功绿，否则用中性灰。</summary>
+    /// <summary>会话状态圆点的语义色键：有已连接会话时用「已连接」蓝（与列表一致），否则用中性灰。</summary>
     public string SessionStatusBrushKey => _sessions.ConnectedSessionCount == 0
         ? "Status.Idle"
-        : "Status.Success";
+        : "Status.Info";
 
     /// <summary>
     /// 当前打开的会话标签页数量，含连接中 / 重连中 / 已断开——只要 Tab 还在，
@@ -250,15 +256,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    partial void OnSelectedTabChanged(WorkspaceTabViewModel? value)
+    partial void OnSelectedTabChanged(WorkspaceTabViewModel? oldValue, WorkspaceTabViewModel? newValue)
     {
         // 多选是临时上下文：从连接/凭据列表切到某个会话 Tab 即退出并清空选择。
-        if (value is SessionTabViewModel && IsConnectionListPage)
+        if (newValue is SessionTabViewModel && IsConnectionListPage)
         {
             ConnectionsPage.ExitMultiSelectCommand.Execute(null);
         }
 
-        if (value is SessionTabViewModel && CurrentPage == NavigationPage.Credentials)
+        if (newValue is SessionTabViewModel && CurrentPage == NavigationPage.Credentials)
         {
             _credentialsPage.ExitMultiSelectCommand.Execute(null);
         }
@@ -267,15 +273,24 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // 这样切换 Tab 不会销毁 RDP 控件或终端 WebView。
         foreach (var tab in Tabs)
         {
-            tab.IsActive = ReferenceEquals(tab, value);
+            tab.IsActive = ReferenceEquals(tab, newValue);
         }
 
         OnPropertyChanged(nameof(IsSessionSelected));
 
         // 离开会话时回到常规档，避免用户回到列表却看不到导航。
-        if (value is not SessionTabViewModel)
+        if (newValue is not SessionTabViewModel)
         {
             ResetSessionView();
+        }
+
+        // 会话期间页面数据可能已变化；用户直接点工作区 Tab 返回时做一次轻量刷新（不重新探测主机）。
+        // 导航切页内部也会选中 WorkspaceTab，那条路径由 CurrentPage hook 负责，避免重复加载。
+        if (!_activatingWorkspacePage
+            && oldValue is SessionTabViewModel
+            && ReferenceEquals(newValue, WorkspaceTab))
+        {
+            RequestPageReload(CurrentPage, lightweight: true);
         }
     }
 
@@ -284,19 +299,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void NavigateTo(NavigationPage page)
     {
-        ShowWorkspacePage(page);
-        _ = ReloadCurrentPageAsync();
+        if (CurrentPage != page)
+        {
+            // 属性变更 hook 是切页与刷新的唯一入口。
+            CurrentPage = page;
+            return;
+        }
+
+        // 同页再次点击没有 PropertyChanged，仍应重新读取数据和实时状态。
+        ActivateWorkspacePage(page);
+        RequestPageReload(page);
     }
 
-    /// <summary>
-    /// 切换工作区页面（设置工作区内容、标题并选中工作区 Tab），但不触发数据加载。
-    /// <see cref="NavigateTo"/> 的同步部分：需要「先切页、await 加载完再继续」的调用方
-    /// 先调它，再自行 <see cref="ReloadCurrentPageAsync"/>，避免与内部的 fire-and-forget 重载并发。
-    /// </summary>
-    private void ShowWorkspacePage(NavigationPage page)
+    /// <summary>切换工作区页面内容、标题并选中工作区 Tab；数据刷新由统一导航链另行触发。</summary>
+    private void ActivateWorkspacePage(NavigationPage page)
     {
-        CurrentPage = page;
-
         // 收藏与最近本质上是「我的连接」的两个筛选视图，
         // 复用同一页面而不是各做一份，避免逻辑重复。
         switch (page)
@@ -304,29 +321,34 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             case NavigationPage.Home:
                 WorkspaceTab.Page = HomePage;
                 WorkspaceTab.Title = "首页";
+                WorkspaceTab.Icon = ""; // Icon.Home
                 break;
 
             case NavigationPage.Connections:
                 ConnectionsPage.Filter = ConnectionFilter.All;
                 WorkspaceTab.Page = ConnectionsPage;
                 WorkspaceTab.Title = "连接工作台";
+                WorkspaceTab.Icon = ""; // Icon.Connections
                 break;
 
             case NavigationPage.Favorites:
                 ConnectionsPage.Filter = ConnectionFilter.Favorites;
                 WorkspaceTab.Page = ConnectionsPage;
                 WorkspaceTab.Title = "收藏";
+                WorkspaceTab.Icon = ""; // Icon.Favorite
                 break;
 
             case NavigationPage.Recent:
                 ConnectionsPage.Filter = ConnectionFilter.Recent;
                 WorkspaceTab.Page = ConnectionsPage;
                 WorkspaceTab.Title = "最近连接";
+                WorkspaceTab.Icon = ""; // Icon.Recent
                 break;
 
             case NavigationPage.Credentials:
                 WorkspaceTab.Page = _credentialsPage;
                 WorkspaceTab.Title = "凭据";
+                WorkspaceTab.Icon = ""; // Icon.Credential
                 break;
 
             case NavigationPage.Settings:
@@ -335,57 +357,121 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 _settingsPage.ReloadStartup();
                 WorkspaceTab.Page = _settingsPage;
                 WorkspaceTab.Title = "设置";
+                WorkspaceTab.Icon = ""; // Icon.Settings
                 break;
 
             case NavigationPage.Help:
                 WorkspaceTab.Page = _helpPage;
                 WorkspaceTab.Title = "使用指南";
+                WorkspaceTab.Icon = ""; // Icon.Help
                 break;
 
             case NavigationPage.About:
                 WorkspaceTab.Page = _aboutPage;
                 WorkspaceTab.Title = "关于";
+                WorkspaceTab.Icon = ""; // Icon.Info
                 break;
         }
 
-        SelectedTab = WorkspaceTab;
-    }
-
-    /// <summary>首次显示与切换页面时加载对应数据。</summary>
-    public async Task ReloadCurrentPageAsync()
-    {
+        _activatingWorkspacePage = true;
         try
         {
-            PageLoadError = string.Empty;
+            SelectedTab = WorkspaceTab;
+        }
+        finally
+        {
+            _activatingWorkspacePage = false;
+        }
+    }
 
-            switch (CurrentPage)
+    /// <summary>重新加载当前页；会取消上一批页面加载，并丢弃过期批次的错误结果。</summary>
+    public Task ReloadCurrentPageAsync()
+    {
+        RequestPageReload(CurrentPage);
+        return _pageReloadTask;
+    }
+
+    /// <param name="lightweight">
+    /// true：从会话 Tab 切回工作区。首页只重读列表、沿用上次在线探测结果；连接列表的会话状态
+    /// 已由 SessionsChanged 实时同步，不整表重建（避免来回切换会话时反复重建列表并探测全部主机）。
+    /// </param>
+    private void RequestPageReload(NavigationPage page, bool lightweight = false)
+    {
+        if (lightweight && page is NavigationPage.Connections or NavigationPage.Favorites or NavigationPage.Recent)
+        {
+            return;
+        }
+
+        _pageReloadCts?.Cancel();
+
+        var cts = new CancellationTokenSource();
+        _pageReloadCts = cts;
+        var version = ++_pageReloadVersion;
+        _pageReloadTask = ReloadPageAsync(page, version, cts, lightweight);
+    }
+
+    private async Task ReloadPageAsync(
+        NavigationPage page,
+        int version,
+        CancellationTokenSource batchCts,
+        bool lightweight)
+    {
+        var ct = batchCts.Token;
+        try
+        {
+            if (version == _pageReloadVersion)
+            {
+                PageLoadError = string.Empty;
+            }
+
+            switch (page)
             {
                 case NavigationPage.Home:
-                    await HomePage.LoadAsync();
+                    await (lightweight ? HomePage.RefreshAsync(ct) : HomePage.LoadAsync(ct));
                     break;
 
                 case NavigationPage.Connections:
                 case NavigationPage.Favorites:
                 case NavigationPage.Recent:
-                    await _credentialsPage.LoadAsync();
-                    await ConnectionsPage.LoadAsync();
-                    ConnectionsPage.ApplyCredentialNames(_credentialsPage.GetNameMap());
+                    await _credentialsPage.LoadAsync(ct);
+                    ct.ThrowIfCancellationRequested();
+                    await ConnectionsPage.LoadAsync(ct);
+                    ct.ThrowIfCancellationRequested();
+                    if (version == _pageReloadVersion && CurrentPage == page)
+                    {
+                        ConnectionsPage.ApplyCredentialNames(_credentialsPage.GetNameMap());
+                    }
                     break;
 
                 case NavigationPage.Credentials:
-                    await _credentialsPage.LoadAsync();
+                    await _credentialsPage.LoadAsync(ct);
                     break;
 
                 case NavigationPage.Settings:
-                    await _settingsPage.LoadHostKeysAsync();
-                    await _settingsPage.LoadGroupsAsync();
+                    await _settingsPage.LoadHostKeysAsync(ct);
                     break;
             }
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // 快速切页或重复刷新：旧批次静默退出，不覆盖当前页状态。
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "加载页面数据失败：{Page}", CurrentPage);
-            PageLoadError = "页面数据加载失败——数据库可能被占用或损坏。点「重试」；若持续，关闭所有 RemoteFlow 窗口后重开。";
+            _logger.LogError(ex, "加载页面数据失败：{Page}", page);
+            if (version == _pageReloadVersion && CurrentPage == page)
+            {
+                PageLoadError = "页面数据加载失败——数据库可能被占用或损坏。点「重试」；若持续，关闭所有 RemoteFlow 窗口后重开。";
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_pageReloadCts, batchCts))
+            {
+                _pageReloadCts = null;
+            }
+
+            batchCts.Dispose();
         }
     }
 
@@ -422,8 +508,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 case HomeRowActions.Manage:
                     // 跳到「我的连接」全部视图并让该连接可见、选中。
                     GlobalSearchText = string.Empty;
-                    ShowWorkspacePage(NavigationPage.Connections);
-                    await ReloadCurrentPageAsync();
+                    NavigateTo(NavigationPage.Connections);
+                    await _pageReloadTask;
                     ConnectionsPage.SelectById(item.Id);
                     return;
 
@@ -596,15 +682,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// 统一「点设备→开会话」漏斗。同一 Profile 已有会话（连接中或已连）则聚焦其 Tab，
     /// 不新建；正在创建中（连点）则忽略本次；否则创建新会话，由 SessionCreated 开新 Tab。
+    /// <paramref name="forceNew"/> 供「新建会话」动作跳过去重聚焦，强制再开一个会话。
     /// </summary>
-    public async Task OpenSessionAsync(ConnectionProfile profile)
+    public async Task OpenSessionAsync(ConnectionProfile profile, bool forceNew = false)
     {
-        var existing = Tabs.OfType<SessionTabViewModel>()
-            .FirstOrDefault(t => t.Session.Profile.Id == profile.Id);
-        if (existing is not null)
+        if (!forceNew)
         {
-            SelectedTab = existing;
-            return;
+            var existing = Tabs.OfType<SessionTabViewModel>()
+                .FirstOrDefault(t => t.Session.Profile.Id == profile.Id);
+            if (existing is not null)
+            {
+                SelectedTab = existing;
+                return;
+            }
         }
 
         if (!_openingProfileIds.Add(profile.Id))
@@ -722,6 +812,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         _disposed = true;
+        _pageReloadCts?.Cancel();
         _sessions.SessionCreated -= OnSessionCreated;
         _sessions.SessionClosed -= OnSessionClosed;
         _sessions.SessionsChanged -= OnSessionsChanged;

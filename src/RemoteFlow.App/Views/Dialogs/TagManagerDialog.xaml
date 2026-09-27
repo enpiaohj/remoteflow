@@ -63,8 +63,14 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
-                                    <Ellipse Grid.Column="0" Width="12" Height="12" VerticalAlignment="Center"
-                                             Fill="{Binding Color, Converter={StaticResource ColorToBrush}}" />
+                                    <Grid Grid.Column="0" Width="32" Height="32" VerticalAlignment="Center">
+                                        <Border CornerRadius="8"
+                                                Background="{Binding Color, Converter={StaticResource ColorToBrush}}"
+                                                Opacity="0.13" />
+                                        <Path Style="{StaticResource OrganizationIcon.Path}" Width="16" Height="16"
+                                              Data="{Binding Icon, Converter={StaticResource KeyToGeometry}, ConverterParameter=TagIcon.Tag}"
+                                              Fill="{Binding Color, Converter={StaticResource ColorToBrush}}" />
+                                    </Grid>
 
                                     <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}"

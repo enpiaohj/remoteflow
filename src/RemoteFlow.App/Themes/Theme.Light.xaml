@@ -62,6 +62,9 @@
     <SolidColorBrush x:Key="Status.Info" Color="#3352CE" />
     <SolidColorBrush x:Key="Status.Idle" Color="#868686" />
 
+    <!-- 强调色：收藏星（与行内收藏星同色，双主题恒定琥珀） -->
+    <SolidColorBrush x:Key="Accent.Favorite" Color="#F2C037" />
+
     <!-- 协议标识色：三色相互拉开，同时都能落在白色卡片上保持可读 -->
     <SolidColorBrush x:Key="Protocol.Rdp" Color="#3352CE" />
     <SolidColorBrush x:Key="Protocol.Ssh" Color="#0E7C57" />

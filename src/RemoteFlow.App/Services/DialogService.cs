@@ -101,6 +101,9 @@ public sealed class DialogService(
     public Task<bool> ConfirmHostKeyAsync(SshHostKeyVerificationContext context)
         => InvokeOnUiAsync(() => HostKeyDialog.Show(Owner, context));
 
+    public Task<GroupEditorResult?> EditGroupAsync(GroupEditorPrompt prompt)
+        => InvokeOnUiAsync(() => GroupEditorDialog.Prompt(Owner, prompt));
+
     public Task<string?> EditGroupNameAsync(GroupNamePrompt prompt)
         => InvokeOnUiAsync(() => GroupNameDialog.Prompt(Owner, prompt));
 

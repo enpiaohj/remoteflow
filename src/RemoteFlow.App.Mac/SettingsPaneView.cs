@@ -108,7 +108,6 @@ public sealed class SettingsPaneView : NSView
 
         Select(0);
 
-        _ = _vm.LoadGroupsAsync();
         _ = _vm.LoadHostKeysAsync();
     }
 
@@ -843,34 +842,6 @@ public sealed class SettingsPaneView : NSView
             }
         };
 
-        // ── 分组：保护默认分组 ──────────────────────────────────
-        var protect = new NSButton { Title = _vm.DefaultGroupSwitchLabel, TranslatesAutoresizingMaskIntoConstraints = false };
-        protect.SetButtonType(NSButtonType.Switch);
-        protect.State = _vm.DefaultGroupProtected ? NSCellStateValue.On : NSCellStateValue.Off;
-        protect.Enabled = _vm.ProtectionSwitchEnabled;
-        protect.Activated += (_, _) => _vm.DefaultGroupProtected = protect.State == NSCellStateValue.On;
-
-        var protectHint = Muted(_vm.DefaultGroupDescription);
-
-        // LoadGroupsAsync 完成后同步开关标题 / 状态 / 副文案。
-        _vm.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName is nameof(SettingsPageViewModel.DefaultGroupProtected)
-                or nameof(SettingsPageViewModel.DefaultGroupSwitchLabel)
-                or nameof(SettingsPageViewModel.DefaultGroupLabel)
-                or nameof(SettingsPageViewModel.ProtectionSwitchEnabled)
-                or nameof(SettingsPageViewModel.DefaultGroupDescription))
-            {
-                NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
-                {
-                    protect.Title = _vm.DefaultGroupSwitchLabel;
-                    protect.State = _vm.DefaultGroupProtected ? NSCellStateValue.On : NSCellStateValue.Off;
-                    protect.Enabled = _vm.ProtectionSwitchEnabled;
-                    protectHint.StringValue = _vm.DefaultGroupDescription;
-                });
-            }
-        };
-
         return Page(
             Card("外观与行为", "paintbrush",
                 "主题会应用到所有页面；默认页面决定每次启动后先落在哪儿；"
@@ -890,11 +861,7 @@ public sealed class SettingsPaneView : NSView
                 Row("首页时间行", homeLine)),
             Card("语言", "globe",
                 "目前仅提供简体中文，后续版本开放更多语言。",
-                Row("界面语言", language)),
-            Card("分组", "folder",
-                "默认分组是新建连接的落点。开启保护可以防止它被误删或误改，日常整理时更安心。",
-                protect,
-                protectHint));
+                Row("界面语言", language)));
     }
 
     // ── RDP ─────────────────────────────────────────────────────

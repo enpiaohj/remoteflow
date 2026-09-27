@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using RemoteFlow.App.Services;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Presentation.Services;
+using RemoteFlow.Presentation.ViewModels;
 
 namespace RemoteFlow.App.Views.Dialogs;
 
@@ -233,6 +234,12 @@ public sealed class TestConnectionDialogModel : ObservableObject
             _ => "Protocol.Vnc"
         };
 
+        // 头部与列表 / 详情使用同一套设备主图标；协议已在 HostPortLine 里以文字呈现。
+        var device = DeviceTypeCatalog.Resolve(profile.DeviceType)
+            ?? DeviceTypeCatalog.InferFromProtocol(profile.Protocol);
+        DeviceIconKey = device.IconResourceKey;
+        DeviceBrushKey = device.AccentBrushKey;
+
         HostPortLine = $"{profile.Host} : {profile.Port} · {protocolName}";
 
         Rows =
@@ -247,6 +254,10 @@ public sealed class TestConnectionDialogModel : ObservableObject
     public string ProtocolIcon { get; }
 
     public string ProtocolBrushKey { get; }
+
+    public string DeviceIconKey { get; }
+
+    public string DeviceBrushKey { get; }
 
     public string ConnectionName { get; }
 

@@ -54,10 +54,9 @@
                 <!-- ══ 产品 ══ -->
                 <Border Style="{StaticResource Surface.Card}" Padding="20,18">
                     <StackPanel Orientation="Horizontal">
-                        <Border Width="46" Height="46" CornerRadius="12" Background="{DynamicResource Brand.Default}">
-                            <TextBlock Text="&#xE8AF;" FontFamily="{StaticResource IconFont}" FontSize="21"
-                                       Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
+                        <!-- 产品图标与标题栏 / 任务栏同源（Assets/RemoteFlow-logo.png） -->
+                        <Image Width="46" Height="46" Source="pack://application:,,,/Assets/RemoteFlow-logo.png"
+                               RenderOptions.BitmapScalingMode="HighQuality" />
                         <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="RemoteFlow" Style="{StaticResource Text.SectionTitle}" FontSize="20" />
                             <TextBlock Text="统一远程连接工作台" Style="{StaticResource Text.BodySecondary}" Margin="0,3,0,0" />

@@ -23,6 +23,12 @@ public sealed class ConnectionProfile
 
     public ProtocolType Protocol { get; set; }
 
+    /// <summary>
+    /// 设备类型（图标套系的主视觉维度）。Unknown 时界面按协议推断显示，
+    /// 与协议正交：类型描述「这台机器是什么」，协议描述「怎么连上去」。
+    /// </summary>
+    public DeviceType DeviceType { get; set; } = DeviceType.Unknown;
+
     /// <summary>所属分组。一个连接只能有一个主分组，可为空表示未分组。</summary>
     public Guid? GroupId { get; set; }
 
@@ -70,6 +76,7 @@ public sealed class ConnectionProfile
             Host = Host,
             Port = Port,
             Protocol = Protocol,
+            DeviceType = DeviceType,
             GroupId = GroupId,
             CredentialId = CredentialId,
             Favorite = false,

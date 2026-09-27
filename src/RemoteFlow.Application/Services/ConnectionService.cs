@@ -94,7 +94,12 @@ public sealed class ConnectionService(
     // 用户看到的是「已有那几个标签、名称和颜色都是固定的」。这里补上服务层方法，
     // 校验规则参照分组（GroupService）：名称去空白、不能为空、同名不允许重复。
 
-    public async Task<Tag> CreateTagAsync(string name, string color, string description, CancellationToken ct = default)
+    public Task<Tag> CreateTagAsync(
+        string name, string color, string description, CancellationToken ct = default)
+        => CreateTagAsync(name, color, description, TagIconCatalog.DefaultKey, ct);
+
+    public async Task<Tag> CreateTagAsync(
+        string name, string color, string description, string? icon, CancellationToken ct = default)
     {
         var trimmed = (name ?? string.Empty).Trim();
         if (trimmed.Length == 0)
@@ -112,6 +117,7 @@ public sealed class ConnectionService(
         {
             Name = trimmed,
             Color = ValidateColor(color),
+            Icon = TagIconCatalog.Normalize(icon),
             Description = (description ?? string.Empty).Trim(),
         };
 
@@ -120,7 +126,12 @@ public sealed class ConnectionService(
         return tag;
     }
 
-    public async Task UpdateTagAsync(Guid id, string name, string color, string description, CancellationToken ct = default)
+    public Task UpdateTagAsync(
+        Guid id, string name, string color, string description, CancellationToken ct = default)
+        => UpdateTagAsync(id, name, color, description, icon: null, ct: ct);
+
+    public async Task UpdateTagAsync(
+        Guid id, string name, string color, string description, string? icon, CancellationToken ct = default)
     {
         var trimmed = (name ?? string.Empty).Trim();
         if (trimmed.Length == 0)
@@ -139,6 +150,7 @@ public sealed class ConnectionService(
 
         tag.Name = trimmed;
         tag.Color = ValidateColor(color);
+        tag.Icon = icon is null ? TagIconCatalog.Normalize(tag.Icon) : TagIconCatalog.Normalize(icon);
         tag.Description = (description ?? string.Empty).Trim();
         await tags.UpdateAsync(tag, ct);
         await _sync.TrackUpsertAsync(SyncEntityTypes.Tag, tag.Id.ToString(), ct);

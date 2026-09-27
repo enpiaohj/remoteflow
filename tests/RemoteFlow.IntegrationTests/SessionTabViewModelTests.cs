@@ -39,6 +39,41 @@ public sealed class SessionTabViewModelTests
         Assert.Equal("已连接", vm.StateText);
     }
 
+    [Fact]
+    public void 会话标签使用主机设备图标且提示中保留协议与状态()
+    {
+        using var vm = CreateVm();
+        var expected = DeviceTypeCatalog.InferFromProtocol(ProtocolType.Ssh);
+
+        Assert.Equal(expected.IconResourceKey, vm.DeviceIconKey);
+        Assert.Equal(expected.AccentBrushKey, vm.DeviceBrushKey);
+        Assert.Contains("SSH", vm.TabToolTip, StringComparison.Ordinal);
+        Assert.Contains(vm.Title, vm.TabToolTip, StringComparison.Ordinal);
+
+        ((FakeSession)vm.Session).RaiseStateChanged(ConnectionState.Connecting, ConnectionState.Connected);
+        Assert.Contains("已连接", vm.TabToolTip, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void 会话状态色与全应用统一语义一致()
+    {
+        // 与连接列表 / 详情 / 首页一致：连接中琥珀、已连接蓝、异常红；绿色只表示「在线（可达）」。
+        using var vm = CreateVm();
+        var session = (FakeSession)vm.Session;
+
+        session.RaiseStateChanged(ConnectionState.Idle, ConnectionState.Connecting);
+        Assert.Equal("Status.Warning", vm.StateBrushKey);
+
+        session.RaiseStateChanged(ConnectionState.Connecting, ConnectionState.Connected);
+        Assert.Equal("Status.Info", vm.StateBrushKey);
+
+        session.RaiseStateChanged(ConnectionState.Connected, ConnectionState.Reconnecting);
+        Assert.Equal("Status.Warning", vm.StateBrushKey);
+
+        session.RaiseStateChanged(ConnectionState.Reconnecting, ConnectionState.Failed);
+        Assert.Equal("Status.Danger", vm.StateBrushKey);
+    }
+
     private static SessionTabViewModel CreateVm() => new(
         new FakeSession(),
         _ => Task.CompletedTask,
@@ -85,7 +120,12 @@ internal sealed class ManualTimer : IUiTimer
 {
     public TimeSpan Interval { get; set; }
 
-    public event EventHandler? Tick;
+    // 本组测试不驱动计时，事件无需保存订阅者。
+    public event EventHandler? Tick
+    {
+        add { }
+        remove { }
+    }
 
     public void Start() { }
 

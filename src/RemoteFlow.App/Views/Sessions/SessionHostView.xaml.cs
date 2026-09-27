@@ -18,7 +18,7 @@ namespace RemoteFlow.App.Views.Sessions;
 /// 会话 Tab 的外壳：工具条 + 协议视图 + 状态层。
 /// <para>
 /// 会话工具条显示在标题栏行（Tab 条右侧），见 SessionToolsBar。
-/// 全屏：应用标题栏与 Tab 栏都隐藏了，工具条改为一条<b>悬浮药丸</b>
+/// 完全全屏：应用标题栏与 Tab 栏都隐藏了，工具条改为一条<b>悬浮药丸</b>
 /// （<c>ToolbarPopup</c>），承担会话切换、最小化 / 关闭 / 退出全屏；默认自动隐藏——
 /// 鼠标离开后按设置延迟淡出，移到屏幕顶沿需悬停片刻（延迟可配）再淡入，
 /// 单击远端画面立即淡出；可固定常驻，可拖动。
@@ -35,7 +35,7 @@ namespace RemoteFlow.App.Views.Sessions;
 public partial class SessionHostView : UserControl
 {
     /// <summary>
-    /// 进入全屏后，若鼠标未落到药丸上，多久自动收起。
+    /// 进入完全全屏后，若鼠标未落到药丸上，多久自动收起。
     /// <para>
     /// Windows 端取 3s——比其他平台略长，给用户看清工具条的时间；单击远端画面
     /// 仍由低级鼠标钩子立即收起（见 <see cref="LowLevelMouseHook"/>），不受此值影响。
@@ -89,7 +89,7 @@ public partial class SessionHostView : UserControl
     /// </summary>
     private readonly DispatcherTimer _revealTimer;
 
-    /// <summary>true=药丸固定常驻；false=自动隐藏。仅全屏下有意义。</summary>
+    /// <summary>true=药丸固定常驻；false=自动隐藏。仅完全全屏下有意义。</summary>
     private bool _pinned;
 
     /// <summary>正在以代码同步 <see cref="PinToggle"/> 的选中态，用于抑制回调递归。</summary>
@@ -134,7 +134,7 @@ public partial class SessionHostView : UserControl
         DataContextChanged += OnDataContextChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        SizeChanged += (_, _) => RepositionPopup();
+        SizeChanged += (_, _) => RepositionOverlays();
 
         // Popup 是独立 HWND，其内部的 WPF 鼠标事件正常可用。
         PillBar.MouseEnter += (_, _) => _autoHideTimer.Stop();
@@ -172,12 +172,12 @@ public partial class SessionHostView : UserControl
         if (IsVisible)
         {
             RefreshScreenFullButton(_main?.IsScreenFull == true);
-            ApplyFullScreenMode(_main?.IsSessionFullScreen == true);
+            ApplyScreenFullMode(_main?.IsScreenFull == true);
         }
     }
 
     /// <summary>
-    /// 本视图可见性变化。切回来（且当前处于全屏）→ 重新套用全屏模式；
+    /// 本视图可见性变化。切回来（且当前处于完全全屏）→ 重新套用药丸模式；
     /// 切走 → 拆掉本视图的悬浮药丸、计时器与低级鼠标钩子，避免多个后台视图的
     /// 药丸 / 钩子并存。（一次性的「首次可见」不够——切走再切回就不会再触发。）
     /// </summary>
@@ -186,7 +186,7 @@ public partial class SessionHostView : UserControl
         if (IsVisible)
         {
             RefreshScreenFullButton(_main?.IsScreenFull == true);
-            ApplyFullScreenMode(_main?.IsSessionFullScreen == true);
+            ApplyScreenFullMode(_main?.IsScreenFull == true);
         }
         else
         {
@@ -279,14 +279,9 @@ public partial class SessionHostView : UserControl
 
         switch (e.PropertyName)
         {
-            // 窗口最大化 ↔ 完全全屏：不装卸药丸，只换那颗按钮的图标与提示。
+            // 药丸只属于完全全屏：进入时装载，退到窗口最大化或常规档时立即拆除。
             case nameof(MainViewModel.IsScreenFull):
-                RefreshScreenFullButton(main.IsScreenFull);
-                break;
-
-            // 常规 ↔ 任意全屏档：药丸与常驻条互换，计时器与鼠标钩子随之装卸。
-            case nameof(MainViewModel.IsSessionFullScreen):
-                ApplyFullScreenMode(main.IsSessionFullScreen);
+                ApplyScreenFullMode(main.IsScreenFull);
                 RefreshScreenFullButton(main.IsScreenFull);
                 break;
         }
@@ -304,17 +299,17 @@ public partial class SessionHostView : UserControl
         ScreenFullButton.ToolTip = screenFull ? "退出完全全屏 (F11)" : "完全全屏 (F11)";
     }
 
-    /// <summary>只对当前可见（选中）的会话联动，避免影响后台会话。</summary>
-    private void ApplyFullScreenMode(bool fullScreen)
+    /// <summary>只对当前可见（选中）的会话装卸完全全屏药丸，避免影响后台会话。</summary>
+    private void ApplyScreenFullMode(bool screenFull)
     {
         if (!IsVisible)
         {
             return;
         }
 
-        if (fullScreen)
+        if (screenFull)
         {
-            // 进入全屏：药丸默认自动隐藏（沉浸式），从顶部居中出现，随即排定收起。
+            // 进入完全全屏：药丸默认自动隐藏（沉浸式），从顶部居中出现，随即排定收起。
             _userMoved = false;
             SetPinnedState(false);
             ShowToolbar();
@@ -324,7 +319,9 @@ public partial class SessionHostView : UserControl
         }
         else
         {
-            // 退出全屏：收起药丸，工具条回到常驻条。
+            // 退到窗口最大化或常规档：先关闭可能锚定在药丸按钮上的 Flyout，
+            // 再拆除药丸及其计时器 / 钩子，避免保留失效的定位锚点。
+            CloseQualityFlyout();
             _edgeWatch.Stop();
             _autoHideTimer.Stop();
             _revealTimer.Stop();
@@ -702,7 +699,13 @@ public partial class SessionHostView : UserControl
 
     // ── Popup 定位（跟随窗口、居中、限制在可视区）────────────────
 
-    private void OnWindowMovedOrResized(object? sender, EventArgs e) => RepositionPopup();
+    private void OnWindowMovedOrResized(object? sender, EventArgs e) => RepositionOverlays();
+
+    private void RepositionOverlays()
+    {
+        RepositionPopup();
+        PositionQualityFlyout();
+    }
 
     /// <summary>
     /// Popup 默认不会随窗口移动 / 布局变化重新定位。这里重算偏移：
@@ -870,10 +873,8 @@ public partial class SessionHostView : UserControl
         _flyout = null; // 上一实例已关闭，清引用重建
         _flyoutAnchor = anchor;
 
-        var window = _window ?? Window.GetWindow(this);
         var flyout = new ConnectionQualityFlyout
         {
-            Owner = window,
             DataContext = _tab
         };
         flyout.Closed += OnQualityFlyoutClosed;
@@ -896,9 +897,6 @@ public partial class SessionHostView : UserControl
             return;
         }
 
-        flyout.Closed -= OnQualityFlyoutClosed;
-        // 解除 owned 关系再关闭：避免关闭时激活转移把宿主窗口最小化（WPF 已知行为）。
-        flyout.Owner = null;
         flyout.Close();
         _flyout = null;
         _flyoutAnchor = null;
@@ -919,13 +917,6 @@ public partial class SessionHostView : UserControl
             }
         }
 
-        // 兜底：owned 无任务栏按钮的无边框窗口关闭时，Windows 偶尔会把宿主窗口最小化。
-        if (_window is { WindowState: WindowState.Minimized })
-        {
-            _window.WindowState = WindowState.Normal;
-            _window.Activate();
-        }
-
         if (ReferenceEquals(_flyout, sender))
         {
             _flyout = null;
@@ -942,8 +933,13 @@ public partial class SessionHostView : UserControl
             return;
         }
 
-        var window = flyout.Owner;
+        var window = _window ?? Window.GetWindow(this);
         if (window is null)
+        {
+            return;
+        }
+
+        if (!anchor.IsVisible || PresentationSource.FromVisual(anchor) is null)
         {
             return;
         }
@@ -951,8 +947,19 @@ public partial class SessionHostView : UserControl
         var source = PresentationSource.FromVisual(window);
         var toDiu = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
 
-        var windowOriginPx = window.PointToScreen(new Point(0, 0));
-        var anchorBottomPx = anchor.PointToScreen(new Point(0, anchor.ActualHeight));
+        Point windowOriginPx;
+        Point anchorBottomPx;
+        try
+        {
+            windowOriginPx = window.PointToScreen(new Point(0, 0));
+            anchorBottomPx = anchor.PointToScreen(new Point(0, anchor.ActualHeight));
+        }
+        catch (InvalidOperationException)
+        {
+            // 全屏档切换或 Tab 切换期间，锚点可能刚从可视树移除。
+            return;
+        }
+
         var relDiu = toDiu.Transform(new Point(
             anchorBottomPx.X - windowOriginPx.X,
             anchorBottomPx.Y - windowOriginPx.Y));

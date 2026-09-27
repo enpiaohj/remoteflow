@@ -7,9 +7,10 @@ namespace RemoteFlow.App.Views.Sessions;
 /// <summary>
 /// 连接质量详情 Flyout（轻量弹出窗）。
 /// <para>
-/// 以独立顶层窗口呈现：因为要盖在 RDP ActiveX airspace 之上（同全屏药丸用 Popup 的原因），
-/// 且全屏会话中不退出全屏。无边框、AllowsTransparency、Topmost、不可调整大小；
-/// 圆角与投影随主题（DynamicResource）。同一会话 Tab 只允许一个实例，由
+/// 以独立顶层窗口呈现：既能盖在 RDP ActiveX airspace 之上（同全屏药丸使用 Popup 的原因），
+/// 又不会退出完全全屏。窗口无边框、AllowsTransparency、Topmost、不可调整大小，且不设置
+/// 原生 Owner，避免激活切换改写主窗口状态；圆角与投影随主题（DynamicResource）。
+/// 同一会话 Tab 只允许一个实例，由
 /// <see cref="SessionHostView"/> 统一打开 / 定位 / 关闭。
 /// </para>
 /// <para>
@@ -33,12 +34,10 @@ public partial class ConnectionQualityFlyout : Window
         Activated += (_, _) => _activatedOnce = true;
         Deactivated += (_, _) =>
         {
-            // 点击窗口以外（含 RDP ActiveX / 常驻工具条）会令本窗失活 → 视为关闭。
-            // 关闭前先解除 owned 关系：owned 无边框窗口关闭时 Windows 偶发把宿主
-            // 窗口最小化（激活转移的已知行为），解除后关闭不再牵连宿主。
+            // 点击窗口以外（含 RDP ActiveX / 标题栏工具条）会令本窗失活 → 视为关闭。
+            // 本窗不设置原生 Owner，避免激活切换影响主窗口的 WindowState。
             if (_activatedOnce && !_closed)
             {
-                Owner = null;
                 Close();
             }
         };
