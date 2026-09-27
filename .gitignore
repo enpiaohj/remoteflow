@@ -88,3 +88,6 @@ native/rdp/freerdp-dist/
 # 本地构建产物（上传 GitHub Releases 后本地留存）
 /RemoteFlow-v*-win-x64.exe
 /RemoteFlow-v*-win-x64.zip
+
+# 视觉设计讨论工作区（brainstorming 视觉稿，非产品源码）
+.superpowers/
