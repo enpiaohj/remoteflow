@@ -1,0 +1,164 @@
+<UserControl x:Class="RemoteFlow.App.Views.Sessions.SessionTabSelector"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+             xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
+             mc:Ignorable="d"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             d:DesignHeight="36"
+             shell:WindowChrome.IsHitTestVisibleInChrome="True">
+
+    <!-- 紧凑模式的「当前会话」选择器：会话达到阈值或标题栏放不下时，
+         替代横向 Tab 列表。DataContext = MainViewModel；
+         会话列表由代码后置从 Tabs.OfType<SessionTabViewModel>() 同步（保持打开顺序）。 -->
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
+    </UserControl.Resources>
+
+    <Grid>
+        <!-- 收起态：协议图标 + 会话名 + 状态点 + 下拉箭头；工作台选中时显示「会话（N）」。
+             命名元素放在 Content（而非 ControlTemplate 内）以便代码后置直接更新。 -->
+        <ToggleButton x:Name="SelectorToggle"
+                      Height="36"
+                      MinWidth="150"
+                      MaxWidth="240"
+                      Margin="2,0"
+                      Cursor="Hand"
+                      Focusable="False"
+                      ContextMenu="{DynamicResource SessionTabContextMenu}"
+                      ToolTip="当前会话：右键可重新连接 / 关闭会话 / 关闭全部会话"
+                      Click="OnToggleClick">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock x:Name="HeaderIcon"
+                           FontFamily="{StaticResource IconFont}"
+                           FontSize="13"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource Text.Secondary}" />
+                <TextBlock x:Name="HeaderTitle"
+                           Margin="7,0,0,0"
+                           MaxWidth="150"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center"
+                           FontSize="13"
+                           Foreground="{DynamicResource Text.Primary}" />
+                <Ellipse x:Name="HeaderDot"
+                         Width="7" Height="7"
+                         Margin="7,0,0,0"
+                         VerticalAlignment="Center" />
+                <TextBlock Text="&#xE70D;"
+                           FontFamily="{StaticResource IconFont}"
+                           FontSize="10"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource Text.Secondary}" />
+            </StackPanel>
+            <ToggleButton.Template>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Root"
+                            Background="Transparent"
+                            BorderBrush="Transparent"
+                            BorderThickness="1,1,1,0"
+                            CornerRadius="8,8,0,0"
+                            Padding="10,0">
+                        <ContentPresenter VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Layer}" />
+                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Subtle}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </ToggleButton.Template>
+        </ToggleButton>
+
+        <!-- 展开态：独立 Popup（可盖在 RDP ActiveX airspace 之上），
+             ListBox 按打开顺序列出全部会话，行右键复用主窗口共享菜单 -->
+        <Popup x:Name="SelectorPopup"
+               PlacementTarget="{Binding ElementName=SelectorToggle}"
+               Placement="Bottom"
+               VerticalOffset="2"
+               AllowsTransparency="True"
+               PopupAnimation="Fade"
+               StaysOpen="False"
+               Closed="OnPopupClosed">
+            <Border Background="{DynamicResource Bg.Layer}"
+                    BorderBrush="{DynamicResource Stroke.Default}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource Radius.Medium}"
+                    MinWidth="280"
+                    MaxHeight="420"
+                    Padding="4">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.18" Direction="270" />
+                </Border.Effect>
+                <ListBox x:Name="SessionsList"
+                         Style="{StaticResource List.Plain}"
+                         SelectionChanged="OnSessionsListSelectionChanged"
+                         PreviewKeyDown="OnSessionsListPreviewKeyDown">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="6,0" MinHeight="38" Background="Transparent">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- 与会话标签一致：主机设备图标；协议写在第二行主机后 -->
+                                <Image Grid.Column="0" Style="{StaticResource DeviceIcon.Image}"
+                                       Width="20" Height="20" VerticalAlignment="Center"
+                                       Source="{Binding DeviceIconKey, Converter={StaticResource KeyToImageSource}}" />
+
+                                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Title}"
+                                               FontSize="13"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource Text.Primary}" />
+                                    <TextBlock Text="{Binding TabHostLine}"
+                                               FontSize="11"
+                                               FontFamily="{StaticResource MonoFont}"
+                                               TextTrimming="CharacterEllipsis"
+                                               Margin="0,1,0,0"
+                                               Foreground="{DynamicResource Text.Tertiary}" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                    <TextBlock Text="{Binding StateText}"
+                                               FontSize="11"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Text.Secondary}" />
+                                    <Ellipse Width="7" Height="7" Margin="6,0,0,0" VerticalAlignment="Center"
+                                             Fill="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}" />
+                                </StackPanel>
+
+                                <Button Grid.Column="3"
+                                        Style="{StaticResource Button.Icon}"
+                                        Width="26" Height="26"
+                                        Margin="8,0,-4,0"
+                                        FontSize="11"
+                                        Content="{StaticResource Icon.Close}"
+                                        ToolTip="关闭会话 (Ctrl+W)"
+                                        Visibility="{Binding CanClose, Converter={StaticResource BoolToVisibility}}"
+                                        Click="OnRowCloseClick" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">
+                            <!-- 右键复用主窗口共享的会话菜单（重新连接 / 关闭会话 / 关闭其他…） -->
+                            <Setter Property="ContextMenu" Value="{DynamicResource SessionTabContextMenu}" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>
