@@ -59,4 +59,4 @@
 
 ### Git
 - 源码提交：`332bfa3`（chore: 版本号提升至 0.22.0）；Tag `v0.22.0` 指向随后的 `release: RemoteFlow v0.22.0` 提交
-- 本版本仅本地封版：未推送、未创建 GitHub Release
+- 2026-09-27 本地封版；同日推送并创建 GitHub Release（Latest）
