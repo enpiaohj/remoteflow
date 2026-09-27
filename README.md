@@ -26,12 +26,13 @@ ViewModel（`RemoteFlow.Core` + `RemoteFlow.Presentation`），各自用平台�
 | 多协议会话 | RDP / SSH / VNC（含 macOS 屏幕共享），统一 Tab 外壳、多会话并行，切 Tab 不断开 |
 | 三档全屏 | 常规 → 窗口最大化（保留标题栏）→ 完全全屏，F11 逐档循环；可拖动 / 可固定 / 自动隐藏的悬浮药丸工具条盖在原生画面之上 |
 | 会话生命周期 | 统一状态机与资源清理，断线可见状态，重连不残留；关闭主窗口且有活动会话时先确认 |
-| 实时状态同步 | SessionManager 唯一状态源，首页/列表/详情/托盘/状态栏随会话实时一致 |
+| 实时状态同步 | SessionManager 唯一状态源，首页/列表/详情/托盘/状态栏随会话实时一致；切换页面即刷新数据，首页与工作台按主机做轻量 TCP 在线探测 |
+| 统一视觉语言 | 12 种设备类型矢量图标（Windows / 服务器 / Linux / 域控 / 数据库 / 网络设备 / 云主机等，与协议正交）、协议徽章（RDP 蓝 / SSH 绿 / VNC 紫）、全应用一致的状态色（在线绿 / 已连接蓝 / 连接中琥珀 / 异常红 / 离线灰）；会话标签显示主机设备图标 |
 | 连接质量详情 | 常驻条 / 药丸的状态入口打开：连接状态、会话时长、重连次数、质量指标，可重新检测 |
 | RDP 工具 | 发送 `Ctrl+Alt+Del`、启动远端任务管理器（mstsc 官方远端语义动作 + 协议级回退）、缩放/适应窗口 |
 | SSH 终端 | xterm.js（WebView2 / WKWebView 承载）：WebGL 渲染、六套主题、字体/字号、**右键菜单（复制 / 粘贴 / 粘贴选中 / 查找 / 清屏）**、输出内搜索（`Ctrl+Shift+F`）、粘贴安全（多行/大文本确认）、括号粘贴开关、中文输入法直输 |
 | VNC 画面 | 三档缩放（等比 / 拉伸 / 1:1）、本地零延迟光标、剪贴板远端→本机 |
-| 连接资产管理 | 新建 / 编辑 / 复制 / 删除，多级分组（含受保护默认组）、跨分组标签、收藏、连接历史 |
+| 连接资产管理 | 新建 / 编辑 / 复制 / 删除，多级分组、跨分组标签、收藏、连接历史；永久内置「我的设备」「未分组」，自定义分组可选 12 种组织图标，标签支持图标 + 颜色（详见 [分组、标签与图标说明](docs/2026-09-27-RemoteFlow-v0.21.0-分组标签图标与状态刷新说明-v1.0.md)） |
 | 全局搜索 | 按名称、IP、分组、标签、备注即时过滤，`Ctrl+K` 聚焦 |
 | Credential Vault | 密码 / 私钥由平台密钥库加密单独保存（Windows DPAPI / macOS Keychain），连接库只存引用 |
 | SSH Host Key 校验 | 首次连接记录指纹（TOFU），指纹变化时强警告，杜绝无感中间人 |
@@ -144,6 +145,10 @@ dotnet test tests/RemoteFlow.IntegrationTests.Windows
 
 # 发布 win-x64 单文件
 dotnet publish src/RemoteFlow.App -c Release -r win-x64
+
+# 重新生成程序图标（Windows .ico / Logo PNG + macOS iconset / .icns，需 Python 3 + Pillow）
+python scripts/build-appicon.py          # 生成并自校验
+python scripts/build-appicon.py --check  # 只校验
 ```
 
 应用数据默认位于 `%LOCALAPPDATA%\RemoteFlow\`：
