@@ -389,7 +389,7 @@
                                AllowsTransparency="True"
                                PopupAnimation="Fade"
                                Focusable="False">
-                            <Border Background="{DynamicResource Bg.Layer}"
+                            <Border Background="{DynamicResource Bg.Popup}"
                                     BorderBrush="{DynamicResource Stroke.Default}"
                                     BorderThickness="1"
                                     CornerRadius="{StaticResource Radius.Medium}"
@@ -547,7 +547,7 @@
     <!-- ── 上下文菜单 ─────────────────────────────────────────── -->
 
     <Style TargetType="ContextMenu">
-        <Setter Property="Background" Value="{DynamicResource Bg.Layer}" />
+        <Setter Property="Background" Value="{DynamicResource Bg.Popup}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Stroke.Default}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="4" />
@@ -623,7 +623,7 @@
                                Placement="Right"
                                PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
                                PopupAnimation="Fade">
-                            <Border Background="{DynamicResource Bg.Layer}"
+                            <Border Background="{DynamicResource Bg.Popup}"
                                     BorderBrush="{DynamicResource Stroke.Default}"
                                     BorderThickness="1"
                                     CornerRadius="{StaticResource Radius.Medium}"
@@ -670,7 +670,7 @@
         <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
         <Setter Property="FontSize" Value="{StaticResource FontSize.Caption}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-        <Setter Property="Background" Value="{DynamicResource Bg.Layer}" />
+        <Setter Property="Background" Value="{DynamicResource Bg.Popup}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToolTip">

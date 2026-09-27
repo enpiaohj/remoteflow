@@ -38,6 +38,7 @@ public partial class TestConnectionDialog : Window
         _logger = logger;
 
         InitializeComponent();
+        WindowBackdrop.PrepareDialog(this);
 
         _model = new TestConnectionDialogModel(profile);
         DataContext = _model;

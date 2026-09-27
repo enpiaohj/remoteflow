@@ -8,6 +8,19 @@ public enum AppTheme
     Dark = 2
 }
 
+/// <summary>窗口材质（玻璃外观）。</summary>
+public enum WindowMaterial
+{
+    /// <summary>纯色：不使用系统材质。</summary>
+    Solid = 0,
+
+    /// <summary>云母（Mica）：随桌面壁纸淡淡透色，最克制。</summary>
+    Mica = 1,
+
+    /// <summary>亚克力（Acrylic）：模糊透出窗口后方内容，玻璃感最强。</summary>
+    Acrylic = 2
+}
+
 /// <summary>关闭主窗口时的行为。</summary>
 public enum WindowCloseBehavior
 {
@@ -84,6 +97,19 @@ public sealed class AppSettings
     public WindowCloseBehavior CloseBehavior { get; set; } = WindowCloseBehavior.Exit;
 
     public AppTheme Theme { get; set; } = AppTheme.System;
+
+    /// <summary>
+    /// 窗口材质（玻璃外观）：主窗口使用系统材质（Windows 11 Mica / Acrylic），面板为半透明；
+    /// 对话框与浮层在非纯色时统一使用亚克力。系统不支持（Windows 11 22H2 以下）时自动保持纯色；
+    /// 关闭系统透明效果、节能模式等场景由系统改画纯色兜底。
+    /// </summary>
+    public WindowMaterial WindowMaterial { get; set; } = WindowMaterial.Acrylic;
+
+    /// <summary>
+    /// 玻璃外观的透明度，0（最不透明）～100（最透明），默认 50。仅在非纯色材质下生效；
+    /// 越透明玻璃感越强，但窗口后方内容过亮或过暗时文字对比度会下降。
+    /// </summary>
+    public int WindowTransparency { get; set; } = 50;
 
     /// <summary>主窗口初始尺寸预置。见 <see cref="WindowSizePreset"/>。</summary>
     public WindowSizePreset WindowSize { get; set; } = WindowSizePreset.Auto;

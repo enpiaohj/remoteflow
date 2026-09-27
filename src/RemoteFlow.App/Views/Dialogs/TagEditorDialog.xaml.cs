@@ -31,6 +31,7 @@ public partial class TagEditorDialog : Window, INotifyPropertyChanged
     private TagEditorDialog(TagEditorPrompt prompt)
     {
         InitializeComponent();
+        WindowBackdrop.PrepareDialog(this);
 
         IconOptions = TagIconCatalog.All;
         SelectedIcon = IconOptions.FirstOrDefault(x => x.Key == TagIconCatalog.Normalize(prompt.InitialIcon))

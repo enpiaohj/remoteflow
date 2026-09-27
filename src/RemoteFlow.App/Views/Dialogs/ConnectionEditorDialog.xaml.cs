@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Core.Models;
+using RemoteFlow.App.Services;
 
 namespace RemoteFlow.App.Views.Dialogs;
 
@@ -21,6 +22,7 @@ public partial class ConnectionEditorDialog : Window
     public ConnectionEditorDialog(ConnectionEditorViewModel viewModel, Func<Task<IReadOnlyList<Tag>>> manageTags)
     {
         InitializeComponent();
+        WindowBackdrop.PrepareDialog(this);
 
         _viewModel = viewModel;
         _manageTags = manageTags;

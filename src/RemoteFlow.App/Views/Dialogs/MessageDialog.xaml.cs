@@ -29,6 +29,7 @@ public partial class MessageDialog : Window
     private MessageDialog()
     {
         InitializeComponent();
+        WindowBackdrop.PrepareDialog(this);
 
         // 无系统标题栏，允许拖拽窗体空白处移动。
         MouseLeftButtonDown += (_, e) =>

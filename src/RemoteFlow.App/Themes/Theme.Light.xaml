@@ -24,6 +24,13 @@
     <SolidColorBrush x:Key="Bg.Sidebar" Color="#F3F3F3" />
     <!-- 纸张：只用于卡片本身（Surface.Card）等具体内容块，不再是整个内容区的底色 -->
     <SolidColorBrush x:Key="Bg.Layer" Color="#FFFFFF" />
+    <!-- 以下三个键在纯色主题下与纸张同色（外观不变），玻璃外观时由 Glass.*.xaml 分别覆盖：
+         Chrome = 标题栏 / 状态栏 / 连接资源列（玻璃时透明，直接露出系统材质）；
+         Workspace = 中央工作区与详情面板（玻璃时为磨砂半透明面）；
+         Popup = 菜单 / 下拉 / 提示 / 浮层（没有自己的模糊，玻璃时仍需近乎不透明） -->
+    <SolidColorBrush x:Key="Bg.Chrome" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Bg.Workspace" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="Bg.Popup" Color="#FFFFFF" />
     <!-- 卡片内的凹陷区（表头、内嵌块、图标块底） -->
     <SolidColorBrush x:Key="Bg.Subtle" Color="#F7F7F7" />
     <SolidColorBrush x:Key="Bg.Hover" Color="#EBEBEB" />

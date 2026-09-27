@@ -338,6 +338,8 @@ public partial class App : System.Windows.Application
         var theme = Services.GetRequiredService<ThemeService>();
         var settings = Services.GetRequiredService<AppSettings>();
 
+        theme.SetTransparency(settings.WindowTransparency);
+        theme.SetMaterial(settings.WindowMaterial);
         theme.Apply(settings.Theme);
         theme.StartListeningToSystemTheme();
     }

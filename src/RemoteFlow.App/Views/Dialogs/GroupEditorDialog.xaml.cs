@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Presentation.Services;
+using RemoteFlow.App.Services;
 
 namespace RemoteFlow.App.Views.Dialogs;
 
@@ -23,6 +24,7 @@ public partial class GroupEditorDialog : Window, INotifyPropertyChanged
             ?? IconOptions[0];
 
         InitializeComponent();
+        WindowBackdrop.PrepareDialog(this);
         DataContext = this;
 
         MouseLeftButtonDown += (_, e) =>

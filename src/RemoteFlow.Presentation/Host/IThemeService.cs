@@ -20,4 +20,18 @@ public interface IThemeService
 
     /// <summary>应用指定主题。</summary>
     void Apply(AppTheme theme);
+
+    /// <summary>
+    /// 设置窗口材质（玻璃外观）。默认实现为空：不支持系统材质的平台忽略该设置。
+    /// </summary>
+    void SetMaterial(WindowMaterial material)
+    {
+    }
+
+    /// <summary>
+    /// 设置玻璃外观的透明度（0–100）。默认实现为空：不支持系统材质的平台忽略该设置。
+    /// </summary>
+    void SetTransparency(int transparency)
+    {
+    }
 }

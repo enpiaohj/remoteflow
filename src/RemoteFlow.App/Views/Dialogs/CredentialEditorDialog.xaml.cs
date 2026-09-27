@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Core.Models;
+using RemoteFlow.App.Services;
 
 namespace RemoteFlow.App.Views.Dialogs;
 
@@ -20,6 +21,7 @@ public partial class CredentialEditorDialog : Window
     public CredentialEditorDialog(CredentialEditorViewModel viewModel)
     {
         InitializeComponent();
+        WindowBackdrop.PrepareDialog(this);
 
         _viewModel = viewModel;
         DataContext = viewModel;

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using RemoteFlow.Presentation.ViewModels;
+using RemoteFlow.App.Services;
 
 namespace RemoteFlow.App.Views.Dialogs;
 
@@ -10,6 +11,7 @@ public partial class TagManagerDialog : Window
     public TagManagerDialog(TagManagerViewModel viewModel)
     {
         InitializeComponent();
+        WindowBackdrop.PrepareDialog(this);
         DataContext = viewModel;
 
         MouseLeftButtonDown += (_, e) =>

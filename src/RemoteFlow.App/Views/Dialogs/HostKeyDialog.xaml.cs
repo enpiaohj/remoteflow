@@ -3,6 +3,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using RemoteFlow.Core.Sessions;
+using RemoteFlow.App.Services;
 
 namespace RemoteFlow.App.Views.Dialogs;
 
@@ -50,6 +51,7 @@ public partial class HostKeyDialog : Window
     private HostKeyDialog()
     {
         InitializeComponent();
+        WindowBackdrop.PrepareDialog(this);
 
         MouseLeftButtonDown += (_, e) =>
         {

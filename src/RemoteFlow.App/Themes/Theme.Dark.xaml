@@ -12,6 +12,10 @@
     <SolidColorBrush x:Key="Bg.Base" Color="#15171C" />
     <SolidColorBrush x:Key="Bg.Sidebar" Color="#15171C" />
     <SolidColorBrush x:Key="Bg.Layer" Color="#1D2027" />
+    <!-- 纯色主题下与纸张同色；玻璃外观时由 Glass.Dark.xaml 覆盖（见 Theme.Light.xaml 说明） -->
+    <SolidColorBrush x:Key="Bg.Chrome" Color="#1D2027" />
+    <SolidColorBrush x:Key="Bg.Workspace" Color="#1D2027" />
+    <SolidColorBrush x:Key="Bg.Popup" Color="#1D2027" />
     <SolidColorBrush x:Key="Bg.Subtle" Color="#23272F" />
     <SolidColorBrush x:Key="Bg.Hover" Color="#2A2F38" />
     <SolidColorBrush x:Key="Bg.Pressed" Color="#333944" />

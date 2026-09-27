@@ -63,6 +63,9 @@ public partial class MainWindow : Window
 
         UpdateRootPadding();
 
+        // 玻璃外观：主窗口按设置使用云母或亚克力；纯色或系统不支持时保持原样。
+        WindowBackdrop.Attach(this, isMainWindow: true);
+
         // 全局 Ctrl+K：跳到连接工作台并聚焦页内搜索（标题栏搜索框已按概念稿 v0.2 移除）。
         viewModel.FocusSearchRequested += (_, _) =>
         {
@@ -418,6 +421,10 @@ public partial class MainWindow : Window
         WindowStyle = previous.Style;
         ResizeMode = previous.Resize;
         _screenFullChrome = null;
+
+        // 还原 WindowStyle 会让系统重新加回系统菜单样式与边框设置，玻璃外观需要重新接上，
+        // 否则系统标题按钮会再次叠在自绘按钮下方。
+        WindowBackdrop.Refresh(this, isMainWindow: true);
 
         ApplySavedBounds();
     }

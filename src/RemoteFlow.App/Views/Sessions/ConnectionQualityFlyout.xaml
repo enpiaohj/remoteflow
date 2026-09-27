@@ -25,7 +25,7 @@
 
     <!-- 连接质量详情 Flyout：独立顶层窗口，盖在 RDP ActiveX airspace 之上；
          内容全部来自 SessionTabViewModel / SessionQualityState，禁止此处自维护连接状态。 -->
-    <Border Background="{DynamicResource Bg.Layer}"
+    <Border Background="{DynamicResource Bg.Popup}"
             BorderBrush="{DynamicResource Stroke.Default}"
             BorderThickness="1"
             CornerRadius="12"

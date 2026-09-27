@@ -182,6 +182,18 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     public IReadOnlyList<AppTheme> ThemeOptions { get; } = [AppTheme.System, AppTheme.Light, AppTheme.Dark];
 
+    /// <summary>窗口材质（玻璃外观）：纯色 / 云母 / 亚克力。切换即时生效。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsGlassMaterial))]
+    private WindowMaterial _selectedWindowMaterial;
+
+    /// <summary>玻璃透明度（0–100）。拖动时实时预览；步进 5，避免拖动过程中频繁写盘。</summary>
+    [ObservableProperty]
+    private int _windowTransparency = 50;
+
+    /// <summary>非纯色材质时透明度才有意义，纯色下禁用滑块。</summary>
+    public bool IsGlassMaterial => SelectedWindowMaterial != WindowMaterial.Solid;
+
     /// <summary>主窗口**初始**尺寸预置 —— 高分屏 / 普通屏 / 笔记本各取所需，下次启动生效。</summary>
     [ObservableProperty]
     private WindowSizePreset _selectedWindowSize;
@@ -393,6 +405,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         LaunchOnStartup = _settings.LaunchOnStartup;
         MinimizeToTrayOnClose = _settings.CloseBehavior == WindowCloseBehavior.MinimizeToTray;
         SelectedTheme = _settings.Theme;
+        SelectedWindowMaterial = _settings.WindowMaterial;
+        WindowTransparency = _settings.WindowTransparency;
         SelectedWindowSize = _settings.WindowSize;
         DefaultLandingPage = _settings.DefaultLandingPage;
         Language = string.IsNullOrWhiteSpace(_settings.Language) ? "zh-CN" : _settings.Language;
@@ -455,6 +469,18 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     partial void OnSelectedThemeChanged(AppTheme value)
     {
         _themeService.Apply(value);
+        Save();
+    }
+
+    partial void OnSelectedWindowMaterialChanged(WindowMaterial value)
+    {
+        _themeService.SetMaterial(value);
+        Save();
+    }
+
+    partial void OnWindowTransparencyChanged(int value)
+    {
+        _themeService.SetTransparency(value);
         Save();
     }
 
@@ -600,6 +626,8 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         _settings.LaunchOnStartup = LaunchOnStartup;
         _settings.CloseBehavior = MinimizeToTrayOnClose ? WindowCloseBehavior.MinimizeToTray : WindowCloseBehavior.Exit;
         _settings.Theme = SelectedTheme;
+        _settings.WindowMaterial = SelectedWindowMaterial;
+        _settings.WindowTransparency = WindowTransparency;
         _settings.WindowSize = SelectedWindowSize;
         _settings.DefaultLandingPage = DefaultLandingPage;
         _settings.Language = Language;

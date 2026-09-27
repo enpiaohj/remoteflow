@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
+using RemoteFlow.App.Services;
 
 namespace RemoteFlow.App.Views.Sessions;
 
@@ -29,6 +30,7 @@ public partial class ConnectionQualityFlyout : Window
     public ConnectionQualityFlyout()
     {
         InitializeComponent();
+        WindowBackdrop.PrepareDialog(this);
 
         PreviewKeyDown += OnPreviewKeyDown;
         Activated += (_, _) => _activatedOnce = true;

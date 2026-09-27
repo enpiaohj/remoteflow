@@ -88,7 +88,7 @@
                PopupAnimation="Fade"
                StaysOpen="False"
                Closed="OnPopupClosed">
-            <Border Background="{DynamicResource Bg.Layer}"
+            <Border Background="{DynamicResource Bg.Popup}"
                     BorderBrush="{DynamicResource Stroke.Default}"
                     BorderThickness="1"
                     CornerRadius="{StaticResource Radius.Medium}"

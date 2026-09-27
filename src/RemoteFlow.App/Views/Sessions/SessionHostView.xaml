@@ -125,7 +125,7 @@
             <Border x:Name="PillBar"
                     Margin="14,0,14,12"
                     Padding="4"
-                    Background="{DynamicResource Bg.Layer}"
+                    Background="{DynamicResource Bg.Popup}"
                     BorderBrush="{DynamicResource Stroke.Subtle}"
                     BorderThickness="1,0,1,1"
                     CornerRadius="0,0,10,10"

@@ -184,6 +184,58 @@
                                     </RadioButton>
                                 </StackPanel>
                             </Grid>
+
+                            <!-- 窗口材质（玻璃外观）：切换即时生效 -->
+                            <Grid Margin="0,16,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="窗口材质" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
+                                               Text="亚克力：模糊透出窗口后方内容，玻璃感最强；云母：随桌面壁纸淡淡透色；纯色：不使用系统材质。需要 Windows 11 22H2 及以上，关闭系统透明效果或节能模式时由系统显示为纯色。" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <RadioButton Style="{StaticResource Segment}" GroupName="WindowMaterial"
+                                                 IsChecked="{Binding SelectedWindowMaterial, Converter={StaticResource EnumToBool}, ConverterParameter=Acrylic, Mode=TwoWay}">
+                                        <TextBlock Text="亚克力" VerticalAlignment="Center" />
+                                    </RadioButton>
+                                    <RadioButton Style="{StaticResource Segment}" GroupName="WindowMaterial"
+                                                 IsChecked="{Binding SelectedWindowMaterial, Converter={StaticResource EnumToBool}, ConverterParameter=Mica, Mode=TwoWay}">
+                                        <TextBlock Text="云母" VerticalAlignment="Center" />
+                                    </RadioButton>
+                                    <RadioButton Style="{StaticResource Segment}" GroupName="WindowMaterial" Margin="0"
+                                                 IsChecked="{Binding SelectedWindowMaterial, Converter={StaticResource EnumToBool}, ConverterParameter=Solid, Mode=TwoWay}">
+                                        <TextBlock Text="纯色" VerticalAlignment="Center" />
+                                    </RadioButton>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- 玻璃透明度：拖动实时预览；纯色材质下禁用 -->
+                            <Grid Margin="0,16,0,0" IsEnabled="{Binding IsGlassMaterial}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="透明度" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
+                                               Text="越透明玻璃感越强；窗口后方内容过亮或过暗时，文字对比度会随之下降。仅在亚克力 / 云母下生效。" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="不透明" Style="{StaticResource Text.Caption}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                    <Slider Style="{StaticResource Input.Slider}" Width="220" VerticalAlignment="Center"
+                                            Minimum="0" Maximum="100" TickFrequency="5" SmallChange="5" LargeChange="10"
+                                            AutomationProperties.Name="透明度"
+                                            Value="{Binding WindowTransparency, Mode=TwoWay}" />
+                                    <TextBlock Text="透明" Style="{StaticResource Text.Caption}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                                    <TextBlock Text="{Binding WindowTransparency, StringFormat={}{0}%}" Style="{StaticResource Text.Body}"
+                                               Width="40" TextAlignment="Right" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </Grid>
                         </StackPanel>
                     </Border>
 

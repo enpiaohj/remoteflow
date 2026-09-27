@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using RemoteFlow.App.Services;
 
 namespace RemoteFlow.App.Views.Dialogs;
 
@@ -18,6 +19,7 @@ public partial class PasswordPromptDialog : Window
     private PasswordPromptDialog(string title, string message, bool confirm)
     {
         InitializeComponent();
+        WindowBackdrop.PrepareDialog(this);
 
         _confirm = confirm;
         TitleText.Text = title;

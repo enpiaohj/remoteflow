@@ -11,6 +11,7 @@ public partial class GroupNameDialog : Window
     private GroupNameDialog(GroupNamePrompt prompt)
     {
         InitializeComponent();
+        WindowBackdrop.PrepareDialog(this);
 
         TitleText.Text = prompt.Title;
         NameInput.Text = prompt.InitialName;
