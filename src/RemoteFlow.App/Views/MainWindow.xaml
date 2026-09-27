@@ -160,8 +160,27 @@
             </Setter>
         </Style>
         <!-- 模块图标栏的单个入口：34×34 圆角方块，选中 = 品牌淡底 -->
+        <!-- 页面 Tab 图标（DataContext = PageTabViewModel）：常态线性、当前 Tab 填充并用品牌色 -->
+        <Style x:Key="Workspace.PageTabIcon" TargetType="Path" BasedOn="{StaticResource UiIcon}">
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
+            <Setter Property="Margin" Value="13,0" />
+            <Setter Property="Fill" Value="{DynamicResource Text.Secondary}" />
+            <Setter Property="Data" Value="{Binding IconKey, Converter={StaticResource UiIconGeometry}}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                    <Setter Property="Fill" Value="{DynamicResource Brand.Default}" />
+                    <Setter Property="Data" Value="{Binding IconKey, Converter={StaticResource UiIconGeometry}, ConverterParameter=.Filled}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--
+            导航栏项：Content 为 Ui.* 基础图标键（字符串），常态画线性图标、选中换 .Filled 填充变体；
+            无障碍名称取 ToolTip，避免把图标键读给屏幕阅读器。
+        -->
         <Style x:Key="Nav.RailItem" TargetType="RadioButton">
-            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}" />
             <Setter Property="Width" Value="34" />
             <Setter Property="Height" Value="34" />
             <Setter Property="Margin" Value="0,2" />
@@ -174,7 +193,9 @@
                                 Background="Transparent"
                                 CornerRadius="8"
                                 SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Path x:Name="Glyph" Style="{StaticResource UiIcon}" Width="19" Height="19"
+                                  Fill="{TemplateBinding Foreground}"
+                                  Data="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource UiIconGeometry}}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -182,6 +203,8 @@
                                 <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Glyph" Property="Data"
+                                        Value="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource UiIconGeometry}, ConverterParameter=.Filled}" />
                                 <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Selected}" />
                                 <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
                             </Trigger>
@@ -296,12 +319,7 @@
                                                              IsChecked="{Binding IsActive, Mode=OneWay}"
                                                              Checked="OnTabHeaderChecked"
                                                              ContextMenuOpening="OnTabContextMenuOpening">
-                                                    <TextBlock Text="{Binding Icon}"
-                                                               FontFamily="{StaticResource IconFont}"
-                                                               FontSize="14"
-                                                               Margin="13,0"
-                                                               VerticalAlignment="Center"
-                                                               Foreground="{DynamicResource Text.Secondary}" />
+                                                    <Path Style="{StaticResource Workspace.PageTabIcon}" />
                                                 </RadioButton>
                                             </DataTemplate>
                                             <!-- 会话 Tab：图标 + 名称 + 状态点 + 关闭 -->
@@ -350,7 +368,7 @@
                                                         <Button Style="{StaticResource Button.Icon}"
                                                                 Width="26" Height="26" Margin="6,0,-2,0"
                                                                 FontSize="11"
-                                                                Content="{StaticResource Icon.Close}"
+                                                                Content="{StaticResource Ui.Close}"
                                                                 ToolTip="关闭会话 (Ctrl+W)"
                                                                 Command="{Binding CloseCommand}"
                                                                 Visibility="{Binding CanClose, Converter={StaticResource BoolToVisibility}}" />
@@ -370,12 +388,7 @@
                                                  IsChecked="{Binding IsActive, Mode=OneWay}"
                                                  Checked="OnTabHeaderChecked"
                                                  ToolTip="{Binding Title}">
-                                        <TextBlock Text="{Binding Icon}"
-                                                   FontFamily="{StaticResource IconFont}"
-                                                   FontSize="14"
-                                                   Margin="13,0"
-                                                   VerticalAlignment="Center"
-                                                   Foreground="{DynamicResource Text.Secondary}" />
+                                        <Path Style="{StaticResource Workspace.PageTabIcon}" />
                                     </RadioButton>
 
                                     <sessions:SessionTabSelector x:Name="SessionSelector"
@@ -448,10 +461,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{StaticResource Icon.Warning}"
-                                           FontFamily="{StaticResource IconFont}" FontSize="13"
-                                           Foreground="{DynamicResource Status.Warning}"
-                                           VerticalAlignment="Center" />
+                                <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Warning}" Width="15" Height="15" Grid.Column="0" Fill="{DynamicResource Status.Warning}" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="1" Text="{Binding PageLoadError}"
                                            Style="{StaticResource Text.Caption}"
                                            TextWrapping="Wrap"
@@ -527,27 +537,19 @@
 
                             <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="首页"
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Home, Mode=TwoWay}"
-                                         Tag="{x:Static vm:NavigationPage.Home}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick">
-                                <TextBlock Text="{StaticResource Icon.Home}" FontFamily="{StaticResource IconFont}" FontSize="16" />
-                            </RadioButton>
+                                         Tag="{x:Static vm:NavigationPage.Home}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Home" />
                             <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="连接工作台"
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Connections, Mode=TwoWay}"
-                                         Tag="{x:Static vm:NavigationPage.Connections}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick">
-                                <TextBlock Text="{StaticResource Icon.Connections}" FontFamily="{StaticResource IconFont}" FontSize="16" />
-                            </RadioButton>
+                                         Tag="{x:Static vm:NavigationPage.Connections}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Connections" />
 
                             <Border Style="{StaticResource Surface.Divider}" Margin="12,8" />
 
                             <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="凭据"
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Credentials, Mode=TwoWay}"
-                                         Tag="{x:Static vm:NavigationPage.Credentials}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick">
-                                <TextBlock Text="{StaticResource Icon.Credential}" FontFamily="{StaticResource IconFont}" FontSize="16" />
-                            </RadioButton>
+                                         Tag="{x:Static vm:NavigationPage.Credentials}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Credential" />
                             <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="设置"
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Settings, Mode=TwoWay}"
-                                         Tag="{x:Static vm:NavigationPage.Settings}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick">
-                                <TextBlock Text="{StaticResource Icon.Settings}" FontFamily="{StaticResource IconFont}" FontSize="16" />
-                            </RadioButton>
+                                         Tag="{x:Static vm:NavigationPage.Settings}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Settings" />
                         </StackPanel>
                     </ScrollViewer>
 
@@ -555,14 +557,10 @@
                     <StackPanel Grid.Row="1" Margin="0,0,0,8">
                         <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="帮助"
                                      IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Help, Mode=TwoWay}"
-                                         Tag="{x:Static vm:NavigationPage.Help}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick">
-                            <TextBlock Text="{StaticResource Icon.Help}" FontFamily="{StaticResource IconFont}" FontSize="16" />
-                        </RadioButton>
+                                         Tag="{x:Static vm:NavigationPage.Help}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Help" />
                         <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="关于"
                                      IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=About, Mode=TwoWay}"
-                                         Tag="{x:Static vm:NavigationPage.About}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick">
-                            <TextBlock Text="{StaticResource Icon.Info}" FontFamily="{StaticResource IconFont}" FontSize="16" />
-                        </RadioButton>
+                                         Tag="{x:Static vm:NavigationPage.About}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Info" />
                     </StackPanel>
                   </Grid>
                 </Border>
@@ -580,8 +578,7 @@
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <TextBlock Text="{Binding ConnectionsPage.TotalConnectionsDisplay}" Style="{StaticResource Text.Caption}"
                                    Margin="0,0,14,0" />
-                        <TextBlock Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}" FontSize="11"
-                                   Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Shield}" Width="12.5" Height="12.5" Fill="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
                         <TextBlock Text="本地优先 · 凭据由 Windows DPAPI 保护"
                                    Style="{StaticResource Text.Caption}" Margin="7,0,0,0" />
                     </StackPanel>

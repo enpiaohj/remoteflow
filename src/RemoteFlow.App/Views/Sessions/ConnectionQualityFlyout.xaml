@@ -62,7 +62,7 @@
                             Style="{StaticResource Button.Icon}"
                             Width="28" Height="28"
                             FontSize="12"
-                            Content="&#xE711;"
+                            Content="{StaticResource Ui.Close}"
                             ToolTip="关闭 (Esc)"
                             Click="OnCloseClick" />
                 </Grid>
@@ -70,11 +70,7 @@
 
             <!-- ── 状态头：● 已连接 / 网络波动 等 ── -->
             <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="20,2,20,0">
-                <TextBlock Text="{Binding FlyoutStateIcon}"
-                           FontFamily="{StaticResource IconFont}"
-                           FontSize="13"
-                           VerticalAlignment="Center"
-                           Foreground="{Binding FlyoutStateBrushKey, Converter={StaticResource KeyToBrush}}" />
+                <Path Style="{StaticResource UiIcon}" Width="15" Height="15" Data="{Binding FlyoutStateIconKey, Converter={StaticResource UiIconGeometry}}" Fill="{Binding FlyoutStateBrushKey, Converter={StaticResource KeyToBrush}}" />
                 <TextBlock Text="{Binding FlyoutStateText}"
                            Style="{StaticResource Text.Body}"
                            FontWeight="SemiBold"
@@ -205,10 +201,7 @@
                             MinHeight="32"
                             Command="{Binding Quality.RedetectCommand}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE72C;"
-                                       FontFamily="{StaticResource IconFont}"
-                                       FontSize="12"
-                                       VerticalAlignment="Center" />
+                            <Path Style="{StaticResource UiIcon}" Width="14" Height="14" Data="{StaticResource Ui.Refresh}" />
                             <TextBlock Text="重新检测" Margin="7,0,0,0" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>

@@ -20,8 +20,17 @@
             <Setter Property="Width" Value="38" />
             <Setter Property="Height" Value="38" />
             <Setter Property="CornerRadius" Value="10" />
-            <Setter Property="Background" Value="{DynamicResource Brand.Subtle}" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="VerticalAlignment" Value="Top" />
+        </Style>
+
+        <!-- 分区彩色身份图标（Id.*）：自带色彩与体积感，外框不再铺品牌淡底 -->
+        <Style x:Key="Help.Tile.Image" TargetType="Image">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="RenderOptions.BitmapScalingMode" Value="HighQuality" />
         </Style>
 
         <!-- 步骤数字徽章 -->
@@ -74,8 +83,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Style="{StaticResource Help.Tile}" Margin="0,0,14,0">
-                            <TextBlock Text="{StaticResource Icon.Connect}" FontFamily="{StaticResource IconFont}" FontSize="17"
-                                       Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image Style="{StaticResource Help.Tile.Image}" Source="{StaticResource Id.QuickStart}" />
                         </Border>
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="快速上手" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,12" />
@@ -138,8 +146,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Style="{StaticResource Help.Tile}" Margin="0,0,14,0">
-                            <TextBlock Text="{StaticResource Icon.Connections}" FontFamily="{StaticResource IconFont}" FontSize="17"
-                                       Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image Style="{StaticResource Help.Tile.Image}" Source="{StaticResource ResourceIcon.AllDevices}" />
                         </Border>
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="连接管理" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,10" />
@@ -169,8 +176,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Style="{StaticResource Help.Tile}" Margin="0,0,14,0">
-                            <TextBlock Text="{StaticResource Icon.Sessions}" FontFamily="{StaticResource IconFont}" FontSize="17"
-                                       Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image Style="{StaticResource Help.Tile.Image}" Source="{StaticResource Id.Sessions}" />
                         </Border>
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="会话操作" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,10" />
@@ -233,8 +239,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Style="{StaticResource Help.Tile}" Margin="0,0,14,0">
-                            <TextBlock Text="{StaticResource Icon.FullScreen}" FontFamily="{StaticResource IconFont}" FontSize="17"
-                                       Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image Style="{StaticResource Help.Tile.Image}" Source="{StaticResource Id.FloatingToolbar}" />
                         </Border>
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="三档全屏与 F11" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,10" />
@@ -287,8 +292,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Style="{StaticResource Help.Tile}" Margin="0,0,14,0">
-                            <TextBlock Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}" FontSize="17"
-                                       Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image Style="{StaticResource Help.Tile.Image}" Source="{StaticResource Id.DataSafety}" />
                         </Border>
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="凭据与安全" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,10" />
@@ -316,8 +320,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Style="{StaticResource Help.Tile}" Margin="0,0,14,0">
-                            <TextBlock Text="{StaticResource Icon.Database}" FontFamily="{StaticResource IconFont}" FontSize="17"
-                                       Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image Style="{StaticResource Help.Tile.Image}" Source="{StaticResource Id.AppData}" />
                         </Border>
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="数据与备份" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,10" />
@@ -341,8 +344,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Style="{StaticResource Help.Tile}" Margin="0,0,14,0">
-                            <TextBlock Text="{StaticResource Icon.Refresh}" FontFamily="{StaticResource IconFont}" FontSize="17"
-                                       Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image Style="{StaticResource Help.Tile.Image}" Source="{StaticResource Id.Sync}" />
                         </Border>
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="云同步（AppsCloud）" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,10" />
@@ -367,8 +369,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Style="{StaticResource Help.Tile}" Margin="0,0,14,0">
-                            <TextBlock Text="{StaticResource Icon.Keyboard}" FontFamily="{StaticResource IconFont}" FontSize="17"
-                                       Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image Style="{StaticResource Help.Tile.Image}" Source="{StaticResource Id.Keyboard}" />
                         </Border>
                         <Grid Grid.Column="1">
                             <Grid.RowDefinitions>

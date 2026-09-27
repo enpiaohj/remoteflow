@@ -11,6 +11,7 @@ using RemoteFlow.App.Services;
 using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Infrastructure.Settings;
+using RemoteFlow.App.Converters;
 
 namespace RemoteFlow.App.Views.Sessions;
 
@@ -288,14 +289,14 @@ public partial class SessionHostView : UserControl
     }
 
     /// <summary>
-    /// 同步药丸上「完全全屏」按钮的双态图标与提示。图标已有的
-    /// <c>Icon.ExitFullScreen</c> 此前无人使用，正好用在这里。
+    /// 同步药丸上「完全全屏」按钮的双态图标与提示。图标为
+    /// <c>Ui.FullScreen</c> / <c>Ui.ExitFullScreen</c>。
     /// 该按钮从不禁用、从不隐藏——与 macOS 药丸上的同类按钮一致。
     /// </summary>
     private void RefreshScreenFullButton(bool screenFull)
     {
         ScreenFullButton.Content = TryFindResource(
-            screenFull ? "Icon.ExitFullScreen" : "Icon.FullScreen") ?? ScreenFullButton.Content;
+            screenFull ? "Ui.ExitFullScreen" : "Ui.FullScreen") ?? ScreenFullButton.Content;
         ScreenFullButton.ToolTip = screenFull ? "退出完全全屏 (F11)" : "完全全屏 (F11)";
     }
 
@@ -765,8 +766,6 @@ public partial class SessionHostView : UserControl
         _sessionMenu ??= new ContextMenu { PlacementTarget = SessionSwitchButton, Placement = PlacementMode.Bottom };
         _sessionMenu.Items.Clear();
 
-        var iconFont = TryFindResource("IconFont") as FontFamily ?? new FontFamily("Segoe MDL2 Assets");
-
         foreach (var tab in _main.Tabs.OfType<SessionTabViewModel>())
         {
             var current = tab;
@@ -774,7 +773,13 @@ public partial class SessionHostView : UserControl
             {
                 Header = current.Title,
                 IsChecked = ReferenceEquals(current, _main.SelectedTab),
-                Icon = new TextBlock { Text = current.Icon, FontFamily = iconFont, FontSize = 13 }
+                Icon = new System.Windows.Shapes.Path
+                {
+                    Style = TryFindResource("UiIcon") as Style,
+                    Data = UiIconResources.Find(UiIconResources.ProtocolKey(current.Protocol)),
+                    Width = 15,
+                    Height = 15
+                }
             };
             item.Click += (_, _) => _main.SelectedTab = current;
             _sessionMenu.Items.Add(item);

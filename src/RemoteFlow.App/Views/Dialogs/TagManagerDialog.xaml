@@ -36,11 +36,7 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <TextBlock Text="{StaticResource Icon.Tag}"
-                               FontFamily="{StaticResource IconFont}"
-                               FontSize="17"
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource Brand.Default}" />
+                    <Image Width="24" Height="24" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" Source="{StaticResource Id.Tag}" />
                     <TextBlock Text="标签管理" Style="{StaticResource Text.SectionTitle}"
                                Margin="12,0,0,0" VerticalAlignment="Center" />
                 </StackPanel>
@@ -82,13 +78,13 @@
 
                                     <Button Grid.Column="2" Style="{StaticResource Button.Icon}"
                                             Width="28" Height="28" FontSize="12"
-                                            Content="{StaticResource Icon.Edit}"
+                                            Content="{StaticResource Ui.Edit}"
                                             ToolTip="编辑标签"
                                             Command="{Binding DataContext.EditTagCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                             CommandParameter="{Binding}" />
                                     <Button Grid.Column="3" Style="{StaticResource Button.Icon}"
                                             Width="28" Height="28" FontSize="12" Margin="4,0,0,0"
-                                            Content="{StaticResource Icon.Delete}"
+                                            Content="{StaticResource Ui.Delete}"
                                             Foreground="{DynamicResource Status.Danger}"
                                             ToolTip="删除标签"
                                             Command="{Binding DataContext.DeleteTagCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"

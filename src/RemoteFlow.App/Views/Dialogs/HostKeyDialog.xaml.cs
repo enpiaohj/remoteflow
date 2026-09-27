@@ -120,8 +120,8 @@ public partial class HostKeyDialog : Window
 
         if (context.IsMismatch)
         {
-            dialog.IconGlyph.Text = (string)System.Windows.Application.Current.FindResource("Icon.Warning");
-            dialog.IconGlyph.Foreground = (Brush)System.Windows.Application.Current.FindResource("Status.Danger");
+            dialog.IconGlyph.Data = (Geometry)System.Windows.Application.Current.FindResource("Ui.Warning.Filled");
+            dialog.IconGlyph.Fill = (Brush)System.Windows.Application.Current.FindResource("Status.Danger");
             dialog.TitleText.Text = "主机密钥已变更";
             dialog.MessageText.Text =
                 "该主机的密钥指纹与此前记录的不一致。这可能是服务器重装或密钥轮换造成的，" +
@@ -140,8 +140,8 @@ public partial class HostKeyDialog : Window
         }
         else
         {
-            dialog.IconGlyph.Text = (string)System.Windows.Application.Current.FindResource("Icon.Info");
-            dialog.IconGlyph.Foreground = (Brush)System.Windows.Application.Current.FindResource("Status.Info");
+            dialog.IconGlyph.Data = (Geometry)System.Windows.Application.Current.FindResource("Ui.Info.Filled");
+            dialog.IconGlyph.Fill = (Brush)System.Windows.Application.Current.FindResource("Status.Info");
             dialog.TitleText.Text = "首次连接该主机";
             dialog.MessageText.Text =
                 "这是第一次连接该主机，RemoteFlow 尚未记录它的密钥指纹。请核对下方指纹是否与服务器上的一致。";

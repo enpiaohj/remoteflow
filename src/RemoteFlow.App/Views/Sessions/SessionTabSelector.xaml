@@ -32,11 +32,7 @@
                       ToolTip="当前会话：右键可重新连接 / 关闭会话 / 关闭全部会话"
                       Click="OnToggleClick">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock x:Name="HeaderIcon"
-                           FontFamily="{StaticResource IconFont}"
-                           FontSize="13"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource Text.Secondary}" />
+                <Path x:Name="HeaderIcon" Style="{StaticResource UiIcon}" Width="15" Height="15" VerticalAlignment="Center" Fill="{DynamicResource Text.Secondary}" />
                 <TextBlock x:Name="HeaderTitle"
                            Margin="7,0,0,0"
                            MaxWidth="150"
@@ -144,7 +140,7 @@
                                         Width="26" Height="26"
                                         Margin="8,0,-4,0"
                                         FontSize="11"
-                                        Content="{StaticResource Icon.Close}"
+                                        Content="{StaticResource Ui.Close}"
                                         ToolTip="关闭会话 (Ctrl+W)"
                                         Visibility="{Binding CanClose, Converter={StaticResource BoolToVisibility}}"
                                         Click="OnRowCloseClick" />

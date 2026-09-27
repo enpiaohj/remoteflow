@@ -25,6 +25,7 @@ RemoteFlow 按GPL-3.0 许可证发布。本文件列出随源码分发 / 运行�
 - **.NET Runtime / Windows Desktop Runtime**（.NET 10）—— MIT（.NET Foundation）
 - **mstscax.dll（RDP ActiveX）** —— 随 Windows 系统组件提供，不随本应用分发，遵循 Microsoft Windows 许可条款。
 - **xterm.js**（经 WebView2 内嵌资源加载，SSH 终端前端）—— MIT，https://xtermjs.org
+- **Fluent UI System Icons**（Microsoft，界面线性操作图标的矢量几何，由 `scripts/build-ui-icons.py` 生成 `Themes/UiIcons.xaml`）—— MIT，https://github.com/microsoft/fluentui-system-icons ；许可证全文见文末。
 
 ## macOS 平台
 
@@ -44,3 +45,31 @@ RemoteFlow 按GPL-3.0 许可证发布。本文件列出随源码分发 / 运行�
 ## 版本来源
 
 组件版本以仓库根 `Directory.Packages.props`（集中式包版本管理）为准；本清单版本号为撰写时的快照，升级依赖时请同步更新。
+
+## 许可证全文
+
+### Fluent UI System Icons
+
+```
+MIT License
+
+Copyright (c) 2020 Microsoft Corporation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

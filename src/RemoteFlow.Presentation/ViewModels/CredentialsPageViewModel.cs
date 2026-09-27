@@ -464,6 +464,16 @@ public sealed partial class CredentialItemViewModel(Credential credential, int u
         _ => "\uE8D7"                                                             // Permissions
     };
 
+    /// <summary>凭据类型身份图标资源键（Id.* 彩色图标，Windows 端使用；字形 <see cref="TypeIcon"/> 保留给其它端）。</summary>
+    public string TypeIconKey => Credential.Type switch
+    {
+        CredentialType.WindowsDomain => "Id.WindowsDomain",
+        CredentialType.LocalPassword => "Id.LocalAccount",
+        CredentialType.SshPassword => "Id.SshPassword",
+        CredentialType.SshPrivateKey => "Id.SshKey",
+        _ => "Id.VncPassword"
+    };
+
     /// <summary>类型徽章的语义色键。与协议色系保持一致，便于扫读。</summary>
     public string TypeAccentBrushKey => Credential.Type switch
     {

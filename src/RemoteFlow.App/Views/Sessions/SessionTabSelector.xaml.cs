@@ -6,6 +6,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using RemoteFlow.Presentation.ViewModels;
+using RemoteFlow.App.Converters;
 
 namespace RemoteFlow.App.Views.Sessions;
 
@@ -160,7 +161,7 @@ public sealed partial class SessionTabSelector : UserControl
 
     private void ShowSessionHeader(SessionTabViewModel session)
     {
-        HeaderIcon.Text = session.Icon;
+        HeaderIcon.Data = UiIconResources.Find(UiIconResources.ProtocolKey(session.Protocol));
         HeaderTitle.Text = session.Title;
         SelectorToggle.ToolTip = $"{session.StateText} · {session.Title}";
         if (TryFindResource(session.StateBrushKey) is Brush brush)
@@ -173,7 +174,7 @@ public sealed partial class SessionTabSelector : UserControl
 
     private void ShowWorkspaceHeader()
     {
-        HeaderIcon.Text = TryFindResource("Icon.Sessions") as string ?? "";
+        HeaderIcon.Data = UiIconResources.Find("Ui.Sessions");
         HeaderTitle.Text = $"活动连接（{_sessionTabs.Count}）";
         SelectorToggle.ToolTip = "选择会话";
         HeaderDot.Visibility = Visibility.Collapsed;

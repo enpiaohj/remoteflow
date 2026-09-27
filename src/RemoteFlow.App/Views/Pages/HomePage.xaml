@@ -160,7 +160,7 @@
                 <Button Style="{StaticResource Button.Icon}"
                         Width="26" Height="26" FontSize="12"
                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,12,12,0"
-                        Content="{StaticResource Icon.More}"
+                        Content="{StaticResource Ui.More}"
                         Click="OnItemMenuClick" Tag="{Binding}"
                         ContextMenu="{StaticResource HomeRowMenu}" />
             </Grid>
@@ -245,7 +245,7 @@
 
                 <Button Grid.Column="3" Style="{StaticResource Button.Icon}"
                         Width="24" Height="24" FontSize="11" VerticalAlignment="Center"
-                        Content="{StaticResource Icon.More}"
+                        Content="{StaticResource Ui.More}"
                         Click="OnItemMenuClick" Tag="{Binding}"
                         ContextMenu="{StaticResource HomeRowMenu}" />
             </Grid>
@@ -378,8 +378,7 @@
 
                         <Grid Grid.Row="0" Margin="0,0,0,10">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.Favorite}" FontFamily="{StaticResource IconFont}"
-                                           FontSize="15" Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
+                                <Image Width="20" Height="20" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" Source="{StaticResource Id.Favorite}" />
                                 <TextBlock Text="收藏" Style="{StaticResource Text.SectionTitle}" Margin="8,0,0,0" />
                             </StackPanel>
                             <Button Content="查看全部" Style="{StaticResource Home.LinkButton}"
@@ -402,7 +401,7 @@
                             <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Stretch"
                                     Command="{Binding ViewAllFavoritesCommand}">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                    <TextBlock Text="{StaticResource Icon.Favorite}" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" />
+                                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Favorite}" Width="14" Height="14" VerticalAlignment="Center" />
                                     <TextBlock Text="管理收藏" Margin="8,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
@@ -421,8 +420,7 @@
 
                         <Grid Grid.Row="0" Margin="0,0,0,10">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{StaticResource Icon.Recent}" FontFamily="{StaticResource IconFont}"
-                                           FontSize="15" Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
+                                <Image Width="20" Height="20" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" Source="{StaticResource Id.History}" />
                                 <TextBlock Text="最近活动" Style="{StaticResource Text.SectionTitle}" Margin="8,0,0,0" />
                             </StackPanel>
                             <Button Content="查看全部" Style="{StaticResource Home.LinkButton}"
@@ -445,7 +443,7 @@
                             <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Stretch"
                                     Command="{Binding ViewAllActivityCommand}">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                    <TextBlock Text="{StaticResource Icon.Recent}" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" />
+                                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Recent}" Width="14" Height="14" VerticalAlignment="Center" />
                                     <TextBlock Text="查看所有活动" Margin="8,0,0,0" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
@@ -468,8 +466,7 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0" Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}"
-                               FontSize="16" Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                    <Image Grid.Column="0" Width="24" Height="24" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" Source="{StaticResource Id.DataSafety}" />
                     <StackPanel Grid.Column="1" Margin="12,0,12,0" VerticalAlignment="Center">
                         <TextBlock Text="安全提示" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
                         <TextBlock Text="为保障连接安全，请定期更新密码，并为关键账号启用双因素认证。"
@@ -479,7 +476,7 @@
                             VerticalAlignment="Center" Command="{Binding ViewCredentialsCommand}" />
                     <Button Grid.Column="3" Style="{StaticResource Button.Icon}"
                             Width="28" Height="28" FontSize="10" Margin="6,0,0,0" VerticalAlignment="Center"
-                            Content="{StaticResource Icon.Close}" ToolTip="不再提示"
+                            Content="{StaticResource Ui.Close}" ToolTip="不再提示"
                             Command="{Binding DismissSecurityTipCommand}" />
                 </Grid>
             </Border>

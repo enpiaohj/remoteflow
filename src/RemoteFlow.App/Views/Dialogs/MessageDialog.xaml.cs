@@ -132,14 +132,14 @@ public partial class MessageDialog : Window
         // 图标与颜色同时表达类型，不单靠颜色传达信息。
         var (glyphKey, brushKey) = kind switch
         {
-            DialogKind.Success => ("Icon.Success", "Status.Success"),
-            DialogKind.Warning => ("Icon.Warning", "Status.Warning"),
-            DialogKind.Error => ("Icon.Error", "Status.Danger"),
-            _ => ("Icon.Info", "Status.Info")
+            DialogKind.Success => ("Ui.Success.Filled", "Status.Success"),
+            DialogKind.Warning => ("Ui.Warning.Filled", "Status.Warning"),
+            DialogKind.Error => ("Ui.Error.Filled", "Status.Danger"),
+            _ => ("Ui.Info.Filled", "Status.Info")
         };
 
-        dialog.IconGlyph.Text = (string)System.Windows.Application.Current.FindResource(glyphKey);
-        dialog.IconGlyph.Foreground = (Brush)System.Windows.Application.Current.FindResource(brushKey);
+        dialog.IconGlyph.Data = (Geometry)System.Windows.Application.Current.FindResource(glyphKey);
+        dialog.IconGlyph.Fill = (Brush)System.Windows.Application.Current.FindResource(brushKey);
 
         return dialog;
     }

@@ -133,7 +133,7 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True">
                     <Button Style="{StaticResource Button.Icon}" Width="28" Height="28"
-                            Content="{StaticResource Icon.Add}" ToolTip="新建分组" Click="OnNewGroupMenuClick">
+                            Content="{StaticResource Ui.Add}" ToolTip="新建分组" Click="OnNewGroupMenuClick">
                         <Button.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="新建分组" Click="OnNewGroupMenuClick" />

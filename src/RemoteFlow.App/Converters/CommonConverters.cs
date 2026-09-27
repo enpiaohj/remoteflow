@@ -123,6 +123,67 @@ public sealed class ResourceKeyToGeometryConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>
+/// 字号 → 线性图标边长。图标沿用原字体图标「按字号定尺寸」的用法：Fluent 20 网格的图形约占画布 85%，
+/// 边长取字号 × 1.15（参数可覆盖倍率），视觉大小与原字形基本一致；取整到 0.5 像素避免模糊。
+/// </summary>
+public sealed class IconSizeConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var fontSize = value is double d && d > 0 ? d : 13d;
+        var factor = parameter is string s && double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var f)
+            ? f
+            : 1.15;
+        return Math.Round(fontSize * factor * 2, MidpointRounding.AwayFromZero) / 2;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>后台代码取用 Ui.* 线性图标的统一入口（会话菜单、对话框级别图标等无法写在 XAML 的场景）。</summary>
+public static class UiIconResources
+{
+    public static string ProtocolKey(ProtocolType protocol) => protocol switch
+    {
+        ProtocolType.Rdp => "Ui.ProtocolRdp",
+        ProtocolType.Ssh => "Ui.ProtocolSsh",
+        _ => "Ui.ProtocolVnc"
+    };
+
+    public static Geometry? Find(string key)
+        => System.Windows.Application.Current?.TryFindResource(key) as Geometry;
+}
+
+/// <summary>
+/// Ui.* 图标键 → Geometry；参数为变体后缀（如 ".Filled"），变体不存在时回落到基础键。
+/// 用于「线性常态、选中填充」的导航图标，调用方只需给出基础键。
+/// </summary>
+public sealed class UiIconGeometryConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not string key || key.Length == 0)
+        {
+            return null;
+        }
+
+        var app = System.Windows.Application.Current;
+        if (parameter is string suffix
+            && suffix.Length > 0
+            && app?.TryFindResource(key + suffix) is Geometry variant)
+        {
+            return variant;
+        }
+
+        return app?.TryFindResource(key) as Geometry;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>设备类型枚举 → 正式矢量图标，供编辑器下拉预览；Unknown 不显示图标。</summary>
 public sealed class DeviceTypeToImageSourceConverter : IValueConverter
 {

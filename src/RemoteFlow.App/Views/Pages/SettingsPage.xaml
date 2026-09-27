@@ -91,6 +91,14 @@
             <Setter Property="Margin" Value="0,0,0,12" />
         </Style>
 
+        <!-- 卡片标题左侧的彩色身份图标（Id.*）：20px，与 15px 标题字同一视觉高度 -->
+        <Style x:Key="Settings.CardIcon" TargetType="Image">
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="RenderOptions.BitmapScalingMode" Value="HighQuality" />
+        </Style>
+
         <!-- 卡片内分区小标题：RDP/SSH 设置按 Section 归组用 -->
         <Style x:Key="Settings.SectionHeader" TargetType="TextBlock" BasedOn="{StaticResource Text.Label}">
             <Setter Property="FontSize" Value="12" />
@@ -145,8 +153,7 @@
                     <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
-                                <TextBlock Text="{StaticResource Icon.Appearance}" FontFamily="{StaticResource IconFont}" FontSize="15"
-                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <Image Style="{StaticResource Settings.CardIcon}" Source="{StaticResource Id.Appearance}" />
                                 <TextBlock Text="外观与行为" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
                             </StackPanel>
 
@@ -164,21 +171,21 @@
                                     <RadioButton Style="{StaticResource Segment}" GroupName="Theme"
                                                  IsChecked="{Binding SelectedTheme, Converter={StaticResource EnumToBool}, ConverterParameter=System, Mode=TwoWay}">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="&#xE770;" FontFamily="{StaticResource IconFont}" FontSize="13" VerticalAlignment="Center" />
+                                            <Path Style="{StaticResource UiIcon}" Width="15" Height="15" Data="{StaticResource Ui.ThemeSystem}" />
                                             <TextBlock Text="跟随系统" Margin="7,0,0,0" VerticalAlignment="Center" />
                                         </StackPanel>
                                     </RadioButton>
                                     <RadioButton Style="{StaticResource Segment}" GroupName="Theme"
                                                  IsChecked="{Binding SelectedTheme, Converter={StaticResource EnumToBool}, ConverterParameter=Light, Mode=TwoWay}">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="&#xE706;" FontFamily="{StaticResource IconFont}" FontSize="13" VerticalAlignment="Center" />
+                                            <Path Style="{StaticResource UiIcon}" Width="15" Height="15" Data="{StaticResource Ui.ThemeLight}" />
                                             <TextBlock Text="浅色" Margin="7,0,0,0" VerticalAlignment="Center" />
                                         </StackPanel>
                                     </RadioButton>
                                     <RadioButton Style="{StaticResource Segment}" GroupName="Theme" Margin="0"
                                                  IsChecked="{Binding SelectedTheme, Converter={StaticResource EnumToBool}, ConverterParameter=Dark, Mode=TwoWay}">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="&#xE708;" FontFamily="{StaticResource IconFont}" FontSize="13" VerticalAlignment="Center" />
+                                            <Path Style="{StaticResource UiIcon}" Width="15" Height="15" Data="{StaticResource Ui.ThemeDark}" />
                                             <TextBlock Text="深色" Margin="7,0,0,0" VerticalAlignment="Center" />
                                         </StackPanel>
                                     </RadioButton>
@@ -243,8 +250,7 @@
                     <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
-                                <TextBlock Text="{StaticResource Icon.Recent}" FontFamily="{StaticResource IconFont}" FontSize="15"
-                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <Image Style="{StaticResource Settings.CardIcon}" Source="{StaticResource Id.DateTime}" />
                                 <TextBlock Text="日期与时间" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
                             </StackPanel>
 
@@ -318,8 +324,7 @@
                     <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
-                                <TextBlock Text="{StaticResource Icon.Power}" FontFamily="{StaticResource IconFont}" FontSize="15"
-                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <Image Style="{StaticResource Settings.CardIcon}" Source="{StaticResource Id.Startup}" />
                                 <TextBlock Text="启动与托盘" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
                             </StackPanel>
 
@@ -412,8 +417,7 @@
                     <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
-                                <TextBlock Text="{StaticResource Icon.FullScreen}" FontFamily="{StaticResource IconFont}" FontSize="15"
-                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <Image Style="{StaticResource Settings.CardIcon}" Source="{StaticResource Id.FloatingToolbar}" />
                                 <TextBlock Text="全屏悬浮工具条" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
                             </StackPanel>
 
@@ -509,8 +513,7 @@
                     <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
-                                <TextBlock Text="{StaticResource Icon.Language}" FontFamily="{StaticResource IconFont}" FontSize="15"
-                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <Image Style="{StaticResource Settings.CardIcon}" Source="{StaticResource Id.Language}" />
                                 <TextBlock Text="语言" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
                             </StackPanel>
 
@@ -839,7 +842,7 @@
                                                 </StackPanel>
                                                 <Button Grid.Column="1" Style="{StaticResource Button.Icon}"
                                                         Width="30" Height="30" FontSize="13"
-                                                        Content="{StaticResource Icon.Delete}"
+                                                        Content="{StaticResource Ui.Delete}"
                                                         ToolTip="移除该主机密钥"
                                                         Foreground="{DynamicResource Status.Danger}"
                                                         Command="{Binding DataContext.RemoveHostKeyCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -1189,8 +1192,7 @@
                     <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,24">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
-                                <TextBlock Text="{StaticResource Icon.Database}" FontFamily="{StaticResource IconFont}" FontSize="15"
-                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <Image Style="{StaticResource Settings.CardIcon}" Source="{StaticResource Id.ConnectionData}" />
                                 <TextBlock Text="连接数据" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
                             </StackPanel>
 
@@ -1204,8 +1206,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Download}" Style="{StaticResource IconTile.Glyph}"
-                                                   Foreground="{DynamicResource Brand.Default}" />
+                                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Download}" Width="20" Height="20" Fill="{DynamicResource Brand.Default}" HorizontalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="导入连接 CSV" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -1226,8 +1227,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Upload}" Style="{StaticResource IconTile.Glyph}"
-                                                   Foreground="{DynamicResource Brand.Default}" />
+                                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Upload}" Width="20" Height="20" Fill="{DynamicResource Brand.Default}" HorizontalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="导出连接 CSV" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -1244,8 +1244,7 @@
                     <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,24">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
-                                <TextBlock Text="{StaticResource Icon.Credential}" FontFamily="{StaticResource IconFont}" FontSize="15"
-                                           Foreground="{DynamicResource Status.Success}" VerticalAlignment="Center" />
+                                <Image Style="{StaticResource Settings.CardIcon}" Source="{StaticResource Id.CredentialBackup}" />
                                 <TextBlock Text="凭据备份" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
                             </StackPanel>
 
@@ -1257,8 +1256,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Download}" Style="{StaticResource IconTile.Glyph}"
-                                                   Foreground="{DynamicResource Status.Success}" />
+                                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Download}" Width="20" Height="20" Fill="{DynamicResource Status.Success}" HorizontalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="导入 .rfbackup" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -1279,8 +1277,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Upload}" Style="{StaticResource IconTile.Glyph}"
-                                                   Foreground="{DynamicResource Status.Success}" />
+                                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Upload}" Width="20" Height="20" Fill="{DynamicResource Status.Success}" HorizontalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="导出 .rfbackup" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -1297,8 +1294,7 @@
                     <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,24">
                         <StackPanel>
                             <StackPanel Style="{StaticResource Settings.CardHeader}">
-                                <TextBlock Text="{StaticResource Icon.Database}" FontFamily="{StaticResource IconFont}" FontSize="15"
-                                           Foreground="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
+                                <Image Style="{StaticResource Settings.CardIcon}" Source="{StaticResource Id.AppData}" />
                                 <TextBlock Text="应用数据" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
                             </StackPanel>
 
@@ -1310,8 +1306,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.Folder}" Style="{StaticResource IconTile.Glyph}"
-                                                   Foreground="{DynamicResource Text.Secondary}" />
+                                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Folder}" Width="20" Height="20" Fill="{DynamicResource Text.Secondary}" HorizontalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="数据存储位置" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -1333,8 +1328,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
-                                        <TextBlock Text="{StaticResource Icon.ImportExport}" Style="{StaticResource IconTile.Glyph}"
-                                                   Foreground="{DynamicResource Text.Secondary}" />
+                                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ImportExport}" Width="20" Height="20" Fill="{DynamicResource Text.Secondary}" HorizontalAlignment="Center" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                                         <TextBlock Text="打开日志目录" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -1354,8 +1348,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
-                                    <TextBlock Text="{StaticResource Icon.Database}" Style="{StaticResource IconTile.Glyph}"
-                                               Foreground="{DynamicResource Text.Secondary}" />
+                                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Database}" Width="20" Height="20" Fill="{DynamicResource Text.Secondary}" HorizontalAlignment="Center" />
                                 </Border>
                                 <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
                                     <TextBlock Text="备份数据" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -1376,8 +1369,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
-                                    <TextBlock Text="{StaticResource Icon.Delete}" Style="{StaticResource IconTile.Glyph}"
-                                               Foreground="{DynamicResource Status.Danger}" />
+                                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Delete}" Width="20" Height="20" Fill="{DynamicResource Status.Danger}" HorizontalAlignment="Center" />
                                 </Border>
                                 <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
                                     <TextBlock Text="清理连接历史" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
@@ -1396,16 +1388,14 @@
                             VerticalAlignment="Top">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                <TextBlock Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}" FontSize="15"
-                                           Foreground="{DynamicResource Status.Success}" VerticalAlignment="Center" />
+                                <Image Style="{StaticResource Settings.CardIcon}" Source="{StaticResource Id.DataSafety}" />
                                 <TextBlock Text="数据安全提示" Style="{StaticResource Text.Body}" FontWeight="SemiBold" Margin="10,0,0,0" />
                             </StackPanel>
                             <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,0,0,14"
                                        Text="所有数据仅存储在本地设备上，不会上传或同步到云端。" />
 
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                <TextBlock Text="{StaticResource Icon.Lock}" FontFamily="{StaticResource IconFont}" FontSize="15"
-                                           Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
+                                <Image Style="{StaticResource Settings.CardIcon}" Source="{StaticResource Id.Encryption}" />
                                 <TextBlock Text="加密保护" Style="{StaticResource Text.Body}" FontWeight="SemiBold" Margin="10,0,0,0" />
                             </StackPanel>
                             <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
@@ -1429,10 +1419,7 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                            <TextBlock Text="{StaticResource Icon.Warning}"
-                                                       FontFamily="{StaticResource IconFont}" FontSize="11"
-                                                       Foreground="{DynamicResource Status.Warning}"
-                                                       VerticalAlignment="Top" Margin="0,2,0,0" />
+                                            <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Warning}" Width="12.5" Height="12.5" Fill="{DynamicResource Status.Warning}" VerticalAlignment="Top" Margin="0,2,0,0" />
                                             <TextBlock Text="{Binding}" Style="{StaticResource Text.Caption}"
                                                        TextWrapping="Wrap" Margin="8,0,0,0" />
                                         </StackPanel>

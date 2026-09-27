@@ -322,6 +322,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 WorkspaceTab.Page = HomePage;
                 WorkspaceTab.Title = "首页";
                 WorkspaceTab.Icon = ""; // Icon.Home
+                WorkspaceTab.IconKey = "Ui.Home";
                 break;
 
             case NavigationPage.Connections:
@@ -329,6 +330,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 WorkspaceTab.Page = ConnectionsPage;
                 WorkspaceTab.Title = "连接工作台";
                 WorkspaceTab.Icon = ""; // Icon.Connections
+                WorkspaceTab.IconKey = "Ui.Connections";
                 break;
 
             case NavigationPage.Favorites:
@@ -336,6 +338,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 WorkspaceTab.Page = ConnectionsPage;
                 WorkspaceTab.Title = "收藏";
                 WorkspaceTab.Icon = ""; // Icon.Favorite
+                WorkspaceTab.IconKey = "Ui.Favorite";
                 break;
 
             case NavigationPage.Recent:
@@ -343,12 +346,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 WorkspaceTab.Page = ConnectionsPage;
                 WorkspaceTab.Title = "最近连接";
                 WorkspaceTab.Icon = ""; // Icon.Recent
+                WorkspaceTab.IconKey = "Ui.Recent";
                 break;
 
             case NavigationPage.Credentials:
                 WorkspaceTab.Page = _credentialsPage;
                 WorkspaceTab.Title = "凭据";
                 WorkspaceTab.Icon = ""; // Icon.Credential
+                WorkspaceTab.IconKey = "Ui.Credential";
                 break;
 
             case NavigationPage.Settings:
@@ -358,18 +363,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 WorkspaceTab.Page = _settingsPage;
                 WorkspaceTab.Title = "设置";
                 WorkspaceTab.Icon = ""; // Icon.Settings
+                WorkspaceTab.IconKey = "Ui.Settings";
                 break;
 
             case NavigationPage.Help:
                 WorkspaceTab.Page = _helpPage;
                 WorkspaceTab.Title = "使用指南";
                 WorkspaceTab.Icon = ""; // Icon.Help
+                WorkspaceTab.IconKey = "Ui.Help";
                 break;
 
             case NavigationPage.About:
                 WorkspaceTab.Page = _aboutPage;
                 WorkspaceTab.Title = "关于";
                 WorkspaceTab.Icon = ""; // Icon.Info
+                WorkspaceTab.IconKey = "Ui.Info";
                 break;
         }
 

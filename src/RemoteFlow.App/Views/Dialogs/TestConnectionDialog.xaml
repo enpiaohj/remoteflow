@@ -70,12 +70,7 @@
                                     <ColumnDefinition Width="88" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0"
-                                           Text="{Binding Glyph}"
-                                           FontFamily="{StaticResource IconFont}"
-                                           FontSize="12"
-                                           Foreground="{Binding BrushKey, Converter={StaticResource KeyToBrush}}"
-                                           VerticalAlignment="Center" />
+                                <Path Grid.Column="0" Style="{StaticResource UiIcon}" Width="14" Height="14" Data="{Binding Glyph, Converter={StaticResource UiIconGeometry}}" Fill="{Binding BrushKey, Converter={StaticResource KeyToBrush}}" />
                                 <TextBlock Grid.Column="1"
                                            Text="{Binding Label}"
                                            FontSize="12"
@@ -95,11 +90,7 @@
                 <!-- 结论行 -->
                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
                             Visibility="{Binding HasConclusion, Converter={StaticResource BoolToVisibility}}">
-                    <TextBlock Text="{Binding ConclusionGlyph}"
-                               FontFamily="{StaticResource IconFont}"
-                               FontSize="14"
-                               Foreground="{Binding ConclusionBrushKey, Converter={StaticResource KeyToBrush}}"
-                               VerticalAlignment="Center" />
+                    <Path Style="{StaticResource UiIcon}" Width="16" Height="16" Data="{Binding ConclusionGlyph, Converter={StaticResource UiIconGeometry}}" Fill="{Binding ConclusionBrushKey, Converter={StaticResource KeyToBrush}}" />
                     <TextBlock Text="{Binding ConclusionText}"
                                Style="{StaticResource Text.Body}"
                                FontWeight="SemiBold"

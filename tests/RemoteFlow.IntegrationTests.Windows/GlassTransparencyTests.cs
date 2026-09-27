@@ -7,6 +7,7 @@ using Xunit;
 namespace RemoteFlow.IntegrationTests;
 
 /// <summary>玻璃透明度滑块：三层半透明面的 Alpha 插值规则。</summary>
+[Collection(WpfApplicationCollection.Name)]
 public sealed class GlassTransparencyTests
 {
     private static readonly XNamespace X = "http://schemas.microsoft.com/winfx/2006/xaml";

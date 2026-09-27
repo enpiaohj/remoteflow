@@ -79,11 +79,7 @@
                         HorizontalAlignment="Center">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding StateIcon}"
-                                       FontFamily="{StaticResource IconFont}"
-                                       FontSize="16"
-                                       VerticalAlignment="Center"
-                                       Foreground="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}" />
+                            <Path Style="{StaticResource UiIcon}" Width="18" Height="18" Data="{Binding StateIconKey, Converter={StaticResource UiIconGeometry}}" Fill="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}" />
                             <TextBlock Text="{Binding StateText}"
                                        Style="{StaticResource Text.SectionTitle}"
                                        Margin="10,0,0,0"
@@ -146,7 +142,7 @@
                             Click="OnSessionSwitchClick"
                             ToolTip="切换会话">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{StaticResource Icon.Sessions}" FontFamily="{StaticResource IconFont}" FontSize="13" VerticalAlignment="Center" />
+                            <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Sessions}" Width="15" Height="15" VerticalAlignment="Center" />
                             <TextBlock Text="{Binding Title}"
                                        FontFamily="{StaticResource UiFont}"
                                        FontSize="12"
@@ -168,12 +164,12 @@
                                   Unchecked="OnPinChanged">
                         <ToggleButton.Style>
                             <Style TargetType="ToggleButton">
-                                <Setter Property="Content" Value="{StaticResource Icon.Unpin}" />
+                                <Setter Property="Content" Value="{StaticResource Ui.Unpin}" />
                                 <Setter Property="ToolTip" Value="固定工具条" />
                                 <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
                                 <Style.Triggers>
                                     <Trigger Property="IsChecked" Value="True">
-                                        <Setter Property="Content" Value="{StaticResource Icon.Pin}" />
+                                        <Setter Property="Content" Value="{StaticResource Ui.Pin}" />
                                         <Setter Property="ToolTip" Value="取消固定（自动隐藏）" />
                                         <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
                                     </Trigger>
@@ -183,12 +179,7 @@
                         <ToggleButton.Template>
                             <ControlTemplate TargetType="ToggleButton">
                                 <Border x:Name="Root" Background="{TemplateBinding Background}" CornerRadius="6">
-                                    <TextBlock Text="{TemplateBinding Content}"
-                                               FontFamily="{StaticResource IconFont}"
-                                               FontSize="13"
-                                               Foreground="{TemplateBinding Foreground}"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center" />
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" TextElement.FontSize="13" TextElement.Foreground="{TemplateBinding Foreground}" />
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
@@ -206,7 +197,7 @@
                          不再是点击热区——药丸窄、拖动多，整块可点极易误触。 -->
                     <StackPanel Orientation="Horizontal" Margin="2,0,0,0">
                         <Button Style="{StaticResource Session.BarButton}"
-                                Content="{Binding StateIcon}"
+                                Content="{Binding StateIconKey, Converter={StaticResource UiIconGeometry}}"
                                 FontSize="12"
                                 Foreground="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}"
                                 Click="OnStatusEntryClick"
@@ -224,41 +215,41 @@
 
                     <StackPanel x:Name="RdpToolsPill" Orientation="Horizontal" Visibility="Collapsed">
                         <Button Style="{StaticResource Session.BarButton}"
-                                Content="{StaticResource Icon.Scale}"
+                                Content="{StaticResource Ui.Scale}"
                                 ToolTip="缩放 / 适应窗口"
                                 Command="{Binding ToggleScalingCommand}" />
                         <Button Style="{StaticResource Session.BarButton}"
-                                Content="{StaticResource Icon.Keyboard}"
+                                Content="{StaticResource Ui.Keyboard}"
                                 ToolTip="发送 Ctrl+Alt+Del"
                                 Command="{Binding SendCtrlAltDeleteCommand}" />
                         <Button Style="{StaticResource Session.BarButton}"
-                                Content="{StaticResource Icon.TaskManager}"
+                                Content="{StaticResource Ui.TaskManager}"
                                 ToolTip="启动任务管理器"
                                 Command="{Binding SendTaskManagerCommand}" />
                     </StackPanel>
 
                     <StackPanel x:Name="SshToolsPill" Orientation="Horizontal" Visibility="Collapsed">
                         <Button Style="{StaticResource Session.BarButton}"
-                                Content="{StaticResource Icon.Copy}"
+                                Content="{StaticResource Ui.Copy}"
                                 ToolTip="复制选中内容 (Ctrl+Shift+C)"
                                 Command="{Binding CopySelectionCommand}" />
                         <Button Style="{StaticResource Session.BarButton}"
-                                Content="{StaticResource Icon.Paste}"
+                                Content="{StaticResource Ui.Paste}"
                                 ToolTip="粘贴 (Ctrl+Shift+V)"
                                 Command="{Binding PasteClipboardCommand}" />
                         <Button Style="{StaticResource Session.BarButton}"
-                                Content="{StaticResource Icon.Clear}"
+                                Content="{StaticResource Ui.Clear}"
                                 ToolTip="清屏"
                                 Command="{Binding ClearTerminalCommand}" />
                         <Button Style="{StaticResource Session.BarButton}"
-                                Content="{StaticResource Icon.Search}"
+                                Content="{StaticResource Ui.Search}"
                                 ToolTip="在输出中查找"
                                 Command="{Binding SearchTerminalCommand}" />
                     </StackPanel>
 
                     <StackPanel x:Name="VncToolsPill" Orientation="Horizontal" Visibility="Collapsed">
                         <Button Style="{StaticResource Session.BarButton}"
-                                Content="{StaticResource Icon.Scale}"
+                                Content="{StaticResource Ui.Scale}"
                                 ToolTip="{Binding VncScalingLabel}"
                                 Command="{Binding CycleVncScalingCommand}" />
                     </StackPanel>
@@ -275,7 +266,7 @@
                          从不禁用、从不隐藏（对齐 macOS 药丸的同类按钮）。 -->
                     <Button x:Name="ScreenFullButton"
                             Style="{StaticResource Session.BarButton}"
-                            Content="{StaticResource Icon.FullScreen}"
+                            Content="{StaticResource Ui.FullScreen}"
                             ToolTip="完全全屏 (F11)"
                             Command="{Binding ToggleScreenFullCommand}" />
 
@@ -285,7 +276,7 @@
                             ToolTip="退出全屏（回到常规）" />
 
                     <Button Style="{StaticResource Session.BarButton}"
-                            Content="{StaticResource Icon.Close}"
+                            Content="{StaticResource Ui.Close}"
                             ToolTip="关闭会话 (Ctrl+W)"
                             Command="{Binding CloseCommand}" />
 

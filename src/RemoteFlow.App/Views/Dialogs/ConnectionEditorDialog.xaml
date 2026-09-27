@@ -109,7 +109,7 @@
                            VerticalAlignment="Center"
                            Margin="24,0,0,0" />
                 <Button Style="{StaticResource Button.Icon}"
-                        Content="{StaticResource Icon.Close}"
+                        Content="{StaticResource Ui.Close}"
                         HorizontalAlignment="Right"
                         Margin="0,0,12,0"
                         IsCancel="True"
@@ -133,8 +133,7 @@
                     <RadioButton Style="{StaticResource ProtocolOption}"
                                  IsChecked="{Binding Protocol, Converter={StaticResource EnumToBool}, ConverterParameter=Rdp, Mode=TwoWay}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{StaticResource Icon.Rdp}" FontFamily="{StaticResource IconFont}"
-                                       FontSize="14" Foreground="{DynamicResource Protocol.Rdp}" VerticalAlignment="Center" />
+                            <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ProtocolRdp}" Width="16" Height="16" Fill="{DynamicResource Protocol.Rdp}" VerticalAlignment="Center" />
                             <TextBlock Text="RDP" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="13" />
                         </StackPanel>
                     </RadioButton>
@@ -142,8 +141,7 @@
                     <RadioButton Style="{StaticResource ProtocolOption}"
                                  IsChecked="{Binding Protocol, Converter={StaticResource EnumToBool}, ConverterParameter=Ssh, Mode=TwoWay}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{StaticResource Icon.Ssh}" FontFamily="{StaticResource IconFont}"
-                                       FontSize="14" Foreground="{DynamicResource Protocol.Ssh}" VerticalAlignment="Center" />
+                            <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ProtocolSsh}" Width="16" Height="16" Fill="{DynamicResource Protocol.Ssh}" VerticalAlignment="Center" />
                             <TextBlock Text="SSH" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="13" />
                         </StackPanel>
                     </RadioButton>
@@ -151,8 +149,7 @@
                     <RadioButton Style="{StaticResource ProtocolOption}"
                                  IsChecked="{Binding Protocol, Converter={StaticResource EnumToBool}, ConverterParameter=Vnc, Mode=TwoWay}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{StaticResource Icon.Vnc}" FontFamily="{StaticResource IconFont}"
-                                       FontSize="14" Foreground="{DynamicResource Protocol.Vnc}" VerticalAlignment="Center" />
+                            <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ProtocolVnc}" Width="16" Height="16" Fill="{DynamicResource Protocol.Vnc}" VerticalAlignment="Center" />
                             <TextBlock Text="VNC" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="13" />
                         </StackPanel>
                     </RadioButton>
@@ -619,10 +616,7 @@
 
                                 <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="6" Padding="12,10" Margin="0,12,0,0">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{StaticResource Icon.Warning}"
-                                                   FontFamily="{StaticResource IconFont}" FontSize="13"
-                                                   Foreground="{DynamicResource Status.Warning}"
-                                                   VerticalAlignment="Top" Margin="0,1,0,0" />
+                                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Warning}" Width="15" Height="15" Fill="{DynamicResource Status.Warning}" VerticalAlignment="Top" Margin="0,1,0,0" />
                                         <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
                                                    Margin="9,0,0,0" MaxWidth="380" HorizontalAlignment="Left"
                                                    Text="VNC 协议自身的加密能力有限，建议只在内网、VPN 或 SSH 隧道中使用，不要把 VNC 端口直接暴露到公网。" />
@@ -642,9 +636,7 @@
                 <Grid>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
                                 Visibility="{Binding HasValidationMessage, Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock Text="{StaticResource Icon.Error}"
-                                   FontFamily="{StaticResource IconFont}" FontSize="13"
-                                   Foreground="{DynamicResource Status.Danger}" VerticalAlignment="Center" />
+                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Error}" Width="15" Height="15" Fill="{DynamicResource Status.Danger}" VerticalAlignment="Center" />
                         <TextBlock Text="{Binding ValidationMessage}"
                                    Style="{StaticResource Text.Body}"
                                    Foreground="{DynamicResource Status.Danger}"

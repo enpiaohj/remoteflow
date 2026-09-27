@@ -33,11 +33,7 @@
                     Click="OnStatusEntryClick"
                     ToolTip="连接状态 · 查看质量详情">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{Binding StateIcon}"
-                               FontFamily="{StaticResource IconFont}"
-                               FontSize="12"
-                               VerticalAlignment="Center"
-                               Foreground="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}" />
+                    <Path Style="{StaticResource UiIcon}" Width="14" Height="14" Data="{Binding StateIconKey, Converter={StaticResource UiIconGeometry}}" Fill="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}" />
                     <TextBlock Text="{Binding StateText}"
                                Style="{StaticResource Text.Caption}"
                                VerticalAlignment="Center"
@@ -59,41 +55,41 @@
         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
             <StackPanel x:Name="RdpToolsDock" Orientation="Horizontal" Visibility="Collapsed">
                 <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                        Content="{StaticResource Icon.Scale}"
+                        Content="{StaticResource Ui.Scale}"
                         ToolTip="缩放 / 适应窗口"
                         Command="{Binding ToggleScalingCommand}" />
                 <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                        Content="{StaticResource Icon.Keyboard}"
+                        Content="{StaticResource Ui.Keyboard}"
                         ToolTip="发送 Ctrl+Alt+Del"
                         Command="{Binding SendCtrlAltDeleteCommand}" />
                 <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                        Content="{StaticResource Icon.TaskManager}"
+                        Content="{StaticResource Ui.TaskManager}"
                         ToolTip="启动任务管理器"
                         Command="{Binding SendTaskManagerCommand}" />
             </StackPanel>
 
             <StackPanel x:Name="SshToolsDock" Orientation="Horizontal" Visibility="Collapsed">
                 <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                        Content="{StaticResource Icon.Copy}"
+                        Content="{StaticResource Ui.Copy}"
                         ToolTip="复制选中内容 (Ctrl+Shift+C)"
                         Command="{Binding CopySelectionCommand}" />
                 <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                        Content="{StaticResource Icon.Paste}"
+                        Content="{StaticResource Ui.Paste}"
                         ToolTip="粘贴 (Ctrl+Shift+V)"
                         Command="{Binding PasteClipboardCommand}" />
                 <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                        Content="{StaticResource Icon.Clear}"
+                        Content="{StaticResource Ui.Clear}"
                         ToolTip="清屏"
                         Command="{Binding ClearTerminalCommand}" />
                 <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                        Content="{StaticResource Icon.Search}"
+                        Content="{StaticResource Ui.Search}"
                         ToolTip="在输出中查找"
                         Command="{Binding SearchTerminalCommand}" />
             </StackPanel>
 
             <StackPanel x:Name="VncToolsDock" Orientation="Horizontal" Visibility="Collapsed">
                 <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                        Content="{StaticResource Icon.Scale}"
+                        Content="{StaticResource Ui.Scale}"
                         ToolTip="{Binding VncScalingLabel}"
                         Command="{Binding CycleVncScalingCommand}" />
             </StackPanel>
@@ -107,7 +103,7 @@
                     ToolTip="窗口最大化（收起侧边，会话铺满窗口）"
                     Command="{Binding AdvanceFullScreenCommand}" />
             <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                    Content="{StaticResource Icon.FullScreen}"
+                    Content="{StaticResource Ui.FullScreen}"
                     ToolTip="完全全屏 (F11)"
                     Command="{Binding ToggleScreenFullCommand}" />
         </StackPanel>

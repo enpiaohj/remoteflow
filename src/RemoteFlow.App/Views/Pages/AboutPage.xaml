@@ -13,8 +13,17 @@
             <Setter Property="Width" Value="38" />
             <Setter Property="Height" Value="38" />
             <Setter Property="CornerRadius" Value="10" />
-            <Setter Property="Background" Value="{DynamicResource Brand.Subtle}" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="VerticalAlignment" Value="Top" />
+        </Style>
+
+        <!-- 分区彩色身份图标（Id.*）：自带色彩与体积感，外框不再铺品牌淡底 -->
+        <Style x:Key="About.Tile.Image" TargetType="Image">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="RenderOptions.BitmapScalingMode" Value="HighQuality" />
         </Style>
 
         <!-- 信息行标签 / 描述列统一 96，与隐私条目对齐 -->
@@ -72,8 +81,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Style="{StaticResource About.Tile}" Margin="0,0,14,0">
-                            <TextBlock Text="{StaticResource Icon.Info}" FontFamily="{StaticResource IconFont}" FontSize="17"
-                                       Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image Style="{StaticResource About.Tile.Image}" Source="{StaticResource Id.Info}" />
                         </Border>
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="版本与归属" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,12" />
@@ -130,8 +138,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Style="{StaticResource About.Tile}" Margin="0,0,14,0">
-                            <TextBlock Text="{StaticResource Icon.Shield}" FontFamily="{StaticResource IconFont}" FontSize="17"
-                                       Foreground="{DynamicResource Brand.Default}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Image Style="{StaticResource About.Tile.Image}" Source="{StaticResource Id.DataSafety}" />
                         </Border>
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="隐私与数据" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,12" />

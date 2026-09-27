@@ -6,6 +6,32 @@
     <!-- 本字典内模板必须就地解析 converter；不能依赖合并它的上层字典后置声明。 -->
     <conv:ResourceKeyToBrushConverter x:Key="Controls.KeyToBrush" />
     <conv:ResourceKeyToImageSourceConverter x:Key="Controls.KeyToImageSource" />
+    <conv:ResourceKeyToGeometryConverter x:Key="Controls.KeyToGeometry" />
+    <conv:IconSizeConverter x:Key="Controls.IconSize" />
+    <conv:UiIconGeometryConverter x:Key="UiIconGeometry" />
+
+    <!--
+        线性图标（Ui.*，Fluent System Icons 几何）的统一渲染：
+        · UiIcon：独立使用的图标（Path），颜色默认跟随所在控件的文字前景色，因此按钮的悬停 / 禁用变色自动生效；
+          需要特定颜色时直接设置 Fill。
+        · 任何内容为 Geometry 的 ContentControl（按钮等）自动按本模板画成图标，边长跟随 FontSize
+          （与原字体图标「按字号定尺寸」的写法一致）：Content="{StaticResource Ui.Edit}"。
+    -->
+    <Style x:Key="UiIcon" TargetType="Path">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="SnapsToDevicePixels" Value="False" />
+        <Setter Property="Fill" Value="{Binding Path=(TextElement.Foreground), RelativeSource={RelativeSource Self}}" />
+    </Style>
+
+    <DataTemplate DataType="{x:Type Geometry}">
+        <Path Style="{StaticResource UiIcon}" Data="{Binding}"
+              Width="{Binding Path=(TextElement.FontSize), RelativeSource={RelativeSource Self}, Converter={StaticResource Controls.IconSize}}"
+              Height="{Binding Path=(TextElement.FontSize), RelativeSource={RelativeSource Self}, Converter={StaticResource Controls.IconSize}}" />
+    </DataTemplate>
 
     <!--
         基础控件样式：排版、按钮、输入控件。

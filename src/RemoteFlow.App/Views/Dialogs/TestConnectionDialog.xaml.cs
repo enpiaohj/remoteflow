@@ -204,9 +204,9 @@ public sealed class TestConnectionDialogModel : ObservableObject
     private const string GlyphRdp = "\uE7F4";
     private const string GlyphSsh = "\uE756";
     private const string GlyphVnc = "\uE7F8";
-    private const string GlyphSuccess = "\uE930";
-    private const string GlyphError = "\uEA39";
-    private const string GlyphPending = "\uE895";
+    private const string GlyphSuccess = "Ui.Success.Filled";
+    private const string GlyphError = "Ui.Error.Filled";
+    private const string GlyphPending = "Ui.Pending";
     private const string GlyphChevronRight = "\uE76C";
     private const string GlyphChevronDown = "\uE70D";
 
@@ -521,10 +521,10 @@ public sealed class TestConnectionDialogModel : ObservableObject
 /// <summary>诊断对话框里的一行：状态图标 + 标签 + 状态文字。</summary>
 public sealed class StepRow : ObservableObject
 {
-    private const string GlyphSuccess = "\uE930";
-    private const string GlyphWarning = "\uE7BA";
-    private const string GlyphError = "\uEA39";
-    private const string GlyphPending = "\uE895";
+    private const string GlyphSuccess = "Ui.Success.Filled";
+    private const string GlyphWarning = "Ui.Warning.Filled";
+    private const string GlyphError = "Ui.Error.Filled";
+    private const string GlyphPending = "Ui.Pending";
 
     public StepRow(string label)
     {

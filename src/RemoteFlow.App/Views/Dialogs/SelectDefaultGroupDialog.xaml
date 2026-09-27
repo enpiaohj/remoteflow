@@ -21,9 +21,7 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate DataType="{x:Type svc:DefaultGroupOption}">
                             <StackPanel Orientation="Horizontal" Height="34">
-                                <TextBlock Text="{StaticResource Icon.Folder}" FontFamily="{StaticResource IconFont}"
-                                           FontSize="13" Foreground="{DynamicResource Text.Secondary}"
-                                           VerticalAlignment="Center" />
+                                <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Folder}" Width="15" Height="15" Fill="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
                                 <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Margin="8,0,0,0" />
                             </StackPanel>
                         </DataTemplate>

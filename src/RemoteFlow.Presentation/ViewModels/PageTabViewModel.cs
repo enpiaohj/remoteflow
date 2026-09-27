@@ -12,6 +12,12 @@ public sealed partial class PageTabViewModel : WorkspaceTabViewModel
     [ObservableProperty]
     private ObservableObject? _page;
 
+    /// <summary>
+    /// 页面图标资源键（Ui.* 线性图标，Windows 端使用）；<see cref="WorkspaceTabViewModel.Icon"/> 字形保留给其它端。
+    /// </summary>
+    [ObservableProperty]
+    private string _iconKey = "Ui.Connections";
+
     public PageTabViewModel()
     {
         Title = "连接";

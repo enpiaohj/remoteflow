@@ -110,7 +110,11 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     private string _flyoutStateText = "准备中";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FlyoutStateIconKey))]
     private string _flyoutStateIcon = "";
+
+    /// <summary>Flyout 头部状态图标资源键（Ui.* 线性图标，Windows 端使用）。</summary>
+    public string FlyoutStateIconKey => StateGlyphToIconKey(FlyoutStateIcon);
 
     [ObservableProperty]
     private string _flyoutStateBrushKey = "Status.Idle";
@@ -133,7 +137,20 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     /// 确保不单靠颜色传达信息（可访问性要求）。
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StateIconKey))]
     private string _stateIcon = "\uE895";
+
+    /// <summary>状态图标资源键（Ui.* 线性图标，Windows 端使用；字形 <see cref="StateIcon"/> 保留给其它端）。</summary>
+    public string StateIconKey => StateGlyphToIconKey(StateIcon);
+
+    /// <summary>状态字形 → Ui.* 图标键。状态字形只有下列四种，集中映射，避免每个状态分支重复赋值。</summary>
+    private static string StateGlyphToIconKey(string glyph) => glyph switch
+    {
+        "\uE930" => "Ui.Success.Filled",
+        "\uE7BA" => "Ui.Warning.Filled",
+        "\uEA39" => "Ui.Error.Filled",
+        _ => "Ui.Pending"
+    };
 
     /// <summary>状态色资源键。</summary>
     [ObservableProperty]

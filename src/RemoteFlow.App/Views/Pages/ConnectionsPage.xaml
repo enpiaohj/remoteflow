@@ -229,11 +229,11 @@
                         CommandParameter="{Binding}">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource Button.Icon}">
-                            <Setter Property="Content" Value="{StaticResource Icon.Favorite}" />
+                            <Setter Property="Content" Value="{StaticResource Ui.Favorite}" />
                             <Setter Property="Foreground" Value="{DynamicResource Text.Tertiary}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsFavorite}" Value="True">
-                                    <Setter Property="Content" Value="{StaticResource Icon.FavoriteFilled}" />
+                                    <Setter Property="Content" Value="{StaticResource Ui.Favorite.Filled}" />
                                     <Setter Property="Foreground" Value="#F2C037" />
                                 </DataTrigger>
                             </Style.Triggers>
@@ -242,7 +242,7 @@
                 </Button>
 
                 <Button Grid.Column="9" Style="{StaticResource Button.Icon}" Width="26" Height="26"
-                        Content="{StaticResource Icon.More}" ToolTip="更多操作" Click="OnMoreClick" />
+                        Content="{StaticResource Ui.More}" ToolTip="更多操作" Click="OnMoreClick" />
 
                 <!-- 行底发丝分隔线（概念稿 v0.2 的表格节奏）。
                      必须显式跨全部 10 列：Grid 子元素不指定 ColumnSpan 时只落在第 0 列，
@@ -285,12 +285,12 @@
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                 <Button Style="{StaticResource Button.Icon}" Width="30" Height="30"
-                        Content="{StaticResource Icon.Scale}"
+                        Content="{StaticResource Ui.Scale}"
                         ToolTip="探测当前列表的可达性"
                         Command="{Binding ProbePresenceCommand}"
                         Visibility="{Binding PresenceProbeEnabled, Converter={StaticResource BoolToVisibility}}" />
                 <Button Style="{StaticResource Button.Icon}" Width="30" Height="30" Margin="6,0,0,0"
-                        Content="{StaticResource Icon.Refresh}"
+                        Content="{StaticResource Ui.Refresh}"
                         ToolTip="刷新列表"
                         Command="{Binding RefreshCommand}" />
                 <Button Style="{StaticResource Button.Secondary}" MinHeight="30" Padding="12,0" Margin="10,0,0,0"
@@ -305,7 +305,7 @@
                 <Button Style="{StaticResource Button.Primary}" MinHeight="30" Padding="14,0" Margin="8,0,0,0"
                         Command="{Binding CreateCommand}">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{StaticResource Icon.Add}" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" />
+                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Add}" Width="14" Height="14" VerticalAlignment="Center" />
                         <TextBlock Text="新建连接" Margin="7,0,0,0" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
@@ -328,8 +328,7 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="{StaticResource Icon.Search}" FontFamily="{StaticResource IconFont}"
-                               FontSize="13" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="12,0,0,0" />
+                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Search}" Width="15" Height="15" Grid.Column="0" Fill="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="12,0,0,0" />
                     <TextBox x:Name="PageFilterBox" Grid.Column="1"
                              Text="{Binding PageFilterText, UpdateSourceTrigger=PropertyChanged, Delay=120}"
                              Background="Transparent" BorderThickness="0" FontSize="13"
@@ -445,8 +444,7 @@
                               Margin="12,0,0,0" VerticalAlignment="Center" Focusable="False"
                               IsChecked="{Binding IsMultiSelect, Mode=TwoWay}"
                               ToolTip="批量选择：勾选设备进行批量操作">
-                    <TextBlock Text="{StaticResource Icon.Checklist}" FontFamily="{StaticResource IconFont}"
-                               FontSize="13" VerticalAlignment="Center" />
+                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Checklist}" Width="15" Height="15" VerticalAlignment="Center" />
                 </ToggleButton>
             </StackPanel>
 
@@ -504,11 +502,7 @@
                     Margin="0,0,0,12"
                     Visibility="{Binding SearchText.Length, Converter={StaticResource CountToVisibility}}">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{StaticResource Icon.Search}"
-                               FontFamily="{StaticResource IconFont}"
-                               FontSize="12"
-                               Foreground="{DynamicResource Brand.Default}"
-                               VerticalAlignment="Center" />
+                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Search}" Width="14" Height="14" Fill="{DynamicResource Brand.Default}" VerticalAlignment="Center" />
                     <TextBlock Style="{StaticResource Text.Body}" Margin="8,0,0,0">
                         <Run Text="正在搜索" />
                         <Run Text="{Binding SearchText, Mode=OneWay}" FontWeight="SemiBold" />
@@ -722,9 +716,7 @@
                                                         <Expander IsExpanded="True" Background="Transparent" BorderThickness="0">
                                                             <Expander.Header>
                                                                 <StackPanel Orientation="Horizontal" Margin="0,6,0,2">
-                                                                    <TextBlock Text="{StaticResource Icon.Recent}"
-                                                                               FontFamily="{StaticResource IconFont}" FontSize="13"
-                                                                               Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
+                                                                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Recent}" Width="15" Height="15" Fill="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
                                                                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13"
                                                                                Foreground="{DynamicResource Text.Primary}" Margin="8,0,0,0" VerticalAlignment="Center" />
                                                                     <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="9" Padding="7,1" Margin="8,0,0,0" VerticalAlignment="Center">
@@ -747,8 +739,7 @@
                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="380"
                                     Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
                             <Border Width="56" Height="56" CornerRadius="16" Background="{DynamicResource Bg.Subtle}" HorizontalAlignment="Center">
-                                <TextBlock Text="{StaticResource Icon.Connections}" FontFamily="{StaticResource IconFont}" FontSize="24"
-                                           Foreground="{DynamicResource Text.Tertiary}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <Image Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" Source="{StaticResource ResourceIcon.AllDevices}" />
                             </Border>
                             <TextBlock Text="{Binding EmptyMessage}" Style="{StaticResource Text.BodySecondary}"
                                        TextWrapping="Wrap" TextAlignment="Center" Margin="0,16,0,0" />
