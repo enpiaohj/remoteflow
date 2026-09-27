@@ -149,7 +149,7 @@ def build() -> int:
         print("未找到：", *missing, sep="\n  ")
         return 1
 
-    OUT.write_text("\r\n".join(lines), encoding="utf-8")
+    OUT.write_text("\n".join(lines), encoding="utf-8", newline="\n")  # 仓库统一 LF（.gitattributes）
     print(f"已生成 {OUT.relative_to(ROOT)}，共 {sum(2 if f else 1 for _, _, f in ICONS)} 个图标")
     return 0
 
