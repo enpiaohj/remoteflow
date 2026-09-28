@@ -50,8 +50,11 @@
    ```
    白名单不含 `docs/ releases/ .github/ CLAUDE.md`（内部内容不入本仓）。
 2. **敏感校验**（任何批量导入后必做，必须零命中才继续）：
+   内网网段（RFC1918）、内部主机名前缀、内部域名后缀、内部运维文档标题、内部项目代号。
+   具体字面量不写在这里——本仓是公开仓库，把待检词列出来等于把要藏的东西公开。
+   需要完整词表时查私有仓的对应规则文件。
    ```
-   grep -rIn "192\.168\.\|internal-fs\|internal-dc\|internal-domain-a\|internal-domain-b\|发布与回滚\|Vault" --include="*.cs" --include="*.md" .
+   # 按上述五类逐一 grep（--include="*.cs" --include="*.md"），并排除 releases/
    ```
    `appscloud.cn` 是已批准公开的体验服务地址，允许存在。Secret 形态扫描（私钥块 / token 字面量）tests 之外零命中。
 3. **版本号**：`Directory.Build.props` 的 `VersionPrefix` / `AssemblyVersion` / `FileVersion` 三处同步提升。
