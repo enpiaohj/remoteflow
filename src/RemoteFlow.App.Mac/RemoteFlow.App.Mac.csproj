@@ -73,6 +73,9 @@
   <ItemGroup>
     <!-- App 图标：iconset → AppIcon.icns，经 Info.plist 的 CFBundleIconFile 引用。 -->
     <BundleResource Include="Resources\AppIcon.icns" />
+    <!-- 彩色身份图标：scripts/build-identity-icons-mac.py 从 Windows 版 IdentityIcons.xaml 转换生成，
+         经 IdentityIconCatalog 按 "Id.XXX" 键 + 子目录名取用；svg/ 是转换后的矢量源，不必打包。 -->
+    <BundleResource Include="Resources\IdentityIcons\*.png" LogicalName="IdentityIcons\%(FileName)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

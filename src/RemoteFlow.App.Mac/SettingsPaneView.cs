@@ -153,16 +153,53 @@ public sealed class SettingsPaneView : NSView
         => Card(title, symbol, null, content);
 
     private static NSView Card(string title, string symbol, string? desc, params NSView[] content)
-    {
-        var box = new SoftBox();
-
-        var icon = new NSImageView
+        => Card(title, new NSImageView
         {
             Image = NSImage.GetSystemSymbol(symbol, null),
             ContentTintColor = NSColor.ControlAccent,
             TranslatesAutoresizingMaskIntoConstraints = false,
             SymbolConfiguration = NSImageSymbolConfiguration.Create(13, NSFontWeight.Medium),
+        }, desc, content);
+
+    /// <summary>彩色身份图标重载（<see cref="IdentityIconCatalog"/>）：图标自带渐变配色，
+    /// 不套 ContentTintColor / SymbolConfiguration（那两个是 SF Symbol 专属，套上去只会把
+    /// 彩色位图强行改成单色）。</summary>
+    private static NSView Card(string title, NSImage identityIcon, string? desc, params NSView[] content)
+        => Card(title, new NSImageView
+        {
+            Image = identityIcon,
+            ImageScaling = NSImageScale.ProportionallyUpOrDown,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        }, desc, content);
+
+    /// <summary>卡片标题图标：有对应彩色身份图标就用它，否则回落 SF Symbol。</summary>
+    private static NSImageView SectionIcon(string identityKey, string fallbackSymbol)
+    {
+        if (IdentityIconCatalog.Get(identityKey) is { } identityIcon)
+        {
+            return new NSImageView
+            {
+                Image = identityIcon,
+                ImageScaling = NSImageScale.ProportionallyUpOrDown,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
+        }
+
+        return new NSImageView
+        {
+            Image = NSImage.GetSystemSymbol(fallbackSymbol, null),
+            ContentTintColor = NSColor.ControlAccent,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+            SymbolConfiguration = NSImageSymbolConfiguration.Create(13, NSFontWeight.Medium),
         };
+    }
+
+    private static NSView Card(string title, NSImageView icon, string? desc, params NSView[] content)
+    {
+        var box = new SoftBox();
+
+        icon.WidthAnchor.ConstraintEqualTo(15).Active = true;
+        icon.HeightAnchor.ConstraintEqualTo(15).Active = true;
         var head = new NSTextField
         {
             StringValue = title,
@@ -582,8 +619,8 @@ public sealed class SettingsPaneView : NSView
         {
             WantsLayer = true;
             TranslatesAutoresizingMaskIntoConstraints = false;
-            Layer!.CornerRadius = 9;
-            AddGlassBackground(this, 9);
+            Layer!.CornerRadius = 12;
+            AddGlassBackground(this, 12);
         }
     }
 
@@ -622,9 +659,9 @@ public sealed class SettingsPaneView : NSView
         {
             WantsLayer = true;
             TranslatesAutoresizingMaskIntoConstraints = false;
-            Layer!.CornerRadius = 9;
+            Layer!.CornerRadius = 12;
             Layer.BorderWidth = 1;
-            AddGlassBackground(this, 9);
+            AddGlassBackground(this, 12);
             Refresh();
         }
 
@@ -657,7 +694,7 @@ public sealed class SettingsPaneView : NSView
         {
             WantsLayer = true;
             TranslatesAutoresizingMaskIntoConstraints = false;
-            _blur = AddGlassBackground(this, 10);
+            _blur = AddGlassBackground(this, 12);
             Refresh();
         }
 
@@ -690,7 +727,7 @@ public sealed class SettingsPaneView : NSView
             }
             else
             {
-                Layer!.CornerRadius = 10;
+                Layer!.CornerRadius = 12;
                 Layer.BorderWidth = 1;
                 Layer.BorderColor = Palette.Hairline(this).CGColor;
                 Layer.BackgroundColor = null;   // 底色交给毛玻璃层
@@ -802,6 +839,45 @@ public sealed class SettingsPaneView : NSView
             Math.Max(0, _vm.WindowSizeOptions.ToList().IndexOf(_vm.SelectedWindowSize)),
             i => _vm.SelectedWindowSize = _vm.WindowSizeOptions[i]);
 
+        // 窗口材质 / 透明度（对齐 Windows 版「玻璃外观」）：材质决定模糊强弱与色调，
+        // 透明度在同一材质区间内插值，纯色下滑块禁用（Palette.PageGround 消费这两个值）。
+        var material = NSSegmentedControl.FromLabels(
+            new[] { "亚克力", "云母", "纯色" }, NSSegmentSwitchTracking.SelectOne, () => { });
+        material.SelectedSegment = _vm.SelectedWindowMaterial switch
+        {
+            WindowMaterial.Mica => 1,
+            WindowMaterial.Solid => 2,
+            _ => 0,
+        };
+        material.Activated += (_, _) => _vm.SelectedWindowMaterial = material.SelectedSegment switch
+        {
+            1 => WindowMaterial.Mica,
+            2 => WindowMaterial.Solid,
+            _ => WindowMaterial.Acrylic,
+        };
+
+        var transparency = new NSSlider
+        {
+            MinValue = 0,
+            MaxValue = 100,
+            DoubleValue = _vm.WindowTransparency,
+            Enabled = _vm.IsGlassMaterial,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        transparency.WidthAnchor.ConstraintEqualTo(160).Active = true;
+        transparency.Activated += (_, _) =>
+            _vm.WindowTransparency = (int)Math.Round(transparency.DoubleValue);
+
+        // 切到纯色时滑块跟着禁用，对齐 Windows；切回云母 / 亚克力时重新启用。
+        _vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SettingsPageViewModel.IsGlassMaterial))
+            {
+                NSApplication.SharedApplication.BeginInvokeOnMainThread(
+                    () => transparency.Enabled = _vm.IsGlassMaterial);
+            }
+        };
+
         var language = Popup(new[] { "简体中文" }, 0, _ => { });
         language.Enabled = false; // 目前仅简体中文；保留控件以对齐 Windows 版，i18n 落地后接 _vm.LanguageOptions。
 
@@ -857,23 +933,27 @@ public sealed class SettingsPaneView : NSView
         };
 
         return Page(
-            Card("外观与行为", "paintbrush",
+            Card("外观与行为", SectionIcon("Id.Appearance", "paintbrush"),
                 "主题会应用到所有页面；默认页面决定每次启动后先落在哪儿；"
                 + "初始窗口大小按显示器选（高分屏选大、笔记本选小），改完下次启动生效；"
-                + "并发会话上限用于在异常情况下防止无限重复建立连接。",
+                + "并发会话上限用于在异常情况下防止无限重复建立连接。"
+                + "窗口材质：亚克力模糊透出窗口后方内容、玻璃感最强；云母随桌面壁纸淡淡透色、最克制；"
+                + "纯色不使用系统材质。透明度仅在亚克力 / 云母下生效，越大玻璃感越强。切换即时生效。",
                 Row("主题", theme),
                 Row("默认页面", landing),
                 Row("初始窗口大小", windowSize),
+                Row("窗口材质", material),
+                Row("透明度", transparency),
                 Row("并发会话上限", concurrency),
                 Check("登录时自动启动 RemoteFlow", _vm.LaunchOnStartup, v => _vm.LaunchOnStartup = v),
                 Check("关闭窗口时最小化到菜单栏而非退出", _vm.MinimizeToTrayOnClose, v => _vm.MinimizeToTrayOnClose = v)),
-            Card("日期与时间", "calendar",
+            Card("日期与时间", SectionIcon("Id.DateTime", "calendar"),
                 "日期格式用于首页完整日期、创建时间等；时间格式用于列表与历史；"
                 + "「首页时间行」决定首页标题下方那行的详略程度，下拉项即当前格式下的真实样例。",
                 Row("日期格式", dateFmt),
                 Row("时间格式", timeFmt),
                 Row("首页时间行", homeLine)),
-            Card("语言", "globe",
+            Card("语言", SectionIcon("Id.Language", "globe"),
                 "目前仅提供简体中文，后续版本开放更多语言。",
                 Row("界面语言", language)));
     }

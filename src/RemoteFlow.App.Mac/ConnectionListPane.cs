@@ -3,9 +3,13 @@ using RemoteFlow.Presentation.ViewModels;
 
 namespace RemoteFlow.App.Mac;
 
+/// <summary>「我的连接」工作台的三种智能视图（对齐 Windows 版：收藏 / 最近连接已降级为
+/// 工作台内视图切换，不再是侧栏一级导航项）。</summary>
+public enum ConnectionListView { All, Favorites, Recent }
+
 /// <summary>
-/// 主窗口第二列：连接列表。按导航项切换三种形态：
-/// 我的连接（分组树）/ 收藏（扁平）/ 最近连接（扁平 + 时间分段）。
+/// 主窗口第二列：连接列表。顶部分段控制切换三种形态：
+/// 全部（分组树）/ 收藏（扁平）/ 最近（扁平 + 时间分段）。
 /// 均绑同一 <see cref="ConnectionsPageViewModel"/>（切 Filter）。
 /// </summary>
 public sealed class ConnectionListPane : NSViewController
@@ -16,6 +20,7 @@ public sealed class ConnectionListPane : NSViewController
     private readonly NSTableView _flat = new();
     private readonly NSScrollView _treeScroll;
     private readonly NSScrollView _flatScroll;
+    private readonly NSSegmentedControl _viewSwitch;
     private readonly NSSegmentedControl _recentRange;
     private NSButton _addGroup = null!;
     private readonly NSTextField _title = Heading();
@@ -103,6 +108,14 @@ public sealed class ConnectionListPane : NSViewController
         };
         _addGroup.Activated += (_, _) => _ = RunGroupCreateAsync(null);
 
+        // 智能视图切换（对齐 Windows「连接工作台」）：收藏 / 最近连接不再是侧栏一级导航项，
+        // 降级为这里的三段切换，跟「我的连接」共用同一块工作区。
+        _viewSwitch = NSSegmentedControl.FromLabels(
+            new[] { "全部", "收藏", "最近" }, NSSegmentSwitchTracking.SelectOne,
+            () => _ = SetView((ConnectionListView)_viewSwitch.SelectedSegment));
+        _viewSwitch.SelectedSegment = 0;
+        _viewSwitch.TranslatesAutoresizingMaskIntoConstraints = false;
+
         var titleRow = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
@@ -117,12 +130,14 @@ public sealed class ConnectionListPane : NSViewController
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
-            Spacing = 2,
+            Spacing = 8,
             EdgeInsets = new NSEdgeInsets(10, 14, 8, 14),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
         header.AddArrangedSubview(titleRow);
         titleRow.WidthAnchor.ConstraintEqualTo(header.WidthAnchor, 1, -28).Active = true;
+        header.AddArrangedSubview(_viewSwitch);
+        _viewSwitch.WidthAnchor.ConstraintEqualTo(header.WidthAnchor, 1, -28).Active = true;
         header.AddArrangedSubview(_count);
         header.AddArrangedSubview(_recentRange);
 
@@ -151,6 +166,7 @@ public sealed class ConnectionListPane : NSViewController
             _flatScroll.BottomAnchor.ConstraintEqualTo(root.BottomAnchor),
         });
 
+        _title.StringValue = "我的连接";
         View = root;
     }
 
@@ -169,10 +185,22 @@ public sealed class ConnectionListPane : NSViewController
         RefreshCount();
     }
 
-    public async Task ShowConnectionsAsync()
+    /// <summary>切到指定的智能视图，并同步顶部分段控制的选中态
+    /// （外部——如首页「查看全部收藏」、设置里的默认页面——都走这个入口）。</summary>
+    public Task SetView(ConnectionListView view)
+    {
+        _viewSwitch.SelectedSegment = (int)view;
+        return view switch
+        {
+            ConnectionListView.Favorites => ShowFavoritesAsync(),
+            ConnectionListView.Recent => ShowRecentAsync(),
+            _ => ShowConnectionsAsync(),
+        };
+    }
+
+    private async Task ShowConnectionsAsync()
     {
         _reload = ShowConnectionsAsync;
-        _title.StringValue = "我的连接";
         _recentRange.Hidden = true;
         _addGroup.Hidden = false;
         _vm.Filter = ConnectionFilter.All;
@@ -213,10 +241,9 @@ public sealed class ConnectionListPane : NSViewController
         }
     }
 
-    public async Task ShowFavoritesAsync()
+    private async Task ShowFavoritesAsync()
     {
         _reload = ShowFavoritesAsync;
-        _title.StringValue = "收藏";
         _recentRange.Hidden = true;
         _addGroup.Hidden = true;
         _vm.Filter = ConnectionFilter.Favorites;
@@ -225,10 +252,9 @@ public sealed class ConnectionListPane : NSViewController
         MountFlat();
     }
 
-    public async Task ShowRecentAsync()
+    private async Task ShowRecentAsync()
     {
         _reload = ShowRecentAsync;
-        _title.StringValue = "最近连接";
         _recentRange.Hidden = false;
         _addGroup.Hidden = true;
         _vm.Filter = ConnectionFilter.Recent;
@@ -261,11 +287,17 @@ public sealed class ConnectionListPane : NSViewController
 
     private void RefreshCount()
     {
-        var n = _vm.Items.Count(_ => true);
-        var treeN = _vm.GroupNodes.Sum(g => g.TotalCount);
-        _count.StringValue = _title.StringValue == "我的连接"
-            ? (treeN == 0 ? "暂无连接" : $"{treeN} 个连接")
-            : (_vm.Items.Count == 0 ? "暂无连接" : $"{_vm.Items.Count} 个连接");
+        // 标题固定是「我的连接」，不能再靠它判断当前视图——改用分段控制的选中态。
+        if (_viewSwitch.SelectedSegment == (int)ConnectionListView.All)
+        {
+            var treeN = _vm.GroupNodes.Sum(g => g.TotalCount);
+            _count.StringValue = treeN == 0 ? "暂无连接" : $"{treeN} 个连接";
+            return;
+        }
+
+        var n = _vm.Items.Count;
+        var unit = _viewSwitch.SelectedSegment == (int)ConnectionListView.Favorites ? "个收藏" : "个连接";
+        _count.StringValue = n == 0 ? "暂无连接" : $"{n} {unit}";
     }
 
     private void ActivateTree()

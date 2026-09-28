@@ -27,6 +27,12 @@ public sealed class SessionTabBar : NSView
     private readonly List<Tab> _tabs = new();
     private Guid _active;
 
+    /// <summary>单个标签的下限宽度（跟 Tab 内部约束的 110 对齐）——用来判断横向铺不铺得下。</summary>
+    private static readonly nfloat MinTabWidth = 110f;
+    private readonly NSScrollView _scroll;
+    private readonly NSButton _collapsedButton;
+    private bool _collapsed;
+
     public event EventHandler<Guid>? TabSelected;
     public event EventHandler<Guid>? TabClosed;
 
@@ -44,7 +50,7 @@ public sealed class SessionTabBar : NSView
         WantsLayer = true;
         RefreshChrome();
 
-        var scroll = new NSScrollView
+        var scroll = _scroll = new NSScrollView
         {
             DocumentView = _row,
             DrawsBackground = false,
@@ -52,6 +58,21 @@ public sealed class SessionTabBar : NSView
             HasVerticalScroller = false,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
+
+        // 空间不够铺不下所有标签时（对齐 Windows 版），整条折叠成一个按钮：
+        // 有当前会话就显示它的名字，否则显示「活动连接 (N)」；点开跟正常标签一样能切换。
+        _collapsedButton = new NSButton
+        {
+            Bordered = false,
+            ImagePosition = NSCellImagePosition.ImageRight,
+            Image = NSImage.GetSystemSymbol("chevron.down", null),
+            Font = NSFont.SystemFontOfSize(12, NSFontWeight.Medium),
+            ContentTintColor = NSColor.Label,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+            Hidden = true,
+        };
+        _collapsedButton.SymbolConfiguration = NSImageSymbolConfiguration.Create(10, NSFontWeight.Medium);
+        _collapsedButton.Activated += (_, _) => ShowSessionMenu(_collapsedButton);
 
         var winFull = IconButton("rectangle.expand.vertical", "窗口内全屏 —— 折叠左侧两列，会话铺满窗口");
         if (winFull.Image is null)
@@ -77,6 +98,7 @@ public sealed class SessionTabBar : NSView
         var sep = new NSBox { BoxType = NSBoxType.NSBoxSeparator, TranslatesAutoresizingMaskIntoConstraints = false };
 
         AddSubview(scroll);
+        AddSubview(_collapsedButton);
         AddSubview(vsep);
         AddSubview(actions);
         AddSubview(sep);
@@ -89,6 +111,9 @@ public sealed class SessionTabBar : NSView
             _row.LeadingAnchor.ConstraintEqualTo(scroll.ContentView.LeadingAnchor, 6),
             _row.TopAnchor.ConstraintEqualTo(scroll.ContentView.TopAnchor),
             _row.BottomAnchor.ConstraintEqualTo(scroll.ContentView.BottomAnchor),
+
+            _collapsedButton.LeadingAnchor.ConstraintEqualTo(LeadingAnchor, 12),
+            _collapsedButton.CenterYAnchor.ConstraintEqualTo(CenterYAnchor, -1),
 
             vsep.WidthAnchor.ConstraintEqualTo(1),
             vsep.HeightAnchor.ConstraintEqualTo(16),
@@ -152,6 +177,7 @@ public sealed class SessionTabBar : NSView
         _row.AddArrangedSubview(tab.View);
         Select(id);
         SyncSeparators();
+        UpdateCollapse();
     }
 
     public void RemoveTab(Guid id)
@@ -165,10 +191,52 @@ public sealed class SessionTabBar : NSView
         _tabs.Remove(tab);
         tab.View.RemoveFromSuperview();
         SyncSeparators();
+        UpdateCollapse();
 
         if (_active == id && _tabs.Count > 0)
         {
             Select(_tabs[^1].Id);
+        }
+    }
+
+    /// <summary>点开「切换会话」：有当前激活会话就显示它的名字，否则显示「活动连接 (N)」
+    /// （对齐 Windows 版——空间不够横排时整条折叠成这一个按钮）。</summary>
+    private void ShowSessionMenu(NSView anchor)
+    {
+        if (_tabs.Count == 0)
+        {
+            return;
+        }
+
+        var menu = new NSMenu();
+        foreach (var t in _tabs)
+        {
+            menu.AddItem(new NSMenuItem(t.Title, (_, _) => Select(t.Id)) { Image = ProtocolStyle.Symbol(t.Protocol) });
+        }
+
+        menu.PopUpMenu(null, new CGPoint(0, anchor.Bounds.Height + 4), anchor);
+    }
+
+    /// <summary>横向铺不下所有标签时（宽度 &lt; 标签数 × 最小宽度）整条折叠成一个按钮。
+    /// 每次尺寸变化（窗口缩放、折叠 / 展开左侧两列）都要重新判断。</summary>
+    public override void Layout()
+    {
+        base.Layout();
+        UpdateCollapse();
+    }
+
+    private void UpdateCollapse()
+    {
+        var available = Bounds.Width - 90; // 粗略扣掉 vsep + actions 两个按钮的固定占宽
+        var needed = _tabs.Count * MinTabWidth;
+        var collapsed = _tabs.Count > 0 && available > 0 && needed > available;
+        _collapsed = collapsed;
+        _scroll.Hidden = collapsed;
+        _collapsedButton.Hidden = !collapsed;
+        if (collapsed)
+        {
+            var activeTab = _tabs.FirstOrDefault(t => t.Id == _active);
+            _collapsedButton.Title = activeTab?.Title ?? $"活动连接 ({_tabs.Count})";
         }
     }
 
@@ -193,6 +261,10 @@ public sealed class SessionTabBar : NSView
         }
 
         SyncSeparators();
+        if (_collapsed)
+        {
+            UpdateCollapse();
+        }
     }
 
     public void ClearHighlight()

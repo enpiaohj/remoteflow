@@ -57,6 +57,14 @@ public sealed class DetailView : NSView
     private void RefreshGround()
         => Palette.With(this, () => Layer!.BackgroundColor = Palette.PageGround(this).CGColor);
 
+    /// <summary>窗口材质 / 透明度设置变化后由 <see cref="MainWindowController"/> 调用：
+    /// 重算自身底衬，并顺带刷新已经构建过的设置页（它是唯一另一个持久持有 PageGround 的视图）。</summary>
+    internal void RefreshGlassAppearance()
+    {
+        ViewDidChangeEffectiveAppearance();
+        _settings?.ViewDidChangeEffectiveAppearance();
+    }
+
     public void ShowEmpty()
         => Swap(EmptyState("选择一个连接", "从左侧列表选择，或用工具栏「＋」新建连接。", "rectangle.connected.to.line.below"));
 
@@ -390,18 +398,21 @@ public sealed class DetailView : NSView
     /// 右下角挂一枚在线状态徽标（绿=已连接、橙=会话活动中），与列表行保持一致。
     /// </summary>
     private static NSView IconTile(ProtocolType p, bool connected = false, bool active = false)
+        => IconTile(p, connected, active, 40);
+
+    private static NSView IconTile(ProtocolType p, bool connected, bool active, nfloat size)
     {
         var tint = ProtocolStyle.Tint(p);
-        var tile = new CardView(() => tint.ColorWithAlphaComponent(0.16f), cornerRadius: 9);
-        tile.WidthAnchor.ConstraintEqualTo(40).Active = true;
-        tile.HeightAnchor.ConstraintEqualTo(40).Active = true;
+        var tile = new CardView(() => tint.ColorWithAlphaComponent(0.16f), cornerRadius: size * 9f / 40f);
+        tile.WidthAnchor.ConstraintEqualTo(size).Active = true;
+        tile.HeightAnchor.ConstraintEqualTo(size).Active = true;
 
         var glyph = new NSImageView
         {
             Image = ProtocolStyle.Symbol(p),
             ContentTintColor = tint,
             TranslatesAutoresizingMaskIntoConstraints = false,
-            SymbolConfiguration = NSImageSymbolConfiguration.Create(17, NSFontWeight.Medium),
+            SymbolConfiguration = NSImageSymbolConfiguration.Create(size * 17f / 40f, NSFontWeight.Medium),
         };
         tile.AddSubview(glyph);
         NSLayoutConstraint.ActivateConstraints(new[]
@@ -412,10 +423,10 @@ public sealed class DetailView : NSView
 
         if (connected || active)
         {
-            // 40pt 图标块上 9pt 太小要凑近看，这里用 12pt。
+            // 40pt 图标块上 9pt 太小要凑近看，这里用 12pt（按 size 等比例缩放）。
             // 必须**完全落在**图标块内部：之前挂到 tile 外沿（+3）会溢出父视图，
             // 被祖先裁掉一角，看着就不圆了。
-            var badge = ProtocolStyle.StatusBadge(12);
+            var badge = ProtocolStyle.StatusBadge(size * 12f / 40f);
             tile.AddSubview(badge);
             NSLayoutConstraint.ActivateConstraints(new[]
             {
@@ -755,12 +766,15 @@ public sealed class DetailView : NSView
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
 
-        // 问候 + 日期 + 统计 —— 与页面里其它区块一样，包进一张毛玻璃卡片（不再是裸铺在底衬上）。
+        // 问候 + 日期 + 统计——裸铺在页面底衬上，不套卡片。这是页面标题区，跟下面真正的
+        // 内容卡片（最近连接 / 收藏 / 活动）拉开「轻—重」节奏；全部套卡片会让首页从上到下
+        // 密度均匀、显得堆叠，反而不如留白疏朗。左右留 22 跟卡片内边距一致，文字对齐。
         var greeting = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Vertical,
             Alignment = NSLayoutAttribute.Leading,
             Spacing = 0,
+            EdgeInsets = new NSEdgeInsets(0, 22, 0, 22),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
         greeting.AddArrangedSubview(Big(string.IsNullOrEmpty(vm.Greeting) ? "欢迎" : vm.Greeting, 28));
@@ -770,8 +784,8 @@ public sealed class DetailView : NSView
         greeting.AddArrangedSubview(_homeDateLine);
         greeting.AddArrangedSubview(Gap(7));
         greeting.AddArrangedSubview(Muted($"{vm.TotalConnections} 个连接  ·  {vm.ConnectedSessions} 个会话已连接", 12));
-        AddFill(col, CardWithContent(greeting, padX: 22, padY: 18));
-        col.AddArrangedSubview(Gap(22));
+        AddFill(col, greeting);
+        col.AddArrangedSubview(Gap(28));
 
         if (vm.IsFirstRun)
         {
@@ -814,11 +828,11 @@ public sealed class DetailView : NSView
         var favCol = HomeColumnCard("收藏", "star",
             vm.HasFavorites ? vm.FavoriteItems.Select(HomeFavRow) : null,
             "还没有收藏的连接。在「我的连接」里点星标即可加入。",
-            () => vm.ViewAllFavoritesCommand.Execute(null), "管理收藏");
+            () => vm.ViewAllFavoritesCommand.Execute(null), "管理收藏", "Id.Favorite");
         var actCol = HomeColumnCard("最近活动", "clock.arrow.circlepath",
             vm.HasActivity ? vm.RecentHistory.Select(HomeActivityRow) : null,
             "还没有连接记录。",
-            () => vm.ViewAllActivityCommand.Execute(null), "查看所有活动");
+            () => vm.ViewAllActivityCommand.Execute(null), "查看所有活动", "Id.History");
         twoCol.AddArrangedSubview(favCol);
         twoCol.AddArrangedSubview(actCol);
         favCol.WidthAnchor.ConstraintEqualTo(actCol.WidthAnchor).Active = true;
@@ -882,7 +896,7 @@ public sealed class DetailView : NSView
 
         NSLayoutConstraint.ActivateConstraints(new[]
         {
-            card.HeightAnchor.ConstraintEqualTo(92),
+            card.HeightAnchor.ConstraintEqualTo(104),
             border.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor),
             border.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor),
             border.TopAnchor.ConstraintEqualTo(card.TopAnchor),
@@ -895,7 +909,7 @@ public sealed class DetailView : NSView
 
         var tint = ProtocolStyle.Tint(c.Profile.Protocol);
         var bar = new CardView(() => tint, cornerRadius: 1.5f);
-        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.IsConnecting);
+        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.IsConnecting, size: 56);
         var name = Plain(c.Name, 14);
         name.Font = NSFont.SystemFontOfSize(14, NSFontWeight.Semibold);
         name.LineBreakMode = NSLineBreakMode.TruncatingTail;
@@ -938,9 +952,11 @@ public sealed class DetailView : NSView
         return card;
     }
 
-    /// <summary>收藏 / 最近活动列卡：标题行 + 「查看全部」 + 滚动列表 / 空态。</summary>
+    /// <summary>收藏 / 最近活动列卡：标题行 + 「查看全部」 + 滚动列表 / 空态。
+    /// <paramref name="identityKey"/> 命中 <see cref="IdentityIconCatalog"/> 时用彩色身份图标，
+    /// 否则回落 <paramref name="symbol"/>（SF Symbol）。</summary>
     private NSView HomeColumnCard(string title, string symbol, IEnumerable<NSView>? rows, string emptyText,
-        Action viewAll, string footerText)
+        Action viewAll, string footerText, string? identityKey = null)
     {
         var card = Card();
         // 固定高度在内容少时会留下一大片空洞（收藏只有一两条时尤其明显）。
@@ -957,13 +973,31 @@ public sealed class DetailView : NSView
             Spacing = 7,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
-        head.AddArrangedSubview(new NSImageView
+        var headIcon = identityKey is not null ? IdentityIconCatalog.Get(identityKey) : null;
+        NSImageView headIconView;
+        if (headIcon is not null)
         {
-            Image = NSImage.GetSystemSymbol(symbol, null),
-            ContentTintColor = NSColor.SecondaryLabel,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-            SymbolConfiguration = NSImageSymbolConfiguration.Create(12, NSFontWeight.Regular),
-        });
+            headIconView = new NSImageView
+            {
+                Image = headIcon,
+                ImageScaling = NSImageScale.ProportionallyUpOrDown,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
+            headIconView.WidthAnchor.ConstraintEqualTo(14).Active = true;
+            headIconView.HeightAnchor.ConstraintEqualTo(14).Active = true;
+        }
+        else
+        {
+            headIconView = new NSImageView
+            {
+                Image = NSImage.GetSystemSymbol(symbol, null),
+                ContentTintColor = NSColor.SecondaryLabel,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+                SymbolConfiguration = NSImageSymbolConfiguration.Create(12, NSFontWeight.Regular),
+            };
+        }
+
+        head.AddArrangedSubview(headIconView);
         head.AddArrangedSubview(SectionLabel(title));
         var hspacer = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
         hspacer.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
@@ -1684,10 +1718,11 @@ public sealed class DetailView : NSView
 
             if (elevated && !glass)
             {
-                // 极轻投影：分层靠"抬起来"，不靠把底色染灰。玻璃那层自带材质，叠投影会显脏。
-                Layer.ShadowOpacity = 0.06f;
-                Layer.ShadowRadius = 3;
-                Layer.ShadowOffset = new CGSize(0, -1);
+                // 投影负责"抬起来"的空气感，不靠把底色染灰。玻璃那层自带材质，叠投影会显脏。
+                // 半径 3 太贴边，几乎看不出浮起——对齐 Windows Surface.Card 的柔和大范围投影。
+                Layer.ShadowOpacity = 0.10f;
+                Layer.ShadowRadius = 12;
+                Layer.ShadowOffset = new CGSize(0, -2);
             }
         }
 

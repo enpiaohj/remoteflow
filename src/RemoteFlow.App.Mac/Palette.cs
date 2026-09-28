@@ -1,4 +1,5 @@
 using AppKit;
+using RemoteFlow.Core.Models;
 
 namespace RemoteFlow.App.Mac;
 
@@ -13,6 +14,15 @@ namespace RemoteFlow.App.Mac;
 /// </summary>
 internal static class Palette
 {
+    /// <summary>当前「窗口材质」设置（设置 → 常规 → 外观与行为），由
+    /// <see cref="Host.AppKitThemeService"/> 在启动 / 设置变化时写入。只影响
+    /// <see cref="PageGround"/> 的透过率——卡片（<see cref="CardSurface"/>）
+    /// 三档材质下都保持不透明，避免削弱之前专门调过的白卡可读性。</summary>
+    public static WindowMaterial Material { get; set; } = WindowMaterial.Acrylic;
+
+    /// <summary>玻璃透明度（0 最不透明 ～ 100 最透明），语义对齐 Windows 版设置。</summary>
+    public static int Transparency { get; set; } = 50;
+
     private static bool IsDark(NSView view)
         => view.EffectiveAppearance.FindBestMatch(new[]
         {
@@ -28,10 +38,27 @@ internal static class Palette
 
     /// <summary>页面底衬：卡片之外那片区域。**半透明**覆一层 —— 窗口底铺了整块磨砂
     /// （见 MainWindowController），这里留出透过率让磨砂露出来一点，同时仍比卡片（纯毛玻璃）
-    /// 亮一档，两者只留**轻微色差**。用不透明色会把窗口底的磨砂完全盖死。</summary>
-    public static NSColor PageGround(NSView v) => IsDark(v)
-        ? NSColor.Black.ColorWithAlphaComponent(0.55f)
-        : NSColor.White.ColorWithAlphaComponent(0.82f);
+    /// 亮一档，两者只留**轻微色差**。用不透明色会把窗口底的磨砂完全盖死。
+    /// 不透明度按 <see cref="Material"/> 定区间、<see cref="Transparency"/> 在区间内插值——
+    /// 纯色恒为 1（等于关掉材质），云母区间最窄最保守，亚克力区间最宽、玻璃感最强。</summary>
+    public static NSColor PageGround(NSView v)
+    {
+        var t = Math.Clamp(Transparency, 0, 100) / 100f;
+        var dark = IsDark(v);
+        var (max, min) = (Material, dark) switch
+        {
+            (WindowMaterial.Solid, _) => (1f, 1f),
+            (WindowMaterial.Mica, false) => (0.92f, 0.55f),
+            (WindowMaterial.Mica, true) => (0.62f, 0.35f),
+            (WindowMaterial.Acrylic, false) => (0.65f, 0.20f),
+            (WindowMaterial.Acrylic, true) => (0.45f, 0.12f),
+            _ => (0.82f, 0.82f),
+        };
+        var opacity = max - ((max - min) * t);
+        return dark
+            ? NSColor.Black.ColorWithAlphaComponent((nfloat)opacity)
+            : NSColor.White.ColorWithAlphaComponent((nfloat)opacity);
+    }
 
     /// <summary>卡片 / 列表等内容表面。浅色下纯白，深色下比底衬亮一档。
     /// 注：现在「框」普遍改用**毛玻璃底**（材质与左侧栏一致），见 DetailView.CardView(glass: true)

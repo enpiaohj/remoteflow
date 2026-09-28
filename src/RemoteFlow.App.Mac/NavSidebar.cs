@@ -5,14 +5,14 @@ namespace RemoteFlow.App.Mac;
 /// <summary>主窗口第一列：导航源列表。连接 / 管理两组，路由到中间列表。</summary>
 public sealed class NavSidebar : NSViewController
 {
-    public enum Item { Home, Connections, Favorites, Recent, Credentials, Settings }
+    /// <summary>收藏 / 最近连接不再是一级导航项（对齐 Windows「连接工作台」），
+    /// 降级为 <see cref="ConnectionListPane"/> 顶部的智能视图切换。</summary>
+    public enum Item { Home, Connections, Credentials, Settings }
 
     private static readonly (Item Item, string Title, string Symbol, bool GroupStart)[] Rows =
     {
         (Item.Home, "首页", "house", true),
         (Item.Connections, "我的连接", "rectangle.stack", false),
-        (Item.Favorites, "收藏", "star", false),
-        (Item.Recent, "最近连接", "clock.arrow.circlepath", false),
         (Item.Credentials, "凭据", "key", true),
         (Item.Settings, "设置", "gearshape", false),
     };

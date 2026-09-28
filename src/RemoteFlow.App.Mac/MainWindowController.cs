@@ -1,9 +1,11 @@
 using AppKit;
 using CoreGraphics;
 using Foundation;using Microsoft.Extensions.DependencyInjection;
+using RemoteFlow.App.Mac.Host;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
+using RemoteFlow.Presentation.Host;
 using RemoteFlow.Presentation.ViewModels;
 
 namespace RemoteFlow.App.Mac;
@@ -72,31 +74,26 @@ public sealed class MainWindowController : NSWindowController
         Window.ContentMinSize = new CGSize(980, 560);
         Window.TitleVisibility = NSWindowTitleVisibility.Hidden;
         Window.CollectionBehavior |= NSWindowCollectionBehavior.FullScreenPrimary;
+        // 默认 false：不按按钮的纯移动不会分发给任何视图的 MouseMoved。RDP/VNC 会话靠
+        // MouseMoved 把光标位置转发给远端（见 RdpScreenView/VncScreenView.Pointer），
+        // 不开这个开关，远端就收不到「划过但没点」的位置变化——典型症状：点菜单项能选中
+        // （MouseDown/Up 不受此开关影响），但鼠标划过菜单项时看不到选中高亮跟着走。
+        Window.AcceptsMouseMovedEvents = true;
 
         BuildSplit();
         BuildToolbar();
 
-        // 整个窗口底铺一层毛玻璃（材质与各个「框」一致）：窗口自身设为透明，
-        // 让最底下这层磨砂去透桌面 —— 三栏里凡是没被不透明内容盖住的地方都带磨砂质感。
-        Window.IsOpaque = false;
-        Window.BackgroundColor = NSColor.Clear;
-        if (Window.ContentView is { } host)
+        // 窗口材质（设置 → 常规 → 外观与行为）：启动时按当前设置铺一次，之后设置页拖动
+        // 材质 / 透明度会通过 AppKitThemeService.GlassAppearanceChanged 实时重铺（见下）。
+        var appSettings = services.GetRequiredService<AppSettings>();
+        Palette.Material = appSettings.WindowMaterial;
+        Palette.Transparency = appSettings.WindowTransparency;
+        ApplyGlassAppearance(appSettings.WindowMaterial);
+        if (services.GetRequiredService<IThemeService>() is AppKitThemeService themeService)
         {
-            var glass = new NSVisualEffectView
-            {
-                Material = NSVisualEffectMaterial.Sidebar,
-                BlendingMode = NSVisualEffectBlendingMode.BehindWindow,
-                State = NSVisualEffectState.FollowsWindowActiveState,
-                TranslatesAutoresizingMaskIntoConstraints = false,
-            };
-            host.AddSubview(glass, NSWindowOrderingMode.Below, null);
-            NSLayoutConstraint.ActivateConstraints(new[]
-            {
-                glass.LeadingAnchor.ConstraintEqualTo(host.LeadingAnchor),
-                glass.TrailingAnchor.ConstraintEqualTo(host.TrailingAnchor),
-                glass.TopAnchor.ConstraintEqualTo(host.TopAnchor),
-                glass.BottomAnchor.ConstraintEqualTo(host.BottomAnchor),
-            });
+            themeService.GlassAppearanceChanged += (_, _) =>
+                NSApplication.SharedApplication.BeginInvokeOnMainThread(
+                    () => ApplyGlassAppearance(Palette.Material));
         }
 
         // 初始尺寸放在 ContentViewController 设好**之后** —— 见 ApplyInitialSizeAndCenter。
@@ -156,6 +153,56 @@ public sealed class MainWindowController : NSWindowController
         _ = StartAsync();
     }
 
+    private NSVisualEffectView? _glass;
+
+    /// <summary>按材质铺 / 收窗口底的磨砂：纯色时窗口本身不透明、不铺材质层；
+    /// 云母 / 亚克力时窗口透明、铺一层 <see cref="NSVisualEffectView"/>，
+    /// 具体透过多少交给 <see cref="Palette.PageGround"/>（材质本身只决定模糊强弱与色调）。
+    /// 设置页拖动材质 / 透明度时会重复调用本方法（见构造函数里的 GlassAppearanceChanged 订阅）。</summary>
+    private void ApplyGlassAppearance(WindowMaterial material)
+    {
+        if (material == WindowMaterial.Solid)
+        {
+            Window.IsOpaque = true;
+            Window.BackgroundColor = NSColor.WindowBackground;
+            _glass?.RemoveFromSuperview();
+            _glass = null;
+        }
+        else
+        {
+            Window.IsOpaque = false;
+            Window.BackgroundColor = NSColor.Clear;
+            var wanted = material == WindowMaterial.Acrylic
+                ? NSVisualEffectMaterial.HudWindow
+                : NSVisualEffectMaterial.Sidebar;
+
+            if (_glass is null && Window.ContentView is { } host)
+            {
+                _glass = new NSVisualEffectView
+                {
+                    BlendingMode = NSVisualEffectBlendingMode.BehindWindow,
+                    State = NSVisualEffectState.FollowsWindowActiveState,
+                    TranslatesAutoresizingMaskIntoConstraints = false,
+                };
+                host.AddSubview(_glass, NSWindowOrderingMode.Below, null);
+                NSLayoutConstraint.ActivateConstraints(new[]
+                {
+                    _glass.LeadingAnchor.ConstraintEqualTo(host.LeadingAnchor),
+                    _glass.TrailingAnchor.ConstraintEqualTo(host.TrailingAnchor),
+                    _glass.TopAnchor.ConstraintEqualTo(host.TopAnchor),
+                    _glass.BottomAnchor.ConstraintEqualTo(host.BottomAnchor),
+                });
+            }
+
+            if (_glass is not null)
+            {
+                _glass.Material = wanted;
+            }
+        }
+
+        _detail.RefreshGlassAppearance();
+    }
+
     /// <summary>初始窗口尺寸与居中。档位取自「设置 → 常规 → 外观与行为 → 初始窗口大小」
     /// （<see cref="WindowSizePreset"/>）：高分屏 / 普通屏 / 笔记本适合的尺寸差得远，写死一个
     /// 值总有一头不合适，所以做成可选项。无论选哪档都会再夹进当前屏幕可用区域，选「大」也不会
@@ -203,14 +250,26 @@ public sealed class MainWindowController : NSWindowController
         // 选中第 1 行「我的连接」，于是「默认页面」这个设置在 macOS 端从来没生效过
         // （选「首页」照样进「我的连接」）。
         var landing = _services.GetRequiredService<AppSettings>().DefaultLandingPage;
-        _nav.Select(landing switch
+        var item = landing switch
         {
-            LandingPage.Connections => NavSidebar.Item.Connections,
-            LandingPage.Favorites => NavSidebar.Item.Favorites,
-            LandingPage.Recent => NavSidebar.Item.Recent,
+            LandingPage.Connections or LandingPage.Favorites or LandingPage.Recent
+                => NavSidebar.Item.Connections,
             LandingPage.Credentials => NavSidebar.Item.Credentials,
             _ => NavSidebar.Item.Home,
-        });
+        };
+        _nav.Select(item);
+        if (item == NavSidebar.Item.Connections)
+        {
+            // 收藏 / 最近连接已降级为工作台内的智能视图，这里补一次真正的视图切换
+            // （上面 Select 触发的 OnNavSelected 只会刷新「全部」）。
+            _ = _listPane.SetView(landing switch
+            {
+                LandingPage.Favorites => ConnectionListView.Favorites,
+                LandingPage.Recent => ConnectionListView.Recent,
+                _ => ConnectionListView.All,
+            });
+        }
+
         return Task.CompletedTask;
     }
 
@@ -529,9 +588,10 @@ public sealed class MainWindowController : NSWindowController
 
     private void SyncTabBarVisibility()
     {
-        // 只有「舞台正在显示会话画面」时才出现 Tab 条 —— 首页 / 凭据 / 连接详情上
-        // 挂一条会话标签既突兀也没用。全屏下也不显示（改用悬浮药丸）。
-        var show = _tabBar.Count > 0 && _stageIsSession && _mode == ViewMode.Normal;
+        // 只要有活跃会话就常驻显示（对齐 Windows 版）：切到首页 / 我的连接 / 设置等页面
+        // 不应该把会话 Tab 藏起来——用户需要能随时看见、随时切回去，不用先记住自己开了几个会话。
+        // 全屏下不显示（改用悬浮药丸）。
+        var show = _tabBar.Count > 0 && _mode == ViewMode.Normal;
         _tabBar.Hidden = !show;
         // 顺序要紧：先停用旧的再启用新的，两条同时生效会互相冲突。
         if (show)
@@ -791,19 +851,9 @@ public sealed class MainWindowController : NSWindowController
                 SetListApplicable(true);
                 SetListVisible(true);
                 _detail.ShowEmpty();
-                _ = _listPane.ShowConnectionsAsync();
-                break;
-            case NavSidebar.Item.Favorites:
-                SetListApplicable(true);
-                SetListVisible(true);
-                _detail.ShowEmpty();
-                _ = _listPane.ShowFavoritesAsync();
-                break;
-            case NavSidebar.Item.Recent:
-                SetListApplicable(true);
-                SetListVisible(true);
-                _detail.ShowEmpty();
-                _ = _listPane.ShowRecentAsync();
+                // 只刷新当前智能视图（全部 / 收藏 / 最近），不强制重置——用户离开工作台
+                // 再点回来，应该还在离开时的那个视图；要切视图走 NavigateTo → SetView。
+                _ = _listPane.RefreshAsync();
                 break;
             case NavSidebar.Item.Home:
                 SetListApplicable(false);
@@ -886,13 +936,26 @@ public sealed class MainWindowController : NSWindowController
         var item = page switch
         {
             NavigationPage.Home => NavSidebar.Item.Home,
-            NavigationPage.Favorites => NavSidebar.Item.Favorites,
-            NavigationPage.Recent => NavSidebar.Item.Recent,
             NavigationPage.Credentials => NavSidebar.Item.Credentials,
             NavigationPage.Settings => NavSidebar.Item.Settings,
-            _ => NavSidebar.Item.Connections,
+            _ => NavSidebar.Item.Connections, // Connections / Favorites / Recent 都落在工作台
         };
         _nav.Select(item);
+
+        // 收藏 / 最近连接不再是独立导航项，落地后还要告诉工作台切到对应的智能视图
+        // （_nav.Select 若目标行未变不会重新触发 OnNavSelected，这里独立设置不受影响）。
+        switch (page)
+        {
+            case NavigationPage.Favorites:
+                _ = _listPane.SetView(ConnectionListView.Favorites);
+                break;
+            case NavigationPage.Recent:
+                _ = _listPane.SetView(ConnectionListView.Recent);
+                break;
+            case NavigationPage.Connections:
+                _ = _listPane.SetView(ConnectionListView.All);
+                break;
+        }
     }
 
     private async Task OpenAsync(ConnectionProfile profile, string name)

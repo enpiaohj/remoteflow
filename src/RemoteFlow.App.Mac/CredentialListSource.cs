@@ -66,19 +66,39 @@ public sealed class CredentialListSource : NSTableViewDelegate
         };
     }
 
-    /// <summary>名称列：圆形头像（按类型着色）+ 名称。</summary>
+    /// <summary>名称列：头像（按类型区分）+ 名称。彩色身份图标自带渐变底和投影，
+    /// 直接铺满头像位；没有对应图标时回落 SF Symbol + 染色圆底。</summary>
     private static NSView NameCell(CredentialItemViewModel item)
     {
-        var tint = TypeTint(item);
-        var avatar = new RoundFill(tint.ColorWithAlphaComponent(0.16f));
-        var glyph = new NSImageView
+        NSView avatar;
+        if (IdentityIconCatalog.Get(item.TypeIconKey) is { } identityIcon)
         {
-            Image = NSImage.GetSystemSymbol(TypeSymbol(item), null),
-            ContentTintColor = tint,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-            SymbolConfiguration = NSImageSymbolConfiguration.Create(13, NSFontWeight.Regular),
-        };
-        avatar.AddSubview(glyph);
+            avatar = new NSImageView
+            {
+                Image = identityIcon,
+                ImageScaling = NSImageScale.ProportionallyUpOrDown,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
+        }
+        else
+        {
+            var tint = TypeTint(item);
+            var fallback = new RoundFill(tint.ColorWithAlphaComponent(0.16f));
+            var glyph = new NSImageView
+            {
+                Image = NSImage.GetSystemSymbol(TypeSymbol(item), null),
+                ContentTintColor = tint,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+                SymbolConfiguration = NSImageSymbolConfiguration.Create(13, NSFontWeight.Regular),
+            };
+            fallback.AddSubview(glyph);
+            NSLayoutConstraint.ActivateConstraints(new[]
+            {
+                glyph.CenterXAnchor.ConstraintEqualTo(fallback.CenterXAnchor),
+                glyph.CenterYAnchor.ConstraintEqualTo(fallback.CenterYAnchor),
+            });
+            avatar = fallback;
+        }
 
         var name = Lbl(13, NSColor.Label);
         name.StringValue = item.Name;
@@ -90,8 +110,6 @@ public sealed class CredentialListSource : NSTableViewDelegate
         cell.TextField = name;
         NSLayoutConstraint.ActivateConstraints(new[]
         {
-            glyph.CenterXAnchor.ConstraintEqualTo(avatar.CenterXAnchor),
-            glyph.CenterYAnchor.ConstraintEqualTo(avatar.CenterYAnchor),
             avatar.WidthAnchor.ConstraintEqualTo(28),
             avatar.HeightAnchor.ConstraintEqualTo(28),
             avatar.LeadingAnchor.ConstraintEqualTo(cell.LeadingAnchor, 4),

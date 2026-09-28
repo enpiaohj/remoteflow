@@ -358,12 +358,18 @@ static BOOL rf_pre_connect(freerdp* instance)
 	rdpSettings* s = instance->context->settings;
 	freerdp_settings_set_bool(s, FreeRDP_SoftwareGdi, TRUE);
 
-	/* RDP8+ 图形管线：Progressive（小波 + 渐进细化，滚动 / 大重绘不再卡）、
-	   ClearCodec（文本 / UI）、ZGFX 批压缩、帧确认背压。都是 FreeRDP 内建、无外部依赖。
-	   H.264（GfxH264 / GfxAVC444）需要 openh264/ffmpeg 后端，暂不开。 */
+	/* RDP8+ 图形管线：ZGFX 批压缩、帧确认背压，FreeRDP 内建、无外部依赖。
+	   H.264（GfxH264 / GfxAVC444）需要 openh264/ffmpeg 后端，暂不开。
+	   Progressive（小波 + 渐进细化）关掉，改走经典 RemoteFX（ThinClient）：
+	   Progressive 对「小范围、高频率、持续变化」的内容（典型如菜单项 hover 高亮）有已知的
+	   刷新缺陷——服务端在带宽/内容持续变化时会推迟甚至跳过精修帧，导致该区域可能停留在
+	   粗糙首帧甚至看不到更新（GitHub FreeRDP#2662 RemoteApp 菜单渲染问题即为同类现象）。
+	   我们默认按局域网连接（下方 ConnectionType=LAN），不缺 Progressive 想省的那点带宽，
+	   换经典 RemoteFX 的正确性更划算。 */
 	freerdp_settings_set_bool(s, FreeRDP_SupportGraphicsPipeline, TRUE);
-	freerdp_settings_set_bool(s, FreeRDP_GfxProgressive, TRUE);
-	freerdp_settings_set_bool(s, FreeRDP_GfxProgressiveV2, TRUE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxProgressive, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxProgressiveV2, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxThinClient, TRUE);
 	freerdp_settings_set_bool(s, FreeRDP_GfxH264, FALSE);
 	freerdp_settings_set_bool(s, FreeRDP_GfxAVC444, FALSE);
 	freerdp_settings_set_bool(s, FreeRDP_GfxAVC444v2, FALSE);

@@ -1,6 +1,7 @@
 using AppKit;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Presentation.Host;
+using RemoteFlow.App.Mac;
 
 namespace RemoteFlow.App.Mac.Host;
 
@@ -13,6 +14,22 @@ public sealed class AppKitThemeService : IThemeService
     public bool IsDark { get; private set; } = IsSystemDark();
 
     public event EventHandler? EffectiveThemeChanged;
+
+    /// <summary>窗口材质 / 透明度变化（设置页拖动即触发）。<see cref="MainWindowController"/>
+    /// 订阅它来实时重铺窗口底的磨砂并刷新已构建页面的底衬颜色。</summary>
+    public event EventHandler? GlassAppearanceChanged;
+
+    public void SetMaterial(WindowMaterial material)
+    {
+        Palette.Material = material;
+        GlassAppearanceChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetTransparency(int transparency)
+    {
+        Palette.Transparency = transparency;
+        GlassAppearanceChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     public void Apply(AppTheme theme)
     {
