@@ -56,8 +56,18 @@ dotnet restore RemoteFlow.slnx --nologo -v q
 echo "== 4/6 创建源码快照 → $REL/source/ =="
 rm -rf "$REL/source"
 mkdir -p "$REL/source"
-# 快照 = 当前 HEAD 的精确跟踪状态；排除 releases/ 防止快照里再套一层历史发布目录。
-git archive --format=tar HEAD -- ':(exclude)releases' | tar -x -C "$REL/source"
+# 快照 = 当前 HEAD 的精确跟踪状态，但要排除**内部内容**：
+#   releases/   防止快照里再套一层历史发布目录（递归嵌套）。
+#   docs/       内部产品设计 / 提示词 / 测试文档，不属于可重建源码。
+#   .github/    CI 配置，内部。
+#   CLAUDE.md   项目内部规则。
+# 白名单口径与 CLAUDE.md 里 Windows 侧的 `git archive <白名单>` 一致：
+# 「内部内容不入本仓」。早先这里只排除了 releases/，导致 docs/ 与 CLAUDE.md 被打进
+# 公开快照并随 tag 发布，其中含内网 IP、内部主机名与内部项目代号
+# （2026-09-28 已重写历史清除，并在此处堵住来源）。
+git archive --format=tar HEAD \
+  -- ':(exclude)releases' ':(exclude)docs' ':(exclude).github' ':(exclude)CLAUDE.md' \
+  | tar -x -C "$REL/source"
 SNAP_N="$(find "$REL/source" -type f | wc -l | tr -d ' ')"
 echo "  $SNAP_N 个文件"
 # 冗余保险：快照里不应出现构建产物。
