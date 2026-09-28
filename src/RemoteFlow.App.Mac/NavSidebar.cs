@@ -73,10 +73,22 @@ public sealed class NavSidebar : NSViewController
             Font = NSFont.SystemFontOfSize(15, NSFontWeight.Semibold),
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
+        var versionLabel = new NSTextField
+        {
+            StringValue = AppVersion,
+            Bordered = false,
+            Editable = false,
+            Selectable = false,
+            DrawsBackground = false,
+            TextColor = NSColor.SecondaryLabel,
+            Font = NSFont.SystemFontOfSize(11, NSFontWeight.Regular),
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
 
         // 不用 NSStackView 拼这一行：普通 NSView 没有固有尺寸，stack 会把它压成 0 → 图文重叠。
         fx.AddSubview(brandTile);
         fx.AddSubview(brandLabel);
+        fx.AddSubview(versionLabel);
 
         scroll.TranslatesAutoresizingMaskIntoConstraints = false;
         fx.AddSubview(scroll);
@@ -93,6 +105,9 @@ public sealed class NavSidebar : NSViewController
             brandLabel.LeadingAnchor.ConstraintEqualTo(brandTile.TrailingAnchor, 8),
             brandLabel.CenterYAnchor.ConstraintEqualTo(brandTile.CenterYAnchor),
 
+            versionLabel.LeadingAnchor.ConstraintEqualTo(brandLabel.TrailingAnchor, 6),
+            versionLabel.LastBaselineAnchor.ConstraintEqualTo(brandLabel.LastBaselineAnchor),
+
             scroll.LeadingAnchor.ConstraintEqualTo(fx.LeadingAnchor),
             scroll.TrailingAnchor.ConstraintEqualTo(fx.TrailingAnchor),
             scroll.TopAnchor.ConstraintEqualTo(brandTile.BottomAnchor, 14),
@@ -101,6 +116,11 @@ public sealed class NavSidebar : NSViewController
 
         View = fx;
     }
+
+    /// <summary>产品版本号，取自 bundle 的 <c>CFBundleShortVersionString</c>
+    /// （= csproj 的 <c>ApplicationDisplayVersion</c>，构建时写进 Info.plist）。</summary>
+    private static string AppVersion =>
+        "v" + (NSBundle.MainBundle.InfoDictionary?["CFBundleShortVersionString"]?.ToString() ?? "?");
 
     /// <summary>按导航项定位并选中对应行（触发 <see cref="Selected"/>）。</summary>
     public void Select(Item item)
