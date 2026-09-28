@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    macOS 专属集成测试：Keychain 凭据保险库。
+    与 Windows 侧 DpapiCredentialVaultTests 对等，验证真实系统钥匙串的存取行为。
+    在非 macOS 平台上其中的测试会自行跳过（见 MacOnlyFactAttribute）。
+    对应 macOS 版技术方案 §6.4 / §10。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RemoteFlow.IntegrationTests.Mac</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\RemoteFlow.Core\RemoteFlow.Core.csproj" />
+    <ProjectReference Include="..\..\src\RemoteFlow.Infrastructure.Mac\RemoteFlow.Infrastructure.Mac.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>

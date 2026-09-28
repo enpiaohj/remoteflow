@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RemoteFlow.App/RemoteFlow.App.csproj" />
+    <Project Path="src/RemoteFlow.Application/RemoteFlow.Application.csproj" />
+    <Project Path="src/RemoteFlow.Core/RemoteFlow.Core.csproj" />
+    <Project Path="src/RemoteFlow.Infrastructure/RemoteFlow.Infrastructure.csproj" />
+    <Project Path="src/RemoteFlow.Infrastructure.Mac/RemoteFlow.Infrastructure.Mac.csproj" />
+    <Project Path="src/RemoteFlow.Infrastructure.Windows/RemoteFlow.Infrastructure.Windows.csproj" />
+    <Project Path="src/RemoteFlow.Presentation/RemoteFlow.Presentation.csproj" />
+    <Project Path="src/RemoteFlow.Protocol.Rdp/RemoteFlow.Protocol.Rdp.csproj" />
+    <Project Path="src/RemoteFlow.Protocol.Ssh/RemoteFlow.Protocol.Ssh.csproj" />
+    <Project Path="src/RemoteFlow.Protocol.Vnc/RemoteFlow.Protocol.Vnc.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RemoteFlow.Core.Tests/RemoteFlow.Core.Tests.csproj" />
+    <Project Path="tests/RemoteFlow.IntegrationTests/RemoteFlow.IntegrationTests.csproj" />
+    <Project Path="tests/RemoteFlow.IntegrationTests.Mac/RemoteFlow.IntegrationTests.Mac.csproj" />
+    <Project Path="tests/RemoteFlow.IntegrationTests.Windows/RemoteFlow.IntegrationTests.Windows.csproj" />
+  </Folder>
+</Solution>
