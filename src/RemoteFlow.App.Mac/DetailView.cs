@@ -755,14 +755,22 @@ public sealed class DetailView : NSView
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
 
-        // 问候 + 日期 + 统计
-        col.AddArrangedSubview(Big(string.IsNullOrEmpty(vm.Greeting) ? "欢迎" : vm.Greeting, 28));
-        col.AddArrangedSubview(Gap(3));
+        // 问候 + 日期 + 统计 —— 与页面里其它区块一样，包进一张毛玻璃卡片（不再是裸铺在底衬上）。
+        var greeting = new NSStackView
+        {
+            Orientation = NSUserInterfaceLayoutOrientation.Vertical,
+            Alignment = NSLayoutAttribute.Leading,
+            Spacing = 0,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        greeting.AddArrangedSubview(Big(string.IsNullOrEmpty(vm.Greeting) ? "欢迎" : vm.Greeting, 28));
+        greeting.AddArrangedSubview(Gap(3));
         // 日期行详略由「设置 → 首页时间行」决定；含时间时由 StartHomeClock 秒级刷新。
         _homeDateLine = Styled(vm.DateLine ?? "", 13, NSFontWeight.Regular, NSColor.TertiaryLabel);
-        col.AddArrangedSubview(_homeDateLine);
-        col.AddArrangedSubview(Gap(7));
-        col.AddArrangedSubview(Muted($"{vm.TotalConnections} 个连接  ·  {vm.ConnectedSessions} 个会话已连接", 12));
+        greeting.AddArrangedSubview(_homeDateLine);
+        greeting.AddArrangedSubview(Gap(7));
+        greeting.AddArrangedSubview(Muted($"{vm.TotalConnections} 个连接  ·  {vm.ConnectedSessions} 个会话已连接", 12));
+        AddFill(col, CardWithContent(greeting, padX: 22, padY: 18));
         col.AddArrangedSubview(Gap(22));
 
         if (vm.IsFirstRun)
@@ -898,7 +906,7 @@ public sealed class DetailView : NSView
     private NSView HomeRecentCard(ConnectionItemViewModel c)
     {
         var card = new TapRow(() => ConnectRequested?.Invoke(this, c)) { Menu = ConnMenu(c) };
-        var border = CardView.Surface(10);
+        var border = CardView.Surface(12);
         card.AddSubview(border);
 
         // 悬停层压在卡片之上、内容之下：卡片是不透明的，TapRow 自己的底会被它盖住。
@@ -941,9 +949,13 @@ public sealed class DetailView : NSView
         txt.AddArrangedSubview(host);
         txt.AddArrangedSubview(badge);
 
+        // 行尾的「…」：点开与右键同一套菜单。
+        var more = MoreButton(() => ConnMenu(c));
+
         card.AddSubview(bar);
         card.AddSubview(tile);
         card.AddSubview(txt);
+        card.AddSubview(more);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
             bar.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor),
@@ -952,8 +964,10 @@ public sealed class DetailView : NSView
             bar.WidthAnchor.ConstraintEqualTo(3),
             tile.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor, 16),
             tile.CenterYAnchor.ConstraintEqualTo(card.CenterYAnchor),
+            more.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor, -12),
+            more.CenterYAnchor.ConstraintEqualTo(card.CenterYAnchor),
             txt.LeadingAnchor.ConstraintEqualTo(tile.TrailingAnchor, 12),
-            txt.TrailingAnchor.ConstraintLessThanOrEqualTo(card.TrailingAnchor, -12),
+            txt.TrailingAnchor.ConstraintLessThanOrEqualTo(more.LeadingAnchor, -8),
             txt.CenterYAnchor.ConstraintEqualTo(card.CenterYAnchor),
         });
         return card;
@@ -1085,6 +1099,10 @@ public sealed class DetailView : NSView
         foot.Bordered = false;
         foot.ContentTintColor = NSColor.SecondaryLabel;
         foot.Font = NSFont.SystemFontOfSize(12);
+        // 底部动作做成一条**浅灰圆角条**（对齐设计稿），而不是一行裸文字链。
+        foot.WantsLayer = true;
+        foot.Layer!.CornerRadius = 8;
+        Palette.With(foot, () => foot.Layer.BackgroundColor = Palette.InsetFill(foot).CGColor);
 
         card.AddSubview(head);
         card.AddSubview(body);
@@ -1103,8 +1121,11 @@ public sealed class DetailView : NSView
             footSep.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor, -12),
             footSep.HeightAnchor.ConstraintEqualTo(1),
             footSep.BottomAnchor.ConstraintEqualTo(foot.TopAnchor, -6),
-            foot.CenterXAnchor.ConstraintEqualTo(card.CenterXAnchor),
-            foot.BottomAnchor.ConstraintEqualTo(card.BottomAnchor, -8),
+            // 全宽横条（不是居中小按钮），高度固定 —— 设计稿里它是卡片底部的一条动作带。
+            foot.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor, 12),
+            foot.TrailingAnchor.ConstraintEqualTo(card.TrailingAnchor, -12),
+            foot.HeightAnchor.ConstraintEqualTo(28),
+            foot.BottomAnchor.ConstraintEqualTo(card.BottomAnchor, -10),
         });
         return card;
     }
@@ -1133,16 +1154,20 @@ public sealed class DetailView : NSView
             TranslatesAutoresizingMaskIntoConstraints = false,
             Menu = ConnMenu(c),
         };
+        var more = MoreButton(() => ConnMenu(c));
         row.AddSubview(tile);
         row.AddSubview(stack);
+        row.AddSubview(more);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
             row.HeightAnchor.ConstraintEqualTo(46),
             tile.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor, 8),
             tile.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
             stack.LeadingAnchor.ConstraintEqualTo(tile.TrailingAnchor, 10),
-            stack.TrailingAnchor.ConstraintLessThanOrEqualTo(row.TrailingAnchor, -8),
+            stack.TrailingAnchor.ConstraintLessThanOrEqualTo(more.LeadingAnchor, -6),
             stack.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
+            more.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor, -8),
+            more.CenterYAnchor.ConstraintEqualTo(row.CenterYAnchor),
         });
         return row;
     }
@@ -1228,8 +1253,10 @@ public sealed class DetailView : NSView
 
     private static NSView HomeSecurityCard(Action dismiss)
     {
-        var card = new CardView(() => NSColor.SystemBlue.ColorWithAlphaComponent(0.09f),
-            () => NSColor.SecondaryLabel.ColorWithAlphaComponent(0.12f), 10);
+        // 与页面里其它卡片一样用白面（盾牌图标保留提示色，表示这是一条安全提示）。
+        CardView card = null!;
+        card = new CardView(() => Palette.CardSurface(card), () => Palette.Hairline(card),
+            12, elevated: true);
 
         var icon = new NSImageView
         {
@@ -1649,13 +1676,15 @@ public sealed class DetailView : NSView
         private readonly Func<NSColor>? _border;
 
         private readonly bool _elevated;
+        private readonly bool _glass;
 
         public CardView(Func<NSColor>? fill, Func<NSColor>? border = null, nfloat cornerRadius = default,
-            bool elevated = false)
+            bool elevated = false, bool glass = false)
         {
             _fill = fill;
             _border = border;
             _elevated = elevated;
+            _glass = glass;
             WantsLayer = true;
             TranslatesAutoresizingMaskIntoConstraints = false;
             Layer!.CornerRadius = cornerRadius;
@@ -1664,9 +1693,33 @@ public sealed class DetailView : NSView
                 Layer.BorderWidth = 1;
             }
 
-            if (elevated)
+            if (glass)
             {
-                // 极轻投影：分层靠"抬起来"，不靠把底色染灰。
+                // 毛玻璃底：材质与左侧栏一致，铺在最底层、按同样圆角裁切 —— 卡片的 fill 留空，
+                // 让磨砂自己透出后面的底色，全应用的「框」看上去就是同一种材质。
+                var blur = new NSVisualEffectView
+                {
+                    Material = NSVisualEffectMaterial.Sidebar,
+                    BlendingMode = NSVisualEffectBlendingMode.WithinWindow,
+                    State = NSVisualEffectState.FollowsWindowActiveState,
+                    TranslatesAutoresizingMaskIntoConstraints = false,
+                };
+                blur.WantsLayer = true;
+                blur.Layer!.CornerRadius = cornerRadius;
+                blur.Layer.MasksToBounds = true;
+                AddSubview(blur, NSWindowOrderingMode.Below, null);
+                NSLayoutConstraint.ActivateConstraints(new[]
+                {
+                    blur.LeadingAnchor.ConstraintEqualTo(LeadingAnchor),
+                    blur.TrailingAnchor.ConstraintEqualTo(TrailingAnchor),
+                    blur.TopAnchor.ConstraintEqualTo(TopAnchor),
+                    blur.BottomAnchor.ConstraintEqualTo(BottomAnchor),
+                });
+            }
+
+            if (elevated && !glass)
+            {
+                // 极轻投影：分层靠"抬起来"，不靠把底色染灰。玻璃那层自带材质，叠投影会显脏。
                 Layer.ShadowOpacity = 0.06f;
                 Layer.ShadowRadius = 3;
                 Layer.ShadowOffset = new CGSize(0, -1);
@@ -1688,6 +1741,8 @@ public sealed class DetailView : NSView
         /// <summary>标准内容表面卡：调色板的卡片底 + 发丝描边 + 极轻投影。</summary>
         public static CardView Surface(nfloat cornerRadius)
         {
+            // 设计稿的基调是「磨砂背景 + 白内容卡」：卡片用不透明白，配发丝描边与极轻投影，
+            // 层次靠卡片"浮起来"，而不是全屏同一种材质。
             CardView card = null!;
             card = new CardView(() => Palette.CardSurface(card), () => Palette.Hairline(card),
                 cornerRadius, elevated: true);
@@ -1721,7 +1776,47 @@ public sealed class DetailView : NSView
     // 深色下比窗口底稍亮），配细描边 + 极轻投影。
     // 之前是「灰底上再叠一层灰」，两者明度太近，整块看着发闷、像没渲染完；
     // 这也是 macOS 系统设置 / Finder 的分组做法，不是刺眼的"白卡压灰底"。
-    private static CardView Card() => CardView.Surface(9);
+    private static CardView Card() => CardView.Surface(12);
+
+    /// <summary>行尾的「…」更多按钮：点开与右键同一套菜单（设计稿里每张卡 / 每行都有）。
+    /// 用 <c>PopUpMenuPositioningItem</c> 定位，不需要鼠标事件。</summary>
+    private static NSButton MoreButton(Func<NSMenu?> menuFactory)
+    {
+        var b = NSButton.CreateButton(string.Empty, () => { });
+        b.Bordered = false;
+        b.Image = NSImage.GetSystemSymbol("ellipsis", null);
+        b.ContentTintColor = NSColor.TertiaryLabel;
+        b.SymbolConfiguration = NSImageSymbolConfiguration.Create(13, NSFontWeight.Regular);
+        b.TranslatesAutoresizingMaskIntoConstraints = false;
+        b.Activated += (_, _) =>
+        {
+            if (menuFactory() is { } menu)
+            {
+                NSMenu.PopUpContextMenu(menu, NSApplication.SharedApplication.CurrentEvent, b);
+            }
+        };
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            b.WidthAnchor.ConstraintEqualTo(24),
+            b.HeightAnchor.ConstraintEqualTo(24),
+        });
+        return b;
+    }
+
+    /// <summary>把一段内容放进带内边距的毛玻璃卡片（首页问候区这类「裸铺」的区块用）。</summary>
+    private static NSView CardWithContent(NSView content, nfloat padX, nfloat padY)
+    {
+        var card = Card();
+        card.AddSubview(content);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            content.LeadingAnchor.ConstraintEqualTo(card.LeadingAnchor, padX),
+            content.TopAnchor.ConstraintEqualTo(card.TopAnchor, padY),
+            content.TrailingAnchor.ConstraintLessThanOrEqualTo(card.TrailingAnchor, -padX),
+            content.BottomAnchor.ConstraintEqualTo(card.BottomAnchor, -padY),
+        });
+        return card;
+    }
 
     private static CardView Hairline()
     {

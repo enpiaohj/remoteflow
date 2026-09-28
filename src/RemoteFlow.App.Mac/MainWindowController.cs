@@ -76,6 +76,29 @@ public sealed class MainWindowController : NSWindowController
         BuildSplit();
         BuildToolbar();
 
+        // 整个窗口底铺一层毛玻璃（材质与各个「框」一致）：窗口自身设为透明，
+        // 让最底下这层磨砂去透桌面 —— 三栏里凡是没被不透明内容盖住的地方都带磨砂质感。
+        Window.IsOpaque = false;
+        Window.BackgroundColor = NSColor.Clear;
+        if (Window.ContentView is { } host)
+        {
+            var glass = new NSVisualEffectView
+            {
+                Material = NSVisualEffectMaterial.Sidebar,
+                BlendingMode = NSVisualEffectBlendingMode.BehindWindow,
+                State = NSVisualEffectState.FollowsWindowActiveState,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
+            host.AddSubview(glass, NSWindowOrderingMode.Below, null);
+            NSLayoutConstraint.ActivateConstraints(new[]
+            {
+                glass.LeadingAnchor.ConstraintEqualTo(host.LeadingAnchor),
+                glass.TrailingAnchor.ConstraintEqualTo(host.TrailingAnchor),
+                glass.TopAnchor.ConstraintEqualTo(host.TopAnchor),
+                glass.BottomAnchor.ConstraintEqualTo(host.BottomAnchor),
+            });
+        }
+
         // 初始尺寸放在 ContentViewController 设好**之后** —— 见 ApplyInitialSizeAndCenter。
         ApplyInitialSizeAndCenter();
 

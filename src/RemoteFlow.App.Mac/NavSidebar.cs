@@ -50,13 +50,52 @@ public sealed class NavSidebar : NSViewController
             State = NSVisualEffectState.FollowsWindowActiveState,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
+        // 侧栏顶部的产品标识：强调色圆角块 + 白色图标 + 产品名（对齐设计稿）。
+        var brandTile = new NSView { TranslatesAutoresizingMaskIntoConstraints = false, WantsLayer = true };
+        brandTile.Layer!.CornerRadius = 6;
+        Palette.With(brandTile, () => brandTile.Layer.BackgroundColor = NSColor.ControlAccent.CGColor);
+        var brandGlyph = new NSImageView
+        {
+            Image = NSImage.GetSystemSymbol("display", null),
+            ContentTintColor = NSColor.White,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+            SymbolConfiguration = NSImageSymbolConfiguration.Create(12, NSFontWeight.Medium),
+        };
+        brandTile.AddSubview(brandGlyph);
+
+        var brandLabel = new NSTextField
+        {
+            StringValue = "RemoteFlow",
+            Bordered = false,
+            Editable = false,
+            Selectable = false,
+            DrawsBackground = false,
+            Font = NSFont.SystemFontOfSize(15, NSFontWeight.Semibold),
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+
+        // 不用 NSStackView 拼这一行：普通 NSView 没有固有尺寸，stack 会把它压成 0 → 图文重叠。
+        fx.AddSubview(brandTile);
+        fx.AddSubview(brandLabel);
+
         scroll.TranslatesAutoresizingMaskIntoConstraints = false;
         fx.AddSubview(scroll);
         NSLayoutConstraint.ActivateConstraints(new[]
         {
+            // 顶部留出标题栏的高度（窗口是 FullSizeContentView，内容会延伸到红黄绿按钮那一行）。
+            brandTile.LeadingAnchor.ConstraintEqualTo(fx.LeadingAnchor, 16),
+            brandTile.TopAnchor.ConstraintEqualTo(fx.SafeAreaLayoutGuide.TopAnchor, 10),
+            brandTile.WidthAnchor.ConstraintEqualTo(24),
+            brandTile.HeightAnchor.ConstraintEqualTo(24),
+            brandGlyph.CenterXAnchor.ConstraintEqualTo(brandTile.CenterXAnchor),
+            brandGlyph.CenterYAnchor.ConstraintEqualTo(brandTile.CenterYAnchor),
+
+            brandLabel.LeadingAnchor.ConstraintEqualTo(brandTile.TrailingAnchor, 8),
+            brandLabel.CenterYAnchor.ConstraintEqualTo(brandTile.CenterYAnchor),
+
             scroll.LeadingAnchor.ConstraintEqualTo(fx.LeadingAnchor),
             scroll.TrailingAnchor.ConstraintEqualTo(fx.TrailingAnchor),
-            scroll.TopAnchor.ConstraintEqualTo(fx.TopAnchor, 6),
+            scroll.TopAnchor.ConstraintEqualTo(brandTile.BottomAnchor, 14),
             scroll.BottomAnchor.ConstraintEqualTo(fx.BottomAnchor),
         });
 

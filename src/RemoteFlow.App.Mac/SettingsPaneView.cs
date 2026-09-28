@@ -576,7 +576,7 @@ public sealed class SettingsPaneView : NSView
         return panel;
     }
 
-    /// <summary>比 SoftBox 更内敛的说明底纹：淡填充、无描边、无投影。</summary>
+    /// <summary>说明面板：与其它框同一层毛玻璃底（无描边、无投影）。</summary>
     private sealed class InfoBox : NSView
     {
         public InfoBox()
@@ -584,27 +584,38 @@ public sealed class SettingsPaneView : NSView
             WantsLayer = true;
             TranslatesAutoresizingMaskIntoConstraints = false;
             Layer!.CornerRadius = 9;
-            Refresh();
-        }
-
-        public override void ViewDidChangeEffectiveAppearance()
-        {
-            base.ViewDidChangeEffectiveAppearance();
-            Refresh();
-        }
-
-        private void Refresh()
-        {
-            var prev = NSAppearance.CurrentAppearance;
-            NSAppearance.CurrentAppearance = EffectiveAppearance;
-            Layer!.BackgroundColor = Palette.InsetFill(this).CGColor;
-            NSAppearance.CurrentAppearance = prev;
+            AddGlassBackground(this, 9);
         }
     }
 
+    /// <summary>给视图铺一层与**左侧栏**同材质的毛玻璃底（按同样的圆角裁切）。
+    /// 全应用的「框」都用它 —— 不做填充色，让材质自己透出后面的页面底衬。</summary>
+    private static NSVisualEffectView AddGlassBackground(NSView host, nfloat cornerRadius)
+    {
+        var blur = new NSVisualEffectView
+        {
+            Material = NSVisualEffectMaterial.Sidebar,
+            BlendingMode = NSVisualEffectBlendingMode.WithinWindow,
+            State = NSVisualEffectState.FollowsWindowActiveState,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+        blur.WantsLayer = true;
+        blur.Layer!.CornerRadius = cornerRadius;
+        blur.Layer.MasksToBounds = true;
+        host.AddSubview(blur, NSWindowOrderingMode.Below, null);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            blur.LeadingAnchor.ConstraintEqualTo(host.LeadingAnchor),
+            blur.TrailingAnchor.ConstraintEqualTo(host.TrailingAnchor),
+            blur.TopAnchor.ConstraintEqualTo(host.TopAnchor),
+            blur.BottomAnchor.ConstraintEqualTo(host.BottomAnchor),
+        });
+        return blur;
+    }
+
     /// <summary>
-    /// 抬起的内容表面：系统内容底色 + 细描边 + 极轻投影，跟随明暗切换。
-    /// 分层靠抬升而非染色 —— 灰底上再叠灰卡会发闷。
+    /// 内容表面：毛玻璃底（材质同左侧栏）+ 细描边。不投影 —— 磨砂层自带层次，
+    /// 再叠投影会显脏。
     /// </summary>
     private sealed class SoftBox : NSView
     {
@@ -614,9 +625,7 @@ public sealed class SettingsPaneView : NSView
             TranslatesAutoresizingMaskIntoConstraints = false;
             Layer!.CornerRadius = 9;
             Layer.BorderWidth = 1;
-            Layer.ShadowOpacity = 0.06f;
-            Layer.ShadowRadius = 3;
-            Layer.ShadowOffset = new CoreGraphics.CGSize(0, -1);
+            AddGlassBackground(this, 9);
             Refresh();
         }
 
@@ -630,9 +639,7 @@ public sealed class SettingsPaneView : NSView
         {
             var prev = NSAppearance.CurrentAppearance;
             NSAppearance.CurrentAppearance = EffectiveAppearance;
-            Layer!.BackgroundColor = Palette.CardSurface(this).CGColor;
-            Layer.BorderColor = Palette.Hairline(this).CGColor;
-            Layer.ShadowColor = NSColor.Black.CGColor;
+            Layer!.BorderColor = Palette.Hairline(this).CGColor;   // 底色交给毛玻璃层
             NSAppearance.CurrentAppearance = prev;
         }
     }
@@ -645,11 +652,13 @@ public sealed class SettingsPaneView : NSView
     private sealed class PlainBox : NSView
     {
         private bool _hairline;
+        private readonly NSVisualEffectView? _blur;
 
         public PlainBox()
         {
             WantsLayer = true;
             TranslatesAutoresizingMaskIntoConstraints = false;
+            _blur = AddGlassBackground(this, 10);
             Refresh();
         }
 
@@ -669,6 +678,11 @@ public sealed class SettingsPaneView : NSView
         {
             var prev = NSAppearance.CurrentAppearance;
             NSAppearance.CurrentAppearance = EffectiveAppearance;
+            if (_blur is not null)
+            {
+                _blur.Hidden = _hairline;   // 退化成发丝线时不需要磨砂底
+            }
+
             if (_hairline)
             {
                 Layer!.CornerRadius = 0;
@@ -680,7 +694,7 @@ public sealed class SettingsPaneView : NSView
                 Layer!.CornerRadius = 10;
                 Layer.BorderWidth = 1;
                 Layer.BorderColor = Palette.Hairline(this).CGColor;
-                Layer.BackgroundColor = Palette.CardSurface(this).CGColor;
+                Layer.BackgroundColor = null;   // 底色交给毛玻璃层
             }
 
             NSAppearance.CurrentAppearance = prev;
