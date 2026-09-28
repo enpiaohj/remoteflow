@@ -195,6 +195,13 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         SelectedGroupNode = null;
         _syncingSmartView = false;
 
+        // 上面清空 SelectedGroupNode 时 _syncingSmartView 仍是 true，OnSelectedGroupNodeChanged
+        // 的守卫会原样跳过整个方法体（含 HasGroupFilter / ViewTitle 的变更通知）——不补发，
+        // UI 上「分组浏览」提示条会在切到智能视图后残留分组名（Windows「退出分组」胶囊、
+        // macOS 资源导航同款胶囊都靠这两个属性隐藏)。
+        OnPropertyChanged(nameof(HasGroupFilter));
+        OnPropertyChanged(nameof(ViewTitle));
+
         if (Filter != value.FilterValue)
         {
             Filter = value.FilterValue;
@@ -1484,6 +1491,10 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             item.MarkProbing();
         }
 
+        // WPF 会直接观察每个行 VM；AppKit 表格则通过本聚合通知触发状态列重画。
+        // 在首个结果返回前先通知一次，确保用户能立即看到「探测中」，而不是沿用上批结果。
+        RefreshPresenceCounts();
+
         var gate = new SemaphoreSlim(8);
         var tasks = snapshot.Select(async item =>
         {
@@ -1493,8 +1504,12 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                 await gate.WaitAsync(ct);
                 acquired = true;
 
-                var state = await _probe.ProbeAsync(
-                    item.Host, item.Profile.Port, PresenceProbeService.DefaultTimeout, ct);
+                // 再包一层硬超时：ProbeAsync 内部虽然也有超时，但 DNS 解析阶段未必吃得下
+                // 取消令牌（系统解析器可能一直阻塞到它自己的超时），不兜底的话这一项会
+                // 长时间停在「探测中」不动（真实反馈：超时的主机一直显示探测中）。
+                var state = await _probe
+                    .ProbeAsync(item.Host, item.Profile.Port, PresenceProbeService.DefaultTimeout, ct)
+                    .WaitAsync(PresenceProbeService.DefaultTimeout + TimeSpan.FromSeconds(1), ct);
 
                 // 结果 marshal 回 UI 线程；批次已取消时丢弃，保留原状态。
                 _ui.Post(() =>
@@ -1507,13 +1522,28 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                     RefreshPresenceCounts();
                 });
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                // 批次取消 / 重跑：静默退出。
+                // 整批被取消（换筛选 / 重跑）：保留原状态，交给新一批处理。
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "在线探测失败：{Host}:{Port}", item.Host, item.Profile.Port);
+                // 走到这里的都不是「整批取消」——含硬超时与各类网络异常。
+                // 必须把状态从「探测中」落定成离线，否则这一行会永远卡在探测中。
+                if (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "在线探测失败：{Host}:{Port}", item.Host, item.Profile.Port);
+                }
+
+                _ui.Post(() =>
+                {
+                    if (ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    item.SetProbeResult(false);
+                    RefreshPresenceCounts();
+                });
             }
             finally
             {
@@ -1531,6 +1561,33 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         catch
         {
             // 单项异常已在内部消化，聚合不会抛；这里兜底不打断调用方。
+        }
+
+        // 收尾兜底：这一批跑完后，凡是还停在「探测中」的一律落定为离线。
+        // 上面每条路径都应该自己落定状态了，这里只是保证「探测中」不会成为终态。
+        if (!ct.IsCancellationRequested)
+        {
+            _ui.Post(() =>
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                var stuck = snapshot.Where(i => i.Presence == PresenceState.Probing).ToList();
+                if (stuck.Count == 0)
+                {
+                    return;
+                }
+
+                foreach (var item in stuck)
+                {
+                    item.SetProbeResult(false);
+                }
+
+                _logger.LogWarning("在线探测收尾：{Count} 项未返回结果，已落定为离线", stuck.Count);
+                RefreshPresenceCounts();
+            });
         }
     }
 

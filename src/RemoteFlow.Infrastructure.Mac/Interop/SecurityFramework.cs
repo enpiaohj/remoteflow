@@ -50,15 +50,23 @@ internal static partial class SecurityFramework
         => Marshal.ReadIntPtr(NativeLibrary.GetExport(LibraryHandle, name));
 
     /// <summary>
-    /// 创建「所有应用可访问、不弹授权框」的 SecAccessRef（<c>trustedlist = NULL</c>）。
+    /// 创建「仅本应用可免确认访问」的 SecAccessRef。
     /// <para>
-    /// 用途：ad-hoc 签名的开发构建每次 hash 变化会让默认「仅创建方」ACL 失效，
-    /// 触发钥匙串授权框。桌面单用户应用里「钥匙串本身已解锁」即是安全边界，
-    /// 因此新写入的条目放开 app 限制，避免每次构建都要重新授权。
-    /// 失败（如权限不足）返回 <c>nint.Zero</c>，调用方回落默认 ACL。
+    /// <c>SecAccessCreate(descriptor, trustedlist: NULL, …)</c> 的语义是
+    /// <b>只把创建该条目的应用加入信任列表</b>，而不是放开给所有应用——本方法早先叫
+    /// <c>CreateOpenAccess</c> 并在注释里写成「所有应用可访问」，与 API 实际行为相反，
+    /// 已按 Apple 文档更正（放开给所有应用需要 <c>SecACLSetContents</c> 把
+    /// applicationList 置 NULL，本项目刻意不这么做：那等于任何本机程序都能静默读出远程主机密码）。
     /// </para>
+    /// <para>
+    /// 该 ACL 比对的是应用的 designated requirement。ad-hoc 签名的 DR 含 cdhash，
+    /// 每次重新编译都会变，旧授权随即作废、逐条弹系统密码框；配上固定签名证书后
+    /// DR 只含 bundle id + 证书主体，跨构建稳定，用户批准一次即长期有效
+    /// （见 <c>RemoteFlow.App.Mac.csproj</c> 的 CodesignKey 段）。
+    /// </para>
+    /// <para>失败（如老 API 不可用）返回 <c>nint.Zero</c>，调用方回落系统默认 ACL。</para>
     /// </summary>
-    internal static nint CreateOpenAccess(string label)
+    internal static nint CreateAppOnlyAccess(string label)
     {
         try
         {

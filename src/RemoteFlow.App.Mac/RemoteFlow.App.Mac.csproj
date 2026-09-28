@@ -36,6 +36,24 @@
   </PropertyGroup>
 
   <!--
+    代码签名身份。默认留空 = ad-hoc 签名，但**开发机上强烈建议配一个固定证书**：
+
+    登录钥匙串条目的 ACL 记住的是「哪个签名身份被信任」。ad-hoc 没有稳定标识，每次重新
+    编译二进制哈希都变，系统即判定为另一个程序，先前的「始终允许」全部作废——表现为每次
+    改完代码重跑，所有凭据条目逐条弹系统密码框（真实反馈：一次开机被问十来遍）。
+    固定证书签名后身份跨构建不变，批准一次长期有效，且安全模型不降级（仍只有本应用可读）。
+
+    配置方式（二选一，都不入库）：
+      · 本机开发：src/RemoteFlow.App.Mac/RemoteFlow.App.Mac.csproj.user 里设 CodesignKey
+      · CI / 脚本：设环境变量 RF_CODESIGN_KEY
+    可用身份：security find-identity -v -p codesigning
+    正式发布 DMG 应改用 Developer ID Application 证书并公证（notarize）。
+  -->
+  <PropertyGroup Condition="'$(CodesignKey)' == '' And '$(RF_CODESIGN_KEY)' != ''">
+    <CodesignKey>$(RF_CODESIGN_KEY)</CodesignKey>
+  </PropertyGroup>
+
+  <!--
     Release 专属绕法：ILLink「Setup」+ 静态 registrar 需 macOS 26.5 SDK 头文件（MM0179）。
     关裁剪 + 动态 registrar（运行期注册，绕过编译期头文件依赖）。
     正式发布升级 Xcode 后删除本段，恢复默认（静态 registrar + 裁剪）进一步瘦身 / 提速（§8.F）。
@@ -73,9 +91,11 @@
   <ItemGroup>
     <!-- App 图标：iconset → AppIcon.icns，经 Info.plist 的 CFBundleIconFile 引用。 -->
     <BundleResource Include="Resources\AppIcon.icns" />
-    <!-- 彩色身份图标：scripts/build-identity-icons-mac.py 从 Windows 版 IdentityIcons.xaml 转换生成，
-         经 IdentityIconCatalog 按 "Id.XXX" 键 + 子目录名取用；svg/ 是转换后的矢量源，不必打包。 -->
+    <!-- 彩色矢量图标：scripts/build-vector-icons-mac.py 从 Windows 版 IdentityIcons.xaml /
+         DeviceIcons.xaml 转换生成，分别经 IdentityIconCatalog / DeviceIconCatalog 按键取用；
+         svg/ 是转换后的矢量源，不必打包。 -->
     <BundleResource Include="Resources\IdentityIcons\*.png" LogicalName="IdentityIcons\%(FileName)%(Extension)" />
+    <BundleResource Include="Resources\DeviceIcons\*.png" LogicalName="DeviceIcons\%(FileName)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

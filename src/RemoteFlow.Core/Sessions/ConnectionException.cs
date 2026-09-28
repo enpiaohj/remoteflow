@@ -26,6 +26,8 @@ public sealed class ConnectionException(
         ConnectionErrorCode.Timeout => "连接超时，目标主机未在预期时间内响应。",
         ConnectionErrorCode.AuthenticationFailed => "身份验证失败，请检查用户名、密码或私钥是否正确。",
         ConnectionErrorCode.CredentialMissing => "连接引用的凭据不存在或已被删除，请重新选择凭据。",
+        ConnectionErrorCode.CredentialSecretMissing =>
+            "该凭据的密码或私钥已不在本机凭据保险库中（可能被手动删除），请在「凭据」页重新填写后再连接。",
         ConnectionErrorCode.HostKeyMismatch => "主机密钥与已记录的指纹不一致，可能存在中间人攻击，连接已中止。",
         ConnectionErrorCode.HostKeyRejected => "已拒绝该主机密钥，连接未建立。",
         ConnectionErrorCode.ProtocolNegotiationFailed => "协议协商失败，目标主机可能不支持当前连接方式。",

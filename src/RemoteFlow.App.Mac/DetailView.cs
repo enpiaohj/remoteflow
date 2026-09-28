@@ -113,7 +113,12 @@ public sealed class DetailView : NSView
     }
 
     public void ShowConnecting(string name)
-        => Swap(Centered(Spinner(), $"正在连接 {name}…"));
+        => Swap(MakeConnectingPlaceholder(name));
+
+    /// <summary>独立的连接中画面。宿主把它作为会话舞台内容展示时，
+    /// 不会被误判成普通详情页而保留资源栏与连接列表。</summary>
+    public NSView MakeConnectingPlaceholder(string name)
+        => Centered(Spinner(), $"正在连接 {name}…");
 
     // 会话视图的生命周期与多 Tab 由 MainWindowController 管理，这里只负责构造。
     public SshTerminalView MakeSshTerminal(SshSession session) => new(session);
@@ -219,7 +224,7 @@ public sealed class DetailView : NSView
         };
 
         // ── 头部：图标 + 名称 + 收藏；状态点；连接 / 编辑 ──
-        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.IsConnecting);
+        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.IsConnecting, c.DeviceIconKey);
         var name = Big(c.Name, 22);
         name.LineBreakMode = NSLineBreakMode.TruncatingTail;
 
@@ -260,6 +265,30 @@ public sealed class DetailView : NSView
         edit.Image = NSImage.GetSystemSymbol("pencil", null);
         edit.ToolTip = "编辑连接";
 
+        // Ping：对齐 Windows 详情页的同名按钮，跑的是已有的「测试连接」诊断
+        //（DNS → Ping → TCP 三步，见 ConnectionTestWindow）。
+        var ping = NSButton.CreateButton(string.Empty, () => { vm.TestConnectionCommand.Execute(c); });
+        ping.BezelStyle = NSBezelStyle.Rounded;
+        ping.ControlSize = NSControlSize.Large;
+        ping.Image = NSImage.GetSystemSymbol("wave.3.right", null)
+                     ?? NSImage.GetSystemSymbol("antenna.radiowaves.left.and.right", null);
+        ping.ToolTip = "测试连通性（DNS / Ping / 端口）";
+
+        var more = NSButton.CreateButton(string.Empty, () => { });
+        more.BezelStyle = NSBezelStyle.Rounded;
+        more.ControlSize = NSControlSize.Large;
+        more.Image = NSImage.GetSystemSymbol("ellipsis", null);
+        more.ToolTip = "更多操作";
+        more.Activated += (_, _) =>
+        {
+            var menu = new NSMenu();
+            menu.AddItem(MenuItem("复制连接", () => vm.DuplicateCommand.Execute(c)));
+            menu.AddItem(MenuItem(c.IsFavorite ? "取消收藏" : "收藏", () => vm.ToggleFavoriteCommand.Execute(c)));
+            menu.AddItem(NSMenuItem.SeparatorItem);
+            menu.AddItem(MenuItem("删除…", () => vm.DeleteCommand.Execute(c)));
+            menu.PopUpMenu(null, new CoreGraphics.CGPoint(0, more.Bounds.Height + 2), more);
+        };
+
         var actions = new NSStackView
         {
             Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
@@ -270,9 +299,13 @@ public sealed class DetailView : NSView
         var actSpacer = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
         actions.AddArrangedSubview(connect);
         actions.AddArrangedSubview(edit);
+        actions.AddArrangedSubview(ping);
+        actions.AddArrangedSubview(more);
         actions.AddArrangedSubview(actSpacer);
-        connect.WidthAnchor.ConstraintEqualTo(200).Active = true;
+        connect.WidthAnchor.ConstraintEqualTo(160).Active = true;
         edit.WidthAnchor.ConstraintEqualTo(44).Active = true;
+        ping.WidthAnchor.ConstraintEqualTo(44).Active = true;
+        more.WidthAnchor.ConstraintEqualTo(44).Active = true;
         actSpacer.SetContentHuggingPriorityForOrientation(1, NSLayoutConstraintOrientation.Horizontal);
         AddFill(col, actions);
 
@@ -398,28 +431,55 @@ public sealed class DetailView : NSView
     /// 右下角挂一枚在线状态徽标（绿=已连接、橙=会话活动中），与列表行保持一致。
     /// </summary>
     private static NSView IconTile(ProtocolType p, bool connected = false, bool active = false)
-        => IconTile(p, connected, active, 40);
+        => IconTile(p, connected, active, 40, null);
 
     private static NSView IconTile(ProtocolType p, bool connected, bool active, nfloat size)
-    {
-        var tint = ProtocolStyle.Tint(p);
-        var tile = new CardView(() => tint.ColorWithAlphaComponent(0.16f), cornerRadius: size * 9f / 40f);
-        tile.WidthAnchor.ConstraintEqualTo(size).Active = true;
-        tile.HeightAnchor.ConstraintEqualTo(size).Active = true;
+        => IconTile(p, connected, active, size, null);
 
-        var glyph = new NSImageView
+    private static NSView IconTile(ProtocolType p, bool connected, bool active, string? deviceIconKey)
+        => IconTile(p, connected, active, 40, deviceIconKey);
+
+    /// <summary>设备类型图标优先（<paramref name="deviceIconKey"/> 命中 <see cref="DeviceIconCatalog"/>
+    /// 时），否则回落协议色块 + SF Symbol。设备图标本身已经是带渐变 / 阴影的完整画面，
+    /// 不再叠协议色底——两层背景撞在一起只会显脏。</summary>
+    private static NSView IconTile(ProtocolType p, bool connected, bool active, nfloat size, string? deviceIconKey)
+    {
+        var deviceIcon = deviceIconKey is not null ? DeviceIconCatalog.Get(deviceIconKey) : null;
+        NSView tile;
+        if (deviceIcon is not null)
         {
-            Image = ProtocolStyle.Symbol(p),
-            ContentTintColor = tint,
-            TranslatesAutoresizingMaskIntoConstraints = false,
-            SymbolConfiguration = NSImageSymbolConfiguration.Create(size * 17f / 40f, NSFontWeight.Medium),
-        };
-        tile.AddSubview(glyph);
-        NSLayoutConstraint.ActivateConstraints(new[]
+            var img = new NSImageView
+            {
+                Image = deviceIcon,
+                ImageScaling = NSImageScale.ProportionallyUpOrDown,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
+            img.WidthAnchor.ConstraintEqualTo(size).Active = true;
+            img.HeightAnchor.ConstraintEqualTo(size).Active = true;
+            tile = img;
+        }
+        else
         {
-            glyph.CenterXAnchor.ConstraintEqualTo(tile.CenterXAnchor),
-            glyph.CenterYAnchor.ConstraintEqualTo(tile.CenterYAnchor),
-        });
+            var tint = ProtocolStyle.Tint(p);
+            var card = new CardView(() => tint.ColorWithAlphaComponent(0.16f), cornerRadius: size * 9f / 40f);
+            card.WidthAnchor.ConstraintEqualTo(size).Active = true;
+            card.HeightAnchor.ConstraintEqualTo(size).Active = true;
+
+            var glyph = new NSImageView
+            {
+                Image = ProtocolStyle.Symbol(p),
+                ContentTintColor = tint,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+                SymbolConfiguration = NSImageSymbolConfiguration.Create(size * 17f / 40f, NSFontWeight.Medium),
+            };
+            card.AddSubview(glyph);
+            NSLayoutConstraint.ActivateConstraints(new[]
+            {
+                glyph.CenterXAnchor.ConstraintEqualTo(card.CenterXAnchor),
+                glyph.CenterYAnchor.ConstraintEqualTo(card.CenterYAnchor),
+            });
+            tile = card;
+        }
 
         if (connected || active)
         {
@@ -909,7 +969,7 @@ public sealed class DetailView : NSView
 
         var tint = ProtocolStyle.Tint(c.Profile.Protocol);
         var bar = new CardView(() => tint, cornerRadius: 1.5f);
-        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.IsConnecting, size: 56);
+        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.IsConnecting, 56, c.DeviceIconKey);
         var name = Plain(c.Name, 14);
         name.Font = NSFont.SystemFontOfSize(14, NSFontWeight.Semibold);
         name.LineBreakMode = NSLineBreakMode.TruncatingTail;
@@ -1131,7 +1191,7 @@ public sealed class DetailView : NSView
 
     private NSView HomeFavRow(ConnectionItemViewModel c)
     {
-        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.IsConnecting);
+        var tile = IconTile(c.Profile.Protocol, c.IsConnected, c.IsConnecting, c.DeviceIconKey);
         tile.WidthAnchor.ConstraintEqualTo(30).Active = true;
         tile.HeightAnchor.ConstraintEqualTo(30).Active = true;
 
@@ -1173,7 +1233,7 @@ public sealed class DetailView : NSView
 
     private static NSView HomeActivityRow(HistoryItemViewModel h)
     {
-        var tile = IconTile(h.Protocol);
+        var tile = IconTile(h.Protocol, false, false, h.DeviceIconKey);
         tile.WidthAnchor.ConstraintEqualTo(30).Active = true;
         tile.HeightAnchor.ConstraintEqualTo(30).Active = true;
 
@@ -1877,6 +1937,14 @@ public sealed class DetailView : NSView
         LineBreakMode = NSLineBreakMode.TruncatingTail,
         TranslatesAutoresizingMaskIntoConstraints = false,
     };
+
+    /// <summary>详情页「更多操作」弹出菜单用的菜单项。</summary>
+    private static NSMenuItem MenuItem(string title, Action action)
+    {
+        var item = new NSMenuItem(title);
+        item.Activated += (_, _) => action();
+        return item;
+    }
 
     private static NSView Gap(nfloat h)
     {

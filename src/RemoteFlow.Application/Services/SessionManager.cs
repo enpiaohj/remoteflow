@@ -186,6 +186,14 @@ public sealed class SessionManager : IAsyncDisposable
         {
             credential = await _credentials.ResolveAsync(credentialId, ct)
                 ?? throw ConnectionException.FromCode(ConnectionErrorCode.CredentialMissing);
+
+            // 凭据记录在、但密钥已从保险库丢失：直接中止并给出准确原因。
+            // 不拦的话会带着空密码去连，表象是「认证失败」，误导用户去查服务端。
+            if (credential.SecretMissing)
+            {
+                credential.Dispose();
+                throw ConnectionException.FromCode(ConnectionErrorCode.CredentialSecretMissing);
+            }
         }
 
         IRemoteSession session;

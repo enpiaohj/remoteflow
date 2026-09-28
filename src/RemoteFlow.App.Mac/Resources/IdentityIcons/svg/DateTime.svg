@@ -5,13 +5,13 @@
     <stop offset="0.52" stop-color="#1685E8" />
     <stop offset="1" stop-color="#2453D5" />
   </linearGradient>
-  <linearGradient id="Id-Paper" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#FFFFFF" />
-    <stop offset="1" stop-color="#E3E9F2" />
-  </linearGradient>
   <linearGradient id="Id-Red" x1="0" y1="0" x2="1" y2="1">
     <stop offset="0" stop-color="#FF728D" />
     <stop offset="1" stop-color="#D82F58" />
+  </linearGradient>
+  <linearGradient id="Id-Paper" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#FFFFFF" />
+    <stop offset="1" stop-color="#E3E9F2" />
   </linearGradient>
 </defs>
   <rect x="8" y="11" width="44" height="44" rx="7" ry="7" fill="#001845" fill-opacity="0.133" />

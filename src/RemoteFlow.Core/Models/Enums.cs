@@ -128,7 +128,18 @@ public enum ConnectionErrorCode
     ComponentUnavailable,
 
     /// <summary>未归类错误。</summary>
-    Unknown
+    Unknown,
+
+    /// <summary>
+    /// 凭据记录存在，但它声明的密码 / 私钥在本机凭据保险库（Keychain / DPAPI）里取不到——
+    /// 典型成因是用户手动删除了钥匙串条目。与 <see cref="CredentialMissing"/> 的区别：
+    /// 那个是凭据记录本身没了，这个是记录在、密钥没了。
+    /// </summary>
+    /// <remarks>
+    /// 追加在 <see cref="Unknown"/> 之后而不是插在中间：本枚举会以 int 形式写进连接历史表
+    /// （connection_history.error_code），插在中间会让已入库的历史记录含义整体错位。
+    /// </remarks>
+    CredentialSecretMissing
 }
 
 /// <summary>

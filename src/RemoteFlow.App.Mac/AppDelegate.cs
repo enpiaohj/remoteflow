@@ -146,7 +146,7 @@ public sealed class AppDelegate : NSApplicationDelegate
         };
         viewMenu.AddItem(_toggleSidebarMenuItem);
         viewMenu.AutoEnablesItems = false;
-        ToggleListMenuItem = new NSMenuItem("显示 / 隐藏连接列表", "l", (_, _) =>
+        ToggleListMenuItem = new NSMenuItem("显示 / 隐藏连接资源与列表", "l", (_, _) =>
             (NSApplication.SharedApplication.Delegate as AppDelegate)?._mainWindow?.ToggleListPane())
         {
             KeyEquivalentModifierMask = NSEventModifierMask.CommandKeyMask | NSEventModifierMask.AlternateKeyMask,
@@ -194,7 +194,7 @@ public sealed class AppDelegate : NSApplicationDelegate
         {
             // 首页 / 凭据页无列表列：禁用；否则按列表列是否折叠切换标题。
             list.Enabled = w.IsListApplicable;
-            list.Title = w.IsListVisible ? "隐藏连接列表" : "显示连接列表";
+            list.Title = w.IsListVisible ? "隐藏连接资源与列表" : "显示连接资源与列表";
         }
     }
 
@@ -280,6 +280,10 @@ public sealed class AppDelegate : NSApplicationDelegate
         services.AddSingleton<IConnectionProvider, RemoteFlow.Protocol.Rdp.Mac.RdpConnectionProvider>();
 
         services.AddSingleton<DefaultGroupResolver>();
+        // 在线探测：Windows 端一直有注册，macOS 端此前漏了——ConnectionsPageViewModel
+        // 对它是可选注入（PresenceProbeService?），缺了不会报错，表现是「探测」按钮点了
+        // 没反应、「在线」列永远显示「—」（真实事故）。
+        services.AddSingleton<RemoteFlow.Presentation.Services.PresenceProbeService>();
 
         // 平台服务（AppKit）
         services.AddSingleton<IUiDispatcher, AppKitUiDispatcher>();

@@ -136,13 +136,27 @@ public sealed class DpapiCredentialVault : ICredentialVault
             privateKey = await RetrieveSecretAsync(credential.KeyReference, ct);
         }
 
+        // 「记录里声明有、保险库里取不到」= 密文丢失。这里只如实标记，
+        // 是否要中止连接由调用方（SessionManager）决定。
+        var secretMissing =
+            (!string.IsNullOrEmpty(credential.SecretReference) && password is null)
+            || (!string.IsNullOrEmpty(credential.KeyReference) && privateKey is null);
+
+        if (secretMissing)
+        {
+            _logger.LogWarning(
+                "凭据 {CredentialId} 声明的密钥在保险库中不存在，连接将被中止并提示用户重新填写",
+                credential.Id);
+        }
+
         return new ResolvedCredential
         {
             Type = credential.Type,
             Username = credential.Username,
             Domain = credential.Domain,
             Password = password,
-            PrivateKey = privateKey
+            PrivateKey = privateKey,
+            SecretMissing = secretMissing
         };
     }
 

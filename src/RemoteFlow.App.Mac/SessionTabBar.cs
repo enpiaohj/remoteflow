@@ -5,8 +5,8 @@ using RemoteFlow.Core.Models;
 namespace RemoteFlow.App.Mac;
 
 /// <summary>
-/// 详情区顶部的会话 Tab 条：左侧可横向滚动的会话胶囊，右侧常驻动作区（全屏）。
-/// 对齐 Windows 版 SessionHostView 的常驻工具条。无会话时由宿主隐藏。
+/// 公共标题栏工具栏中的会话 Tab：左侧可横向滚动的会话胶囊，右侧常驻动作区（全屏）。
+/// 对齐 Windows 版 SessionHostView 的标题栏标签。无会话时由宿主移除对应 NSToolbarItem。
 /// </summary>
 public sealed class SessionTabBar : NSView
 {
@@ -15,11 +15,12 @@ public sealed class SessionTabBar : NSView
     /// <summary>条高（点）。会话建立前要据此预留高度，否则 RDP 桌面会比视图高出这一截。</summary>
     public const int BarHeightPoints = BarHeight;
 
+    // 对齐 Windows：标签按内容宽度依次排开（不是等分铺满），标签之间只留 2pt 间隙、没有分隔线。
     private readonly NSStackView _row = new()
     {
         Orientation = NSUserInterfaceLayoutOrientation.Horizontal,
-        Spacing = 0,
-        Distribution = NSStackViewDistribution.FillEqually,
+        Spacing = 2,
+        Distribution = NSStackViewDistribution.GravityAreas,
         Alignment = NSLayoutAttribute.CenterY,
         TranslatesAutoresizingMaskIntoConstraints = false,
     };
@@ -27,8 +28,8 @@ public sealed class SessionTabBar : NSView
     private readonly List<Tab> _tabs = new();
     private Guid _active;
 
-    /// <summary>单个标签的下限宽度（跟 Tab 内部约束的 110 对齐）——用来判断横向铺不铺得下。</summary>
-    private static readonly nfloat MinTabWidth = 110f;
+    /// <summary>单个标签的下限宽度（跟 Tab 内部约束的 <see cref="Tab.MinWidth"/> 对齐）——用来判断横向铺不铺得下。</summary>
+    private static readonly nfloat MinTabWidth = Tab.MinWidth;
     private readonly NSScrollView _scroll;
     private readonly NSButton _collapsedButton;
     private bool _collapsed;
@@ -126,8 +127,30 @@ public sealed class SessionTabBar : NSView
             sep.LeadingAnchor.ConstraintEqualTo(LeadingAnchor),
             sep.TrailingAnchor.ConstraintEqualTo(TrailingAnchor),
             sep.BottomAnchor.ConstraintEqualTo(BottomAnchor),
-            HeightAnchor.ConstraintEqualTo(BarHeight),
         });
+
+        _heightConstraint = HeightAnchor.ConstraintEqualTo(BarHeight);
+        _heightConstraint.Active = true;
+
+        // 自定义 NSToolbarItem 从 macOS 12 起应由 View 自身约束声明尺寸，不能再用已废弃的
+        // NSToolbarItem.MinSize/MaxSize。520pt 是首选宽度；窗口变窄时可压到 220，变宽时最多 720。
+        WidthAnchor.ConstraintGreaterThanOrEqualTo(220).Active = true;
+        WidthAnchor.ConstraintLessThanOrEqualTo(720).Active = true;
+        var preferredWidth = WidthAnchor.ConstraintEqualTo(520);
+        preferredWidth.Priority = (float)NSLayoutPriority.DefaultLow;
+        preferredWidth.Active = true;
+    }
+
+    private readonly NSLayoutConstraint _heightConstraint;
+
+    /// <summary>
+    /// 收起 / 展开整条。宿主移除工具栏项时同步压低高度，重新插入前再恢复，
+    /// 避免同一 View 在 NSToolbarItem 间复用时保留不可见但有尺寸的布局状态。
+    /// </summary>
+    public void SetBarHidden(bool hidden)
+    {
+        Hidden = hidden;
+        _heightConstraint.Constant = hidden ? 0 : BarHeight;
     }
 
     /// <summary>条上通用的 28×28 无边框图标按钮。</summary>
@@ -157,12 +180,15 @@ public sealed class SessionTabBar : NSView
         }
     }
 
+    /// <summary>
+    /// 条本身保持透明。它作为 NSToolbarItem 落在统一标题栏里，铺一层不透明的
+    /// WindowBackground 会在窗口材质为云母 / 亚克力时挖出一块死板的矩形，
+    /// 把整窗玻璃切断（见 <c>MainWindowController.ApplyGlassAppearance</c>）。
+    /// 唯一上色的是选中标签那张卡片，其余交给标题栏材质透出来。
+    /// </summary>
     private void RefreshChrome()
     {
-        var prev = NSAppearance.CurrentAppearance;
-        NSAppearance.CurrentAppearance = EffectiveAppearance;
-        Layer!.BackgroundColor = NSColor.WindowBackground.CGColor;
-        NSAppearance.CurrentAppearance = prev;
+        Layer!.BackgroundColor = NSColor.Clear.CGColor;
     }
 
     public void AddTab(Guid id, string name, ProtocolType protocol)
@@ -176,9 +202,12 @@ public sealed class SessionTabBar : NSView
         _tabs.Add(tab);
         _row.AddArrangedSubview(tab.View);
         Select(id);
-        SyncSeparators();
         UpdateCollapse();
     }
+
+    /// <summary>同步某个会话标签的连接状态（标题右侧那颗状态点）。</summary>
+    public void SetTabConnected(Guid id, bool connected)
+        => _tabs.FirstOrDefault(t => t.Id == id)?.SetConnected(connected);
 
     public void RemoveTab(Guid id)
     {
@@ -190,7 +219,6 @@ public sealed class SessionTabBar : NSView
 
         _tabs.Remove(tab);
         tab.View.RemoveFromSuperview();
-        SyncSeparators();
         UpdateCollapse();
 
         if (_active == id && _tabs.Count > 0)
@@ -260,7 +288,6 @@ public sealed class SessionTabBar : NSView
             t.SetActive(t.Id == id);
         }
 
-        SyncSeparators();
         if (_collapsed)
         {
             UpdateCollapse();
@@ -274,25 +301,6 @@ public sealed class SessionTabBar : NSView
         {
             t.SetActive(false);
         }
-
-        SyncSeparators();
-    }
-
-    /// <summary>
-    /// Safari 式竖分隔线：只画在「两侧都不是选中 / 悬停」的相邻标签之间，
-    /// 最后一个标签不画。这样选中的标签像一张浮起的卡片，两边自然断开。
-    /// </summary>
-    private void SyncSeparators()
-    {
-        for (var i = 0; i < _tabs.Count; i++)
-        {
-            var self = _tabs[i];
-            var next = i + 1 < _tabs.Count ? _tabs[i + 1] : null;
-            var show = next is not null
-                       && !self.IsActive && !self.IsHovering
-                       && !next.IsActive && !next.IsHovering;
-            self.SetSeparator(show);
-        }
     }
 
     private void Select(Guid id)
@@ -304,11 +312,18 @@ public sealed class SessionTabBar : NSView
     private void Close(Guid id) => TabClosed?.Invoke(this, id);
 
     /// <summary>
-    /// 单个会话标签（Safari 风格）：平底条上，选中项浮起成一张圆角卡片；
-    /// 左槽平时是协议色圆点，悬停换成关闭叉；标题居中截断；尾部一条细竖线做分隔。
+    /// 单个会话标签，一比一对齐 Windows 版标题栏标签：
+    /// 左起协议图标 → 标题（左对齐、尾部截断）→ 连接状态绿点 → 常驻关闭叉；
+    /// 选中项是一张贴着内容区的浅色圆角卡片，未选中全透明（悬停只做一层极淡高亮）。
+    /// 标签之间不画竖分隔线 —— Windows 版也没有，靠卡片本身区分当前会话。
     /// </summary>
     private sealed class Tab
     {
+        /// <summary>标签宽度下限 / 上限。Windows 版标签按标题长短自适应：
+        /// 短主机名明显窄于被截断的长 FQDN，这里保持同样的行为。</summary>
+        public static readonly nfloat MinWidth = 150f;
+        private static readonly nfloat MaxWidth = 250f;
+
         public Guid Id { get; }
         public string Title { get; private set; }
         public ProtocolType Protocol { get; }
@@ -320,8 +335,9 @@ public sealed class SessionTabBar : NSView
         private readonly NSTextField _label;
         private readonly HoverCard _card;
         private readonly NSButton _close;
+        private readonly NSImageView _icon;
         private readonly NSView _dot;
-        private readonly NSBox _sep;
+        private bool _connected = true;
 
         public Tab(Guid id, string name, ProtocolType protocol, SessionTabBar owner)
         {
@@ -329,8 +345,13 @@ public sealed class SessionTabBar : NSView
             Title = name;
             Protocol = protocol;
 
-            _dot = new NSView { WantsLayer = true, TranslatesAutoresizingMaskIntoConstraints = false };
-            _dot.Layer!.CornerRadius = 3.5f;
+            _icon = new NSImageView
+            {
+                Image = ProtocolStyle.Symbol(protocol),
+                ContentTintColor = ProtocolStyle.Tint(protocol),
+                SymbolConfiguration = NSImageSymbolConfiguration.Create(13, NSFontWeight.Regular),
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
 
             _label = new NSTextField
             {
@@ -339,7 +360,7 @@ public sealed class SessionTabBar : NSView
                 Editable = false,
                 Selectable = false,
                 DrawsBackground = false,
-                Alignment = NSTextAlignment.Center,
+                Alignment = NSTextAlignment.Left,
                 Font = NSFont.SystemFontOfSize(12),
                 TextColor = NSColor.SecondaryLabel,
                 LineBreakMode = NSLineBreakMode.TruncatingTail,
@@ -348,66 +369,61 @@ public sealed class SessionTabBar : NSView
             };
             _label.SetContentCompressionResistancePriority(1, NSLayoutConstraintOrientation.Horizontal);
 
+            // 连接状态绿点（Windows 版标题与关闭叉之间那颗）。
+            _dot = new NSView { WantsLayer = true, TranslatesAutoresizingMaskIntoConstraints = false };
+            _dot.Layer!.CornerRadius = 3f;
+
             _close = new NSButton
             {
                 Image = NSImage.GetSystemSymbol("xmark", null),
                 Bordered = false,
                 ToolTip = "关闭会话",
-                ContentTintColor = NSColor.SecondaryLabel,
+                ContentTintColor = NSColor.TertiaryLabel,
                 TranslatesAutoresizingMaskIntoConstraints = false,
                 SymbolConfiguration = NSImageSymbolConfiguration.Create(9, NSFontWeight.Semibold),
-                Hidden = true,
             };
             _close.Activated += (_, _) => owner.Close(id);
 
             _card = new HoverCard(() => owner.Select(id));
-            _card.HoverChanged = _ =>
-            {
-                Restyle();
-                owner.SyncSeparators();
-            };
+            _card.HoverChanged = _ => Restyle();
 
-            // 左槽 18pt：圆点与关闭叉同位，悬停时互换（Safari 的 favicon → 关闭）。
+            _card.AddSubview(_icon);
+            _card.AddSubview(_label);
             _card.AddSubview(_dot);
             _card.AddSubview(_close);
-            _card.AddSubview(_label);
-
-            _sep = new NSBox { BoxType = NSBoxType.NSBoxSeparator, TranslatesAutoresizingMaskIntoConstraints = false };
 
             var host = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
             host.AddSubview(_card);
-            host.AddSubview(_sep);
 
             NSLayoutConstraint.ActivateConstraints(new[]
             {
-                _dot.LeadingAnchor.ConstraintEqualTo(_card.LeadingAnchor, 10),
-                _dot.CenterYAnchor.ConstraintEqualTo(_card.CenterYAnchor),
-                _dot.WidthAnchor.ConstraintEqualTo(7),
-                _dot.HeightAnchor.ConstraintEqualTo(7),
+                _icon.LeadingAnchor.ConstraintEqualTo(_card.LeadingAnchor, 10),
+                _icon.CenterYAnchor.ConstraintEqualTo(_card.CenterYAnchor),
+                _icon.WidthAnchor.ConstraintEqualTo(16),
+                _icon.HeightAnchor.ConstraintEqualTo(16),
 
-                _close.CenterXAnchor.ConstraintEqualTo(_dot.CenterXAnchor),
+                _label.LeadingAnchor.ConstraintEqualTo(_icon.TrailingAnchor, 8),
+                _label.CenterYAnchor.ConstraintEqualTo(_card.CenterYAnchor),
+                _label.TrailingAnchor.ConstraintLessThanOrEqualTo(_dot.LeadingAnchor, -6),
+
+                _dot.TrailingAnchor.ConstraintEqualTo(_close.LeadingAnchor, -8),
+                _dot.CenterYAnchor.ConstraintEqualTo(_card.CenterYAnchor),
+                _dot.WidthAnchor.ConstraintEqualTo(6),
+                _dot.HeightAnchor.ConstraintEqualTo(6),
+
+                _close.TrailingAnchor.ConstraintEqualTo(_card.TrailingAnchor, -8),
                 _close.CenterYAnchor.ConstraintEqualTo(_card.CenterYAnchor),
                 _close.WidthAnchor.ConstraintEqualTo(16),
                 _close.HeightAnchor.ConstraintEqualTo(16),
 
-                _label.LeadingAnchor.ConstraintEqualTo(_dot.TrailingAnchor, 7),
-                _label.TrailingAnchor.ConstraintEqualTo(_card.TrailingAnchor, -10),
-                _label.CenterYAnchor.ConstraintEqualTo(_card.CenterYAnchor),
-
-                // 标签本体：条内留 4pt 上下边距，做出「浮起卡片」的空隙。
+                // 选中卡片上下各留 4pt，做出 Windows 里标签「嵌在标题栏中」的那层留白。
                 _card.LeadingAnchor.ConstraintEqualTo(host.LeadingAnchor),
                 _card.TrailingAnchor.ConstraintEqualTo(host.TrailingAnchor),
                 _card.TopAnchor.ConstraintEqualTo(host.TopAnchor, 4),
                 _card.BottomAnchor.ConstraintEqualTo(host.BottomAnchor, -4),
 
-                _sep.TrailingAnchor.ConstraintEqualTo(host.TrailingAnchor),
-                _sep.CenterYAnchor.ConstraintEqualTo(host.CenterYAnchor),
-                _sep.WidthAnchor.ConstraintEqualTo(1),
-                _sep.HeightAnchor.ConstraintEqualTo(15),
-
-                // 等宽由 FillEqually 负责，这里只兜住上下限：多标签时压缩、单标签不至于拉满整条。
-                host.WidthAnchor.ConstraintGreaterThanOrEqualTo(110),
-                host.WidthAnchor.ConstraintLessThanOrEqualTo(240),
+                host.WidthAnchor.ConstraintGreaterThanOrEqualTo(MinWidth),
+                host.WidthAnchor.ConstraintLessThanOrEqualTo(MaxWidth),
                 host.HeightAnchor.ConstraintEqualTo(BarHeight - 1),
             });
 
@@ -428,7 +444,17 @@ public sealed class SessionTabBar : NSView
             Restyle();
         }
 
-        public void SetSeparator(bool show) => _sep.Hidden = !show;
+        /// <summary>会话是否已连接：决定标题右侧那颗状态点是绿色（已连接）还是橙色（连接中 / 异常）。</summary>
+        public void SetConnected(bool connected)
+        {
+            if (_connected == connected)
+            {
+                return;
+            }
+
+            _connected = connected;
+            Restyle();
+        }
 
         public void RefreshChrome() => Restyle();
 
@@ -440,33 +466,30 @@ public sealed class SessionTabBar : NSView
             var layer = _card.Layer!;
             if (IsActive)
             {
-                // 选中：浮起的一张卡片 —— 比条底亮一档 + 极淡描边 + 轻投影。
+                // 选中：与内容区同色的一张圆角卡片（Windows 版就是这个观感），不加描边和投影。
                 layer.BackgroundColor = NSColor.ControlBackground.CGColor;
-                layer.BorderWidth = 1;
-                layer.BorderColor = NSColor.SecondaryLabel.ColorWithAlphaComponent(0.14f).CGColor;
-                layer.ShadowOpacity = 0.10f;
-                layer.ShadowRadius = 3;
-                layer.ShadowOffset = new CGSize(0, -1);
-                layer.ShadowColor = NSColor.Black.CGColor;
             }
             else
             {
                 layer.BackgroundColor = (_card.Hovering
-                    ? NSColor.SecondaryLabel.ColorWithAlphaComponent(0.09f)
+                    ? NSColor.SecondaryLabel.ColorWithAlphaComponent(0.10f)
                     : NSColor.Clear).CGColor;
-                layer.BorderWidth = 0;
-                layer.ShadowOpacity = 0;
             }
 
             _label.TextColor = IsActive ? NSColor.Label : NSColor.SecondaryLabel;
             _label.Font = NSFont.SystemFontOfSize(12, IsActive ? NSFontWeight.Medium : NSFontWeight.Regular);
 
             var tint = ProtocolStyle.Tint(Protocol);
-            _dot.Layer!.BackgroundColor = (IsActive ? tint : tint.ColorWithAlphaComponent(0.6f)).CGColor;
+            _icon.ContentTintColor = IsActive ? tint : tint.ColorWithAlphaComponent(0.75f);
 
-            // 悬停时左槽换成关闭叉（Safari 的 favicon → 关闭）。
-            _close.Hidden = !_card.Hovering;
-            _dot.Hidden = _card.Hovering;
+            var status = _connected ? NSColor.SystemGreen : NSColor.SystemOrange;
+            _dot.Layer!.BackgroundColor = status.CGColor;
+            _dot.ToolTip = _connected ? "已连接" : "连接中";
+
+            // 关闭叉常驻（对齐 Windows），只在悬停时加深，避免未选中标签太抢眼。
+            _close.ContentTintColor = _card.Hovering || IsActive
+                ? NSColor.SecondaryLabel
+                : NSColor.TertiaryLabel;
 
             NSAppearance.CurrentAppearance = prev;
         }

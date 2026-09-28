@@ -11,8 +11,9 @@ using RemoteFlow.Presentation.ViewModels;
 namespace RemoteFlow.App.Mac;
 
 /// <summary>
-/// 主窗口 —— 原生三栏（导航 / 列表 / 详情，对齐邮件 / 备忘录）。
-/// 列表绑共享 <see cref="ConnectionsPageViewModel"/>；设置走独立偏好窗口（⌘,）。
+/// 主窗口 —— 原生四栏（导航 / 连接资源 / 连接列表 / 详情，一比一对齐 Windows 版
+/// 「图标栏 + 资源分组栏 + 连接主机栏 + 详情栏」）。资源导航与列表各自订阅共享的
+/// <see cref="ConnectionsPageViewModel"/>；设置走独立偏好窗口（⌘,）。
 /// </summary>
 public sealed class MainWindowController : NSWindowController
 {
@@ -21,6 +22,7 @@ public sealed class MainWindowController : NSWindowController
     private readonly SessionManager _sessions;
 
     private readonly NavSidebar _nav;
+    private readonly ConnectionResourcePane _resourcePane;
     private readonly ConnectionListPane _listPane;
     private readonly DetailView _detail = new();
     private readonly SessionTabBar _tabBar = new();
@@ -40,13 +42,18 @@ public sealed class MainWindowController : NSWindowController
 
     private ViewMode _mode = ViewMode.Normal;
     private bool _navWasCollapsed;
+    private bool _resourceWasCollapsed;
     private bool _listWasCollapsed;
     private NSToolbarItem? _sessionsItem;
     private HotZone _pillHotZone = null!;
     private readonly NSView _stage = new() { TranslatesAutoresizingMaskIntoConstraints = false };
     private NSView _detailRoot = null!;
+
+    /// <summary>详情栏的默认宽度约束（见 BuildSplit 里的说明）。列表栏靠它腾出的剩余空间伸缩。</summary>
+    private NSLayoutConstraint _detailWidth = null!;
     private readonly NSSplitViewController _split = new();
     private readonly NSSearchField _search = new() { PlaceholderString = "搜索连接" };
+    private NSSplitViewItem? _resourceItem;
     private NSSplitViewItem? _listItem;
     private NSToolbarItem? _toggleListItem;
     /// <summary>当前页是否有可折叠的列表列（首页 / 凭据没有）。</summary>
@@ -68,10 +75,13 @@ public sealed class MainWindowController : NSWindowController
 
         _connectionsVm = services.GetRequiredService<ConnectionsPageViewModel>();
         _nav = new NavSidebar();
+        _resourcePane = new ConnectionResourcePane(_connectionsVm);
         _listPane = new ConnectionListPane(_connectionsVm, HydrateConnectionMetaAsync);
 
         Window.Title = "RemoteFlow";
-        Window.ContentMinSize = new CGSize(980, 560);
+        // 980 → 1130：导航栏收窄成纯图标（52）省下的宽度，全部让给「连接资源」（230）和
+        // 多列表格列表（480，7 列表头放不下时才需要横向滚动）；详情列收窄到 360。
+        Window.ContentMinSize = new CGSize(1130, 560);
         Window.TitleVisibility = NSWindowTitleVisibility.Hidden;
         Window.CollectionBehavior |= NSWindowCollectionBehavior.FullScreenPrimary;
         // 默认 false：不按按钮的纯移动不会分发给任何视图的 MouseMoved。RDP/VNC 会话靠
@@ -135,6 +145,7 @@ public sealed class MainWindowController : NSWindowController
             NSApplication.SharedApplication.BeginInvokeOnMainThread(() =>
             {
                 _listPane.RefreshRowStatus();
+                SyncStatusBar();
                 // 首页的「最近连接 / 收藏」卡片也要跟着亮灭 —— 它们是一次性构建的快照，
                 // 只能整页重建（首页很短，重建代价可以接受）。
                 if (_currentNav == NavSidebar.Item.Home)
@@ -142,6 +153,7 @@ public sealed class MainWindowController : NSWindowController
                     _detail.ShowHome(_services.GetRequiredService<HomePageViewModel>());
                 }
 
+                SyncTabStates();
                 SyncPill();
             });
 
@@ -283,42 +295,49 @@ public sealed class MainWindowController : NSWindowController
 
     private void BuildSplit()
     {
+        // 第一列：纯图标导航栏，一比一对齐 Windows 最左侧窄栏（无文字标签）。
+        // Minimum 与 Maximum 取同一个值把宽度彻底钉死：留区间（原来 52~60）等于给
+        // NSSplitViewController 在「只有导航+详情两栏」和「四栏全开」两种组合下各自
+        // 落在区间内不同值的余地，表现就是在首页/凭据/设置与连接工作台之间来回切时，
+        // 这一栏的宽度会跳（真实反馈）。
         var navItem = NSSplitViewItem.CreateSidebar(_nav);
-        navItem.MinimumThickness = 176;
-        navItem.MaximumThickness = 260;
+        navItem.MinimumThickness = 56;
+        navItem.MaximumThickness = 56;
         navItem.CanCollapse = true;
         navItem.HoldingPriority = 260; // 固定宽度
         _split.AddSplitViewItem(navItem);
 
+        // 第二列：连接资源导航（智能视图 + 分组）。Windows 定宽 216px，这里给到
+        // 230~320 留出余量——分组名 / 计数比 Windows 常见样本更长时不至于一直截断。
+        _resourceItem = NSSplitViewItem.FromViewController(_resourcePane);
+        _resourceItem.MinimumThickness = 230;
+        _resourceItem.MaximumThickness = 320;
+        _resourceItem.CanCollapse = true;
+        _resourceItem.HoldingPriority = 260; // 固定宽度
+        _split.AddSplitViewItem(_resourceItem);
+
         _listItem = NSSplitViewItem.FromViewController(_listPane);
-        // 300 而不是 240：nav / list 的 holding priority 都高于详情列，两列实际恒停在各自的
-        // MinimumThickness，240 放不下「名称 + 主机·协议 + 时间/次数 + 星标」四段 —— 收藏页 /
-        // 最近连接页的行会被截成「20 Nginx -Ubuntu...」「192.0.2.11 · RDP ...」「昨...」。
-        // 窗口最小宽 980 = nav 176 + list 300 + detail 420，仍放得下。
-        _listItem.MinimumThickness = 300;
-        _listItem.MaximumThickness = 460;
+        // 列表列是真正的多列表格（名称/主机/协议/标签/在线/最近连接/收藏），且对齐 Windows：
+        // 它是「跟着窗口宽度伸缩」的那一列（HoldingPriority 全场最低），详情列反而定宽——
+        // 窗口最小宽 1180 = nav 56 + resource 230 + list 480 + detail 380（大致），仍放得下。
+        _listItem.MinimumThickness = 480;
+        _listItem.MaximumThickness = 100_000; // 无上限：多出的窗口宽度优先喂给列表，不是详情列
         _listItem.CanCollapse = true;
-        _listItem.HoldingPriority = 260; // 固定宽度 —— 折叠时让详情列吃掉空出的宽度，而不是缩窗口
+        _listItem.HoldingPriority = 250; // 全场最低 —— 窗口缩放 / 折叠时优先由列表列伸缩
         _split.AddSplitViewItem(_listItem);
 
-        // 详情区 = [会话 Tab 条（空时隐藏）] + [舞台：详情卡 / 会话画面]。
+        // 详情区 = 舞台（详情卡 / 会话画面）。会话 Tab 条不在这里——它挂在窗口标题栏上，
+        // 横跨整个窗口宽度（对齐 Windows：标签在公共标题栏，而不是缩在详情栏内部）。
         var detailRoot = _detailRoot = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
-        detailRoot.AddSubview(_tabBar);
         detailRoot.AddSubview(_stage);
-        _tabBar.Hidden = true;
 
         NSLayoutConstraint.ActivateConstraints(new[]
         {
-            _tabBar.TopAnchor.ConstraintEqualTo(detailRoot.SafeAreaLayoutGuide.TopAnchor),
-            _tabBar.LeadingAnchor.ConstraintEqualTo(detailRoot.LeadingAnchor),
-            _tabBar.TrailingAnchor.ConstraintEqualTo(detailRoot.TrailingAnchor),
+            _stage.TopAnchor.ConstraintEqualTo(detailRoot.SafeAreaLayoutGuide.TopAnchor),
             _stage.LeadingAnchor.ConstraintEqualTo(detailRoot.LeadingAnchor),
             _stage.TrailingAnchor.ConstraintEqualTo(detailRoot.TrailingAnchor),
             _stage.BottomAnchor.ConstraintEqualTo(detailRoot.BottomAnchor),
         });
-        _stageTop = _stage.TopAnchor.ConstraintEqualTo(detailRoot.SafeAreaLayoutGuide.TopAnchor);
-        _stageTopWithTabs = _stage.TopAnchor.ConstraintEqualTo(_tabBar.BottomAnchor);
-        _stageTop.Active = true;
 
         // 全屏悬浮药丸 + 顶沿唤出热区（都盖在舞台之上，热区不吃点击）。
         _pillHotZone = new HotZone(
@@ -347,13 +366,128 @@ public sealed class MainWindowController : NSWindowController
 
         var detailVc = new NSViewController { View = detailRoot };
         var detailItem = NSSplitViewItem.FromViewController(detailVc);
-        detailItem.MinimumThickness = 420;
-        detailItem.MaximumThickness = 100_000; // 显式无上限：不设的话 NSSplitViewController 只让
-                                               // 详情列长到 max(min, fittingSize)，窗口就拉不宽
-        detailItem.HoldingPriority = 250;      // 最低 —— 窗口 / 折叠变化时优先由详情列伸缩
+        // 对齐 Windows：详情列是窄的定宽列，列表列才是跟着窗口宽度伸缩的那个（HoldingPriority
+        // 比列表高 → 有多余宽度时列表先吃，详情列常态下停在 Minimum）。Maximum 仍留无上限：
+        // 会话全屏时 nav / resource / list 三列全部折叠，详情列（含会话画面）要能吃下整个窗口宽度，
+        // 不能被这里的「窄」预设卡死。
+        detailItem.MinimumThickness = 360;
+        detailItem.MaximumThickness = 100_000;
+        detailItem.HoldingPriority = 260;
         _split.AddSplitViewItem(detailItem);
 
-        Window.ContentViewController = _split;
+        // 详情栏默认宽度交给 Auto Layout，而不是 NSSplitView.SetPositionOfDivider。
+        // NSSplitViewController 内部用约束管理各栏宽度，老的 divider API 设完会在下一轮
+        // 约束求解时被覆盖 —— 这正是「切回工作台时列表栏先窄后宽」的根因：早先的写法只能
+        // 靠「立即摆一次 + 下一轮 runloop 再摆一次」去追，而第二次纠正必然发生在用户已经
+        // 看到画面之后（真实反馈 + 用户截到的中间帧：左边工作台列表栏还很窄、右边详情栏
+        // 还显示着首页内容）。改成约束后，展开当帧就由布局系统直接落到目标宽度。
+        //
+        // 优先级必须**高于本栏的 HoldingPriority(260)**：NSSplitViewController 会按
+        // holdingPriority 为每栏生成「坚持当前宽度」的约束，取 DefaultLow(250) 时这条
+        // 宽度约束直接被盖掉 —— 实测结果正好反过来：详情栏吃到 1075，列表栏被压到它的
+        // 最小值 480。500 足以压过 260，又远低于 Required，不会和分栏系统硬冲突。
+        _detailWidth = detailRoot.WidthAnchor.ConstraintEqualTo(DetailDefaultWidth);
+        _detailWidth.Priority = 500;
+        _detailWidth.Active = true;
+
+        // 分栏之外再套一层：底部挂一条状态栏（对齐 Windows 版窗口底部那条）。
+        // 用 AddChildViewController 而不是只把 _split.View 塞进去——后者会绕过
+        // 子 VC 的生命周期与外观传递。
+        var shell = new NSViewController { View = new NSView { TranslatesAutoresizingMaskIntoConstraints = false } };
+        shell.AddChildViewController(_split);
+        var splitView = _split.View;
+        splitView.TranslatesAutoresizingMaskIntoConstraints = false;
+        _statusBar = BuildStatusBar();
+        shell.View.AddSubview(splitView);
+        shell.View.AddSubview(_statusBar);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            splitView.TopAnchor.ConstraintEqualTo(shell.View.TopAnchor),
+            splitView.LeadingAnchor.ConstraintEqualTo(shell.View.LeadingAnchor),
+            splitView.TrailingAnchor.ConstraintEqualTo(shell.View.TrailingAnchor),
+            splitView.BottomAnchor.ConstraintEqualTo(_statusBar.TopAnchor),
+
+            _statusBar.LeadingAnchor.ConstraintEqualTo(shell.View.LeadingAnchor),
+            _statusBar.TrailingAnchor.ConstraintEqualTo(shell.View.TrailingAnchor),
+            _statusBar.BottomAnchor.ConstraintEqualTo(shell.View.BottomAnchor),
+        });
+        // 高度单独留引用：会话全屏时要把它压成 0，只 Hidden 的话这 24pt 仍占位，
+        // 画面底部会空出一条。
+        _statusBarHeight = _statusBar.HeightAnchor.ConstraintEqualTo(StatusBarHeight);
+        _statusBarHeight.Active = true;
+
+        Window.ContentViewController = shell;
+
+        // 会话标签由 BuildToolbar 创建的自定义 NSToolbarItem 承载；这里不再使用
+        // NSTitlebarAccessoryViewController.Bottom——后者会在公共标题栏下方额外撑出一整行。
+        _tabBar.SetBarHidden(true);
+    }
+
+    private const int StatusBarHeight = 24;
+    private NSView _statusBar = null!;
+    private NSLayoutConstraint _statusBarHeight = null!;
+    private NSTextField _statusLeft = null!;
+    private NSTextField _statusRight = null!;
+
+    /// <summary>窗口底部状态条：左边会话状态，右边在线统计 + 凭据保护方式
+    /// （对齐 Windows 版底部「无活动会话 … 在线 10 / 13 · 本地优先」那条）。</summary>
+    private NSView BuildStatusBar()
+    {
+        var bar = new NSVisualEffectView
+        {
+            Material = NSVisualEffectMaterial.Titlebar,
+            BlendingMode = NSVisualEffectBlendingMode.WithinWindow,
+            State = NSVisualEffectState.FollowsWindowActiveState,
+            TranslatesAutoresizingMaskIntoConstraints = false,
+        };
+
+        _statusLeft = StatusLabel(NSTextAlignment.Left);
+        _statusRight = StatusLabel(NSTextAlignment.Right);
+        bar.AddSubview(_statusLeft);
+        bar.AddSubview(_statusRight);
+        NSLayoutConstraint.ActivateConstraints(new[]
+        {
+            _statusLeft.LeadingAnchor.ConstraintEqualTo(bar.LeadingAnchor, 12),
+            _statusLeft.CenterYAnchor.ConstraintEqualTo(bar.CenterYAnchor),
+            _statusRight.TrailingAnchor.ConstraintEqualTo(bar.TrailingAnchor, -12),
+            _statusRight.CenterYAnchor.ConstraintEqualTo(bar.CenterYAnchor),
+            _statusRight.LeadingAnchor.ConstraintGreaterThanOrEqualTo(_statusLeft.TrailingAnchor, 12),
+        });
+
+        _connectionsVm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(_connectionsVm.TotalConnectionsDisplay)
+                or nameof(_connectionsVm.PresenceProbeEnabled))
+            {
+                NSApplication.SharedApplication.BeginInvokeOnMainThread(SyncStatusBar);
+            }
+        };
+
+        SyncStatusBar();
+        return bar;
+    }
+
+    private static NSTextField StatusLabel(NSTextAlignment align) => new()
+    {
+        Bordered = false, Editable = false, Selectable = false, DrawsBackground = false,
+        Font = NSFont.SystemFontOfSize(11),
+        TextColor = NSColor.SecondaryLabel,
+        Alignment = align,
+        LineBreakMode = NSLineBreakMode.TruncatingTail,
+        TranslatesAutoresizingMaskIntoConstraints = false,
+    };
+
+    /// <summary>刷新底部状态条文案。会话数变化、列表重载后都会走到这里。</summary>
+    private void SyncStatusBar()
+    {
+        if (_statusLeft is null || _statusRight is null)
+        {
+            return;
+        }
+
+        var active = _sessions.ActiveSessions.Count;
+        _statusLeft.StringValue = active == 0 ? "无活动会话" : $"已连接 {active} 个会话";
+        _statusRight.StringValue = $"{_connectionsVm.TotalConnectionsDisplay}   ·   本地优先 · 凭据由 macOS 钥匙串保护";
     }
 
     /// <summary>
@@ -372,21 +506,27 @@ public sealed class MainWindowController : NSWindowController
         var wasNormal = _mode == ViewMode.Normal;
         var goingNormal = mode == ViewMode.Normal;
 
-        // 离开常规模式时记住左侧两列原本的折叠状态，回来时照原样还原。
+        // 离开常规模式时记住左侧三列原本的折叠状态，回来时照原样还原。
         if (wasNormal && !goingNormal)
         {
             _navWasCollapsed = NavItem?.Collapsed ?? false;
+            _resourceWasCollapsed = _resourceItem?.Collapsed ?? false;
             _listWasCollapsed = _listItem?.Collapsed ?? false;
         }
 
         _mode = mode;
 
-        // 只有「舞台正在显示会话画面」才隐藏左侧两列与工具栏；
+        // 只有「舞台正在显示会话画面」才隐藏左侧三列与工具栏；
         // 在首页 / 凭据等页面按 ⌃⌘F，就只是普通的原生全屏，界面保持完整。
         var chromeHidden = mode != ViewMode.Normal && _stageIsSession;
         if (NavItem is { } nav)
         {
             nav.Collapsed = chromeHidden || (goingNormal && _navWasCollapsed);
+        }
+
+        if (_resourceItem is not null)
+        {
+            _resourceItem.Collapsed = chromeHidden || (goingNormal && _resourceWasCollapsed);
         }
 
         if (_listItem is not null)
@@ -397,6 +537,15 @@ public sealed class MainWindowController : NSWindowController
         if (Window.Toolbar is { } tb)
         {
             tb.Visible = !chromeHidden;
+        }
+
+        SyncDetailWidthConstraint();
+
+        // 会话铺满窗口时，底部状态条跟着其它 chrome 一起让位（高度一并压成 0）。
+        if (_statusBar is not null)
+        {
+            _statusBar.Hidden = chromeHidden;
+            _statusBarHeight.Constant = chromeHidden ? 0 : StatusBarHeight;
         }
 
         // 全屏顶部那条白线：工具栏一藏，系统仍会在标题栏下沿画一条 hairline 分隔线
@@ -524,6 +673,17 @@ public sealed class MainWindowController : NSWindowController
         base.Dispose(disposing);
     }
 
+    /// <summary>把每个标签上的状态点对齐会话实际状态（绿=已连接，橙=连接中 / 异常），
+    /// 对齐 Windows 版标题栏标签里标题右侧那颗点。</summary>
+    private void SyncTabStates()
+    {
+        foreach (var (id, _, _) in _tabBar.Sessions)
+        {
+            var session = _sessions.ActiveSessions.FirstOrDefault(s => s.SessionId == id);
+            _tabBar.SetTabConnected(id, session?.State == ConnectionState.Connected);
+        }
+    }
+
     private void SyncPill()
     {
         if (_mode == ViewMode.Normal || _tabBar.Count == 0)
@@ -582,32 +742,42 @@ public sealed class MainWindowController : NSWindowController
         public override void MouseExited(NSEvent theEvent) => _onExit();
     }
 
-    private NSLayoutConstraint _stageTop = null!;
-    private NSLayoutConstraint _stageTopWithTabs = null!;
-
+    /// <summary>会话标签工具栏项的唯一标识。它按需插入统一标题栏工具栏，
+    /// 无会话或进入全屏时直接移除，不在标题栏下方另占一行。</summary>
+    private const string SessionTabsToolbarIdentifier = "rf.sessiontabs";
 
     private void SyncTabBarVisibility()
     {
-        // 只要有活跃会话就常驻显示（对齐 Windows 版）：切到首页 / 我的连接 / 设置等页面
-        // 不应该把会话 Tab 藏起来——用户需要能随时看见、随时切回去，不用先记住自己开了几个会话。
-        // 全屏下不显示（改用悬浮药丸）。
+        // 只要有活跃会话就常驻公共标题栏（对齐 Windows 版）：切到首页 / 我的连接 / 设置等页面
+        // 仍可随时看见并切回。两档全屏改用悬浮药丸，因此从系统工具栏移除。
         var show = _tabBar.Count > 0 && _mode == ViewMode.Normal;
-        _tabBar.Hidden = !show;
-        // 顺序要紧：先停用旧的再启用新的，两条同时生效会互相冲突。
-        if (show)
+        if (Window.Toolbar is not { } toolbar)
         {
-            _stageTop.Active = false;
-            _stageTopWithTabs.Active = true;
-        }
-        else
-        {
-            _stageTopWithTabs.Active = false;
-            _stageTop.Active = true;
+            return;
         }
 
-        // 立刻走一次布局：约束换完不强制排版的话，全屏下切会话时舞台会停在
-        // 「给 Tab 条让出 38pt」的旧位置，顶上留一条白边，直到别的什么触发了重排。
-        _detailRoot?.LayoutSubtreeIfNeeded();
+        var existing = Array.FindIndex(
+            toolbar.Items,
+            item => item.Identifier == SessionTabsToolbarIdentifier);
+
+        if (show && existing < 0)
+        {
+            _tabBar.SetBarHidden(false);
+            // 对齐 Windows：先是「回到会话」按钮，活动会话标签从它右侧开始；
+            // 其它页面动作仍留在按钮左侧，搜索框继续固定在标题栏最右。
+            var returnButton = Array.FindIndex(
+                toolbar.Items,
+                item => item.Identifier == "rf.sessions");
+            var insertAt = returnButton >= 0
+                ? returnButton + 1
+                : Math.Min(2, toolbar.Items.Length);
+            toolbar.InsertItem(SessionTabsToolbarIdentifier, insertAt);
+        }
+        else if (!show && existing >= 0)
+        {
+            toolbar.RemoveItem(existing);
+            _tabBar.SetBarHidden(true);
+        }
     }
 
     /// <summary>
@@ -635,6 +805,23 @@ public sealed class MainWindowController : NSWindowController
             view.TrailingAnchor.ConstraintEqualTo(_stage.TrailingAnchor),
             view.BottomAnchor.ConstraintEqualTo(_stage.BottomAnchor),
         });
+
+        SyncPanesForStage();
+    }
+
+    /// <summary>
+    /// 会话画面铺满「图标栏以外的全部区域」——上台的是会话就收起资源栏与列表栏，
+    /// 回到详情 / 工作台再放回来（对齐 Windows：会话期间只剩最左侧图标栏）。
+    /// 两档全屏另有 <see cref="SetViewMode"/> 负责（那里连图标栏一起收），此处不插手。
+    /// </summary>
+    private void SyncPanesForStage()
+    {
+        if (_mode != ViewMode.Normal)
+        {
+            return;
+        }
+
+        SetListVisible(!_stageIsSession && _listApplicable);
     }
 
     /// <summary>首页卡片右键动作 → 桥接到「我的连接」既有命令（对齐 Windows MainViewModel）。</summary>
@@ -764,6 +951,8 @@ public sealed class MainWindowController : NSWindowController
         private const string Sessions = "rf.sessions";
         private const string ToggleList = "rf.togglelist";
         private const string Search = "rf.search";
+        private const string Refresh = "rf.refresh";
+        private const string Probe = "rf.probe";
         private readonly MainWindowController _o;
         public ToolbarDelegate(MainWindowController o) => _o = o;
 
@@ -773,17 +962,44 @@ public sealed class MainWindowController : NSWindowController
             NSToolbar.NSToolbarSidebarTrackingSeparatorItemIdentifier,
             ToggleList,
             NewConn,
+            Refresh,
+            Probe,
             Sessions,
             NSToolbar.NSToolbarFlexibleSpaceItemIdentifier,
             Search,
         };
 
-        public override string[] AllowedItemIdentifiers(NSToolbar t) => DefaultItemIdentifiers(t);
+        public override string[] AllowedItemIdentifiers(NSToolbar t) => new[]
+        {
+            NSToolbar.NSToolbarToggleSidebarItemIdentifier,
+            NSToolbar.NSToolbarSidebarTrackingSeparatorItemIdentifier,
+            ToggleList,
+            NewConn,
+            Refresh,
+            Probe,
+            Sessions,
+            SessionTabsToolbarIdentifier,
+            NSToolbar.NSToolbarFlexibleSpaceItemIdentifier,
+            Search,
+        };
 
         public override NSToolbarItem? WillInsertItem(NSToolbar toolbar, string id, bool willInsert)
         {
             switch (id)
             {
+                case SessionTabsToolbarIdentifier:
+                    // 真正的标题栏内标签：自定义 View 是 NSToolbarItem 的一部分，
+                    // 与刷新 / 搜索等控件共享 Unified toolbar 行，不再产生标题栏下方附加行。
+                    _o._tabBar.Frame = new CGRect(0, 0, 520, SessionTabBar.BarHeightPoints);
+                    _o._tabBar.SetBarHidden(false);
+                    return new NSToolbarItem(SessionTabsToolbarIdentifier)
+                    {
+                        Label = "活动会话",
+                        PaletteLabel = "活动会话",
+                        ToolTip = "活动会话",
+                        View = _o._tabBar,
+                        VisibilityPriority = (nint)(long)NSToolbarItemVisibilityPriority.High,
+                    };
                 case NewConn:
                     var item = new NSToolbarItem(NewConn)
                     {
@@ -794,11 +1010,34 @@ public sealed class MainWindowController : NSWindowController
                     };
                     item.Activated += (_, _) => _o.BeginNewConnection();
                     return item;
+                case Refresh:
+                    // 对齐 Windows 上下文条的「刷新列表」。
+                    var refresh = new NSToolbarItem(Refresh)
+                    {
+                        Label = "刷新",
+                        ToolTip = "刷新连接列表",
+                        Image = NSImage.GetSystemSymbol("arrow.clockwise", null),
+                        Bordered = true,
+                    };
+                    refresh.Activated += (_, _) => _ = _o._listPane.RefreshAsync();
+                    return refresh;
+                case Probe:
+                    // 对齐 Windows 上下文条的「探测当前列表的可达性」。
+                    var probe = new NSToolbarItem(Probe)
+                    {
+                        Label = "探测",
+                        ToolTip = "探测当前列表的可达性（需在设置里开启在线探测）",
+                        Image = NSImage.GetSystemSymbol("dot.radiowaves.left.and.right", null)
+                                ?? NSImage.GetSystemSymbol("wave.3.right", null),
+                        Bordered = true,
+                    };
+                    probe.Activated += (_, _) => _o._connectionsVm.ProbePresenceCommand.Execute(null);
+                    return probe;
                 case ToggleList:
                     var toggle = new NSToolbarItem(ToggleList)
                     {
                         Label = "列表",
-                        ToolTip = "显示 / 隐藏连接列表（⌘⌥L）",
+                        ToolTip = "显示 / 隐藏连接资源与列表（⌘⌥L）",
                         Image = NSImage.GetSystemSymbol("sidebar.squares.left", null)
                                 ?? NSImage.GetSystemSymbol("sidebar.left", null),
                         Bordered = true,
@@ -833,7 +1072,10 @@ public sealed class MainWindowController : NSWindowController
 
     private void OnNavSelected(object? sender, NavSidebar.Item item)
     {
-        if (_currentNav == item)
+        // 重复点当前页通常无事可做 —— 但会话铺满舞台时，图标栏是唯一还可见的导航，
+        // 点「我的连接」就是用户「回到工作台」的入口（对齐 Windows）。此时 _currentNav
+        // 仍停在进入会话前的那一页，短路掉就再也回不去了（真实事故：连上后点图标没反应）。
+        if (_currentNav == item && !_stageIsSession)
         {
             return;
         }
@@ -888,15 +1130,44 @@ public sealed class MainWindowController : NSWindowController
         }
     }
 
+    /// <summary>列表列与资源导航列（第二 / 三列）总是同进同退——资源导航脱离连接列表没有意义。</summary>
     private void SetListVisible(bool visible)
     {
-        if (_listItem is null || _listItem.Collapsed == !visible)
+        var resourceChanging = _resourceItem is not null && _resourceItem.Collapsed == visible;
+        var listChanging = _listItem is not null && _listItem.Collapsed == visible;
+        if (!resourceChanging && !listChanging)
         {
             return;
         }
 
-        _listItem.Collapsed = !visible;
+        // 展开 / 折叠只需要翻这两个开关：各栏宽度由 Auto Layout 决定（详情栏那条定宽约束
+        // + 列表栏最低 HoldingPriority），展开当帧就落到目标比例。
+        // 这里刻意不再调 NSSplitView.SetPositionOfDivider —— 它是 NSSplitView 的老 API，
+        // 在 NSSplitViewController 的约束体系下会被下一轮布局覆盖，只能靠「下一轮 runloop
+        // 再摆一次」去追，而那次纠正必然发生在用户已经看到画面之后，正是列表栏由窄跳宽的来源。
+        if (_resourceItem is not null) _resourceItem.Collapsed = !visible;
+        if (_listItem is not null) _listItem.Collapsed = !visible;
+        SyncDetailWidthConstraint();
     }
+
+    /// <summary>
+    /// 详情栏那条 <see cref="DetailDefaultWidth"/> 定宽约束只在**列表栏可见**时生效。
+    /// 列表栏一折叠（首页 / 凭据 / 设置，或会话铺满图标栏以外的全部区域），详情栏就该吃满
+    /// 剩余空间；此时这条优先级 500 的约束必须让位，否则会和分栏系统的填充约束打架 ——
+    /// 布局最终仍以填充为准，但控制台会持续刷约束冲突警告。
+    /// </summary>
+    private void SyncDetailWidthConstraint()
+    {
+        if (_detailWidth is not null && _listItem is not null)
+        {
+            _detailWidth.Active = !_listItem.Collapsed;
+        }
+    }
+
+    /// <summary>详情栏的默认宽度。列表栏吃掉剩下的全部宽度（对齐 Windows：列表是随窗口
+    /// 伸缩的那一栏，详情栏定宽）。420 是实测折中——520 时详情栏明显比内容需要的宽、
+    /// 白白占走列表的横向空间（真实反馈）；压到 360 以下卡片里的主机名 / 凭据名又开始截断。</summary>
+    private const int DetailDefaultWidth = 420;
 
     /// <summary>⌘, / 菜单「设置…」：切到导航栏的「设置」页，而不是另开偏好窗口。</summary>
     public void OpenSettings() => NavigateTo(NavigationPage.Settings);
@@ -994,63 +1265,23 @@ public sealed class MainWindowController : NSWindowController
             return;
         }
 
-        _detail.ShowConnecting(name);
-        ShowStage(_detail);
+        // 从单击「连接」这一刻就进入会话舞台：这是独立占位视图，不是 _detail，
+        // ShowStage 会立即收起资源栏与连接列表，只保留左侧图标栏。
+        ShowStage(_detail.MakeConnectingPlaceholder(name));
+        Window.ContentView?.LayoutSubtreeIfNeeded();
+        _stage.DisplayIfNeeded();
+
+        // CreateSessionAsync 可能先同步读取 Keychain；先把控制权交回 AppKit 一轮，确保用户
+        // 单击后的第一帧已经收起资源 / 列表并显示会话舞台，而不是继续停在详情页等待。
+        await Task.Yield();
+
+        RemoteFlow.Core.Sessions.IRemoteSession? session = null;
         try
         {
-            var session = await _sessions.CreateSessionAsync(profile);
+            session = await _sessions.CreateSessionAsync(profile);
 
-            // RDP「适应窗口」：按**会话实际要渲染的舞台区域**请求桌面尺寸。
-            // 这里若按整块屏幕的比例要（旧做法），三栏模式下舞台是竖长条，比例对不上，
-            // 画面就会被 letterbox 出上下黑边。连上之后 RdpScreenView 还会随视图尺寸
-            // 变化继续做 DynamicResolutionUpdate。
-            if (session is RemoteFlow.Protocol.Rdp.Mac.RdpSession rdpSession
-                && profile.Rdp is { DisplayMode: not RemoteFlow.Core.Models.RdpDisplayMode.FixedResolution })
-            {
-                var stage = _stage.Bounds.Size;
-
-                // 关键：这条会话建立后，若会话标签条从无到有，舞台会**变矮** 38pt。
-                // 按当前（标签条还没出现的）高度去要桌面尺寸，连上后画面就比视图高一截，
-                // 等比缩放后左右各留一道黑边 —— 实测正是 748 vs 710 差的这 38。
-                var tabBarWillAppear = _tabBar.Count == 0;
-                var usableHeight = stage.Height - (tabBarWillAppear ? SessionTabBar.BarHeightPoints : 0);
-
-                var scale = Window.BackingScaleFactor;
-                double w, h;
-                if (stage.Width >= 320 && usableHeight >= 240)
-                {
-                    w = (double)stage.Width * scale;
-                    h = (double)usableHeight * scale;
-                }
-                else
-                {
-                    var s = (Window.Screen ?? NSScreen.MainScreen)?.Frame.Size ?? new CGSize(1680, 1050);
-                    w = (double)s.Width;
-                    h = (double)s.Height;
-                }
-
-                if (w > 2560)
-                {
-                    h = h * 2560 / w;
-                    w = 2560;
-                }
-
-                rdpSession.PreferredSize = ((int)Math.Round(w / 2) * 2, (int)Math.Round(h / 2) * 2);
-            }
-
-            // 不套人为总超时：各协议自带连接超时（SSH ConnectionInfo.Timeout / RDP 线程），
-            // 且首次连接的主机密钥确认框会停在中途，硬 cap 会把用户读指纹的时间也算进去。
-            await session.ConnectAsync(CancellationToken.None);
-
-            if (session.State != RemoteFlow.Core.Models.ConnectionState.Connected)
-            {
-                _detail.ShowError(
-                    RemoteFlow.Presentation.ConnectionErrorText.Title(session.ErrorCode),
-                    RemoteFlow.Presentation.ConnectionErrorText.Describe(session.ErrorCode, session.ErrorMessage));
-                await _sessions.CloseSessionAsync(session.SessionId);
-                return;
-            }
-
+            // 会话视图必须在 ConnectAsync 前进入可视树：RDP / VNC 需要先拿到实际舞台尺寸，
+            // SSH 的 WKWebView 也可以在网络握手期间同步完成终端资源加载。
             NSView view = session switch
             {
                 RemoteFlow.Protocol.Ssh.SshSession ssh => _detail.MakeSshTerminal(ssh),
@@ -1076,15 +1307,76 @@ public sealed class MainWindowController : NSWindowController
             _sessionViews[session.SessionId] = view;
             _sessionNames[session.SessionId] = name;
             _sessionProfileIds[session.SessionId] = profile.Id;
+
+            // 连接尚在握手时就建立标签并把真实会话视图放上舞台；标签位于统一标题栏工具栏，
+            // 不会再出现「详情页里显示正在登录，连上后才突然切过去」的跳变。
             _tabBar.AddTab(session.SessionId, name, profile.Protocol);
             SyncTabBarVisibility();
             SyncSessionsItem();
             ShowSessionStage(session.SessionId);
             Window.Title = $"{name} — RemoteFlow";
+
+            // ConnectAsync 的部分协议实现会在首次 await 前执行同步握手准备；先让标题栏标签和
+            // 真正的会话视图完成一帧绘制，连接中阶段就不会继续残留上一张详情页快照。
+            await Task.Yield();
+            Window.ContentView?.LayoutSubtreeIfNeeded();
+            _stage.LayoutSubtreeIfNeeded();
+
+            // RDP「适应窗口」：按已经收起资源栏 / 列表栏后的真实会话舞台请求桌面尺寸。
+            // 标签现在与其它控件共用标题栏工具栏行，不再额外吃掉内容区 38pt。
+            if (session is RemoteFlow.Protocol.Rdp.Mac.RdpSession rdpSession
+                && profile.Rdp is { DisplayMode: not RemoteFlow.Core.Models.RdpDisplayMode.FixedResolution })
+            {
+                var stage = _stage.Bounds.Size;
+                var scale = Window.BackingScaleFactor;
+                double w, h;
+                if (stage.Width >= 320 && stage.Height >= 240)
+                {
+                    w = (double)stage.Width * scale;
+                    h = (double)stage.Height * scale;
+                }
+                else
+                {
+                    var screen = (Window.Screen ?? NSScreen.MainScreen)?.Frame.Size ?? new CGSize(1680, 1050);
+                    w = (double)screen.Width;
+                    h = (double)screen.Height;
+                }
+
+                if (w > 2560)
+                {
+                    h = h * 2560 / w;
+                    w = 2560;
+                }
+
+                rdpSession.PreferredSize = ((int)Math.Round(w / 2) * 2, (int)Math.Round(h / 2) * 2);
+            }
+
+            // 不套人为总超时：各协议自带连接超时（SSH ConnectionInfo.Timeout / RDP 线程），
+            // 且首次连接的主机密钥确认框会停在中途，硬 cap 会把用户读指纹的时间也算进去。
+            await session.ConnectAsync(CancellationToken.None);
+
+            if (session.State != RemoteFlow.Core.Models.ConnectionState.Connected)
+            {
+                var title = RemoteFlow.Presentation.ConnectionErrorText.Title(session.ErrorCode);
+                var message = RemoteFlow.Presentation.ConnectionErrorText.Describe(
+                    session.ErrorCode,
+                    session.ErrorMessage);
+                await CloseSessionAsync(session.SessionId);
+                _detail.ShowError(title, message);
+                ShowStage(_detail);
+                SyncTabBarVisibility();
+            }
         }
         catch (Exception ex)
         {
+            if (session is not null)
+            {
+                await CloseSessionAsync(session.SessionId);
+            }
+
             _detail.ShowError(ex.Message);
+            ShowStage(_detail);
+            SyncTabBarVisibility();
         }
     }
 
@@ -1105,7 +1397,8 @@ public sealed class MainWindowController : NSWindowController
     /// <summary>会话（本地关 / 远端断）后清理 Tab 与视图。</summary>
     private void DropSession(Guid id)
     {
-        if (_sessionViews.Remove(id, out var view))
+        var removedView = _sessionViews.Remove(id, out var view);
+        if (removedView && view is not null)
         {
             (view as SshTerminalView)?.Detach();
             (view as VncScreenView)?.Detach();
@@ -1114,7 +1407,7 @@ public sealed class MainWindowController : NSWindowController
         }
 
         _sessionNames.Remove(id);
-        _sessionProfileIds.Remove(id, out var closedProfileId);
+        var removedProfile = _sessionProfileIds.Remove(id, out var closedProfileId);
 
         // 全屏是「用户对当前这个会话」做的操作，不该被下一个会话继承：
         // 主动点标签 / 药丸菜单切会话时保持全屏（那是明确意图），但因为**关闭**当前
@@ -1130,7 +1423,9 @@ public sealed class MainWindowController : NSWindowController
         SyncSessionsItem();
         SyncPill();
 
-        if (_tabBar.Count == 0)
+        // SessionClosed 会排到主线程再通知一次，而 CloseSessionAsync 的调用方也会立即清理；
+        // 第二次进入必须幂等，不能把刚显示的连接失败说明又覆盖成空态。
+        if (_tabBar.Count == 0 && (removedView || removedProfile || wasShowing))
         {
             SetViewMode(ViewMode.Normal); // 没有会话了就退回常规三栏，别把界面卡在全屏形态
             _activeSessionId = Guid.Empty;

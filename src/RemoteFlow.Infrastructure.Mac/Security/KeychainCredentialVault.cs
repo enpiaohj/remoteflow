@@ -162,6 +162,19 @@ public sealed class KeychainCredentialVault : ICredentialVault
             privateKey = await RetrieveSecretAsync(credential.KeyReference, ct);
         }
 
+        // 「记录里声明有、钥匙串里取不到」= 条目丢失（多半被手动删除）。
+        // 这里只如实标记，是否要中止连接由调用方（SessionManager）决定。
+        var secretMissing =
+            (!string.IsNullOrEmpty(credential.SecretReference) && password is null)
+            || (!string.IsNullOrEmpty(credential.KeyReference) && privateKey is null);
+
+        if (secretMissing)
+        {
+            _logger.LogWarning(
+                "凭据 {CredentialId} 声明的密钥在钥匙串中不存在，连接将被中止并提示用户重新填写",
+                credential.Id);
+        }
+
         return new ResolvedCredential
         {
             Type = credential.Type,
@@ -169,6 +182,7 @@ public sealed class KeychainCredentialVault : ICredentialVault
             Domain = credential.Domain,
             Password = password,
             PrivateKey = privateKey,
+            SecretMissing = secretMissing,
         };
     }
 
@@ -192,9 +206,15 @@ public sealed class KeychainCredentialVault : ICredentialVault
 
         // kSecAttrAccessibleAfterFirstUnlock：登录后即可访问，避免后台重连时因
         // 钥匙串未解锁而失败；同时不降级到「始终可访问」这种更弱的等级。
-        // kSecAttrAccess（trustedlist=NULL）：放开 app 签名限制，避免 ad-hoc 构建
-        // 每次 hash 变化触发授权框（见 SecurityFramework.CreateOpenAccess 说明）。
-        var access = SecurityFramework.CreateOpenAccess(_service);
+        //
+        // kSecAttrAccess：ACL 设为「只信任本应用」（SecAccessCreate 的 trustedlist 传 NULL
+        // 就是这个语义——**不是**放开信任，早期注释在这点上写反了）。这正是我们要的安全模型：
+        // 除 RemoteFlow 外任何程序读取都需用户确认。
+        //
+        // 前提是**应用有稳定的签名身份**：ACL 比对的是 designated requirement，
+        // ad-hoc 签名的 DR 含 cdhash，每次重新编译都变 → 旧授权全部作废 → 逐条弹系统密码框。
+        // 因此开发机也必须配固定证书签名（见 RemoteFlow.App.Mac.csproj 的 CodesignKey 段）。
+        var access = SecurityFramework.CreateAppOnlyAccess(_service);
         try
         {
             List<nint> keys =

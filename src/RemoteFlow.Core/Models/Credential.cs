@@ -67,6 +67,16 @@ public sealed class ResolvedCredential : IDisposable
     /// <summary>PEM / OpenSSH 格式私钥正文。可能为 null。</summary>
     public string? PrivateKey { get; init; }
 
+    /// <summary>
+    /// 凭据记录声明了密码 / 私钥，但保险库里取不到（条目被手动删掉等）。
+    /// <para>
+    /// 不加这个标记的话，取不到密钥会被静默降级成「空密码」去发起连接，
+    /// 用户看到的是「认证失败」，很容易误判成密码填错或服务端问题——
+    /// 实际是本机密钥没了（真实事故）。连接路径据此快速失败并给出准确提示。
+    /// </para>
+    /// </summary>
+    public bool SecretMissing { get; init; }
+
     private bool _disposed;
 
     /// <summary>

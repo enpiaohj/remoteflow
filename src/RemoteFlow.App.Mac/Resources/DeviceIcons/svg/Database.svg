@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs>
+  <linearGradient id="DeviceIcon-Red" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FF728D" />
+    <stop offset="1" stop-color="#D82F58" />
+  </linearGradient>
+</defs>
+  <path d="M10,18 C10,11 20,7 32,7 C44,7 54,11 54,18 V49 C54,56 44,60 32,60 C20,60 10,56 10,49 Z" fill="#000000" fill-opacity="0.133" fill-rule="nonzero" />
+  <path d="M8,15 C8,8 19,4 32,4 C45,4 56,8 56,15 V48 C56,55 45,59 32,59 C19,59 8,55 8,48 Z" fill="url(#DeviceIcon-Red)" fill-rule="nonzero" />
+  <ellipse cx="32" cy="15" rx="24" ry="10" fill="#FF9AAE" />
+  <ellipse cx="32" cy="15" rx="21" ry="7" fill="#DC3159" />
+  <path d="M8,29 C8,36 19,40 32,40 C45,40 56,36 56,29 M8,43 C8,50 19,54 32,54 C45,54 56,50 56,43" fill="none" stroke="#FF8BA3" stroke-width="2.2" stroke-linecap="flat" stroke-linejoin="round" fill-rule="nonzero" />
+  <path d="M13,18 C16,20 19,21 22,22 V49 C19,48 16,47 13,45 Z" fill="#FFFFFF" fill-opacity="0.416" fill-rule="nonzero" />
+</svg>
