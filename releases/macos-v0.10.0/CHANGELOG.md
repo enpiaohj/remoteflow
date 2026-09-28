@@ -85,5 +85,5 @@
 
 ## 产物
 
-- `RemoteFlow-v0.10.0-macos-arm64.dmg` —— 待构建
-- `RemoteFlow-v0.10.0-macos-x64.dmg` —— 待构建
+- `RemoteFlow-v0.10.0-macos-arm64.dmg` —— 56.4 MB · SHA-256：`f52f013ea1109c62b8e39407b2a31ff7fc98417c733c14ee13d378233f88d16b`
+- `RemoteFlow-v0.10.0-macos-x64.dmg` —— 58.4 MB · SHA-256：`fd81c2e8d446def326ebaf9eb76e98e6c7983dcf1b0ae765f3a05cc05b509269`
