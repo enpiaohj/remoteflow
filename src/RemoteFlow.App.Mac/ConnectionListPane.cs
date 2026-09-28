@@ -126,6 +126,7 @@ public sealed class ConnectionListPane : NSViewController
         header.AddArrangedSubview(_count);
         header.AddArrangedSubview(_recentRange);
 
+        // 列表列不刷底色，露出窗口的系统背景 —— 与左侧栏（毛玻璃）保持同调，不抢眼。
         var root = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
         root.AddSubview(header);
         root.AddSubview(_treeScroll);
@@ -351,17 +352,10 @@ public sealed class ConnectionListPane : NSViewController
 
         private void BuildGroupMenu(NSMenu menu, ConnectionGroupNodeViewModel group)
         {
-            if (!group.IsUngrouped)
-            {
-                menu.AddItem(Item("新建子分组…", () => _pane.RunGroupItem(_pane._vm.CreateChildGroupCommand, group)));
-            }
-
-            if (!group.IsBuiltIn && !group.IsUngrouped)
-            {
-                menu.AddItem(Item("编辑分组…", () => _pane.RunGroupItem(_pane._vm.RenameGroupCommand, group)));
-                menu.AddItem(NSMenuItem.SeparatorItem);
-                menu.AddItem(Item("删除…", () => _pane.RunGroupItem(_pane._vm.DeleteGroupCommand, group)));
-            }
+            menu.AddItem(Item("新建子分组…", () => _pane.RunGroupItem(_pane._vm.CreateChildGroupCommand, group)));
+            menu.AddItem(Item("重命名…", () => _pane.RunGroupItem(_pane._vm.RenameGroupCommand, group)));
+            menu.AddItem(NSMenuItem.SeparatorItem);
+            menu.AddItem(Item("删除…", () => _pane.RunGroupItem(_pane._vm.DeleteGroupCommand, group)));
         }
 
         private static NSMenuItem Item(string title, Action action)

@@ -76,6 +76,29 @@ public sealed class MainWindowController : NSWindowController
         BuildSplit();
         BuildToolbar();
 
+        // 整个窗口底铺一层毛玻璃（材质与各个「框」一致）：窗口自身设为透明，
+        // 让最底下这层磨砂去透桌面 —— 三栏里凡是没被不透明内容盖住的地方都带磨砂质感。
+        Window.IsOpaque = false;
+        Window.BackgroundColor = NSColor.Clear;
+        if (Window.ContentView is { } host)
+        {
+            var glass = new NSVisualEffectView
+            {
+                Material = NSVisualEffectMaterial.Sidebar,
+                BlendingMode = NSVisualEffectBlendingMode.BehindWindow,
+                State = NSVisualEffectState.FollowsWindowActiveState,
+                TranslatesAutoresizingMaskIntoConstraints = false,
+            };
+            host.AddSubview(glass, NSWindowOrderingMode.Below, null);
+            NSLayoutConstraint.ActivateConstraints(new[]
+            {
+                glass.LeadingAnchor.ConstraintEqualTo(host.LeadingAnchor),
+                glass.TrailingAnchor.ConstraintEqualTo(host.TrailingAnchor),
+                glass.TopAnchor.ConstraintEqualTo(host.TopAnchor),
+                glass.BottomAnchor.ConstraintEqualTo(host.BottomAnchor),
+            });
+        }
+
         // 初始尺寸放在 ContentViewController 设好**之后** —— 见 ApplyInitialSizeAndCenter。
         ApplyInitialSizeAndCenter();
 
@@ -209,7 +232,11 @@ public sealed class MainWindowController : NSWindowController
         _split.AddSplitViewItem(navItem);
 
         _listItem = NSSplitViewItem.FromViewController(_listPane);
-        _listItem.MinimumThickness = 240;
+        // 300 而不是 240：nav / list 的 holding priority 都高于详情列，两列实际恒停在各自的
+        // MinimumThickness，240 放不下「名称 + 主机·协议 + 时间/次数 + 星标」四段 —— 收藏页 /
+        // 最近连接页的行会被截成「20 Nginx -Ubuntu...」「192.0.2.11 · RDP ...」「昨...」。
+        // 窗口最小宽 980 = nav 176 + list 300 + detail 420，仍放得下。
+        _listItem.MinimumThickness = 300;
         _listItem.MaximumThickness = 460;
         _listItem.CanCollapse = true;
         _listItem.HoldingPriority = 260; // 固定宽度 —— 折叠时让详情列吃掉空出的宽度，而不是缩窗口

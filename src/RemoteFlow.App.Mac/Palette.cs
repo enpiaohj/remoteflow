@@ -26,10 +26,16 @@ internal static class Palette
         (hex & 0xFF) / 255f,
         1f);
 
-    /// <summary>页面底衬：卡片之外那片区域。浅色下接近白，只比卡片沉一点点。</summary>
-    public static NSColor PageGround(NSView v) => IsDark(v) ? Rgb(0x1B1B1D) : Rgb(0xF7F7F9);
+    /// <summary>页面底衬：卡片之外那片区域。**半透明**覆一层 —— 窗口底铺了整块磨砂
+    /// （见 MainWindowController），这里留出透过率让磨砂露出来一点，同时仍比卡片（纯毛玻璃）
+    /// 亮一档，两者只留**轻微色差**。用不透明色会把窗口底的磨砂完全盖死。</summary>
+    public static NSColor PageGround(NSView v) => IsDark(v)
+        ? NSColor.Black.ColorWithAlphaComponent(0.55f)
+        : NSColor.White.ColorWithAlphaComponent(0.82f);
 
-    /// <summary>卡片 / 列表等内容表面。浅色下纯白，深色下比底衬亮一档。</summary>
+    /// <summary>卡片 / 列表等内容表面。浅色下纯白，深色下比底衬亮一档。
+    /// 注：现在「框」普遍改用**毛玻璃底**（材质与左侧栏一致），见 DetailView.CardView(glass: true)
+    /// 与 SettingsPaneView.AddGlassBackground；这个纯色值留给还没换的零散场景。</summary>
     public static NSColor CardSurface(NSView v) => IsDark(v) ? Rgb(0x252528) : Rgb(0xFFFFFF);
 
     /// <summary>内嵌说明底纹：比卡片更内敛的一块淡填充（设置页的「数据安全提示」这类）。

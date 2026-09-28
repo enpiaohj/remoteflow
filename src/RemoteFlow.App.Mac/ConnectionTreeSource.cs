@@ -96,30 +96,16 @@ public sealed class ConnectionTreeSource : NSOutlineViewDelegate, INSOutlineView
                 TranslatesAutoresizingMaskIntoConstraints = false,
                 LineBreakMode = NSLineBreakMode.TruncatingTail,
             };
-            var groupIcon = new NSImageView
-            {
-                ImageScaling = NSImageScale.ProportionallyUpOrDown,
-                TranslatesAutoresizingMaskIntoConstraints = false,
-            };
             cell = new NSTableCellView { Identifier = id };
-            cell.AddSubview(groupIcon);
             cell.AddSubview(label);
-            cell.ImageView = groupIcon;
             cell.TextField = label;
             NSLayoutConstraint.ActivateConstraints(new[]
             {
-                groupIcon.LeadingAnchor.ConstraintEqualTo(cell.LeadingAnchor),
-                groupIcon.CenterYAnchor.ConstraintEqualTo(cell.CenterYAnchor),
-                groupIcon.WidthAnchor.ConstraintEqualTo(14),
-                groupIcon.HeightAnchor.ConstraintEqualTo(14),
-                label.LeadingAnchor.ConstraintEqualTo(groupIcon.TrailingAnchor, 6),
+                label.LeadingAnchor.ConstraintEqualTo(cell.LeadingAnchor),
                 label.TrailingAnchor.ConstraintEqualTo(cell.TrailingAnchor, -6),
                 label.CenterYAnchor.ConstraintEqualTo(cell.CenterYAnchor),
             });
         }
-
-        cell.ImageView!.Image = OrganizationStyle.GroupSymbol(node.IconResourceKey);
-        cell.ImageView.ContentTintColor = OrganizationStyle.GroupTint(node.FolderBrushKey);
 
         var name = node.IsUngrouped ? "未分组" : node.Name;
         cell.TextField!.StringValue = $"{name.ToUpperInvariant()}   {node.TotalCount}";
