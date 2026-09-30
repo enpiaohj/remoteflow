@@ -31,6 +31,7 @@ ViewModel（`RemoteFlow.Core` + `RemoteFlow.Presentation`），各自用平台�
 | 连接质量详情 | 常驻条 / 药丸的状态入口打开：连接状态、会话时长、重连次数、质量指标，可重新检测 |
 | RDP 工具 | 发送 `Ctrl+Alt+Del`、启动远端任务管理器（mstsc 官方远端语义动作 + 协议级回退）、缩放/适应窗口 |
 | SSH 终端 | xterm.js（WebView2 / WKWebView 承载）：WebGL 渲染、六套主题、字体/字号、**右键菜单（复制 / 粘贴 / 粘贴选中 / 查找 / 清屏）**、输出内搜索（`Ctrl+Shift+F`）、粘贴安全（多行/大文本确认）、括号粘贴开关、中文输入法直输 |
+| 文件传输（Windows） | **SSH 会话内**右侧 SFTP 侧栏；也可**不建立会话**，在主窗口 Tab 里直接对主机传文件（SSH 走 SFTP，RDP 主机走 **SMB 管理共享**或 SFTP，按连接选择，VNC 不支持）。浏览 / 上传下载文件与文件夹 / 进度队列与取消 / 新建、重命名、删除 / 覆盖确认 / 复制路径，系统资源管理器同款文件图标；下载先写 `.rfpart` 再原子改名、远端文件名净化防路径穿越、不跟随符号链接。SFTP / SMB 通道未在全部环境验证，macOS 版暂无（详见 [文件传输说明](docs/2026-09-30-RemoteFlow-v0.24.0-文件传输说明-v1.1.md)） |
 | VNC 画面 | 三档缩放（等比 / 拉伸 / 1:1）、本地零延迟光标、剪贴板远端→本机 |
 | 连接资产管理 | 新建 / 编辑 / 复制 / 删除，多级分组、跨分组标签、收藏、连接历史；永久内置「我的设备」「未分组」，自定义分组可选 12 种组织图标，标签支持图标 + 颜色（详见 [分组、标签与图标说明](docs/2026-09-27-RemoteFlow-v0.21.0-分组标签图标与状态刷新说明-v1.0.md)） |
 | 全局搜索 | 按名称、IP、分组、标签、备注即时过滤，`Ctrl+K` 聚焦 |
@@ -101,14 +102,14 @@ SSH.NET（SSH 协议层）· xterm.js（终端渲染）· Community.MarcusW.VncC
 RemoteFlow.slnx  （不含 RemoteFlow.App.Mac —— net10.0-macos 无法跨平台构建，作为独立叶子）
 ├─ src/
 │  ├─ RemoteFlow.Core/                   # 领域模型 + 抽象接口（平台无关，net10.0）
-│  ├─ RemoteFlow.Application/            # 应用服务 / Use Case（SessionManager、搜索、导入导出、分组）
+│  ├─ RemoteFlow.Application/            # 应用服务 / Use Case（SessionManager、搜索、导入导出、分组、文件传输队列）
 │  ├─ RemoteFlow.Presentation/           # 平台无关的 ViewModel + 视图无关服务 —— 两端 UI 都绑这一层
 │  ├─ RemoteFlow.Infrastructure/         # 跨平台基础设施基座
-│  ├─ RemoteFlow.Infrastructure.Windows/ # SQLite 仓储、DPAPI Vault、开机启动（Windows）
+│  ├─ RemoteFlow.Infrastructure.Windows/ # SQLite 仓储、DPAPI Vault、开机启动、SMB 文件系统（Windows）
 │  ├─ RemoteFlow.Infrastructure.Mac/     # Keychain Vault、LaunchAgent（macOS）
 │  ├─ RemoteFlow.Protocol.Rdp/           # RDP ActiveX 互操作与会话（Windows）
 │  ├─ RemoteFlow.Protocol.Rdp.Mac/       # FreeRDP 封装与会话（macOS）
-│  ├─ RemoteFlow.Protocol.Ssh/           # SSH 协议层（协议与终端渲染分离，跨平台）
+│  ├─ RemoteFlow.Protocol.Ssh/           # SSH 协议层 + SFTP 文件系统（协议与终端渲染分离，跨平台）
 │  ├─ RemoteFlow.Protocol.Vnc/           # VNC / RFB 会话与渲染目标（跨平台）
 │  ├─ RemoteFlow.App/                    # WPF UI / Startup / Composition Root（Windows）
 │  └─ RemoteFlow.App.Mac/                # AppKit UI / Composition Root（macOS）
