@@ -35,7 +35,29 @@
 - macOS 未含文件传输；Mac 编辑器保存连接是否保留新字段未验证；旧版本客户端经云同步覆盖连接会重置该字段。
 
 ### Artifacts
-（构建后回填）
+- `RemoteFlow-v0.24.0-win-x64.exe`
+  - Size：75,169,025 bytes
+  - SHA-256：`D9C9092C5B810953FCE88EAE1F324C7788A344498E052B9EA4EEFE30C92A5FF8`
+- `RemoteFlow-v0.24.0-win-x64.zip`
+  - Size：69,493,813 bytes
+  - SHA-256：`8A4A897B8AD656A4D74FB5AB765039BE1B650DDB79E2D38ADAED43EE4D2BA0CA`
+
+### Verification
+- Build：`dotnet build RemoteFlow.slnx -c Release` —— 0 警告 / 0 错误
+- Tests：RemoteFlow.Core.Tests 151/151 通过；RemoteFlow.IntegrationTests 422 通过、5 跳过（Mac 专属用例在 Windows 上跳过，属预期）；
+  RemoteFlow.IntegrationTests.Windows 126/126 通过（含视图实例化、文件传输入口标记、系统文件图标）
+- 实机走查（发布产物 `RemoteFlow-v0.24.0-win-x64.exe`）：启动正常、标题栏版本 v0.24.0、设置页可进入、
+  正常退出（exit 0）、无 `remoteflow.db-wal` / `-shm` 残留
+- 开发期实机（试用构建，同一套功能代码）：SSH 会话内文件侧栏可展开并列出远端目录；文件传输 Tab 可从连接入口打开；
+  玻璃外观下侧栏背景与分隔条黑线问题已按截图修正后由用户确认
+- 未执行：SFTP / SMB 上传下载往返（SHA-256 对比）、取消、覆盖确认、大文件期间终端响应、传输中断开等真机验证；
+  SMB（含错误 1219、445 不可达）与 Windows OpenSSH 账号格式；macOS 构建与验证
+- Platform：Windows 11（win-x64）
+
+### Git
+- 源码提交：`c5e4c2c`（chore: 版本号提升至 0.24.0）；Tag `v0.24.0` 指向随后的 `release: RemoteFlow v0.24.0` 提交
+- 功能提交：文件传输核心 / 通道 / 队列 / 视图模型 / WPF 界面，以及改为主窗口 Tab、背景与图标修正（feature/file-transfer 已快进合入 main）
+- 2026-09-30 发布：推送 main 与 Tag，创建 GitHub Release（Latest）
 
 ---
 
