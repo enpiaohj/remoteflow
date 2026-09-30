@@ -27,6 +27,18 @@ public sealed class FileTransferEntryMarkupTests
     }
 
     [Fact]
+    public void MainWindow_HostsFileTransferAsWorkspaceTab()
+    {
+        var markup = ReadApp("Views/MainWindow.xaml");
+
+        // 标签头、标题栏工具条占位、内容区各一份模板；内容区复用会话舞台背景。
+        var templates = markup.Split("DataType=\"{x:Type vm:FileTransferTabViewModel}\"").Length - 1;
+        Assert.Equal(3, templates);
+        Assert.Contains("<sessions:FileTransferPanel DataContext=\"{Binding FileTransfer}\"", markup, StringComparison.Ordinal);
+        Assert.Contains("Background=\"{DynamicResource Bg.Session}\" Padding=\"12\"", markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SessionToolsBar_HasFileTransferToggle()
     {
         Assert.Contains("ToggleFileTransferCommand", ReadApp("Views/Sessions/SessionToolsBar.xaml"), StringComparison.Ordinal);

@@ -11,7 +11,7 @@ using Xunit;
 namespace RemoteFlow.IntegrationTests;
 
 /// <summary>
-/// 文件传输的两个入口：会话内侧栏（SessionTabViewModel）与不建立会话的独立窗口
+/// 文件传输的两个入口：会话内侧栏（SessionTabViewModel）与不建立会话的文件传输 Tab
 /// （连接列表 / 首页触发的 OpenFileTransfer 命令）。
 /// </summary>
 public class FileTransferEntryPointTests
@@ -113,7 +113,7 @@ public class FileTransferEntryPointTests
         Assert.True(session.FileSystem.Disposed);
     }
 
-    // ── 独立窗口入口 ──
+    // ── 文件传输 Tab 入口 ──
 
     [Theory]
     [InlineData(ProtocolType.Ssh, true)]
@@ -169,7 +169,7 @@ public class FileTransferEntryPointTests
     [Fact]
     public void 没有窗口宿主的平台入口不可用且不抛异常()
     {
-        var vm = NewPage(windows: null);
+        var vm = NewPage(launcher: null);
         var item = new ConnectionItemViewModel(new ConnectionProfile { Name = "srv", Protocol = ProtocolType.Ssh });
 
         Assert.False(vm.OpenFileTransferCommand.CanExecute(item));
@@ -178,9 +178,9 @@ public class FileTransferEntryPointTests
 
     // ── 辅助 ──
 
-    private static ConnectionsPageViewModel NewPage(IFileTransferWindowService? windows)
+    private static ConnectionsPageViewModel NewPage(IFileTransferLauncher? launcher)
         => new(null!, null!, null!, null!, null!, null!, null!, null!, null!, SynchronousUiDispatcher.Instance, null!,
-            probe: null, fileTransferWindows: windows);
+            probe: null, fileTransferLauncher: launcher);
 
     private static SessionTabViewModel NewTab(IRemoteSession session, IDialogService? dialogs)
         => new(
@@ -192,15 +192,17 @@ public class FileTransferEntryPointTests
             dialogs,
             NullLogger.Instance);
 
-    private sealed class RecordingWindows : IFileTransferWindowService
+    private sealed class RecordingWindows : IFileTransferLauncher
     {
         public List<ConnectionProfile> Opened { get; } = [];
 
-        public bool HasActiveTransfers => false;
+        public event EventHandler<ConnectionProfile>? OpenRequested;
 
-        public void Open(ConnectionProfile profile) => Opened.Add(profile);
-
-        public Task CloseAllAsync() => Task.CompletedTask;
+        public void Open(ConnectionProfile profile)
+        {
+            Opened.Add(profile);
+            OpenRequested?.Invoke(this, profile);
+        }
     }
 
     private class PlainSession : IRemoteSession

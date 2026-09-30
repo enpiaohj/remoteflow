@@ -2,8 +2,10 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using RemoteFlow.Presentation.Host;
 using RemoteFlow.Presentation.Services;
+using RemoteFlow.Application.FileTransfer;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
@@ -47,6 +49,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly ILogger<MainViewModel> _logger;
     private readonly IUiDispatcher _ui;
     private readonly IUiTimerFactory _timerFactory;
+    private readonly IFileTransferLauncher? _fileTransferLauncher;
+    private readonly IFileTransferConnector? _fileTransferConnector;
+    private readonly ILoggerFactory? _loggerFactory;
     private CancellationTokenSource? _pageReloadCts;
     private Task _pageReloadTask = Task.CompletedTask;
     private int _pageReloadVersion;
@@ -65,7 +70,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         AppSettings settings,
         IUiDispatcher uiDispatcher,
         IUiTimerFactory timerFactory,
-        ILogger<MainViewModel> logger)
+        ILogger<MainViewModel> logger,
+        IFileTransferLauncher? fileTransferLauncher = null,
+        IFileTransferConnector? fileTransferConnector = null,
+        ILoggerFactory? loggerFactory = null)
     {
         _sessions = sessions;
         _ui = uiDispatcher;
@@ -76,6 +84,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _settingsPage = settingsPage;
         _dialogs = dialogs;
         _logger = logger;
+        _fileTransferLauncher = fileTransferLauncher;
+        _fileTransferConnector = fileTransferConnector;
+        _loggerFactory = loggerFactory;
 
         _sessions.MaxConcurrentSessions = settings.MaxConcurrentSessions;
 
@@ -106,6 +117,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         // 详情「打开会话 ▾ → 新建会话」：跳过去重聚焦，强制为同一设备再开一个会话。
         ConnectionsPage.NewSessionRequested += async (_, profile) => await OpenSessionAsync(profile, forceNew: true);
+
+        // 「文件传输…」入口：不建会话，直接在工作区开一个文件传输 Tab。
+        if (_fileTransferLauncher is not null)
+        {
+            _fileTransferLauncher.OpenRequested += OnFileTransferOpenRequested;
+        }
 
         // 首页行右键动作（连接 / 编辑 / 测试连接 / 收藏 / 定位）桥接到「我的连接」既有命令。
         HomePage.ConnectionActionRequested += async (_, args) => await HandleHomeConnectionActionAsync(args);
@@ -530,7 +547,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     break;
 
                 case HomeRowActions.FileTransfer:
-                    // 独立窗口，不改变首页列表，不需要刷新。
+                    // 在工作区开 Tab，不改变首页列表，不需要刷新。
                     ConnectionsPage.OpenFileTransferCommand.Execute(item);
                     return;
 
@@ -690,6 +707,69 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(SessionStatusBrushKey));
     }
 
+    // ── 文件传输 Tab ──────────────────────────────────────────────
+
+    /// <summary>是否有文件传输 Tab 存在进行中的传输。退出应用前据此确认。</summary>
+    public bool HasActiveFileTransfers =>
+        Tabs.OfType<FileTransferTabViewModel>().Any(t => t.FileTransfer.HasActiveTransfers);
+
+    private void OnFileTransferOpenRequested(object? sender, ConnectionProfile profile)
+    {
+        if (_ui.RequeueIfNeeded(() => OnFileTransferOpenRequested(sender, profile)))
+        {
+            return;
+        }
+
+        // 同一连接只开一个 Tab：再次打开则聚焦，避免对同一台主机重复建立传输连接。
+        var existing = Tabs.OfType<FileTransferTabViewModel>().FirstOrDefault(t => t.Profile.Id == profile.Id);
+        if (existing is not null)
+        {
+            SelectedTab = existing;
+            return;
+        }
+
+        if (_fileTransferConnector is null)
+        {
+            return;
+        }
+
+        var viewModel = new FileTransferViewModel(
+            ct => _fileTransferConnector.OpenAsync(profile, ct),
+            _dialogs,
+            _ui,
+            _loggerFactory?.CreateLogger<FileTransferViewModel>() ?? NullLogger<FileTransferViewModel>.Instance,
+            $"文件传输 · {profile.Name}");
+
+        var tab = new FileTransferTabViewModel(profile, viewModel, CloseFileTransferTabAsync);
+        Tabs.Add(tab);
+        SelectedTab = tab;
+
+        // Tab 已经可见，用户能立刻看到「正在连接…」；失败不抛异常，由面板显示并可重试。
+        _ = viewModel.EnsureConnectedAsync();
+    }
+
+    private async Task CloseFileTransferTabAsync(FileTransferTabViewModel tab)
+    {
+        if (tab.FileTransfer.HasActiveTransfers
+            && !await _dialogs.ConfirmAsync(
+                "关闭文件传输",
+                "还有文件正在传输，关闭会取消这些传输，并清理尚未完成的临时文件。\n\n确定要关闭吗？",
+                "关闭并取消",
+                isDanger: true))
+        {
+            return;
+        }
+
+        var wasSelected = ReferenceEquals(SelectedTab, tab);
+        Tabs.Remove(tab);
+        tab.Dispose();
+
+        if (wasSelected)
+        {
+            SelectedTab = Tabs.LastOrDefault(t => t is not PageTabViewModel) ?? (WorkspaceTabViewModel)WorkspaceTab;
+        }
+    }
+
     private async Task CloseSessionAsync(Guid sessionId) => await _sessions.CloseSessionAsync(sessionId);
 
     /// <summary>
@@ -830,9 +910,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _sessions.SessionClosed -= OnSessionClosed;
         _sessions.SessionsChanged -= OnSessionsChanged;
 
+        if (_fileTransferLauncher is not null)
+        {
+            _fileTransferLauncher.OpenRequested -= OnFileTransferOpenRequested;
+        }
+
         foreach (var tab in Tabs.OfType<SessionTabViewModel>())
         {
             tab.ActionRequested -= OnSessionActionRequested;
+            tab.Dispose();
+        }
+
+        foreach (var tab in Tabs.OfType<FileTransferTabViewModel>())
+        {
             tab.Dispose();
         }
     }

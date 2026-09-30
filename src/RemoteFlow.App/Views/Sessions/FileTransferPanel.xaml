@@ -13,7 +13,7 @@
              Background="{DynamicResource Bg.Layer}">
 
     <!--
-        文件传输面板：会话内右侧侧栏与独立文件传输窗口共用同一个控件。
+        文件传输面板：会话内右侧侧栏与工作区文件传输 Tab 共用同一个控件。
         WebView2 终端是原生 HWND，普通 WPF 元素盖不住它，所以侧栏靠 Grid 分列与终端并排，本控件不承担任何浮层职责。
         主题约束：根设全局前景；图标一律 Ui.* / Id.*；列表沿用 List.Plain + List.Row。
     -->

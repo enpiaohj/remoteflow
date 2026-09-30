@@ -8,7 +8,7 @@ using RemoteFlow.Core.Sessions;
 namespace RemoteFlow.Protocol.Ssh;
 
 /// <summary>
-/// 不建立终端会话、直接连 SFTP 的工厂（独立文件传输窗口用）。
+/// 不建立终端会话、直接连 SFTP 的工厂（文件传输 Tab 用）。
 /// 主机密钥走与终端会话相同的两轮握手：首轮遇到未信任的密钥就中止（凭据尚未发送），
 /// 弹窗确认并记录后重试；同一 <c>主机:端口</c> 已在终端里信任过的，静默通过。
 /// </summary>

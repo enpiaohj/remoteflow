@@ -1,7 +1,9 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging.Abstractions;
+using RemoteFlow.Application.FileTransfer;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Abstractions;
+using RemoteFlow.Core.FileTransfer;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 using RemoteFlow.Infrastructure.Settings;
@@ -18,6 +20,8 @@ public sealed class NavigationRefreshTests : IDisposable
     private readonly TempWorkspace _workspace = new();
     private readonly CountingCredentialRepository _credentialRepository = new();
     private readonly MainViewModel _main;
+    private readonly FileTransferLauncher _launcher = new();
+    private readonly FakeTransferConnector _connector = new();
     private readonly CredentialsPageViewModel _credentialsPage;
 
     public NavigationRefreshTests()
@@ -75,13 +79,80 @@ public sealed class NavigationRefreshTests : IDisposable
             settings,
             SynchronousUiDispatcher.Instance,
             new NoOpTimerFactory(),
-            NullLogger<MainViewModel>.Instance);
+            NullLogger<MainViewModel>.Instance,
+            _launcher,
+            _connector,
+            NullLoggerFactory.Instance);
     }
 
     public void Dispose()
     {
         _main.Dispose();
         _workspace.Dispose();
+    }
+
+
+    [Fact]
+    public void 文件传输入口在工作区开Tab且同一连接只开一个()
+    {
+        var profile = new ConnectionProfile { Name = "主机A", Host = "host-a", Protocol = ProtocolType.Ssh };
+
+        _launcher.Open(profile);
+        var tab = Assert.Single(_main.Tabs.OfType<FileTransferTabViewModel>());
+        Assert.Same(tab, _main.SelectedTab);
+        Assert.True(tab.IsActive);
+        Assert.Equal(1, _connector.OpenCount);
+
+        // 切回工作区后再次打开同一连接：聚焦已有 Tab，不重复连接。
+        _main.SelectedTab = _main.WorkspaceTab;
+        _launcher.Open(profile);
+        Assert.Single(_main.Tabs.OfType<FileTransferTabViewModel>());
+        Assert.Same(tab, _main.SelectedTab);
+        Assert.Equal(1, _connector.OpenCount);
+
+        // 文件传输不是会话：不计入会话数，也不进入会话视图。
+        Assert.Equal(0, _main.OpenSessionCount);
+        Assert.False(_main.IsSessionSelected);
+    }
+
+    [Fact]
+    public async Task 关闭文件传输Tab后回到工作区并释放连接()
+    {
+        var profile = new ConnectionProfile { Name = "主机B", Host = "host-b", Protocol = ProtocolType.Ssh };
+        _launcher.Open(profile);
+        var tab = Assert.Single(_main.Tabs.OfType<FileTransferTabViewModel>());
+
+        await tab.CloseCommand.ExecuteAsync(null);
+
+        Assert.Empty(_main.Tabs.OfType<FileTransferTabViewModel>());
+        Assert.Same(_main.WorkspaceTab, _main.SelectedTab);
+        Assert.True(_connector.LastFileSystem!.Disposed);
+    }
+
+    [Fact]
+    public void 不同连接各开各的文件传输Tab()
+    {
+        _launcher.Open(new ConnectionProfile { Name = "甲", Host = "a", Protocol = ProtocolType.Ssh });
+        _launcher.Open(new ConnectionProfile { Name = "乙", Host = "b", Protocol = ProtocolType.Ssh });
+
+        Assert.Equal(2, _main.Tabs.OfType<FileTransferTabViewModel>().Count());
+        Assert.Equal("传输 · 乙", _main.SelectedTab!.Title);
+    }
+
+    private sealed class FakeTransferConnector : IFileTransferConnector
+    {
+        public int OpenCount { get; private set; }
+
+        public FakeRemoteFileSystem? LastFileSystem { get; private set; }
+
+        public FileTransferSupport GetSupport(ConnectionProfile profile) => new(true, FileTransferChannel.Sftp, null);
+
+        public Task<IRemoteFileSystem> OpenAsync(ConnectionProfile profile, CancellationToken cancellationToken)
+        {
+            OpenCount++;
+            LastFileSystem = new FakeRemoteFileSystem();
+            return Task.FromResult<IRemoteFileSystem>(LastFileSystem);
+        }
     }
 
     [Fact]

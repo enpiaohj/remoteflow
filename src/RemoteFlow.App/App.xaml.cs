@@ -249,7 +249,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IDialogService, DialogService>();
         services.AddSingleton<ISshHostKeyPolicy, InteractiveSshHostKeyPolicy>();
         services.AddSingleton<ISessionViewFactory, SessionViewFactory>();
-        services.AddSingleton<IFileTransferWindowService, FileTransferWindowService>();
+        services.AddSingleton<IFileTransferLauncher, FileTransferLauncher>();
 
         // ── ViewModel ─────────────────────────────────────────────
         services.AddSingleton<HomePageViewModel>();

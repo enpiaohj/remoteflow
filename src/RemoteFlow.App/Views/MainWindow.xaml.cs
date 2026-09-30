@@ -7,7 +7,6 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Shell;
-using Microsoft.Extensions.DependencyInjection;
 using RemoteFlow.App.Services;
 using RemoteFlow.App.Views.Pages;
 using RemoteFlow.App.Views.Dialogs;
@@ -927,6 +926,11 @@ public partial class MainWindow : Window
                 session.CloseCommand.Execute(null);
                 e.Handled = true;
             }
+            else if (_viewModel.SelectedTab is FileTransferTabViewModel transfer)
+            {
+                transfer.CloseCommand.Execute(null);
+                e.Handled = true;
+            }
         }
         else if (e.Key == Key.Tab && Keyboard.Modifiers == ModifierKeys.Control)
         {
@@ -994,22 +998,17 @@ public partial class MainWindow : Window
             }
         }
 
-        // 独立文件传输窗口里还有进行中的传输：退出会取消它们并清理尚未完成的临时文件，先问一句。
-        if (App.Services.GetService<IFileTransferWindowService>() is { } transferWindows)
+        // 文件传输 Tab 里还有进行中的传输：退出会取消它们并清理尚未完成的临时文件，先问一句。
+        if (_viewModel.HasActiveFileTransfers
+            && !MessageDialog.ShowConfirm(
+                this,
+                "退出 RemoteFlow？",
+                "还有文件正在传输。退出会取消这些传输，并清理尚未完成的临时文件。",
+                "退出",
+                isDanger: true))
         {
-            if (transferWindows.HasActiveTransfers
-                && !MessageDialog.ShowConfirm(
-                    this,
-                    "退出 RemoteFlow？",
-                    "还有文件正在传输。退出会取消这些传输，并清理尚未完成的临时文件。",
-                    "退出",
-                    isDanger: true))
-            {
-                e.Cancel = true;
-                return;
-            }
-
-            _ = transferWindows.CloseAllAsync();
+            e.Cancel = true;
+            return;
         }
 
         RemoveKeyboardHook();

@@ -65,6 +65,9 @@
         <DataTemplate DataType="{x:Type vm:PageTabViewModel}">
             <Grid Width="0" />
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:FileTransferTabViewModel}">
+            <Grid Width="0" />
+        </DataTemplate>
 
         <!-- 会话 Tab 右键菜单：普通 Tab 头与紧凑选择器的行共用一份定义。
              x:Shared=False：两处引用各自实例化，动作统一在代码后置分发。 -->
@@ -375,6 +378,43 @@
                                                     </StackPanel>
                                                 </RadioButton>
                                             </DataTemplate>
+                                            <!-- 文件传输 Tab：设备图标 + 名称 + 关闭（不是会话，没有状态点） -->
+                                            <DataTemplate DataType="{x:Type vm:FileTransferTabViewModel}">
+                                                <RadioButton Style="{StaticResource WorkspaceTabHeader}"
+                                                             IsChecked="{Binding IsActive, Mode=OneWay}"
+                                                             Checked="OnTabHeaderChecked"
+                                                             ContextMenuOpening="OnTabContextMenuOpening">
+                                                    <StackPanel Orientation="Horizontal" Margin="12,0,8,0"
+                                                                ToolTip="{Binding TabToolTip}">
+                                                        <Image Width="16" Height="16" VerticalAlignment="Center"
+                                                               Source="{Binding DeviceIconKey, Converter={StaticResource KeyToImageSource}}">
+                                                            <Image.Style>
+                                                                <Style TargetType="Image" BasedOn="{StaticResource DeviceIcon.Image}">
+                                                                    <Setter Property="Opacity" Value="0.8" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                            <Setter Property="Opacity" Value="1" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Image.Style>
+                                                        </Image>
+                                                        <TextBlock Text="{Binding Title}"
+                                                                   Margin="8,0,0,0"
+                                                                   MaxWidth="150"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   VerticalAlignment="Center"
+                                                                   FontSize="13"
+                                                                   Foreground="{DynamicResource Text.Primary}" />
+                                                        <Button Style="{StaticResource Button.Icon}"
+                                                                Width="26" Height="26" Margin="6,0,-2,0"
+                                                                FontSize="11"
+                                                                Content="{StaticResource Ui.Close}"
+                                                                ToolTip="关闭文件传输 (Ctrl+W)"
+                                                                Command="{Binding CloseCommand}" />
+                                                    </StackPanel>
+                                                </RadioButton>
+                                            </DataTemplate>
                                         </ItemsControl.Resources>
                                     </ItemsControl>
                                 </ScrollViewer>
@@ -501,6 +541,16 @@
                                 </DataTemplate>
                                 <DataTemplate DataType="{x:Type vm:SessionTabViewModel}">
                                     <sessions:SessionHostView />
+                                </DataTemplate>
+                                <!-- 文件传输 Tab：与会话 Tab 同一块深色舞台（Bg.Session），面板作为浅色卡片居中，
+                                     深浅主题下文字都保持可读。 -->
+                                <DataTemplate DataType="{x:Type vm:FileTransferTabViewModel}">
+                                    <Border Background="{DynamicResource Bg.Session}" Padding="12">
+                                        <Border Background="{DynamicResource Bg.Layer}" CornerRadius="8" ClipToBounds="True">
+                                            <sessions:FileTransferPanel DataContext="{Binding FileTransfer}"
+                                                                        ShowCloseButton="False" />
+                                        </Border>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.Resources>
                         </ItemsControl>

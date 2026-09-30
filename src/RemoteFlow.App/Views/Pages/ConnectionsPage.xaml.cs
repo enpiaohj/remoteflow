@@ -375,7 +375,7 @@ public partial class ConnectionsPage : UserControl
         }
     }
 
-    /// <summary>打开独立文件传输窗口（不建立会话）。</summary>
+    /// <summary>在工作区打开文件传输 Tab（不建立会话）。</summary>
     private void OnFileTransferMenuClick(object sender, RoutedEventArgs e)
     {
         if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)

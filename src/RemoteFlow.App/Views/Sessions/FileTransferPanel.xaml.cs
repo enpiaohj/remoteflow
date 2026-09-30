@@ -7,7 +7,7 @@ using RemoteFlow.Presentation.ViewModels;
 namespace RemoteFlow.App.Views.Sessions;
 
 /// <summary>
-/// 文件传输面板（会话内侧栏与独立窗口共用）。所有逻辑都在 <see cref="FileTransferViewModel"/>，
+/// 文件传输面板（会话内侧栏与工作区文件传输 Tab 共用）。所有逻辑都在 <see cref="FileTransferViewModel"/>，
 /// 这里只做视图互操作：右键选中、双击进入、右键菜单显隐、路径框的编辑 / 面包屑切换、快捷键。
 /// </summary>
 public partial class FileTransferPanel : UserControl
@@ -26,7 +26,7 @@ public partial class FileTransferPanel : UserControl
         PreviewKeyDown += OnPanelPreviewKeyDown;
     }
 
-    /// <summary>显示标题栏右上角的「收起」按钮（侧栏用；独立窗口自带关闭按钮，不需要）。</summary>
+    /// <summary>显示标题栏右上角的「收起」按钮（侧栏用；文件传输 Tab 的标签头自带关闭按钮，不需要）。</summary>
     public bool ShowCloseButton
     {
         get => (bool)GetValue(ShowCloseButtonProperty);

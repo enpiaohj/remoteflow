@@ -28,8 +28,8 @@ public enum FileTransferConnectionState
 }
 
 /// <summary>
-/// 文件传输面板的视图模型：会话内侧栏与独立窗口共用同一份。
-/// 文件系统由工厂委托提供——侧栏来自会话的 <c>IFileTransferSession</c>，独立窗口来自
+/// 文件传输面板的视图模型：会话内侧栏与工作区文件传输 Tab 共用同一份。
+/// 文件系统由工厂委托提供——侧栏来自会话的 <c>IFileTransferSession</c>，文件传输 Tab 来自
 /// <c>IFileTransferConnector</c>；本类只依赖 <see cref="IRemoteFileSystem"/>，与具体通道无关。
 /// <para>
 /// 所有成员都在界面线程上调用；后台线程来的变化（传输进度）经 <see cref="IUiDispatcher"/> 切回。

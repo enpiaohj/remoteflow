@@ -80,7 +80,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     /// <summary>在线探测。可空以允许单元测试以 null 构造（不测探测）。</summary>
     private readonly PresenceProbeService? _probe;
-    private readonly IFileTransferWindowService? _fileTransferWindows;
+    private readonly IFileTransferLauncher? _fileTransferLauncher;
 
     /// <summary>当前批量探测的取消令牌。新探测 / 重新加载都会取消上一批。</summary>
     private CancellationTokenSource? _probeCts;
@@ -124,7 +124,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         IUiDispatcher uiDispatcher,
         SessionManager sessions,
         PresenceProbeService? probe = null,
-        IFileTransferWindowService? fileTransferWindows = null)
+        IFileTransferLauncher? fileTransferLauncher = null)
     {
         _connections = connections;
         _ui = uiDispatcher;
@@ -138,7 +138,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         _logger = logger;
         _sessions = sessions;
         _probe = probe;
-        _fileTransferWindows = fileTransferWindows;
+        _fileTransferLauncher = fileTransferLauncher;
 
         Items = [];
 
@@ -1414,7 +1414,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 打开独立文件传输窗口：不建立终端 / RDP 会话，直接对该主机传文件（SSH 走 SFTP，RDP 走 SMB 或 SFTP）。
+    /// 打开文件传输 Tab：不建立终端 / RDP 会话，直接对该主机传文件（SSH 走 SFTP，RDP 走 SMB 或 SFTP）。
     /// VNC 没有文件传输通道，入口不可用；没有窗口宿主的平台（macOS 本版）同样不可用。
     /// 命令入口同时被右键菜单、详情面板与首页快捷操作复用。
     /// </summary>
@@ -1427,11 +1427,11 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             return;
         }
 
-        _fileTransferWindows?.Open(item.Profile);
+        _fileTransferLauncher?.Open(item.Profile);
     }
 
     private bool CanOpenFileTransfer(ConnectionItemViewModel? item)
-        => _fileTransferWindows is not null && (item ?? SelectedItem)?.SupportsFileTransfer != false;
+        => _fileTransferLauncher is not null && (item ?? SelectedItem)?.SupportsFileTransfer != false;
 
     [RelayCommand]
     private async Task DeleteAsync(ConnectionItemViewModel? item)
