@@ -184,6 +184,18 @@ public sealed class UiIconGeometryConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>远端文件条目 → 系统资源管理器同款文件 / 文件夹图标（按扩展名取，查询失败为 null）。</summary>
+public sealed class RemoteFileShellIconConverter : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is RemoteFileItemViewModel item
+            ? RemoteFlow.App.Services.ShellIconProvider.Get(item.Name, item.IsDirectory)
+            : null;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>设备类型枚举 → 正式矢量图标，供编辑器下拉预览；Unknown 不显示图标。</summary>
 public sealed class DeviceTypeToImageSourceConverter : IValueConverter
 {

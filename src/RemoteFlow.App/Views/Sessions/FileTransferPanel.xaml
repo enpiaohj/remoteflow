@@ -22,18 +22,7 @@
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
         <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
-
-        <!-- 文件 / 文件夹图标：文件夹用品牌色，文件用弱化色 -->
-        <Style x:Key="FileTransfer.EntryIcon" TargetType="Path" BasedOn="{StaticResource UiIcon}">
-            <Setter Property="Width" Value="20" />
-            <Setter Property="Height" Value="20" />
-            <Setter Property="Fill" Value="{DynamicResource Text.Tertiary}" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsDirectory}" Value="True">
-                    <Setter Property="Fill" Value="{DynamicResource Brand.Default}" />
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
+        <conv:RemoteFileShellIconConverter x:Key="ShellIcon" />
 
         <!-- 工具条上的紧凑图标按钮 -->
         <Style x:Key="FileTransfer.ToolButton" TargetType="Button" BasedOn="{StaticResource Button.Icon}">
@@ -222,9 +211,12 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <Path Grid.Column="0" Style="{StaticResource FileTransfer.EntryIcon}"
-                                  Data="{Binding IconKey, Converter={StaticResource UiIconGeometry}}"
-                                  Margin="0,0,10,0" VerticalAlignment="Center" />
+                            <!-- 系统文件图标：与资源管理器一致（按扩展名取，文件夹为系统文件夹图标） -->
+                            <Image Grid.Column="0" Width="22" Height="22"
+                                   Source="{Binding Converter={StaticResource ShellIcon}}"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   SnapsToDevicePixels="True"
+                                   Margin="0,0,10,0" VerticalAlignment="Center" />
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontSize="12"
