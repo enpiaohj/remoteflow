@@ -16,8 +16,8 @@ public readonly record struct SanitizedName(string Name, bool Changed);
 /// </summary>
 public static class LocalNameSanitizer
 {
-    /// <summary>名称最大长度。留出 <c>.rfpart</c> 等临时后缀的余量，低于常见文件系统的 255 上限。</summary>
-    public const int MaxNameLength = 240;
+    /// <summary>名称最大长度。留出 <c>.rfpart</c> 等临时后缀的余量，低于常见文件系统的 255 上限（临时名 = 名称 + 最多 16 个字符）。</summary>
+    public const int MaxNameLength = 200;
 
     private static readonly HashSet<string> ReservedDeviceNames = new(StringComparer.OrdinalIgnoreCase)
     {
