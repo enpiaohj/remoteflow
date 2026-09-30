@@ -129,6 +129,12 @@
         </Grid>
 
         <!-- ══ 文件传输侧栏（仅 SSH 会话，点工具条按钮展开）════════════ -->
+        <!-- 侧栏底板：铺满分隔条 + 面板两列，背景随主题（Bg.Layer）。
+             RootGrid 自身是会话深色底，不垫这一层的话，分隔条与面板边缘的亚像素缝会漏出一条黑线。 -->
+        <Border x:Name="FileTransferBackdrop"
+                Grid.Column="1" Grid.ColumnSpan="2"
+                Background="{DynamicResource Bg.Layer}"
+                Visibility="Collapsed" />
         <GridSplitter x:Name="FileTransferSplitter"
                       Grid.Column="1"
                       Width="5"
@@ -136,7 +142,7 @@
                       VerticalAlignment="Stretch"
                       ResizeBehavior="PreviousAndNext"
                       ResizeDirection="Columns"
-                      Background="{DynamicResource Stroke.Subtle}"
+                      Background="Transparent"
                       Visibility="Collapsed"
                       DragCompleted="OnFileTransferSplitterDragCompleted" />
         <local:FileTransferPanel x:Name="FileTransferPanelView"

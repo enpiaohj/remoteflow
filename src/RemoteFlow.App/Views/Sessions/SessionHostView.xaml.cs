@@ -304,6 +304,7 @@ public partial class SessionHostView : UserControl
         }
 
         var visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        FileTransferBackdrop.Visibility = visibility;
         FileTransferSplitter.Visibility = visibility;
         FileTransferPanelView.Visibility = visibility;
     }
