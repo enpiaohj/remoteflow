@@ -10,7 +10,14 @@
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
     <RootNamespace>RemoteFlow.Infrastructure</RootNamespace>
+    <!-- Smb 下 WNet / NetShareEnum 的 [LibraryImport] 源生成器需要 unsafe 上下文 -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SMB 路径映射 / 错误翻译等 internal 逻辑由 Windows 集成测试直接覆盖。 -->
+    <InternalsVisibleTo Include="RemoteFlow.IntegrationTests.Windows" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\RemoteFlow.Core\RemoteFlow.Core.csproj" />
