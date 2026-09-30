@@ -19,6 +19,7 @@
     <ProjectReference Include="..\..\src\RemoteFlow.Application\RemoteFlow.Application.csproj" />
     <ProjectReference Include="..\..\src\RemoteFlow.Infrastructure\RemoteFlow.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\RemoteFlow.Presentation\RemoteFlow.Presentation.csproj" />
+    <ProjectReference Include="..\..\src\RemoteFlow.Protocol.Ssh\RemoteFlow.Protocol.Ssh.csproj" />
   </ItemGroup>
 
   <ItemGroup>

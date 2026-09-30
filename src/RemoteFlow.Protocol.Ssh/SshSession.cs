@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Renci.SshNet;
 using Renci.SshNet.Common;
+using RemoteFlow.Core.FileTransfer;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 
@@ -20,7 +21,7 @@ namespace RemoteFlow.Protocol.Ssh;
 /// 也会由终端侧的解码器正确拼接，不会出现半个汉字变乱码的问题。
 /// </para>
 /// </summary>
-public sealed class SshSession : IRemoteSession
+public sealed class SshSession : IRemoteSession, IFileTransferSession
 {
     private readonly SessionRequest _request;
     private readonly ILogger _logger;
@@ -45,17 +46,24 @@ public sealed class SshSession : IRemoteSession
     /// <summary>会话已进入收尾（Disconnect / Dispose / 远端 EOF）。置位后不再允许重新连接。</summary>
     private volatile bool _closing;
 
-    /// <summary>Host Key 校验失败的具体原因，用于在连接异常时给出准确错误码。</summary>
-    private ConnectionErrorCode _hostKeyFailure = ConnectionErrorCode.None;
+    /// <summary>
+    /// 主机密钥校验闸门：记录握手时发现的待确认密钥与校验失败的具体原因（用于给出准确错误码）。
+    /// 与 SFTP 工厂共用同一份逻辑，保证终端与文件传输的信任决策一致。
+    /// </summary>
+    private readonly SshHostKeyGate _hostKeyGate;
 
-    /// <summary>握手时发现的、尚未被本机信任的主机密钥。连接失败后据此弹窗确认。</summary>
-    private SshHostKeyVerificationContext? _pendingHostKey;
+    /// <summary>文件传输通道：按需惰性创建并缓存，清理时先于 SSH 连接释放。</summary>
+    private SftpFileSystem? _sftp;
+
+    /// <summary>串行化 <see cref="OpenFileSystemAsync"/>，避免并发打开出多条 SFTP 连接。</summary>
+    private readonly SemaphoreSlim _sftpOpenMutex = new(1, 1);
 
     public SshSession(SessionRequest request, ILogger logger)
     {
         _request = request;
         _credential = request.Credential;
         _logger = logger;
+        _hostKeyGate = new SshHostKeyGate(request.HostKeyPolicy, request.Profile.Host, request.Profile.Port, logger, SessionId);
     }
 
     public Guid SessionId { get; } = Guid.NewGuid();
@@ -143,17 +151,17 @@ public sealed class SshSession : IRemoteSession
                     _logger.LogInformation(
                         "SSH 会话 {SessionId} 第 {Attempt} 轮握手异常，PendingHostKey={HasPending}，" +
                         "异常类型={ExceptionType}：{Message}",
-                        SessionId, attempt, _pendingHostKey is not null, ex.GetType().Name, ex.Message);
+                        SessionId, attempt, _hostKeyGate.PendingHostKey is not null, ex.GetType().Name, ex.Message);
 
                     // 首轮握手被我方中止（主机密钥未信任），且还没弹过窗——现在弹。
-                    if (attempt == 0 && _pendingHostKey is { } pending && _request.HostKeyPolicy is { } policy)
+                    if (attempt == 0 && _hostKeyGate.PendingHostKey is { } pending && _request.HostKeyPolicy is { } policy)
                     {
                         var accepted = await policy.ConfirmAndRememberAsync(pending, cancellationToken);
-                        _pendingHostKey = null;
+                        _hostKeyGate.ClearPending();
 
                         if (accepted)
                         {
-                            _hostKeyFailure = ConnectionErrorCode.None;
+                            _hostKeyGate.Reset();
                             continue; // 指纹已记录，重试；这轮 Lookup 会静默通过
                         }
 
@@ -179,12 +187,11 @@ public sealed class SshSession : IRemoteSession
     /// <summary>单次连接尝试。失败抛异常，由 <see cref="ConnectAsync"/> 决定是否重试。</summary>
     private async Task ConnectOnceAsync(CancellationToken cancellationToken)
     {
-        _pendingHostKey = null;
-        _hostKeyFailure = ConnectionErrorCode.None;
+        _hostKeyGate.Reset();
 
         var connectionInfo = BuildConnectionInfo();
         _client = new SshClient(connectionInfo);
-        _client.HostKeyReceived += OnHostKeyReceived;
+        _client.HostKeyReceived += _hostKeyGate.OnHostKeyReceived;
 
         if (Profile.Ssh.KeepAliveSeconds > 0)
         {
@@ -316,138 +323,85 @@ public sealed class SshSession : IRemoteSession
         }
 
         _lifecycleMutex.Dispose();
+        _sftpOpenMutex.Dispose();
+    }
+
+    // ── 文件传输（SFTP）──────────────────────────────────────────
+
+    /// <summary>
+    /// 在<b>已连接</b>的会话上打开 SFTP。复用 <c>_client.ConnectionInfo</c>——认证方法本来就由它持有，
+    /// 所以不访问凭据库、不新增明文副本；另开一条独立的 TCP 连接，不占用终端通道，传大文件不影响终端响应。
+    /// 主机密钥沿用同一策略：同一「主机:端口」已在终端握手时确认过，这里静默通过。
+    /// 结果按会话缓存；被调用方释放或连接断开后，下一次调用会重建。
+    /// </summary>
+    public async Task<IRemoteFileSystem> OpenFileSystemAsync(CancellationToken cancellationToken)
+    {
+        await _sftpOpenMutex.WaitAsync(cancellationToken);
+        try
+        {
+            if (_sftp is { IsUsable: true } cached)
+            {
+                return cached;
+            }
+
+            var client = _client;
+            if (_closing || _disposed || client is null || State != ConnectionState.Connected)
+            {
+                throw new InvalidOperationException("会话未连接，无法打开文件传输。");
+            }
+
+            var gate = new SshHostKeyGate(_request.HostKeyPolicy, Profile.Host, Profile.Port, _logger, SessionId);
+            var sftpClient = new SftpClient(client.ConnectionInfo);
+            sftpClient.HostKeyReceived += gate.OnHostKeyReceived;
+            if (Profile.Ssh.KeepAliveSeconds > 0)
+            {
+                sftpClient.KeepAliveInterval = TimeSpan.FromSeconds(Profile.Ssh.KeepAliveSeconds);
+            }
+
+            try
+            {
+                // 会话被关闭（Disconnect / Dispose）时 _lifecycleCts 被取消，连接中的 SFTP 随之中断。
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifecycleCts.Token);
+                await sftpClient.ConnectAsync(linked.Token);
+            }
+            catch (Exception ex)
+            {
+                sftpClient.HostKeyReceived -= gate.OnHostKeyReceived;
+                sftpClient.Dispose();
+                if (ex is OperationCanceledException)
+                {
+                    throw;
+                }
+
+                throw SftpFileSystemFactory.ToConnectionException(ex, gate);
+            }
+
+            sftpClient.HostKeyReceived -= gate.OnHostKeyReceived;
+            var fileSystem = new SftpFileSystem(sftpClient, _logger);
+            _sftp = fileSystem;
+
+            // 连接期间会话恰好被关闭：CleanupAsync 可能已经跑完、看不到刚建好的对象，这里自己收尾。
+            if (_closing || _disposed)
+            {
+                _sftp = null;
+                await fileSystem.DisposeAsync();
+                throw new InvalidOperationException("会话已关闭，无法打开文件传输。");
+            }
+
+            _logger.LogInformation("SSH 会话 {SessionId} 已打开 SFTP 文件传输通道", SessionId);
+            return fileSystem;
+        }
+        finally
+        {
+            _sftpOpenMutex.Release();
+        }
     }
 
     // ── 连接构建 ──────────────────────────────────────────────────
 
     private ConnectionInfo BuildConnectionInfo()
-    {
-        var credential = _credential;
-        if (credential is null)
-        {
-            throw ConnectionException.FromCode(ConnectionErrorCode.CredentialMissing);
-        }
-
-        credential.ThrowIfDisposed();
-
-        var username = credential.Username;
-        if (string.IsNullOrWhiteSpace(username))
-        {
-            throw new ConnectionException(
-                ConnectionErrorCode.AuthenticationFailed, "SSH 连接必须指定用户名。");
-        }
-
-        AuthenticationMethod authentication = credential.Type switch
-        {
-            CredentialType.SshPrivateKey => BuildPrivateKeyAuthentication(username, credential),
-            _ => new PasswordAuthenticationMethod(username, credential.Password ?? string.Empty)
-        };
-
-        return new ConnectionInfo(Profile.Host, Profile.Port, username, authentication)
-        {
-            Timeout = TimeSpan.FromSeconds(Math.Max(Profile.Ssh.ConnectTimeoutSeconds, 5)),
-            Encoding = ResolveEncoding(Profile.Ssh.Encoding)
-        };
-    }
-
-    private static PrivateKeyAuthenticationMethod BuildPrivateKeyAuthentication(string username, ResolvedCredential credential)
-    {
-        if (string.IsNullOrEmpty(credential.PrivateKey))
-        {
-            throw new ConnectionException(
-                ConnectionErrorCode.CredentialMissing, "该凭据未包含 SSH 私钥，无法使用私钥登录。");
-        }
-
-        try
-        {
-            using var keyStream = new MemoryStream(Encoding.UTF8.GetBytes(credential.PrivateKey));
-
-            // Password 字段在私钥登录场景下承担 Passphrase 的角色。
-            var keyFile = string.IsNullOrEmpty(credential.Password)
-                ? new PrivateKeyFile(keyStream)
-                : new PrivateKeyFile(keyStream, credential.Password);
-
-            return new PrivateKeyAuthenticationMethod(username, keyFile);
-        }
-        catch (SshException ex)
-        {
-            // 私钥格式错误或 Passphrase 不正确。异常信息不包含私钥内容，可安全传递。
-            throw new ConnectionException(
-                ConnectionErrorCode.AuthenticationFailed, "SSH 私钥无法加载，请检查私钥格式或 Passphrase 是否正确。", ex);
-        }
-    }
-
-    private static Encoding ResolveEncoding(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return Encoding.UTF8;
-        }
-
-        try
-        {
-            return Encoding.GetEncoding(name);
-        }
-        catch (ArgumentException)
-        {
-            // 配置了不认识的编码时退回 UTF-8，而不是让连接直接失败。
-            return Encoding.UTF8;
-        }
-    }
-
-    // ── Host Key 校验 ─────────────────────────────────────────────
-
-    /// <summary>
-    /// SSH.NET 在握手线程上同步触发本事件。<b>这里绝不阻塞等待 UI</b>——会话超时会先到，
-    /// 把弹窗结果吞掉。只做一次快速的本机指纹比对：一致则放行；否则中止握手
-    /// （<c>CanTrust = false</c>，此时凭据尚未发送），把待确认的密钥记下来，
-    /// 由 <see cref="ConnectAsync"/> 在握手失败后弹窗、用户接受则记录并重试。
-    /// </summary>
-    private void OnHostKeyReceived(object? sender, HostKeyEventArgs e)
-    {
-        _logger.LogDebug(
-            "SSH 会话 {SessionId} 收到 HostKeyReceived，调用线程={ThreadId}", SessionId, Environment.CurrentManagedThreadId);
-
-        var policy = _request.HostKeyPolicy;
-        if (policy is null)
-        {
-            // 没有配置校验策略时必须拒绝，绝不静默信任任意主机密钥。
-            _logger.LogWarning("SSH 会话 {SessionId} 未配置 HostKeyPolicy，直接拒绝主机密钥", SessionId);
-            _hostKeyFailure = ConnectionErrorCode.HostKeyRejected;
-            e.CanTrust = false;
-            return;
-        }
-
-        try
-        {
-            var context = policy.Lookup(new SshHostKeyVerificationContext
-            {
-                Host = Profile.Host,
-                Port = Profile.Port,
-                KeyAlgorithm = e.HostKeyName,
-                Fingerprint = e.FingerPrintSHA256,
-            });
-
-            if (context.IsKnownGood)
-            {
-                e.CanTrust = true;
-                return;
-            }
-
-            // 未信任 / 指纹变化：中止本次握手，稍后弹窗。
-            _logger.LogDebug(
-                "SSH 会话 {SessionId} 主机密钥未信任，中止握手待确认，IsMismatch={IsMismatch}",
-                SessionId, context.IsMismatch);
-            _pendingHostKey = context;
-            e.CanTrust = false;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "SSH 会话 {SessionId} 查询主机密钥时发生异常", SessionId);
-            _hostKeyFailure = ConnectionErrorCode.HostKeyRejected;
-            e.CanTrust = false;
-        }
-    }
+        => SshConnectionInfoFactory.Build(
+            Profile.Host, Profile.Port, _credential, Profile.Ssh.ConnectTimeoutSeconds, Profile.Ssh.Encoding);
 
     // ── 数据读取 ──────────────────────────────────────────────────
 
@@ -544,12 +498,20 @@ public sealed class SshSession : IRemoteSession
             _readLoopCts?.Dispose();
             _readLoopCts = null;
 
+            // 文件传输通道先于 SSH 连接释放：先取消它的在途操作再断开，
+            // 否则随后 _client 被释放会让传输以「已释放」异常收场，也可能拖过关闭预算。
+            if (_sftp is { } sftp)
+            {
+                _sftp = null;
+                await sftp.DisposeAsync();
+            }
+
             _shell?.Dispose();
             _shell = null;
 
             if (_client is not null)
             {
-                _client.HostKeyReceived -= OnHostKeyReceived;
+                _client.HostKeyReceived -= _hostKeyGate.OnHostKeyReceived;
 
                 if (_client.IsConnected)
                 {
@@ -594,29 +556,7 @@ public sealed class SshSession : IRemoteSession
     }
 
     /// <summary>把底层库异常映射为标准化错误码，UI 只面对可理解的中文提示。</summary>
-    private ConnectionErrorCode MapError(Exception ex)
-    {
-        // Host Key 校验失败会以 SshConnectionException 的形式冒泡，
-        // 此处优先采用校验阶段记录的精确原因。
-        if (_hostKeyFailure != ConnectionErrorCode.None)
-        {
-            return _hostKeyFailure;
-        }
-
-        return ex switch
-        {
-            ConnectionException connectionException => connectionException.ErrorCode,
-            SshAuthenticationException => ConnectionErrorCode.AuthenticationFailed,
-            SocketException { SocketErrorCode: SocketError.HostNotFound or SocketError.NoData }
-                => ConnectionErrorCode.HostNotFound,
-            SocketException { SocketErrorCode: SocketError.TimedOut } => ConnectionErrorCode.Timeout,
-            SocketException => ConnectionErrorCode.NetworkUnreachable,
-            SshOperationTimeoutException => ConnectionErrorCode.Timeout,
-            SshConnectionException => ConnectionErrorCode.NetworkUnreachable,
-            SshException => ConnectionErrorCode.ProtocolNegotiationFailed,
-            _ => ConnectionErrorCode.Unknown
-        };
-    }
+    private ConnectionErrorCode MapError(Exception ex) => SshErrorMapper.Map(ex, _hostKeyGate.Failure);
 
     private void Fail(ConnectionErrorCode code, Exception? ex)
     {

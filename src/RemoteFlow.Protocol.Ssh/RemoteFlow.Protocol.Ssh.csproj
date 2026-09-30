@@ -15,6 +15,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 主机密钥闸门、异常映射等 internal 纯逻辑由跨平台集成测试直接覆盖。 -->
+    <InternalsVisibleTo Include="RemoteFlow.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="SSH.NET" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
