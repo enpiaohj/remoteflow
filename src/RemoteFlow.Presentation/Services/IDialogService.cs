@@ -1,3 +1,4 @@
+using RemoteFlow.Application.FileTransfer;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 
@@ -76,6 +77,23 @@ public interface IDialogService
 
     /// <summary>选择一个目录，取消返回 null。</summary>
     string? PickFolder(string title);
+
+    /// <summary>
+    /// 多选要打开的文件（文件传输上传用）。取消返回空列表。
+    /// 带默认实现：尚未实现该能力的平台（macOS）与测试替身无需改动即可编译。
+    /// </summary>
+    IReadOnlyList<string> PickFilesToOpen(string title, string filter) => [];
+
+    /// <summary>单行文本输入框（重命名 / 新建文件夹）。取消返回 null；未实现的平台恒返回 null。</summary>
+    Task<string?> PromptTextAsync(string title, string label, string initialText = "")
+        => Task.FromResult<string?>(null);
+
+    /// <summary>
+    /// 文件传输遇到同名冲突时询问用户（覆盖 / 跳过 / 保留两者 / 取消，可「对全部应用」）。
+    /// 未实现的平台保守地选「跳过」——绝不在用户没确认的情况下静默覆盖。
+    /// </summary>
+    Task<ConflictDecision> ResolveTransferConflictAsync(TransferConflict conflict, CancellationToken cancellationToken)
+        => Task.FromResult(new ConflictDecision(ConflictAction.Skip));
 
     /// <summary>
     /// 打开统一「测试连接」对话框：对 <paramref name="profile"/> 自动执行

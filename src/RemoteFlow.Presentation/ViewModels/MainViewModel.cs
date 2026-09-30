@@ -529,6 +529,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     await ConnectionsPage.TestConnectionCommand.ExecuteAsync(item);
                     break;
 
+                case HomeRowActions.FileTransfer:
+                    // 独立窗口，不改变首页列表，不需要刷新。
+                    ConnectionsPage.OpenFileTransferCommand.Execute(item);
+                    return;
+
                 case HomeRowActions.Favorite:
                     await ConnectionsPage.ToggleFavoriteCommand.ExecuteAsync(item);
                     break;
@@ -585,7 +590,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var tab = new SessionTabViewModel(session, CloseSessionAsync, ReconnectAsync, _ui, _timerFactory);
+        var tab = new SessionTabViewModel(session, CloseSessionAsync, ReconnectAsync, _ui, _timerFactory, _dialogs, _logger);
 
         // 会话工具条里的「全屏」由主窗口层处理（隐藏导航/详情、窗口去边框铺满）；
         // 协议专属动作（缩放、Ctrl+Alt+Del 等）由各协议视图自己订阅处理。

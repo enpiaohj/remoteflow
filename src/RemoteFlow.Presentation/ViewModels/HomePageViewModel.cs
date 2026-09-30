@@ -611,6 +611,7 @@ public static class HomeRowActions
     public const string Disconnect = "disconnect";
     public const string Edit = "edit";
     public const string Test = "test";
+    public const string FileTransfer = "filetransfer";
     public const string Favorite = "favorite";
     public const string Manage = "manage";
 }

@@ -1,9 +1,12 @@
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
+using RemoteFlow.Core.FileTransfer;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 using RemoteFlow.Presentation.Host;
+using RemoteFlow.Presentation.Services;
 
 namespace RemoteFlow.Presentation.ViewModels;
 
@@ -33,7 +36,9 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         Func<Guid, Task> closeCallback,
         Func<ConnectionProfile, Task> reconnectCallback,
         IUiDispatcher uiDispatcher,
-        IUiTimerFactory timerFactory)
+        IUiTimerFactory timerFactory,
+        IDialogService? dialogs = null,
+        ILogger? logger = null)
     {
         Session = session;
         _closeCallback = closeCallback;
@@ -56,6 +61,17 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         _durationTimer = timerFactory.Create(TimeSpan.FromSeconds(1));
         _durationTimer.Tick += OnDurationTick;
 
+        // 文件传输侧栏：只有具备文件传输能力的会话（SSH）才创建；VM 本身很轻，真正连接要等用户第一次打开面板。
+        if (dialogs is not null && session is IFileTransferSession transferSession)
+        {
+            FileTransfer = new FileTransferViewModel(
+                transferSession.OpenFileSystemAsync,
+                dialogs,
+                uiDispatcher,
+                logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance,
+                $"文件传输 · {session.Profile.Name}");
+        }
+
         session.StateChanged += OnSessionStateChanged;
         UpdateStateDisplay(session.State, session.ErrorCode, session.ErrorMessage);
 
@@ -67,6 +83,34 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     }
 
     public IRemoteSession Session { get; }
+
+    /// <summary>
+    /// 文件传输侧栏的视图模型；会话不支持文件传输（RDP / VNC）时为 null。
+    /// 与 <see cref="Quality"/> 同样是会话级子对象，随本 Tab 释放。
+    /// </summary>
+    public FileTransferViewModel? FileTransfer { get; }
+
+    public bool SupportsFileTransfer => FileTransfer is not null;
+
+    /// <summary>文件传输侧栏是否展开。纯界面状态，不是 <see cref="SessionAction"/>（不需要协议视图参与）。</summary>
+    [ObservableProperty]
+    private bool _isFileTransferOpen;
+
+    /// <summary>展开 / 收起文件传输侧栏；首次展开时才发起 SFTP 连接。</summary>
+    [RelayCommand]
+    private async Task ToggleFileTransferAsync()
+    {
+        if (FileTransfer is null)
+        {
+            return;
+        }
+
+        IsFileTransferOpen = !IsFileTransferOpen;
+        if (IsFileTransferOpen)
+        {
+            await FileTransfer.EnsureConnectedAsync();
+        }
+    }
 
     public ProtocolType Protocol => Session.Protocol;
 
@@ -285,6 +329,7 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
 
         UpdateStateDisplay(e.NewState, e.ErrorCode, e.ErrorMessage);
         TrackSessionStats(e.NewState);
+        FileTransfer?.OnHostStateChanged(e.NewState);
     }
 
     /// <summary>
@@ -464,6 +509,7 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         Session.StateChanged -= OnSessionStateChanged;
         Quality.PropertyChanged -= OnQualityPropertyChanged;
         Quality.Dispose();
+        FileTransfer?.Dispose();
         _durationTimer.Tick -= OnDurationTick;
         _durationTimer.Dispose();
     }

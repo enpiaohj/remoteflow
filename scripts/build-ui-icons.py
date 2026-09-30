@@ -88,6 +88,12 @@ ICONS: list[tuple[str, list[str], bool]] = [
     ("Ui.ProtocolRdp", ["Desktop"], False),
     ("Ui.ProtocolSsh", ["Window Console"], False),
     ("Ui.ProtocolVnc", ["Desktop Cursor", "Desktop Mac"], False),
+    # 文件传输：文件浏览器与工具条
+    ("Ui.Document", ["Document"], False),
+    ("Ui.FolderAdd", ["Folder Add"], False),
+    ("Ui.FolderOpen", ["Folder Open"], False),
+    ("Ui.ArrowUp", ["Arrow Up"], False),
+    ("Ui.FileTransfer", ["Folder Arrow Up", "Document Arrow Up"], True),
 ]
 
 PATH_RE = re.compile(r'<path[^>]*?\sd="([^"]+)"[^>]*?>', re.S)

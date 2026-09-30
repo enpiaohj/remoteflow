@@ -41,6 +41,17 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
         _ => "\uE7F8"
     };
 
+    /// <summary>
+    /// 该连接能否做文件传输（不建立会话）：VNC 协议本身没有文件传输通道。
+    /// 只按协议判断，不含平台可用性（SMB 仅 Windows 版可用由通道工厂在打开时判定）。
+    /// </summary>
+    public bool SupportsFileTransfer => Profile.FileTransfer.ResolveChannel(Profile.Protocol) is not null;
+
+    /// <summary>「文件传输」菜单项 / 按钮的悬停说明。</summary>
+    public string FileTransferHint => SupportsFileTransfer
+        ? "打开文件传输窗口（不建立远程会话）"
+        : "VNC 协议本身不支持文件传输";
+
     public string ProtocolIconKey => Profile.Protocol switch
     {
         ProtocolType.Rdp => "ProtocolIcon.Rdp",

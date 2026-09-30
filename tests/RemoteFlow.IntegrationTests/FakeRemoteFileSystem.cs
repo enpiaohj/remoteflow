@@ -33,6 +33,9 @@ internal sealed class FakeRemoteFileSystem : IRemoteFileSystem
 
     public Func<string, Exception?>? FailList { get; set; }
 
+    /// <summary>列目录前调用（可在其中阻塞，用来构造「慢请求」）。</summary>
+    public Func<string, CancellationToken, Task>? OnList { get; set; }
+
     public Func<string, Exception?>? FailDelete { get; set; }
 
     public List<string> Calls { get; } = [];
@@ -126,7 +129,17 @@ internal sealed class FakeRemoteFileSystem : IRemoteFileSystem
 
     // ── IRemoteFileSystem ──
 
-    public Task<IReadOnlyList<RemoteFileEntry>> ListAsync(string path, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<RemoteFileEntry>> ListAsync(string path, CancellationToken cancellationToken)
+    {
+        if (OnList is not null)
+        {
+            await OnList(RemotePath.Normalize(path), cancellationToken).ConfigureAwait(false);
+        }
+
+        return ListCore(path, cancellationToken);
+    }
+
+    private IReadOnlyList<RemoteFileEntry> ListCore(string path, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var normalized = RemotePath.Normalize(path);
@@ -159,7 +172,7 @@ internal sealed class FakeRemoteFileSystem : IRemoteFileSystem
                 result.Add(new RemoteFileEntry(name, normalized.TrimEnd('/') + "/" + name, false, false, data.Length, DateTimeOffset.UtcNow));
             }
 
-            return Task.FromResult<IReadOnlyList<RemoteFileEntry>>(result);
+            return result;
         }
     }
 
