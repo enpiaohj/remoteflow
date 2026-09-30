@@ -31,11 +31,12 @@ public sealed class FileTransferEntryMarkupTests
     {
         var markup = ReadApp("Views/MainWindow.xaml");
 
-        // 标签头、标题栏工具条占位、内容区各一份模板；内容区复用会话舞台背景。
+        // 标签头、标题栏工具条占位、内容区各一份模板；内容区直接铺面板。
         var templates = markup.Split("DataType=\"{x:Type vm:FileTransferTabViewModel}\"").Length - 1;
         Assert.Equal(3, templates);
         Assert.Contains("<sessions:FileTransferPanel DataContext=\"{Binding FileTransfer}\"", markup, StringComparison.Ordinal);
-        Assert.Contains("Background=\"{DynamicResource Bg.Session}\" Padding=\"12\"", markup, StringComparison.Ordinal);
+        // 背景随主题（由面板自身的 Bg.Layer 提供），不再套会话深色舞台与外框。
+        Assert.DoesNotContain("Bg.Session}\" Padding=\"12\"", markup, StringComparison.Ordinal);
     }
 
     [Fact]

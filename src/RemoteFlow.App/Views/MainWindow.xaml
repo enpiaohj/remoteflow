@@ -542,15 +542,10 @@
                                 <DataTemplate DataType="{x:Type vm:SessionTabViewModel}">
                                     <sessions:SessionHostView />
                                 </DataTemplate>
-                                <!-- 文件传输 Tab：与会话 Tab 同一块深色舞台（Bg.Session），面板作为浅色卡片居中，
-                                     深浅主题下文字都保持可读。 -->
+                                <!-- 文件传输 Tab：铺满内容区，背景 Bg.Layer 随主题（浅色白 / 深色深灰），无外框。 -->
                                 <DataTemplate DataType="{x:Type vm:FileTransferTabViewModel}">
-                                    <Border Background="{DynamicResource Bg.Session}" Padding="12">
-                                        <Border Background="{DynamicResource Bg.Layer}" CornerRadius="8" ClipToBounds="True">
-                                            <sessions:FileTransferPanel DataContext="{Binding FileTransfer}"
-                                                                        ShowCloseButton="False" />
-                                        </Border>
-                                    </Border>
+                                    <sessions:FileTransferPanel DataContext="{Binding FileTransfer}"
+                                                                ShowCloseButton="False" />
                                 </DataTemplate>
                             </ItemsControl.Resources>
                         </ItemsControl>
