@@ -108,6 +108,11 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         _rdpRedirectAudio = _profile.Rdp.RedirectAudio;
         _rdpRedirectMicrophone = _profile.Rdp.RedirectMicrophone;
         _selectedConnectionQuality = MatchQuality(_profile.Rdp.ConnectionQuality);
+
+        // 文件传输通道下拉只对 RDP 有意义：Auto 在 RDP 下即 SMB，所以用 RDP 语义解析初始选中项
+        // （不能用当前协议——SSH 会解析成 SFTP，用户在编辑器里切到 RDP 时就会错误地预选 SFTP）。
+        _selectedFileTransferChannel = MatchFileTransferChannel(
+            _profile.FileTransfer.ResolveChannel(ProtocolType.Rdp) ?? FileTransferChannel.Smb);
     }
 
     private ResolutionOption? MatchPreset(int width, int height)
@@ -156,6 +161,42 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
 
     private static ConnectionQualityOption MatchQuality(RdpConnectionQuality value)
         => ConnectionQualityOptionItems.FirstOrDefault(o => o.Value == value) ?? ConnectionQualityOptionItems[0];
+
+    // ── 文件传输（RDP 主机不建立会话时的传输通道） ─────────────────
+
+    /// <summary>直接绑定到 profile 上的文件传输参数（SFTP 端口）。</summary>
+    public FileTransferOptions FileTransfer => _profile.FileTransfer;
+
+    /// <summary>
+    /// 通道下拉项。RDP 协议本身没有文件传输通道，「不连接传文件」借用别的协议：
+    /// SMB 管理共享（默认，目标无需额外安装）或 SFTP（目标 Windows 需安装并启用 OpenSSH Server）。
+    /// </summary>
+    public IReadOnlyList<FileTransferChannelOption> FileTransferChannelOptions => FileTransferChannelOptionItems;
+
+    private static readonly IReadOnlyList<FileTransferChannelOption> FileTransferChannelOptionItems =
+    [
+        new(FileTransferChannel.Smb, "SMB 管理共享（\\\\主机\\C$）"),
+        new(FileTransferChannel.Sftp, "SFTP（目标需运行 OpenSSH Server）")
+    ];
+
+    private static FileTransferChannelOption MatchFileTransferChannel(FileTransferChannel value)
+        => FileTransferChannelOptionItems.FirstOrDefault(o => o.Value == value) ?? FileTransferChannelOptionItems[0];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFileTransferSftp))]
+    private FileTransferChannelOption? _selectedFileTransferChannel;
+
+    /// <summary>当前选的是 SFTP：显示端口输入并在保存时校验端口。</summary>
+    public bool IsFileTransferSftp => SelectedFileTransferChannel?.Value == FileTransferChannel.Sftp;
+
+    partial void OnSelectedFileTransferChannelChanged(FileTransferChannelOption? value)
+    {
+        // 只在用户真的改了选择时才写回：没动过就保存的连接保持 Auto，行为不变。
+        if (value is not null)
+        {
+            _profile.FileTransfer.Channel = value.Value;
+        }
+    }
 
     /// <summary>RDP 显示模式。写回 <see cref="RdpOptions.DisplayMode"/>。</summary>
     [ObservableProperty]
@@ -451,6 +492,13 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
             return null;
         }
 
+        // SFTP 端口只在「RDP 主机走 SFTP」时被使用；其它情况下它不生效，不拦保存。
+        if (IsRdp && IsFileTransferSftp && FileTransfer.SftpPort is < 1 or > 65535)
+        {
+            ValidationMessage = "SFTP 端口必须在 1~65535 之间。";
+            return null;
+        }
+
         // RDP 显示：把编辑器里的显示模式 / 分辨率写回 Profile。
         // 适应窗口时宽高对协议无意义（随窗口），保留已存值、不覆盖。
         _profile.Rdp.DisplayMode = RdpDisplayMode;
@@ -560,6 +608,12 @@ public sealed record ResolutionOption(RdpDisplayResolution Value, string Label, 
 
 /// <summary>RDP 连接质量下拉项。</summary>
 public sealed record ConnectionQualityOption(RdpConnectionQuality Value, string Label)
+{
+    public override string ToString() => Label;
+}
+
+/// <summary>文件传输通道下拉项。</summary>
+public sealed record FileTransferChannelOption(FileTransferChannel Value, string Label)
 {
     public override string ToString() => Label;
 }
