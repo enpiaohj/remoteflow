@@ -15,6 +15,16 @@
 
     <UserControl.Resources>
         <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+
+        <!-- 文件传输开关：侧栏展开时用品牌色 -->
+        <Style x:Key="FileTransferToggle" TargetType="Button" BasedOn="{StaticResource Button.Icon}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsFileTransferOpen}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="10,0">
@@ -69,6 +79,11 @@
             </StackPanel>
 
             <StackPanel x:Name="SshToolsDock" Orientation="Horizontal" Visibility="Collapsed">
+                <Button Style="{StaticResource FileTransferToggle}" Height="30" Width="30" FontSize="14"
+                        Content="{StaticResource Ui.FileTransfer}"
+                        ToolTip="文件传输（SFTP）"
+                        Command="{Binding ToggleFileTransferCommand}"
+                        Visibility="{Binding SupportsFileTransfer, Converter={StaticResource BoolToVisibility}}" />
                 <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
                         Content="{StaticResource Ui.Copy}"
                         ToolTip="复制选中内容 (Ctrl+Shift+C)"

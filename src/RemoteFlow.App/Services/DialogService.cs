@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.App.Views.Dialogs;
+using RemoteFlow.Application.FileTransfer;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
@@ -163,6 +164,26 @@ public sealed class DialogService(
 
         return dialog.ShowDialog(Owner) == true ? dialog.FileName : null;
     }
+
+    public IReadOnlyList<string> PickFilesToOpen(string title, string filter)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = title,
+            Filter = filter,
+            CheckFileExists = true,
+            Multiselect = true
+        };
+
+        return dialog.ShowDialog(Owner) == true ? dialog.FileNames : [];
+    }
+
+    public Task<string?> PromptTextAsync(string title, string label, string initialText = "")
+        => InvokeOnUiAsync(() => TextPromptDialog.Prompt(Owner, title, label, initialText));
+
+    public Task<ConflictDecision> ResolveTransferConflictAsync(
+        TransferConflict conflict, CancellationToken cancellationToken)
+        => InvokeOnUiAsync(() => TransferConflictDialog.Ask(Owner, conflict, cancellationToken));
 
     public string? PickFileToSave(string title, string filter, string defaultFileName)
     {

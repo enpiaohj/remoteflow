@@ -506,6 +506,35 @@
 
                                 <Border Style="{StaticResource Surface.Divider}" Margin="0,4,0,14" />
 
+                                <!-- 文件传输（不建立远程桌面会话，直接对该主机传文件） -->
+                                <TextBlock Text="文件传输" Style="{StaticResource RdpSectionHeader}" />
+                                <Grid Style="{StaticResource FormRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="传输通道" Style="{StaticResource Text.FieldLabel}" />
+                                    <ComboBox Grid.Column="1" Style="{StaticResource Dialog.ComboBox}"
+                                              ItemsSource="{Binding FileTransferChannelOptions}"
+                                              SelectedItem="{Binding SelectedFileTransferChannel}"
+                                              DisplayMemberPath="Label" />
+                                </Grid>
+                                <Grid Style="{StaticResource FormRow}"
+                                      Visibility="{Binding IsFileTransferSftp, Converter={StaticResource BoolToVisibility}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="SFTP 端口" Style="{StaticResource Text.FieldLabel}" />
+                                    <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}" Width="100"
+                                             HorizontalAlignment="Left"
+                                             Text="{Binding FileTransfer.SftpPort, UpdateSourceTrigger=PropertyChanged}" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,14"
+                                           Text="RDP 本身没有文件传输通道。SMB 通道使用本连接保存的 Windows 账号访问管理共享（需 445 端口可达、未禁用管理共享），通常仅适用于局域网 / VPN；SFTP 通道需要目标主机运行 OpenSSH Server。仅 Windows 版提供。" />
+
+                                <Border Style="{StaticResource Surface.Divider}" Margin="0,4,0,14" />
+
                                 <!-- 体验 -->
                                 <TextBlock Text="体验" Style="{StaticResource RdpSectionHeader}" />
                                 <Grid Style="{StaticResource FormRow}">

@@ -1,0 +1,345 @@
+<UserControl x:Class="RemoteFlow.App.Views.Sessions.FileTransferPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
+             xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
+             xmlns:core="clr-namespace:RemoteFlow.Core.FileTransfer;assembly=RemoteFlow.Core"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:FileTransferViewModel}"
+             TextElement.Foreground="{DynamicResource Text.Primary}"
+             FontFamily="{StaticResource UiFont}"
+             Background="{DynamicResource Bg.Layer}">
+
+    <!--
+        文件传输面板：会话内右侧侧栏与独立文件传输窗口共用同一个控件。
+        WebView2 终端是原生 HWND，普通 WPF 元素盖不住它，所以侧栏靠 Grid 分列与终端并排，本控件不承担任何浮层职责。
+        主题约束：根设全局前景；图标一律 Ui.* / Id.*；列表沿用 List.Plain + List.Row。
+    -->
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
+
+        <!-- 文件 / 文件夹图标：文件夹用品牌色，文件用弱化色 -->
+        <Style x:Key="FileTransfer.EntryIcon" TargetType="Path" BasedOn="{StaticResource UiIcon}">
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Fill" Value="{DynamicResource Text.Tertiary}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsDirectory}" Value="True">
+                    <Setter Property="Fill" Value="{DynamicResource Brand.Default}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 工具条上的紧凑图标按钮 -->
+        <Style x:Key="FileTransfer.ToolButton" TargetType="Button" BasedOn="{StaticResource Button.Icon}">
+            <Setter Property="Width" Value="30" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="MinWidth" Value="30" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+
+        <!-- 文件行：选中状态双向绑定到视图模型（多选）；双击进入目录；右键先选中所点行 -->
+        <Style x:Key="FileTransfer.Row" TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">
+            <Setter Property="MinHeight" Value="44" />
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+            <EventSetter Event="MouseDoubleClick" Handler="OnRowDoubleClick" />
+            <EventSetter Event="PreviewMouseRightButtonDown" Handler="OnRowRightButtonDown" />
+        </Style>
+
+        <!-- 上传菜单（点上传按钮弹出）：文件 / 文件夹 -->
+        <ContextMenu x:Key="UploadMenu" x:Shared="False">
+            <MenuItem Header="上传文件…" Click="OnUploadFilesClick" />
+            <MenuItem Header="上传文件夹…" Click="OnUploadFolderClick" />
+        </ContextMenu>
+
+        <!-- 文件列表右键菜单：随选中状态显隐，打开时整理分隔线 -->
+        <ContextMenu x:Key="FileRowMenu" x:Shared="False" Opened="OnRowMenuOpened">
+            <MenuItem Tag="download" Header="下载…" Click="OnRowMenuClick" />
+            <MenuItem Tag="rename" Header="重命名" InputGestureText="F2" Click="OnRowMenuClick" />
+            <MenuItem Tag="delete" Header="删除" InputGestureText="Del" Click="OnRowMenuClick" />
+            <Separator />
+            <MenuItem Tag="copypath" Header="复制路径" Click="OnRowMenuClick" />
+            <Separator />
+            <MenuItem Tag="uploadfiles" Header="上传文件到此处…" Click="OnRowMenuClick" />
+            <MenuItem Tag="newfolder" Header="新建文件夹…" Click="OnRowMenuClick" />
+            <Separator />
+            <MenuItem Tag="refresh" Header="刷新" InputGestureText="F5" Click="OnRowMenuClick" />
+        </ContextMenu>
+    </UserControl.Resources>
+
+    <UserControl.InputBindings>
+        <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
+        <KeyBinding Key="F2" Command="{Binding RenameCommand}" />
+        <KeyBinding Key="Delete" Command="{Binding DeleteCommand}" />
+        <KeyBinding Key="Back" Command="{Binding GoUpCommand}" />
+    </UserControl.InputBindings>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />   <!-- 标题 -->
+            <RowDefinition Height="Auto" />   <!-- 导航行：上一级 / 刷新 / 路径 -->
+            <RowDefinition Height="Auto" />   <!-- 操作行 -->
+            <RowDefinition Height="Auto" />   <!-- 提示条 -->
+            <RowDefinition Height="*" />      <!-- 文件列表 / 状态 -->
+            <RowDefinition Height="Auto" />   <!-- 传输队列 -->
+        </Grid.RowDefinitions>
+
+        <!-- ── 标题 ─────────────────────────────────────────── -->
+        <Grid Grid.Row="0" Margin="14,10,8,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Path Grid.Column="0" Style="{StaticResource UiIcon}" Width="18" Height="18"
+                  Data="{StaticResource Ui.FileTransfer}" Fill="{DynamicResource Brand.Default}" />
+            <TextBlock Grid.Column="1" Text="{Binding Title}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                       Margin="8,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <Border Grid.Column="2" Padding="7,2" CornerRadius="9" Margin="6,0,0,0" VerticalAlignment="Center"
+                    Background="{DynamicResource Brand.Subtle}"
+                    Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="{Binding ChannelText}" FontSize="11" Foreground="{DynamicResource Brand.Default}" />
+            </Border>
+            <Button x:Name="CloseButton" Grid.Column="3" Style="{StaticResource FileTransfer.ToolButton}"
+                    Content="{StaticResource Ui.Close}" FontSize="11" Margin="4,0,0,0"
+                    ToolTip="收起文件传输" Visibility="Collapsed" Click="OnCloseClick" />
+        </Grid>
+
+        <!-- ── 导航行：上一级 / 刷新 / 面包屑或路径输入 ────────── -->
+        <Grid Grid.Row="1" Margin="8,0,8,4"
+              Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0" Style="{StaticResource FileTransfer.ToolButton}"
+                    Content="{StaticResource Ui.ArrowUp}" ToolTip="上一级 (Backspace)"
+                    Command="{Binding GoUpCommand}" IsEnabled="{Binding CanGoUp}" />
+            <Button Grid.Column="1" Style="{StaticResource FileTransfer.ToolButton}"
+                    Content="{StaticResource Ui.Refresh}" ToolTip="刷新 (F5)"
+                    Command="{Binding RefreshCommand}" />
+
+            <Grid Grid.Column="2" Margin="6,0,0,0" MinHeight="30">
+                <!-- 面包屑：点空白处切换为可编辑路径 -->
+                <Border x:Name="BreadcrumbHost" Background="Transparent" CornerRadius="6"
+                        BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="1"
+                        Cursor="IBeam" MouseLeftButtonDown="OnBreadcrumbMouseDown">
+                    <ScrollViewer x:Name="BreadcrumbScroll" VerticalScrollBarVisibility="Disabled"
+                                  HorizontalScrollBarVisibility="Hidden" Margin="2,0" Focusable="False">
+                        <ItemsControl ItemsSource="{Binding Segments}" Focusable="False">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type core:RemotePathSegment}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Style="{StaticResource Button.Subtle}" Content="{Binding Name}"
+                                                MinHeight="24" Height="24" Padding="6,0" FontSize="12"
+                                                Command="{Binding DataContext.NavigateToCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding FullPath}" />
+                                        <TextBlock Text="›" Foreground="{DynamicResource Text.Tertiary}"
+                                                   VerticalAlignment="Center" Margin="0,-1,0,0" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+
+                <TextBox x:Name="PathBox" Style="{StaticResource Input.TextBox}" Visibility="Collapsed"
+                         Text="{Binding PathText, UpdateSourceTrigger=PropertyChanged}"
+                         KeyDown="OnPathBoxKeyDown" LostKeyboardFocus="OnPathBoxLostFocus" />
+            </Grid>
+        </Grid>
+
+        <!-- ── 操作行 ────────────────────────────────────────── -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="8,0,8,6"
+                    Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}">
+            <Button x:Name="UploadButton" Style="{StaticResource FileTransfer.ToolButton}"
+                    Content="{StaticResource Ui.Upload}" ToolTip="上传…"
+                    IsEnabled="{Binding CanUpload}" Click="OnUploadButtonClick" />
+            <Button Style="{StaticResource FileTransfer.ToolButton}"
+                    Content="{StaticResource Ui.Download}" ToolTip="下载所选项…"
+                    Command="{Binding DownloadCommand}" />
+            <Button Style="{StaticResource FileTransfer.ToolButton}"
+                    Content="{StaticResource Ui.FolderAdd}" ToolTip="新建文件夹…"
+                    Command="{Binding NewFolderCommand}" IsEnabled="{Binding CanUpload}" />
+            <Button Style="{StaticResource FileTransfer.ToolButton}"
+                    Content="{StaticResource Ui.Edit}" ToolTip="重命名 (F2)"
+                    Command="{Binding RenameCommand}" />
+            <Button Style="{StaticResource FileTransfer.ToolButton}"
+                    Content="{StaticResource Ui.Delete}" ToolTip="删除 (Del)"
+                    Command="{Binding DeleteCommand}" />
+            <Button Style="{StaticResource FileTransfer.ToolButton}"
+                    Content="{StaticResource Ui.Copy}" ToolTip="复制路径"
+                    Command="{Binding CopyPathCommand}" />
+        </StackPanel>
+
+        <!-- ── 提示条（操作结果 / 校验提示，可关闭）────────────── -->
+        <Border Grid.Row="3" Margin="8,0,8,6" Padding="10,7" CornerRadius="6"
+                Background="{DynamicResource Bg.Subtle}"
+                Visibility="{Binding HasNotice, Converter={StaticResource BoolToVisibility}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding NoticeMessage}" Style="{StaticResource Text.Caption}"
+                           Foreground="{DynamicResource Text.Primary}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Style="{StaticResource FileTransfer.ToolButton}" Width="22" Height="22"
+                        MinWidth="22" MinHeight="22" Margin="6,0,0,0" FontSize="10"
+                        Content="{StaticResource Ui.Close}" ToolTip="关闭提示"
+                        Command="{Binding DismissNoticeCommand}" />
+            </Grid>
+        </Border>
+
+        <!-- ── 文件列表 / 状态 ───────────────────────────────── -->
+        <Grid Grid.Row="4">
+            <!-- 列表 -->
+            <ListBox x:Name="FileList"
+                     Style="{StaticResource List.Plain}"
+                     ItemContainerStyle="{StaticResource FileTransfer.Row}"
+                     ItemsSource="{Binding Entries}"
+                     SelectionMode="Extended"
+                     ContextMenu="{StaticResource FileRowMenu}"
+                     KeyDown="OnFileListKeyDown"
+                     Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:RemoteFileItemViewModel}">
+                        <Grid Margin="10,5,10,5" ToolTip="{Binding ToolTipText}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Path Grid.Column="0" Style="{StaticResource FileTransfer.EntryIcon}"
+                                  Data="{Binding IconKey, Converter={StaticResource UiIconGeometry}}"
+                                  Margin="0,0,10,0" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontSize="12"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="链接" FontSize="10" Margin="6,1,0,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Text.Tertiary}"
+                                               Visibility="{Binding IsSymlink, Converter={StaticResource BoolToVisibility}}" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding DetailText}" Style="{StaticResource Text.Caption}" FontSize="11"
+                                           Margin="0,1,0,0" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- 列举中：顶部一条细进度，不遮挡已有内容 -->
+            <ProgressBar IsIndeterminate="True" Height="2" VerticalAlignment="Top" BorderThickness="0"
+                         Background="Transparent" Foreground="{DynamicResource Brand.Default}"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibility}}" />
+
+            <!-- 空目录 -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False"
+                        Visibility="{Binding IsEmptyDirectory, Converter={StaticResource BoolToVisibility}}">
+                <Path Style="{StaticResource UiIcon}" Width="32" Height="32" HorizontalAlignment="Center"
+                      Data="{StaticResource Ui.FolderOpen}" Fill="{DynamicResource Text.Tertiary}" />
+                <TextBlock Text="此目录为空" Style="{StaticResource Text.BodySecondary}" Margin="0,10,0,0"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <!-- 连接中 -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                        Visibility="{Binding IsConnecting, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="正在连接…" Style="{StaticResource Text.BodySecondary}" HorizontalAlignment="Center" />
+                <ProgressBar IsIndeterminate="True" Width="140" Height="2" Margin="0,14,0,0" BorderThickness="0"
+                             Background="{DynamicResource Bg.Hover}" Foreground="{DynamicResource Brand.Default}" />
+            </StackPanel>
+
+            <!-- 连接失败 / 已断开：说明 + 重新连接 -->
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="300" Margin="20,0"
+                        Visibility="{Binding HasConnectionProblem, Converter={StaticResource BoolToVisibility}}">
+                <Path Style="{StaticResource UiIcon}" Width="30" Height="30" HorizontalAlignment="Center"
+                      Data="{StaticResource Ui.Disconnected}" Fill="{DynamicResource Status.Warning}" />
+                <TextBlock Text="{Binding ErrorMessage}" Style="{StaticResource Text.BodySecondary}"
+                           TextWrapping="Wrap" TextAlignment="Center" Margin="0,12,0,0" />
+                <Button Style="{StaticResource Button.Secondary}" Content="重新连接" Margin="0,16,0,0"
+                        HorizontalAlignment="Center" Command="{Binding RetryConnectCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- ── 传输队列 ──────────────────────────────────────── -->
+        <Border Grid.Row="5" BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,1,0,0"
+                Visibility="{Binding HasTransfers, Converter={StaticResource BoolToVisibility}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="14,8,8,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="传输队列" Style="{StaticResource Text.Label}" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Style="{StaticResource Button.Subtle}" Content="全部取消" FontSize="11"
+                            MinHeight="24" Height="24" Padding="8,0" Command="{Binding CancelAllCommand}"
+                            Visibility="{Binding HasActiveTransfers, Converter={StaticResource BoolToVisibility}}" />
+                    <Button Grid.Column="2" Style="{StaticResource Button.Subtle}" Content="清除已完成" FontSize="11"
+                            MinHeight="24" Height="24" Padding="8,0" Command="{Binding ClearFinishedCommand}"
+                            Visibility="{Binding HasFinishedTransfers, Converter={StaticResource BoolToVisibility}}" />
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" MaxHeight="190" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding Transfers}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:TransferItemViewModel}">
+                                <Grid Margin="12,6,8,6" ToolTip="{Binding MessageText}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Path Grid.Column="0" Style="{StaticResource UiIcon}" Width="16" Height="16"
+                                          VerticalAlignment="Top" Margin="0,2,10,0"
+                                          Data="{Binding StatusIconKey, Converter={StaticResource UiIconGeometry}}"
+                                          Fill="{Binding StatusBrushKey, Converter={StaticResource KeyToBrush}}" />
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontSize="12"
+                                                   FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                        <ProgressBar Height="4" Margin="0,5,0,3" BorderThickness="0"
+                                                     Value="{Binding ProgressPercent, Mode=OneWay}" Maximum="100"
+                                                     IsIndeterminate="{Binding IsIndeterminate}"
+                                                     Background="{DynamicResource Bg.Hover}"
+                                                     Foreground="{DynamicResource Brand.Default}"
+                                                     Visibility="{Binding IsFinished, Converter={StaticResource InverseBoolToVisibility}}" />
+                                        <TextBlock Style="{StaticResource Text.Caption}" FontSize="11"
+                                                   TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding StatusText, Mode=OneWay}" />
+                                            <Run Text="{Binding DetailText, Mode=OneWay, StringFormat=' · {0}'}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Style="{StaticResource FileTransfer.ToolButton}" Width="24" Height="24"
+                                            MinWidth="24" MinHeight="24" FontSize="10" VerticalAlignment="Top"
+                                            Content="{StaticResource Ui.Close}" ToolTip="取消"
+                                            Command="{Binding CancelCommand}"
+                                            Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

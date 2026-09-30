@@ -219,6 +219,39 @@ public sealed class FileTransferServiceTests : IDisposable
         Assert.Equal(Encoding("KEEP"), _remote.ReadFile($"{Home}/a.txt/inside.txt"));
     }
 
+    [Fact]
+    public async Task 询问期间被单独取消的项不会牵连同批其它项目()
+    {
+        _remote.AddFile($"{Home}/a.txt", Encoding("OLD-A"));
+        _remote.AddFile($"{Home}/b.txt", Encoding("OLD-B"));
+        var a = WriteLocal("a.txt", Encoding("NEW-A"));
+        var b = WriteLocal("b.txt", Encoding("NEW-B"));
+        var service = NewService();
+        TransferJob? jobA = null;
+        var release = new TaskCompletionSource();
+
+        // 只在 a.txt 的询问里：先取消 a 这一项（模拟用户点了它的取消，界面随之关闭对话框），再返回「取消整批」。
+        ConflictResolver resolver = async (conflict, _) =>
+        {
+            if (conflict.Name == "a.txt")
+            {
+                await release.Task;
+                service.Cancel(jobA!);
+                return new ConflictDecision(ConflictAction.Cancel);
+            }
+
+            return new ConflictDecision(ConflictAction.Skip);
+        };
+
+        var jobs = service.EnqueueUploads([a, b], Home, resolver);
+        jobA = jobs[0];
+        release.SetResult();
+        await Task.WhenAll(jobs.Select(FinishedAsync));
+
+        Assert.Equal(TransferStatus.Cancelled, jobs[0].Status);
+        Assert.Equal(TransferStatus.Completed, jobs[1].Status); // b 没被牵连，按 Skip 正常结束
+        Assert.Equal(1, jobs[1].SkippedCount);
+    }
     // ── 取消 / 失败 ──
 
     [Fact]

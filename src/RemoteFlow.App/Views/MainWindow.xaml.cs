@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Shell;
+using Microsoft.Extensions.DependencyInjection;
 using RemoteFlow.App.Services;
 using RemoteFlow.App.Views.Pages;
 using RemoteFlow.App.Views.Dialogs;
@@ -991,6 +992,24 @@ public partial class MainWindow : Window
                         return;
                 }
             }
+        }
+
+        // 独立文件传输窗口里还有进行中的传输：退出会取消它们并清理尚未完成的临时文件，先问一句。
+        if (App.Services.GetService<IFileTransferWindowService>() is { } transferWindows)
+        {
+            if (transferWindows.HasActiveTransfers
+                && !MessageDialog.ShowConfirm(
+                    this,
+                    "退出 RemoteFlow？",
+                    "还有文件正在传输。退出会取消这些传输，并清理尚未完成的临时文件。",
+                    "退出",
+                    isDanger: true))
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            _ = transferWindows.CloseAllAsync();
         }
 
         RemoveKeyboardHook();

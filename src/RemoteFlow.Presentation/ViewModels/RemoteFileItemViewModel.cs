@@ -26,6 +26,9 @@ public sealed partial class RemoteFileItemViewModel(RemoteFileEntry entry) : Obs
 
     public string PermissionsText => Entry.Permissions ?? string.Empty;
 
+    /// <summary>行内第二行：「大小 · 修改时间」。目录只有时间；缺哪项就省略哪项，不留悬空分隔符。</summary>
+    public string DetailText => string.Join("  ·  ", new[] { SizeText, ModifiedText }.Where(s => s.Length > 0));
+
     /// <summary>悬停提示：符号链接特别标注。</summary>
     public string ToolTipText => Entry.IsSymlink ? $"{Entry.Name}（符号链接）" : Entry.Name;
 

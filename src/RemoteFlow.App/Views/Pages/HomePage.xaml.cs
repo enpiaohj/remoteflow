@@ -90,6 +90,13 @@ public partial class HomePage : UserControl
             favorite.Header = item?.IsFavorite == true ? "取消收藏" : "收藏";
         }
 
+        // VNC 没有文件传输通道：置灰并说明原因，而不是隐藏。
+        if (menu.Items.OfType<MenuItem>().FirstOrDefault(m => (m.Tag as string) == HomeRowActions.FileTransfer) is { } transfer)
+        {
+            transfer.IsEnabled = item?.SupportsFileTransfer != false;
+            transfer.ToolTip = item?.FileTransferHint;
+        }
+
         ContextMenuSeparators.Normalize(menu);
         ViewModel?.SelectInContext(item);
     }

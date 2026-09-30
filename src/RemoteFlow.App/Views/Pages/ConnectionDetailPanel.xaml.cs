@@ -60,6 +60,13 @@ public partial class ConnectionDetailPanel : UserControl
         }
 
         menu.Items.Add(new MenuItem { Header = "测试连接（Ping）", Command = vm.TestConnectionCommand, CommandParameter = item });
+        menu.Items.Add(new MenuItem
+        {
+            Header = "文件传输…",
+            Command = vm.OpenFileTransferCommand,
+            CommandParameter = item,
+            ToolTip = item.FileTransferHint
+        });
         menu.Items.Add(new MenuItem { Header = "编辑连接", Command = vm.EditCommand, CommandParameter = item });
         menu.PlacementTarget = button;
         menu.Placement = PlacementMode.Bottom;

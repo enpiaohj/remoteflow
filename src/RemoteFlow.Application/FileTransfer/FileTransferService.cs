@@ -1072,6 +1072,11 @@ public sealed class FileTransferService : IAsyncDisposable
                 }
 
                 var decision = await resolver(conflict, ct).ConfigureAwait(false);
+
+                // 询问期间这一项自己被取消了（用户点了该项的取消，界面随之关掉对话框）：
+                // 返回值只是「对话框被关了」，必须先丢弃，绝不能把它当成用户选了「取消整批」而牵连同批其它项目。
+                ct.ThrowIfCancellationRequested();
+
                 if (decision.Action == ConflictAction.Cancel)
                 {
                     await _cancelAll.CancelAsync().ConfigureAwait(false);

@@ -20,6 +20,9 @@ using RemoteFlow.Infrastructure.Settings;
 using RemoteFlow.Protocol.Rdp;
 using RemoteFlow.Protocol.Ssh;
 using RemoteFlow.Protocol.Vnc;
+using RemoteFlow.Core.FileTransfer;
+using RemoteFlow.Infrastructure.Smb;
+using AppFileTransfer = RemoteFlow.Application.FileTransfer;
 using AppServices = RemoteFlow.Application.Services;
 using RemoteFlow.Presentation.Services;
 
@@ -230,6 +233,11 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IConnectionProvider, SshConnectionProvider>();
         services.AddSingleton<IConnectionProvider, VncConnectionProvider>();
 
+        // ── 文件传输：按连接选通道，新增通道只需在此追加一个工厂 ───
+        services.AddSingleton<IRemoteFileSystemFactory, SftpFileSystemFactory>();
+        services.AddSingleton<IRemoteFileSystemFactory, SmbFileSystemFactory>();
+        services.AddSingleton<AppFileTransfer.IFileTransferConnector, AppFileTransfer.FileTransferConnector>();
+
         // ── UI 服务 ───────────────────────────────────────────────
         services.AddSingleton<ThemeService>();
         services.AddSingleton<RemoteFlow.Presentation.Host.IThemeService>(
@@ -241,6 +249,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IDialogService, DialogService>();
         services.AddSingleton<ISshHostKeyPolicy, InteractiveSshHostKeyPolicy>();
         services.AddSingleton<ISessionViewFactory, SessionViewFactory>();
+        services.AddSingleton<IFileTransferWindowService, FileTransferWindowService>();
 
         // ── ViewModel ─────────────────────────────────────────────
         services.AddSingleton<HomePageViewModel>();

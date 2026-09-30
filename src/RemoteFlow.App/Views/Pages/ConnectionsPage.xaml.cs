@@ -233,6 +233,11 @@ public partial class ConnectionsPage : UserControl
                 case "locate":
                     item.Visibility = isAll ? Visibility.Collapsed : Visibility.Visible;
                     break;
+                case "filetransfer":
+                    // VNC 协议本身没有文件传输通道：菜单项置灰并在提示里说明，而不是悄悄隐藏让人找不到。
+                    item.IsEnabled = row?.SupportsFileTransfer != false;
+                    item.ToolTip = row?.FileTransferHint;
+                    break;
                 case "favorite":
                     // 收藏页（Filter=Favorites）展示的都是收藏，恒「取消收藏」；其它页按行当前状态。
                     item.Header = vm.Filter == ConnectionFilter.Favorites || row?.IsFavorite == true
@@ -367,6 +372,15 @@ public partial class ConnectionsPage : UserControl
         if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
         {
             await viewModel.TestConnectionCommand.ExecuteAsync(item);
+        }
+    }
+
+    /// <summary>打开独立文件传输窗口（不建立会话）。</summary>
+    private void OnFileTransferMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
+        {
+            viewModel.OpenFileTransferCommand.Execute(item);
         }
     }
 

@@ -79,6 +79,7 @@
             <Separator />
             <MenuItem Tag="duplicate" Header="复制连接" Click="OnDuplicateMenuClick" />
             <MenuItem Tag="test" Header="测试连接" Click="OnTestMenuClick" />
+            <MenuItem Tag="filetransfer" Header="文件传输…" Click="OnFileTransferMenuClick" />
             <!-- 收藏 / 取消收藏：Header 随行当前收藏状态切换，打开时由守卫写入 -->
             <MenuItem Tag="favorite" Header="收藏" IsCheckable="True"
                       IsChecked="{Binding IsFavorite, Mode=OneWay}"

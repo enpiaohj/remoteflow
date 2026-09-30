@@ -240,7 +240,14 @@ public partial class SessionHostView : UserControl
             return;
         }
 
+        if (_tab is not null)
+        {
+            _tab.PropertyChanged -= OnTabPropertyChanged;
+        }
+
         _tab = tab;
+        tab.PropertyChanged += OnTabPropertyChanged;
+        ApplyFileTransferLayout(tab.IsFileTransferOpen);
         ShowToolsFor(tab.Protocol);
         // 标题栏工具条的状态入口 → 打开质量详情 Flyout（锚定在会话内容顶沿）
         tab.StatusEntryRequested += OnStatusEntryRequested;
@@ -255,6 +262,61 @@ public partial class SessionHostView : UserControl
         var factory = App.Services.GetRequiredService<ISessionViewFactory>();
         _protocolView = factory.Create(tab);
         SessionContent.Content = _protocolView;
+    }
+
+    // ── 文件传输侧栏 ──────────────────────────────────────────────
+
+    /// <summary>侧栏宽度（像素）。所有会话共用：用户调好一次，之后新开的会话沿用。</summary>
+    private static double s_fileTransferWidth = 380;
+
+    private const double FileTransferMinWidth = 300;
+    private const double FileTransferMaxWidth = 900;
+    private const double SessionMinWidth = 320;
+
+    private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SessionTabViewModel.IsFileTransferOpen) && sender is SessionTabViewModel tab)
+        {
+            ApplyFileTransferLayout(tab.IsFileTransferOpen);
+        }
+    }
+
+    /// <summary>
+    /// 展开 / 收起侧栏：终端列与侧栏列并排，折叠时侧栏列宽为 0（终端铺满，与没有该功能时完全一致）。
+    /// 终端列设最小宽度，防止侧栏被拖得太宽把终端挤没。
+    /// </summary>
+    private void ApplyFileTransferLayout(bool open)
+    {
+        if (open)
+        {
+            var width = Math.Clamp(s_fileTransferWidth, FileTransferMinWidth, FileTransferMaxWidth);
+            FileTransferColumn.MinWidth = FileTransferMinWidth;
+            FileTransferColumn.Width = new GridLength(width);
+            FileTransferSplitterColumn.Width = new GridLength(5);
+            SessionColumn.MinWidth = SessionMinWidth;
+        }
+        else
+        {
+            SessionColumn.MinWidth = 0;
+            FileTransferColumn.MinWidth = 0;
+            FileTransferColumn.Width = new GridLength(0);
+            FileTransferSplitterColumn.Width = new GridLength(0);
+        }
+
+        var visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        FileTransferSplitter.Visibility = visibility;
+        FileTransferPanelView.Visibility = visibility;
+    }
+
+    private void OnFileTransferSplitterDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        => s_fileTransferWidth = Math.Clamp(FileTransferColumn.ActualWidth, FileTransferMinWidth, FileTransferMaxWidth);
+
+    private void OnFileTransferCloseRequested(object? sender, EventArgs e)
+    {
+        if (_tab is not null)
+        {
+            _tab.IsFileTransferOpen = false;
+        }
     }
 
     /// <summary>按协议显示悬浮药丸的工具分组（标题栏工具条由 SessionToolsBar 自行处理）。</summary>

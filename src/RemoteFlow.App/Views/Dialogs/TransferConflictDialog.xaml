@@ -1,0 +1,115 @@
+<Window x:Class="RemoteFlow.App.Views.Dialogs.TransferConflictDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        SizeToContent="Height"
+        Width="500"
+        WindowStartupLocation="CenterOwner"
+        FontFamily="{StaticResource UiFont}"
+        UseLayoutRounding="True" TextElement.Foreground="{DynamicResource Text.Primary}">
+
+    <!-- 文件传输遇到同名项目时的询问。
+         默认按钮是「保留两者」（回车不会造成任何数据丢失），Esc / 关闭 = 取消整批；
+         「覆盖」是唯一会丢数据的选项，用警示色，且文件与文件夹同名时禁用。 -->
+    <Border Background="{DynamicResource Bg.Layer}"
+            BorderBrush="{DynamicResource Stroke.Default}"
+            BorderThickness="1"
+            CornerRadius="12"
+            Margin="16">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.24" Direction="270" />
+        </Border.Effect>
+
+        <StackPanel>
+            <StackPanel Margin="28,26,28,0">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource UiIcon}" Width="22" Height="22" VerticalAlignment="Center"
+                          Data="{StaticResource Ui.Warning.Filled}" Fill="{DynamicResource Status.Warning}" />
+                    <TextBlock Text="目标位置已有同名项目"
+                               Style="{StaticResource Text.SectionTitle}"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <TextBlock x:Name="NameText"
+                           Style="{StaticResource Text.Body}"
+                           FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis"
+                           Margin="0,16,0,0" />
+
+                <!-- 现有 / 新的对比：让用户凭大小与时间判断该保留哪个 -->
+                <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="8" Padding="14,10" Margin="0,10,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="已有" Style="{StaticResource Text.Caption}" Margin="0,0,14,4" />
+                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="ExistingText" Style="{StaticResource Text.Caption}"
+                                   Foreground="{DynamicResource Text.Primary}" Margin="0,0,0,4" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="新的" Style="{StaticResource Text.Caption}" Margin="0,0,14,0" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="IncomingText" Style="{StaticResource Text.Caption}"
+                                   Foreground="{DynamicResource Text.Primary}" />
+                    </Grid>
+                </Border>
+
+                <TextBlock x:Name="TypeMismatchText"
+                           Style="{StaticResource Text.Caption}"
+                           Foreground="{DynamicResource Status.Warning}"
+                           TextWrapping="Wrap"
+                           Margin="0,10,0,0"
+                           Visibility="Collapsed"
+                           Text="文件与文件夹同名，无法互相覆盖，只能跳过或保留两者。" />
+
+                <CheckBox x:Name="ApplyToAllCheck"
+                          Content="对本批后续的同名项目执行相同操作"
+                          Margin="0,16,0,0" />
+            </StackPanel>
+
+            <Border Background="{DynamicResource Bg.Subtle}"
+                    CornerRadius="0,0,11,11"
+                    Margin="0,22,0,0"
+                    Padding="24,16">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0"
+                            Style="{StaticResource Button.Secondary}"
+                            Content="取消传输"
+                            IsCancel="True"
+                            ToolTip="取消同一批的全部传输"
+                            Click="OnCancelClick" />
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Style="{StaticResource Button.Secondary}"
+                                Content="跳过"
+                                Click="OnSkipClick" />
+                        <Button x:Name="RenameButton"
+                                Style="{StaticResource Button.Primary}"
+                                Content="保留两者"
+                                IsDefault="True"
+                                Margin="8,0,0,0"
+                                ToolTip="新文件自动改名为「名称 (1)」，两个都保留"
+                                Click="OnRenameClick" />
+                        <Button x:Name="OverwriteButton"
+                                Style="{StaticResource Button.Danger}"
+                                Content="覆盖"
+                                Margin="8,0,0,0"
+                                Click="OnOverwriteClick" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </StackPanel>
+    </Border>
+</Window>

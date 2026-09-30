@@ -1,0 +1,21 @@
+<Window x:Class="RemoteFlow.App.Views.FileTransferWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sessions="clr-namespace:RemoteFlow.App.Views.Sessions"
+        Title="{Binding Title}"
+        Width="920" Height="660"
+        MinWidth="560" MinHeight="420"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource Bg.Layer}"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        TextElement.Foreground="{DynamicResource Text.Primary}"
+        FontFamily="{StaticResource UiFont}">
+
+    <!--
+        独立文件传输窗口：不建立终端 / RDP 会话，直接对某台主机传文件。
+        使用系统标准窗口框架（可缩放、Win11 贴靠、任务栏项），标题栏深浅色由代码后置跟随应用主题；
+        面板与会话内侧栏是同一个控件，DataContext 为 FileTransferViewModel。
+    -->
+    <sessions:FileTransferPanel ShowCloseButton="False" />
+</Window>
