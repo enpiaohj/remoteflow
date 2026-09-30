@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs>
+  <linearGradient id="Id-Night" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#34425C" />
+    <stop offset="1" stop-color="#1A2233" />
+  </linearGradient>
+  <linearGradient id="Id-Slate" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#AAB7CC" />
+    <stop offset="1" stop-color="#56647C" />
+  </linearGradient>
+  <linearGradient id="Id-Teal" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#4FD8E6" />
+    <stop offset="1" stop-color="#0B7F99" />
+  </linearGradient>
+</defs>
+  <path d="M28,19 m-12,0 a12,12 0 1 0 24,0 a12,12 0 1 0 -24,0 Z M6,57 C6,43 16,36 28,36 C40,36 50,43 50,57 Z" fill="#003A48" fill-opacity="0.149" fill-rule="nonzero" />
+  <path d="M26,17 m-12,0 a12,12 0 1 0 24,0 a12,12 0 1 0 -24,0 Z M4,55 C4,41 14,34 26,34 C38,34 48,41 48,55 Z" fill="url(#Id-Teal)" fill-rule="nonzero" />
+  <path d="M19,11 C22,7 27,6 31,8 C27,9 23,11 21,15 Z" fill="#FFFFFF" fill-opacity="0.400" fill-rule="nonzero" />
+  <rect x="39" y="40" width="22" height="16" rx="3" ry="3" fill="#000000" fill-opacity="0.149" />
+  <rect x="37" y="38" width="22" height="15" rx="3" ry="3" fill="url(#Id-Night)" />
+  <rect x="40" y="41" width="16" height="9" rx="1.5" ry="1.5" fill="#7FE3F0" />
+  <rect x="33" y="53" width="30" height="4" rx="2" ry="2" fill="url(#Id-Slate)" />
+</svg>

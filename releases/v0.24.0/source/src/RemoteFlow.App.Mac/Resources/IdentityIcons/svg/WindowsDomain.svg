@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs>
+  <linearGradient id="Id-Blue" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#46C7FF" />
+    <stop offset="0.52" stop-color="#1685E8" />
+    <stop offset="1" stop-color="#2453D5" />
+  </linearGradient>
+  <linearGradient id="Id-Slate" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#AAB7CC" />
+    <stop offset="1" stop-color="#56647C" />
+  </linearGradient>
+</defs>
+  <rect x="31" y="12" width="26" height="46" rx="4" ry="4" fill="#001845" fill-opacity="0.133" />
+  <rect x="29" y="9" width="26" height="46" rx="4" ry="4" fill="url(#Id-Slate)" />
+  <path d="M34,15 H39 V20 H34 Z M44,15 H49 V20 H44 Z M34,25 H39 V30 H34 Z M44,25 H49 V30 H44 Z M34,35 H39 V40 H34 Z M44,35 H49 V40 H44 Z" fill="#DDEBFF" fill-rule="nonzero" />
+  <path d="M23,21 m-10,0 a10,10 0 1 0 20,0 a10,10 0 1 0 -20,0 Z M5,59 C5,45 13,37 23,37 C33,37 41,45 41,59 Z" fill="#001845" fill-opacity="0.149" fill-rule="nonzero" />
+  <path d="M21,19 m-10,0 a10,10 0 1 0 20,0 a10,10 0 1 0 -20,0 Z M3,57 C3,43 11,35 21,35 C31,35 39,43 39,57 Z" fill="url(#Id-Blue)" fill-rule="nonzero" />
+  <path d="M15,14 C17,11 21,10 24,11 C21,12 18,14 16,17 Z" fill="#FFFFFF" fill-opacity="0.400" fill-rule="nonzero" />
+</svg>

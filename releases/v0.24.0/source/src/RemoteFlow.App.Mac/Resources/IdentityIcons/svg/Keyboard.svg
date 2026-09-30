@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs>
+  <linearGradient id="Id-Night" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#34425C" />
+    <stop offset="1" stop-color="#1A2233" />
+  </linearGradient>
+</defs>
+  <rect x="5" y="17" width="57" height="36" rx="7" ry="7" fill="#000000" fill-opacity="0.165" />
+  <rect x="2" y="14" width="57" height="36" rx="7" ry="7" fill="url(#Id-Night)" />
+  <path d="M8,20 H14 V26 H8 Z M17,20 H23 V26 H17 Z M26,20 H32 V26 H26 Z M35,20 H41 V26 H35 Z M44,20 H53 V26 H44 Z M8,29 H17 V35 H8 Z M20,29 H26 V35 H20 Z M29,29 H35 V35 H29 Z M38,29 H44 V35 H38 Z M47,29 H53 V35 H47 Z M8,38 H14 V44 H8 Z M47,38 H53 V44 H47 Z" fill="#DCE3EE" fill-rule="nonzero" />
+  <rect x="17" y="38" width="27" height="6" rx="1.5" ry="1.5" fill="#46C7FF" />
+</svg>
