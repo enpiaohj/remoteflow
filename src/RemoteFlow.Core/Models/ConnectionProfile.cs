@@ -57,6 +57,9 @@ public sealed class ConnectionProfile
     /// <summary>VNC 专项参数，仅当 <see cref="Protocol"/> 为 Vnc 时有意义。</summary>
     public VncOptions Vnc { get; set; } = new();
 
+    /// <summary>文件传输专项参数（通道 / SFTP 端口）。老连接缺该字段时取默认值，行为与未配置一致。</summary>
+    public FileTransferOptions FileTransfer { get; set; } = new();
+
     /// <summary>按协议返回标准默认端口。</summary>
     public static int GetDefaultPort(ProtocolType protocol) => protocol switch
     {
@@ -87,7 +90,8 @@ public sealed class ConnectionProfile
             TagIds = [.. TagIds],
             Rdp = Rdp.Clone(),
             Ssh = Ssh.Clone(),
-            Vnc = Vnc.Clone()
+            Vnc = Vnc.Clone(),
+            FileTransfer = FileTransfer.Clone()
         };
     }
 }
