@@ -7,6 +7,44 @@
 
 ---
 
+## [0.24.1] — 2026-10-13
+
+修复玻璃外观下连接较老的 Windows 服务器时远程画面发白，并在连接编辑器中增加 RDP 颜色深度选项。
+本版本仅发布 Windows（win-x64）；macOS 界面未改动、未含产物。
+
+### 修复
+- **玻璃外观（亚克力 / 云母）下，连接 Windows Server 2003 等较老系统时远程画面几乎全白**：主窗口把系统材质扩展到整个客户区后，
+  老服务器走的 GDI 位图绘制不带透明度信息，被系统当成透明。现在玻璃外观下把 RDP 画面区域标记为不透明；纯色外观不受影响。
+
+### 新增
+- **RDP 颜色深度选项**：编辑连接 → RDP → 体验，可选 32 / 24 / 16 / 15 位，默认 32 位（与此前固定值一致，已有连接不受影响）。
+  该选项目前只对 Windows 版生效。
+
+### Artifacts
+- `RemoteFlow-v0.24.1-win-x64.exe`
+  - Size：75,170,518 bytes
+  - SHA-256：`9E3FA818EF784DE0CC536869966BD7E45D6ECF303D38CBA2D66A94DF71831293`
+- `RemoteFlow-v0.24.1-win-x64.zip`
+  - Size：69,495,710 bytes
+  - SHA-256：`DB14F94D950175E254BE89CDCD5D9B890FCF187E0E60984057E6B34D6079927A`
+
+### Verification
+- Build：`dotnet build RemoteFlow.slnx -c Release` —— 0 警告 / 0 错误
+- Tests：RemoteFlow.Core.Tests 151/151 通过；RemoteFlow.IntegrationTests 426 通过、5 跳过（Mac 专属用例在 Windows 上跳过，属预期）；
+  RemoteFlow.IntegrationTests.Windows 126/126 通过
+- 实机走查（发布产物 `RemoteFlow-v0.24.1-win-x64.exe`）：启动正常、标题栏版本 v0.24.1、设置页可进入、
+  正常退出（exit 0）、无 `remoteflow.db-wal` / `-shm` 残留
+- 开发期实机（试用构建，同一处修复代码）：云母外观下连接 Windows Server 2003 画面恢复正常，连接新系统未见异常，由用户确认
+- 未执行：颜色深度各档位在真实会话中的目视验证（仅有视图模型测试）；亚克力外观下的同一场景；macOS 构建与验证
+- Platform：Windows 11（win-x64）
+
+### Git
+- 源码提交：版本号提升提交（chore: 版本号提升至 0.24.1）；Tag `v0.24.1` 指向随后的 `release: RemoteFlow v0.24.1` 提交
+- 修复 / 功能提交：`c42f1ca`（fix(rdp): 玻璃外观下老服务器远程画面发白）、`a4f5f14`（feat(rdp): 颜色深度选项）
+- 2026-10-13 发布：推送 main 与 Tag，创建 GitHub Release（Latest）
+
+---
+
 ## [0.24.0] — 2026-09-30
 
 文件传输：SSH 会话内右侧 SFTP 侧栏；不建立会话、在主窗口 Tab 条里打开的文件传输 Tab（SSH 走 SFTP，RDP 主机走 SMB 管理共享或 SFTP，按连接选择）。
