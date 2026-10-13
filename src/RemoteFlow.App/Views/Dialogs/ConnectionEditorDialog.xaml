@@ -542,6 +542,22 @@
                                         <ColumnDefinition Width="90" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="颜色深度" Style="{StaticResource Text.FieldLabel}" />
+                                    <StackPanel Grid.Column="1">
+                                        <ComboBox Style="{StaticResource Dialog.ComboBox}"
+                                                  ItemsSource="{Binding ColorDepthOptions}"
+                                                  SelectedItem="{Binding SelectedColorDepth}"
+                                                  DisplayMemberPath="Label"
+                                                  HorizontalAlignment="Left" MinWidth="220" />
+                                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,3,0,0"
+                                                   Text="默认 32 位；远端不支持时会自动协商为它支持的最高值。较老的系统或低带宽下可手动降低。" />
+                                    </StackPanel>
+                                </Grid>
+                                <Grid Style="{StaticResource FormRow}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="连接质量" Style="{StaticResource Text.FieldLabel}" />
                                     <StackPanel Grid.Column="1">
                                         <ComboBox Style="{StaticResource Dialog.ComboBox}"

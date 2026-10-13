@@ -108,6 +108,7 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         _rdpRedirectAudio = _profile.Rdp.RedirectAudio;
         _rdpRedirectMicrophone = _profile.Rdp.RedirectMicrophone;
         _selectedConnectionQuality = MatchQuality(_profile.Rdp.ConnectionQuality);
+        _selectedColorDepth = MatchColorDepth(_profile.Rdp.ColorDepth);
 
         // 文件传输通道下拉只对 RDP 有意义：Auto 在 RDP 下即 SMB，所以用 RDP 语义解析初始选中项
         // （不能用当前协议——SSH 会解析成 SFTP，用户在编辑器里切到 RDP 时就会错误地预选 SFTP）。
@@ -219,6 +220,32 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
 
     /// <summary>当前是否选择了「自定义」分辨率（且处于固定分辨率模式）。</summary>
     public bool IsCustomResolution => IsFixedResolution && SelectedResolution == CustomResolution;
+
+    /// <summary>颜色深度下拉项。老服务器（如 Windows Server 2003）最高只到 24 位，协商不理想时可手动降低。</summary>
+    public IReadOnlyList<ColorDepthOption> ColorDepthOptions => ColorDepthOptionItems;
+
+    private static readonly IReadOnlyList<ColorDepthOption> ColorDepthOptionItems =
+    [
+        new(32, "最高质量（32 位）"),
+        new(24, "真彩色（24 位）"),
+        new(16, "增强色（16 位）"),
+        new(15, "增强色（15 位）")
+    ];
+
+    private static ColorDepthOption MatchColorDepth(int value)
+        => ColorDepthOptionItems.FirstOrDefault(o => o.Value == value) ?? ColorDepthOptionItems[0];
+
+    /// <summary>当前选中的颜色深度。写回 <see cref="RdpOptions.ColorDepth"/>。</summary>
+    [ObservableProperty]
+    private ColorDepthOption? _selectedColorDepth;
+
+    partial void OnSelectedColorDepthChanged(ColorDepthOption? value)
+    {
+        if (value is not null)
+        {
+            _profile.Rdp.ColorDepth = value.Value;
+        }
+    }
 
     /// <summary>当前选中的连接质量预设。写回 <see cref="RdpOptions.ConnectionQuality"/>。</summary>
     [ObservableProperty]
@@ -602,6 +629,12 @@ public sealed partial class TagSelection(Guid id, string name, string color, str
 
 /// <summary>RDP 分辨率下拉项。Width/Height 为 null 表示「自定义」（无固定尺寸）。</summary>
 public sealed record ResolutionOption(RdpDisplayResolution Value, string Label, int? Width, int? Height)
+{
+    public override string ToString() => Label;
+}
+
+/// <summary>RDP 颜色深度下拉项。</summary>
+public sealed record ColorDepthOption(int Value, string Label)
 {
     public override string ToString() => Label;
 }
