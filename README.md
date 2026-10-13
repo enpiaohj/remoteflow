@@ -19,6 +19,56 @@ ViewModel（`RemoteFlow.Core` + `RemoteFlow.Presentation`），各自用平台�
 
 ---
 
+## 截图
+
+> 以下截图取自 Windows 版 v0.25.2，其中的连接、主机名与凭据均为**演示数据**。
+
+![首页：最近连接、收藏与最近活动](docs/images/readme-home.png)
+
+| 连接工作台与右键菜单 | 深色主题 |
+| --- | --- |
+| ![连接工作台：分组树、连接列表、详情面板与连接行右键菜单](docs/images/readme-context-menu.png) | ![深色主题下的连接工作台](docs/images/readme-dark-workbench.png) |
+| 分组树、连接列表与详情面板；右键菜单按统一约定分组，删除类操作用警示色并放在最后 | 深浅主题可跟随系统，另有亚克力 / 云母玻璃外观 |
+
+| 凭据 | 设置 |
+| --- | --- |
+| ![凭据列表：类型、用户名与被引用的连接数](docs/images/readme-credentials.png) | ![设置页：主题、窗口材质与透明度](docs/images/readme-settings.png) |
+| 密码与私钥由 Windows DPAPI 加密单独保存，列表只显示元数据 | 外观、日期时间格式、启动与托盘等 |
+
+| 软件更新 | 深色首页 |
+| --- | --- |
+| ![关于页：版本信息、软件更新与隐私说明](docs/images/readme-about.png) | ![深色主题下的首页](docs/images/readme-dark-home.png) |
+| 应用内检查与安装更新，默认不自动联网 | |
+
+远程会话（RDP / SSH / VNC）与文件传输界面需要连接真实主机，暂未提供截图。
+
+---
+
+## 下载与安装
+
+**Windows**（Windows 11，x64）
+
+1. 到 [Releases](https://github.com/enpiaohj/remoteflow/releases/latest) 下载 `RemoteFlow-v<版本>-win-x64.exe`（单文件、自包含，无需安装 .NET）。
+   同一版本另有 `.zip`，内容相同并附带终端资源目录。
+2. 放到一个**有写入权限的目录**后直接运行（放在 `Program Files` 下将无法使用应用内更新）。
+3. SSH 终端依赖 [Microsoft Edge WebView2 运行时](https://developer.microsoft.com/microsoft-edge/webview2/)，Windows 11 通常已内置。
+
+注意：
+
+- 发布产物**没有代码签名**，首次运行时 Windows 可能提示「未知发布者」。每个版本的 SHA-256 记录在
+  [CHANGELOG.md](CHANGELOG.md) 与对应的 Release 页面，可自行核对。
+- v0.25.0 起支持**应用内更新**（「关于 → 软件更新」）；v0.25.2 起更新后文件名跟随新版本，
+  开机启动项与快捷方式会自动指向新文件。
+- 开启「开机时启动」后，随系统启动时应用直接驻留托盘，手动打开才显示窗口（v0.25.1 起）。
+
+**macOS**（macOS 13+）
+
+macOS 版是独立版本线，发布标签形如 `macos-v0.10.0`，在
+[Releases 列表](https://github.com/enpiaohj/remoteflow/releases) 中查找带 `macOS` 字样的条目下载 DMG。
+macOS 版的功能进度落后于 Windows 版：文件传输、应用内更新、右键菜单统一等以下标注「Windows」的能力暂未提供。
+
+---
+
 ## 功能
 
 | 能力 | 说明 |
@@ -33,7 +83,7 @@ ViewModel（`RemoteFlow.Core` + `RemoteFlow.Presentation`），各自用平台�
 | SSH 终端 | xterm.js（WebView2 / WKWebView 承载）：WebGL 渲染、六套主题、字体/字号、**右键菜单（复制 / 粘贴 / 粘贴选中 / 查找 / 清屏）**、输出内搜索（`Ctrl+Shift+F`）、粘贴安全（多行/大文本确认）、括号粘贴开关、中文输入法直输 |
 | 文件传输（Windows） | **SSH 会话内**右侧 SFTP 侧栏；也可**不建立会话**，在主窗口 Tab 里直接对主机传文件（SSH 走 SFTP，RDP 主机走 **SMB 管理共享**或 SFTP，按连接选择，VNC 不支持）。浏览 / 上传下载文件与文件夹 / 进度队列与取消 / 新建、重命名、删除 / 覆盖确认 / 复制路径，系统资源管理器同款文件图标；下载先写 `.rfpart` 再原子改名、远端文件名净化防路径穿越、不跟随符号链接。SFTP / SMB 通道未在全部环境验证，macOS 版暂无（详见 [文件传输说明](docs/2026-09-30-RemoteFlow-v0.24.0-文件传输说明-v1.1.md)） |
 | VNC 画面 | 三档缩放（等比 / 拉伸 / 1:1）、本地零延迟光标、剪贴板远端→本机 |
-| 连接资产管理 | 新建 / 编辑 / 复制 / 删除，多级分组、跨分组标签、收藏、连接历史；永久内置「我的设备」「未分组」，自定义分组可选 12 种组织图标，标签支持图标 + 颜色（详见 [分组、标签与图标说明](docs/2026-09-27-RemoteFlow-v0.21.0-分组标签图标与状态刷新说明-v1.0.md)） |
+| 连接资产管理 | 新建 / 编辑 / 创建副本 / 删除，批量操作（批量连接、收藏、移动分组、加减标签、删除），多级分组、跨分组标签、收藏、连接历史；永久内置「我的设备」「未分组」，自定义分组可选 12 种组织图标，标签支持图标 + 颜色（详见 [分组、标签与图标说明](docs/2026-09-27-RemoteFlow-v0.21.0-分组标签图标与状态刷新说明-v1.0.md)） |
 | 全局搜索 | 按名称、IP、分组、标签、备注即时过滤，`Ctrl+K` 聚焦 |
 | Credential Vault | 密码 / 私钥由平台密钥库加密单独保存（Windows DPAPI / macOS Keychain），连接库只存引用 |
 | SSH Host Key 校验 | 首次连接记录指纹（TOFU），指纹变化时强警告，杜绝无感中间人 |
@@ -42,7 +92,7 @@ ViewModel（`RemoteFlow.Core` + `RemoteFlow.Presentation`），各自用平台�
 | 统一的右键菜单 | 全应用右键菜单遵循同一约定：分组顺序固定、破坏性操作用警示色并放在最后、动作带图标、同一动作叫法一致；连接 / 首页 / 会话标签 / 文件传输标签 / 凭据 / 分组 / 文件列表均有对应菜单，标注的快捷键（`Enter` / `F2` / `Del` / `F11` / `Ctrl+W`）都是真实绑定（详见 [在线更新与右键菜单说明](docs/2026-10-13-RemoteFlow-v0.25.0-在线更新与右键菜单说明-v1.2.md)） |
 | 应用内更新（Windows） | 「关于 → 软件更新」检查、下载并更新；发布源为本仓库的 GitHub Releases，下载后校验大小与 SHA-256；退出时落地，文件名跟随新版本，开机启动项与快捷方式自动指向新文件；落地失败不影响现有安装并在下次启动提示；**启动时自动检查默认关闭**；产物未做代码签名（详见 [在线更新与右键菜单说明](docs/2026-10-13-RemoteFlow-v0.25.0-在线更新与右键菜单说明-v1.2.md)） |
 | 导入 / 导出 | 连接 CSV（不含 Secret）、凭据加密备份 `.rfbackup`（AES-256-GCM + PBKDF2） |
-| 深浅主题 | 默认浅色，可跟随系统 |
+| 深浅主题 | 浅色 / 深色 / 跟随系统（默认跟随系统） |
 | 玻璃外观 | Windows 11 22H2+ 系统材质：亚克力 / 云母 / 纯色可选，透明度 0–100% 可调；对话框统一亚克力（详见 [玻璃外观说明](docs/2026-09-27-RemoteFlow-v0.22.0-玻璃外观说明-v1.0.md)） |
 | 本地优先 | 不强制登录、不依赖云服务即可完整使用 |
 
@@ -125,7 +175,8 @@ RemoteFlow.slnx  （不含 RemoteFlow.App.Mac —— net10.0-macos 无法跨平�
 
 架构依赖方向始终为 `UI(App / App.Mac) → Presentation → Application → Core ← Infrastructure.* / Protocol.*`。
 UI 只做视图构造 + 平台互操作，逻辑一律下沉到 ViewModel。
-协议 Provider 通过 `IConnectionProvider` 抽象注册，后续新增 SFTP / Web / PowerShell 只需追加一个实现。
+协议 Provider 通过 `IConnectionProvider` 抽象注册，后续新增 Web / PowerShell 等协议只需追加一个实现；
+文件传输通道（SFTP / SMB）通过 `IRemoteFileSystemFactory` 注册，新增通道同样只需追加一个工厂。
 
 ---
 
