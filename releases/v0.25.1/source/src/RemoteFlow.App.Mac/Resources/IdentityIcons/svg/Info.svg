@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs>
+  <linearGradient id="Id-Indigo" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#7E95FF" />
+    <stop offset="1" stop-color="#3352CE" />
+  </linearGradient>
+</defs>
+  <ellipse cx="34" cy="34" rx="26" ry="26" fill="#001845" fill-opacity="0.149" />
+  <ellipse cx="32" cy="32" rx="26" ry="26" fill="url(#Id-Indigo)" />
+  <path d="M13,20 C18,11 27,7 36,8 C27,11 20,16 16,25 Z" fill="#FFFFFF" fill-opacity="0.251" fill-rule="nonzero" />
+  <path d="M32,20 m-4,0 a4,4 0 1 0 8,0 a4,4 0 1 0 -8,0 Z M28.5,27 H35.5 V46 H28.5 Z" fill="#FFFFFF" fill-rule="nonzero" />
+</svg>

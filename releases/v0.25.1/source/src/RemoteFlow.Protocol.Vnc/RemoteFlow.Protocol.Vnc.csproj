@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RemoteFlow.Protocol.Vnc —— VNC / macOS Screen Sharing 协议适配层。
+    使用 Community.MarcusW.VncClient（MIT，纯托管 RFB 实现）。
+
+    保持平台无关（net10.0）：画面经 IFrameSource 交给 UI 层承接，
+    按键映射与剪贴板写入均已上移到 UI 层，本工程不引用任何 UI 框架。
+    对应 macOS 版技术方案 §6.5。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RemoteFlow.Protocol.Vnc</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RemoteFlow.Core\RemoteFlow.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Community.MarcusW.VncClient" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+</Project>

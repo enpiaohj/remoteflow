@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs>
+  <linearGradient id="Id-Gold" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#FFE18A" />
+    <stop offset="0.55" stop-color="#F2B01E" />
+    <stop offset="1" stop-color="#D48806" />
+  </linearGradient>
+</defs>
+  <path d="M20,28 V20 A12,12 0 0 1 44,20 V28" fill="none" stroke="#6E7E98" stroke-width="6" stroke-linecap="flat" stroke-linejoin="round" fill-rule="nonzero" />
+  <rect x="12" y="28" width="44" height="31" rx="7" ry="7" fill="#6B4200" fill-opacity="0.165" />
+  <rect x="9" y="25" width="44" height="31" rx="7" ry="7" fill="url(#Id-Gold)" />
+  <path d="M14,30 H46 V33 H14 Z" fill="#FFFFFF" fill-opacity="0.400" fill-rule="nonzero" />
+  <path d="M31,36 m-4.5,0 a4.5,4.5 0 1 0 9,0 a4.5,4.5 0 1 0 -9,0 Z M29,39 H33 L34.5,48 H27.5 Z" fill="#7A4B00" fill-rule="nonzero" />
+</svg>

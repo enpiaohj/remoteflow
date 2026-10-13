@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+
+  <data name="App_Name" xml:space="preserve"><value>RemoteFlow</value></data>
+  <data name="App_Tagline" xml:space="preserve"><value>统一远程连接工作台</value></data>
+
+  <data name="Common_OK" xml:space="preserve"><value>确定</value></data>
+  <data name="Common_Cancel" xml:space="preserve"><value>取消</value></data>
+  <data name="Common_Save" xml:space="preserve"><value>保存</value></data>
+  <data name="Common_Delete" xml:space="preserve"><value>删除</value></data>
+  <data name="Common_Edit" xml:space="preserve"><value>编辑</value></data>
+  <data name="Common_Connect" xml:space="preserve"><value>连接</value></data>
+  <data name="Common_Close" xml:space="preserve"><value>关闭</value></data>
+  <data name="Common_Refresh" xml:space="preserve"><value>刷新</value></data>
+  <data name="Common_Known" xml:space="preserve"><value>知道了</value></data>
+
+  <data name="Nav_Home" xml:space="preserve"><value>首页</value></data>
+  <data name="Nav_Connections" xml:space="preserve"><value>我的连接</value></data>
+  <data name="Nav_Favorites" xml:space="preserve"><value>收藏</value></data>
+  <data name="Nav_Recent" xml:space="preserve"><value>最近连接</value></data>
+  <data name="Nav_Credentials" xml:space="preserve"><value>凭据</value></data>
+  <data name="Nav_ImportExport" xml:space="preserve"><value>导入 / 导出</value></data>
+  <data name="Nav_Settings" xml:space="preserve"><value>设置</value></data>
+
+  <data name="Connection_New" xml:space="preserve"><value>新建连接</value></data>
+  <data name="Connection_Edit" xml:space="preserve"><value>编辑连接</value></data>
+  <data name="Connection_SaveAndConnect" xml:space="preserve"><value>保存并连接</value></data>
+  <data name="Connection_Search_Placeholder" xml:space="preserve"><value>搜索服务器、IP、标签、备注…  Ctrl+K</value></data>
+
+  <data name="Session_Connecting" xml:space="preserve"><value>正在连接…</value></data>
+  <data name="Session_Connected" xml:space="preserve"><value>已连接</value></data>
+  <data name="Session_Disconnected" xml:space="preserve"><value>已断开</value></data>
+  <data name="Session_Failed" xml:space="preserve"><value>连接失败</value></data>
+  <data name="Session_Reconnect" xml:space="preserve"><value>重新连接</value></data>
+  <data name="Session_FullScreen" xml:space="preserve"><value>全屏 (F11)</value></data>
+  <data name="Session_SendCtrlAltDel" xml:space="preserve"><value>发送 Ctrl+Alt+Del</value></data>
+
+  <data name="HostKey_FirstConnect_Title" xml:space="preserve"><value>首次连接该主机</value></data>
+  <data name="HostKey_Changed_Title" xml:space="preserve"><value>主机密钥已变更</value></data>
+  <data name="HostKey_Trust" xml:space="preserve"><value>信任并继续</value></data>
+  <data name="HostKey_Reject" xml:space="preserve"><value>取消连接</value></data>
+</root>

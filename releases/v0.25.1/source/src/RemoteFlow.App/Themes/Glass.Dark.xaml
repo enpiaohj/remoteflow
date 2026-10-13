@@ -1,0 +1,34 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        深色玻璃覆盖层。启用系统材质时由 ThemeService 合并在 Theme.Dark.xaml 之后，
+        只覆盖「面」的语义键。机身透明露出系统材质；纸张为半透明深色，
+        悬停 / 选中用低不透明度的白或品牌色叠加。
+    -->
+
+    <!-- 机身：80% 深色薄涂。后方是亮色窗口时亚克力会被提亮，薄涂保证白字与三级灰字仍可读 -->
+    <SolidColorBrush x:Key="Bg.Base" Color="#CC15171C" />
+    <SolidColorBrush x:Key="Bg.Sidebar" Color="Transparent" />
+    <SolidColorBrush x:Key="Bg.Chrome" Color="Transparent" />
+    <SolidColorBrush x:Key="Bg.Workspace" Color="#66181A1F" />
+    <SolidColorBrush x:Key="Bg.Layer" Color="#99202329" />
+    <SolidColorBrush x:Key="Bg.Popup" Color="#F2202329" />
+    <SolidColorBrush x:Key="Bg.Subtle" Color="#0DFFFFFF" />
+    <SolidColorBrush x:Key="Bg.Hover" Color="#14FFFFFF" />
+    <SolidColorBrush x:Key="Bg.Pressed" Color="#1FFFFFFF" />
+    <SolidColorBrush x:Key="Bg.Selected" Color="#338098F5" />
+    <SolidColorBrush x:Key="Bg.SelectedHover" Color="#478098F5" />
+    <SolidColorBrush x:Key="Bg.RowSelected" Color="#268098F5" />
+    <SolidColorBrush x:Key="Bg.RowSelectedHover" Color="#338098F5" />
+
+    <SolidColorBrush x:Key="Stroke.Subtle" Color="#14FFFFFF" />
+    <SolidColorBrush x:Key="Stroke.Default" Color="#1FFFFFFF" />
+    <SolidColorBrush x:Key="Stroke.Strong" Color="#33FFFFFF" />
+
+    <SolidColorBrush x:Key="Brand.Subtle" Color="#298098F5" />
+
+    <!-- 半透明底亮度会随后方内容浮动，三级文字提亮一档 -->
+    <SolidColorBrush x:Key="Text.Tertiary" Color="#8C95A3" />
+
+</ResourceDictionary>
