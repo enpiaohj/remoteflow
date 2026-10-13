@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    RemoteFlow.Protocol.Rdp.Mac —— macOS 端「应用内嵌入式 RDP」适配层（方案 v1.3 §8.E / §7）。
+    P/Invoke native/rdp 编译出的 libremoteflow_rdp.dylib（FreeRDP 3.x 的极小 C ABI 封装）。
+    画面经 IFrameSource 交给 UI 层（与 VNC 同路径），本工程不引用 AppKit。
+
+    Windows 端的 RDP 走 mstscax ActiveX（RemoteFlow.Protocol.Rdp），两者互不影响。
+    构建前需先 bash native/rdp/build.sh 生成 dylib。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RemoteFlow.Protocol.Rdp.Mac</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RemoteFlow.Core\RemoteFlow.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <!--
+    dylib 不在这里 CopyToOutputDirectory —— App.Mac 用 <NativeReference> 直接把
+    runtimes/osx-<rid>/native/libremoteflow_rdp.dylib 收进 .app/Contents/MonoBundle。
+    若在此 <None Include CopyToOutputDirectory> 传播，App.Mac 的 universal 构建会让
+    osx-x64 / osx-arm64 两个子构建各自拿到同一份 x86_64 dylib，lipo 合并即 "same
+    architectures" 失败（见 build 历史）。仅保留 Pack 供未来 NuGet 打包。
+  -->
+  <ItemGroup>
+    <None Include="runtimes/**/*.dylib" Pack="true" PackagePath="runtimes/" Condition="Exists('runtimes')" />
+  </ItemGroup>
+
+</Project>

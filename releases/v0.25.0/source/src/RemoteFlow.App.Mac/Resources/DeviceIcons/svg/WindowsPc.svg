@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs>
+  <linearGradient id="DeviceIcon-Blue" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#46C7FF" />
+    <stop offset="0.52" stop-color="#1685E8" />
+    <stop offset="1" stop-color="#2453D5" />
+  </linearGradient>
+</defs>
+  <path d="M10,15 L31,11 L31,31 L10,31 Z M34,10 L55,6 L55,31 L34,31 Z M10,34 L31,34 L31,54 L10,50 Z M34,34 L55,34 L55,58 L34,54 Z" fill="#002E72" fill-opacity="0.133" fill-rule="nonzero" />
+  <path d="M8,13 L30,9 L30,31 L8,31 Z M33,8 L56,4 L56,31 L33,31 Z M8,34 L30,34 L30,56 L8,52 Z M33,34 L56,34 L56,60 L33,56 Z" fill="url(#DeviceIcon-Blue)" fill-rule="nonzero" />
+  <path d="M10,15 L29,11.5 L29,15 L10,18 Z M35,10 L54,6.7 L54,10 L35,13 Z" fill="#FFFFFF" fill-opacity="0.400" fill-rule="nonzero" />
+</svg>
