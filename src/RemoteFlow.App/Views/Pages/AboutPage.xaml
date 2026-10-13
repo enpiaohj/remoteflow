@@ -163,6 +163,9 @@
                                     <Button Style="{StaticResource Button.Primary}" Content="下载并更新" Margin="8,0,0,0"
                                             Command="{Binding InstallCommand}"
                                             Visibility="{Binding CanInstall, Converter={StaticResource BoolToVisibility}}" />
+                                    <Button Style="{StaticResource Button.Secondary}" Content="取消下载" Margin="8,0,0,0"
+                                            Command="{Binding CancelDownloadCommand}"
+                                            Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVisibility}}" />
                                     <Button Style="{StaticResource Button.Primary}" Content="立即重启" Margin="8,0,0,0"
                                             Command="{Binding RestartCommand}"
                                             Visibility="{Binding IsReadyToRestart, Converter={StaticResource BoolToVisibility}}" />

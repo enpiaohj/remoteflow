@@ -132,6 +132,27 @@ public sealed class UpdateTests
         Assert.Equal(0, handler.Requests);
     }
 
+    [Fact]
+    public async Task 下载连接停滞时超时放弃并清掉半截文件()
+    {
+        var service = new GitHubUpdateService(new HttpClient(new StalledHandler()), "win-x64.exe", TimeSpan.FromMilliseconds(300));
+        var release = Release(1000, HashA, "RemoteFlow-v9.9.4-win-x64.exe");
+
+        await Assert.ThrowsAsync<TimeoutException>(() => service.DownloadAsync(release, null, CancellationToken.None));
+
+        Assert.False(File.Exists(Path.Combine(Path.GetTempPath(), "RemoteFlow-update", release.AssetName + ".download")));
+    }
+
+    [Fact]
+    public async Task 用户取消下载时抛出取消而不是超时()
+    {
+        var service = new GitHubUpdateService(new HttpClient(new StalledHandler()), "win-x64.exe", TimeSpan.FromSeconds(30));
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.DownloadAsync(Release(1000, HashA, "RemoteFlow-v9.9.5-win-x64.exe"), null, cts.Token));
+    }
+
     // ── 视图模型 ──
 
     [Fact]
@@ -240,6 +261,61 @@ public sealed class UpdateTests
     }
 
     [Fact]
+    public async Task 下载中可以取消_取消后回到可下载状态()
+    {
+        var feed = new FakeFeed { Latest = Release(1, HashA), HoldDownload = true };
+        var installer = new FakeInstaller();
+        var vm = NewViewModel(feed, installer, new AppSettings());
+        await vm.CheckCommand.ExecuteAsync(null);
+
+        var installing = vm.InstallCommand.ExecuteAsync(null);
+        Assert.Equal(UpdateState.Downloading, vm.State);
+
+        vm.CancelDownloadCommand.Execute(null);
+        await installing;
+
+        Assert.Equal(UpdateState.Available, vm.State);
+        Assert.Contains("已取消", vm.StatusText, StringComparison.Ordinal);
+        Assert.Null(installer.Applied);
+        Assert.True(vm.InstallCommand.CanExecute(null));
+    }
+
+    [Theory]
+    [InlineData("timeout", "长时间没有数据")]
+    [InlineData("disk", "磁盘空间")]
+    [InlineData("network", "网络中断")]
+    public async Task 下载失败按原因给出不同说明(string kind, string expected)
+    {
+        Exception error = kind switch
+        {
+            "timeout" => new TimeoutException(),
+            "disk" => new IOException("disk full"),
+            _ => new HttpRequestException("reset")
+        };
+        var feed = new FakeFeed { Latest = Release(1, HashA), DownloadError = error };
+        var vm = NewViewModel(feed, new FakeInstaller(), new AppSettings());
+        await vm.CheckCommand.ExecuteAsync(null);
+
+        await vm.InstallCommand.ExecuteAsync(null);
+
+        Assert.Equal(UpdateState.Failed, vm.State);
+        Assert.Contains(expected, vm.StatusText, StringComparison.Ordinal);
+        Assert.True(vm.CanOpenReleasePage);
+    }
+
+    [Fact]
+    public async Task 被限流时说明是请求过于频繁而不是网络问题()
+    {
+        var feed = new FakeFeed { CheckError = new HttpRequestException("rate", null, HttpStatusCode.Forbidden) };
+        var vm = NewViewModel(feed, new FakeInstaller(), new AppSettings());
+
+        await vm.CheckCommand.ExecuteAsync(null);
+
+        Assert.Equal(UpdateState.Failed, vm.State);
+        Assert.Contains("请求频率", vm.StatusText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task 当前运行形态不支持自更新时只提供下载页()
     {
         var feed = new FakeFeed { Latest = Release(1, HashA) };
@@ -336,6 +412,34 @@ public sealed class UpdateTests
         }
     }
 
+    /// <summary>发出响应头后永远不给数据的连接。</summary>
+    private sealed class StalledHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new NeverStream()) });
+
+        private sealed class NeverStream : Stream
+        {
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => throw new NotSupportedException();
+            public override long Position { get => 0; set => throw new NotSupportedException(); }
+            public override void Flush() { }
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+            public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+                return 0;
+            }
+
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        }
+    }
+
     private sealed class FakeFeed : IUpdateService
     {
         public UpdateRelease? Latest { get; set; }
@@ -354,10 +458,18 @@ public sealed class UpdateTests
             return CheckError is null ? Task.FromResult(Latest) : Task.FromException<UpdateRelease?>(CheckError);
         }
 
-        public Task<string> DownloadAsync(UpdateRelease release, IProgress<double>? progress, CancellationToken cancellationToken)
+        /// <summary>为 true 时下载一直挂起，直到被取消。</summary>
+        public bool HoldDownload { get; set; }
+
+        public async Task<string> DownloadAsync(UpdateRelease release, IProgress<double>? progress, CancellationToken cancellationToken)
         {
             DownloadCount++;
-            return DownloadError is null ? Task.FromResult("pkg") : Task.FromException<string>(DownloadError);
+            if (HoldDownload)
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+
+            return DownloadError is null ? "pkg" : throw DownloadError;
         }
     }
 

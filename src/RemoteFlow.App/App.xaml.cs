@@ -116,7 +116,9 @@ public partial class App : System.Windows.Application
             DateTimeDisplay.Configure(_services.GetRequiredService<AppSettings>());
 
             ShowMainWindow(startHidden);
-            InitializeUpdates(afterUpdate, e.Args.Contains(WpfUpdateInstaller.UpdateFailedArgument));
+            // 失败标记只读取一次；随系统启动（驻留托盘）时不弹窗打扰，留到下次手动打开再提示。
+            var updateFailed = !startHidden && WpfUpdateInstaller.ConsumeFailureMarker();
+            InitializeUpdates(afterUpdate, updateFailed);
         }
         catch (Exception ex)
         {
@@ -432,7 +434,7 @@ public partial class App : System.Windows.Application
             MessageDialog.ShowMessage(
                 MainWindow,
                 "更新未完成",
-                "退出时无法替换程序文件（文件可能被占用或所在目录没有写入权限），当前仍是原版本。\n\n可以在「关于」里重试，或打开下载页手动更新。",
+                "上次退出时没能完成更新（磁盘空间不足、文件被占用或所在目录没有写入权限），当前仍是原版本。\n\n可以在「关于」里重试，或打开下载页手动更新。",
                 DialogKind.Warning);
             afterUpdate = false;
         }

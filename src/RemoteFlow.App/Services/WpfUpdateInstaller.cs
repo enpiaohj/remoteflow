@@ -17,8 +17,13 @@ namespace RemoteFlow.App.Services;
 /// <para>
 /// <b>文件名跟随版本</b>：当前文件名是发布产物的命名形式（<c>RemoteFlow-v0.25.0-win-x64.exe</c>）时，
 /// 新版本以它自己的产物名（<c>RemoteFlow-v0.25.1-win-x64.exe</c>）写到同一目录，文件名与版本始终一致。
-/// 路径因此会变：开机启动项与桌面 / 开始菜单 / 任务栏上指向旧文件的快捷方式在此一并改指向新文件；
+/// 路径因此会变：开机启动项与桌面 / 开始菜单 / 任务栏上指向旧文件的快捷方式一并改指向新文件；
 /// 旧文件由新版本启动后删除。文件名是用户自己改过的（如 <c>RemoteFlow.exe</c>）时保持原名，原地替换。
+/// </para>
+/// <para>
+/// <b>失败处理约定</b>：新文件先写成 <c>.new</c> 临时名、核对大小后再改名到位，任何时刻目录里都不会出现
+/// 名字正确但内容不完整的 exe；落地失败时原文件保持可用，并留下失败标记，下次启动提示用户；
+/// 启动项与快捷方式的改指向在退出时做一次、新版本启动时再补一次，之后才删除旧文件。
 /// </para>
 /// </summary>
 public sealed partial class WpfUpdateInstaller(ILogger<WpfUpdateInstaller> logger) : IUpdateInstaller
@@ -26,13 +31,19 @@ public sealed partial class WpfUpdateInstaller(ILogger<WpfUpdateInstaller> logge
     /// <summary>更新后重启时带的参数：新进程据此等待旧进程退出并释放单实例互斥体。</summary>
     public const string AfterUpdateArgument = "--after-update";
 
-    /// <summary>退出时落地失败、原版本被重新拉起时带的参数：启动后提示用户改为手动更新。</summary>
+    /// <summary>退出时落地失败、原版本被重新拉起时带的参数：与 <see cref="AfterUpdateArgument"/> 一样需要等待旧进程退出。</summary>
     public const string UpdateFailedArgument = "--update-failed";
 
     private const string BackupSuffix = ".old";
 
-    /// <summary>新文件旁的标记文件后缀：内容是被它取代的旧文件名，新版本启动后据此删除旧文件。</summary>
+    /// <summary>新文件旁的标记文件后缀：内容是被它取代的旧文件名，新版本启动后据此善后并删除旧文件。</summary>
     private const string ReplacesSuffix = ".replaces";
+
+    /// <summary>落地失败标记：放在仍在使用的原文件旁，下次启动时提示一次。</summary>
+    private const string FailedSuffix = ".update-failed";
+
+    /// <summary>写入中的新文件临时后缀：只有完整写完并核对大小后才改名到位。</summary>
+    private const string StagingSuffix = ".new";
 
     private const string DownloadSuffix = ".download";
 
@@ -68,15 +79,25 @@ public sealed partial class WpfUpdateInstaller(ILogger<WpfUpdateInstaller> logge
     {
         // 只登记意图：落地与拉起新版本都在 App.OnExit 的最后一步完成。
         s_restartPending = true;
-        if (System.Windows.Application.Current.MainWindow is Views.MainWindow window)
-        {
-            window.RequestExit();
-        }
-        else
+        if (System.Windows.Application.Current.MainWindow is not Views.MainWindow window)
         {
             System.Windows.Application.Current.Shutdown(0);
+            return;
+        }
+
+        window.RequestExit();
+
+        // 关闭可能被别的确认拦下（例如还有文件在传输时用户选了取消）。窗口还在就说明没有退出：
+        // 撤销「待重启」，否则之后用户正常退出时程序会莫名其妙自己又启动起来。更新包仍然登记着，退出时照常落地。
+        if (window.IsLoaded && PresentationSourceAlive(window))
+        {
+            s_restartPending = false;
+            logger.LogInformation("重启被取消，更新将在下次退出时落地");
         }
     }
+
+    private static bool PresentationSourceAlive(System.Windows.Window window)
+        => System.Windows.PresentationSource.FromVisual(window) is not null;
 
     public void OpenUrl(string url)
     {
@@ -112,7 +133,7 @@ public sealed partial class WpfUpdateInstaller(ILogger<WpfUpdateInstaller> logge
     /// <summary>
     /// 退出收尾的最后一步调用（单实例互斥体已释放之后）：有登记的更新包就落地；
     /// 用户点了「立即重启」则随后拉起程序。用户只是正常退出时也会完成落地，下次启动即为新版本。
-    /// 此时日志已关闭，任何失败都保持原文件可用。
+    /// 此时日志已关闭，任何失败都保持原文件可用，并留下失败标记供下次启动提示。
     /// </summary>
     public static void CompletePendingUpdateOnExit()
     {
@@ -131,12 +152,15 @@ public sealed partial class WpfUpdateInstaller(ILogger<WpfUpdateInstaller> logge
         if (package is not null)
         {
             var newPath = ResolveNewPath(current, package);
-            succeeded = string.Equals(newPath, current, StringComparison.OrdinalIgnoreCase)
-                ? TryReplaceInPlace(current, package)
-                : TryInstallSideBySide(current, newPath, package);
+            succeeded = Install(current, newPath, package);
             if (succeeded)
             {
                 launchPath = newPath;
+            }
+            else
+            {
+                launchPath = ResolveUsablePath(current);
+                TryRun(() => File.WriteAllText(launchPath + FailedSuffix, DateTimeOffset.Now.ToString("O")));
             }
         }
 
@@ -157,56 +181,73 @@ public sealed partial class WpfUpdateInstaller(ILogger<WpfUpdateInstaller> logge
     }
 
     /// <summary>
-    /// 文件名跟随版本的落地方式：新文件写到同目录的新名字，旧文件原样不动（它还在运行，之后由新版本删除）。
-    /// 需要用到延迟加载的步骤（注册表、快捷方式）都发生在旧文件仍完好的时候。
+    /// 把更新包落地到 <paramref name="newPath"/>。成功返回 true；失败时 <paramref name="current"/> 保持可用。
     /// </summary>
-    private static bool TryInstallSideBySide(string current, string newPath, string package)
+    internal static bool Install(string current, string newPath, string package)
     {
+        var sideBySide = !string.Equals(newPath, current, StringComparison.OrdinalIgnoreCase);
+
+        // 1) 先把新文件完整写成临时名并核对大小。磁盘满、被强杀都只会留下一个 .new 临时文件，
+        //    不会出现「名字正确但内容不完整」的 exe。
+        var staging = newPath + StagingSuffix;
         try
         {
-            File.Copy(package, newPath, overwrite: true);
+            File.Copy(package, staging, overwrite: true);
+            if (new FileInfo(staging).Length != new FileInfo(package).Length)
+            {
+                TryDelete(staging);
+                return false;
+            }
         }
         catch (Exception)
         {
+            TryDelete(staging);
             return false;
         }
 
-        // 新文件已就位。以下都是「尽力而为」：失败不回滚，新旧文件都在，用户仍可手动处理。
-        TryRun(() => File.WriteAllText(newPath + ReplacesSuffix, Path.GetFileName(current)));
-        TryRun(() => WpfLaunchOnStartupService.RetargetRegistration(current, newPath));
-        TryRun(() => ShortcutRetargeter.Retarget(current, newPath));
-        TryDelete(package);
-        return true;
-    }
-
-    /// <summary>文件名不是发布产物命名时的落地方式：旧文件改名为 .old，新文件写到原路径。</summary>
-    private static bool TryReplaceInPlace(string target, string package)
-    {
-        var backup = target + BackupSuffix;
-        try
+        if (sideBySide)
         {
-            if (File.Exists(backup))
+            // 2a) 文件名跟随版本：旧文件原样不动（它还在运行，之后由新版本删除），新文件改名到位。
+            try
             {
-                File.Delete(backup);
+                File.Move(staging, newPath, overwrite: true);
+            }
+            catch (Exception)
+            {
+                TryDelete(staging);
+                return false;
             }
 
-            File.Move(target, backup);
+            // 新文件已就位。以下是「尽力而为」：这里没改成的，新版本启动时还会按标记再补一次。
+            TryRun(() => File.WriteAllText(newPath + ReplacesSuffix, Path.GetFileName(current)));
+            TryRun(() => WpfLaunchOnStartupService.RetargetRegistration(current, newPath));
+            TryRun(() => ShortcutRetargeter.Retarget(current, newPath));
         }
-        catch (Exception)
+        else
         {
-            return false;
-        }
+            // 2b) 原地替换：旧文件改名为 .old，新文件改名到原路径；第二步失败就把旧文件改回去。
+            var backup = current + BackupSuffix;
+            try
+            {
+                TryDelete(backup);
+                File.Move(current, backup);
+            }
+            catch (Exception)
+            {
+                TryDelete(staging);
+                return false;
+            }
 
-        try
-        {
-            File.Copy(package, target, overwrite: false);
-        }
-        catch (Exception)
-        {
-            // 新文件没写成：把旧文件改回去，当前安装保持可用。
-            TryDelete(target);
-            TryRun(() => File.Move(backup, target));
-            return false;
+            try
+            {
+                File.Move(staging, current);
+            }
+            catch (Exception)
+            {
+                TryRun(() => File.Move(backup, current));
+                TryDelete(staging);
+                return false;
+            }
         }
 
         TryDelete(package);
@@ -214,20 +255,54 @@ public sealed partial class WpfUpdateInstaller(ILogger<WpfUpdateInstaller> logge
     }
 
     /// <summary>
-    /// 启动时清理上一次更新留下的旧版本：原地替换留下的 <c>.old</c>，以及标记文件指明的旧文件。
-    /// 旧进程可能还在退出途中，删不掉就留到下次启动。
+    /// 落地失败后还能用来启动的文件：正常是原路径；原地替换连回滚都失败的极端情况下，原文件以 .old 留着。
+    /// </summary>
+    private static string ResolveUsablePath(string current)
+        => File.Exists(current) || !File.Exists(current + BackupSuffix) ? current : current + BackupSuffix;
+
+    /// <summary>
+    /// 上次退出时更新是否落地失败（只报告一次：读取后即清除标记）。
+    /// 覆盖「不重启、直接退出」的路径——那时没有进程可以带参数回来提示。
+    /// </summary>
+    public static bool ConsumeFailureMarker()
+    {
+        if (Environment.ProcessPath is not { Length: > 0 } path)
+        {
+            return false;
+        }
+
+        return ConsumeFailureMarker(path);
+    }
+
+    internal static bool ConsumeFailureMarker(string path)
+    {
+        var marker = path + FailedSuffix;
+        if (!File.Exists(marker))
+        {
+            return false;
+        }
+
+        TryDelete(marker);
+        return true;
+    }
+
+    /// <summary>
+    /// 启动时善后上一次更新：清掉遗留的临时文件；原地替换留下的 <c>.old</c>；
+    /// 文件名变了的更新，按标记把启动项与快捷方式再改指向一次（退出时可能没改成），然后删除旧文件。
+    /// 旧进程可能还在退出途中，删不掉就保留标记，下次再试。
     /// </summary>
     public static void CleanupPreviousVersion()
     {
         if (Environment.ProcessPath is { Length: > 0 } path)
         {
-            CleanupPreviousVersion(path);
+            CleanupPreviousVersion(path, retarget: true);
         }
     }
 
-    internal static void CleanupPreviousVersion(string path)
+    internal static void CleanupPreviousVersion(string path, bool retarget = false)
     {
         TryDelete(path + BackupSuffix);
+        TryDelete(path + StagingSuffix);
 
         var marker = path + ReplacesSuffix;
         if (!File.Exists(marker))
@@ -240,13 +315,21 @@ public sealed partial class WpfUpdateInstaller(ILogger<WpfUpdateInstaller> logge
             var oldName = File.ReadAllText(marker).Trim();
             var directory = Path.GetDirectoryName(path) ?? string.Empty;
 
-            // 只删同目录下、符合发布产物命名、且不是自己的那个文件：标记内容不可信时什么都不删。
+            // 只处理同目录下、符合发布产物命名、且不是自己的那个文件：标记内容不可信时什么都不动。
             if (oldName.Length > 0
                 && oldName == Path.GetFileName(oldName)
                 && ReleaseArtifactName().IsMatch(oldName)
                 && !string.Equals(oldName, Path.GetFileName(path), StringComparison.OrdinalIgnoreCase))
             {
                 var oldPath = Path.Combine(directory, oldName);
+
+                if (retarget)
+                {
+                    // 第二次机会：旧文件删除之前，确保启动项与快捷方式已经指向新文件。
+                    TryRun(() => WpfLaunchOnStartupService.RetargetRegistration(oldPath, path));
+                    TryRun(() => ShortcutRetargeter.Retarget(oldPath, path));
+                }
+
                 if (File.Exists(oldPath))
                 {
                     File.Delete(oldPath);

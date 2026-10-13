@@ -7,10 +7,13 @@ namespace RemoteFlow.Infrastructure.Updates;
 /// 从公开仓库的 GitHub Releases 检查与下载更新。无需登录；只在用户主动检查或开启了自动检查时才会访问。
 /// 下载的产物必须与 Release 上登记的大小、SHA-256 逐位一致，否则丢弃。
 /// </summary>
-public sealed class GitHubUpdateService(HttpClient http, string assetSuffix) : IUpdateService
+public sealed class GitHubUpdateService(HttpClient http, string assetSuffix, TimeSpan? stallTimeout = null) : IUpdateService
 {
     private const string ReleasesUrl = "https://api.github.com/repos/enpiaohj/remoteflow/releases?per_page=30";
     private static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(20);
+
+    /// <summary>下载过程中连续这么久收不到任何数据就判定为连接停滞并放弃（不是总时长上限）。</summary>
+    private readonly TimeSpan _stallTimeout = stallTimeout ?? TimeSpan.FromSeconds(45);
 
     /// <summary>创建带默认请求头的客户端。使用系统代理设置（访问 GitHub 常需代理）。</summary>
     public static HttpClient CreateHttpClient(string productVersion)
@@ -51,10 +54,15 @@ public sealed class GitHubUpdateService(HttpClient http, string assetSuffix) : I
         Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, release.AssetName + ".download");
 
+        // 停滞看门狗：每收到一块数据就把超时往后推；用户取消与停滞超时共用一个令牌，事后靠原令牌区分。
+        using var watchdog = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        watchdog.CancelAfter(_stallTimeout);
+        var token = watchdog.Token;
+
         try
         {
             using var response = await http
-                .GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, token)
                 .ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
@@ -62,14 +70,15 @@ public sealed class GitHubUpdateService(HttpClient http, string assetSuffix) : I
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             long received = 0;
 
-            await using (var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
+            await using (var source = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false))
             await using (var target = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
             {
                 var buffer = new byte[81920];
                 int read;
-                while ((read = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+                while ((read = await source.ReadAsync(buffer, token).ConfigureAwait(false)) > 0)
                 {
-                    await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                    watchdog.CancelAfter(_stallTimeout);
+                    await target.WriteAsync(buffer.AsMemory(0, read), token).ConfigureAwait(false);
                     hash.AppendData(buffer, 0, read);
                     received += read;
                     if (total > 0)
@@ -91,6 +100,12 @@ public sealed class GitHubUpdateService(HttpClient http, string assetSuffix) : I
             }
 
             return path;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // 不是用户取消，而是看门狗触发：连接停滞。
+            TryDelete(path);
+            throw new TimeoutException("下载连接长时间没有数据。");
         }
         catch
         {

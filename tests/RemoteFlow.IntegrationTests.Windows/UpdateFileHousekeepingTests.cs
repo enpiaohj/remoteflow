@@ -83,10 +83,93 @@ public sealed class UpdateFileHousekeepingTests : IDisposable
         Assert.True(File.Exists(exe));
     }
 
-    private string Touch(string name)
+    [Fact]
+    public void 文件名跟随版本的落地_新文件完整到位且旧文件保持不动()
+    {
+        var current = Touch("RemoteFlow-v0.25.1-win-x64.exe", "old-binary");
+        var package = Touch("pkg.download", "new-binary-content");
+        var newPath = Path.Combine(_dir, "RemoteFlow-v0.25.2-win-x64.exe");
+
+        Assert.True(WpfUpdateInstaller.Install(current, newPath, package));
+
+        Assert.Equal("new-binary-content", File.ReadAllText(newPath));
+        Assert.Equal("old-binary", File.ReadAllText(current));
+        Assert.Equal("RemoteFlow-v0.25.1-win-x64.exe", File.ReadAllText(newPath + ".replaces"));
+        Assert.False(File.Exists(newPath + ".new"));
+        Assert.False(File.Exists(package));
+    }
+
+    [Fact]
+    public void 原地替换的落地_旧文件留作old新文件写到原路径()
+    {
+        var current = Touch("RemoteFlow.exe", "old-binary");
+        var package = Touch("pkg.download", "new-binary-content");
+
+        Assert.True(WpfUpdateInstaller.Install(current, current, package));
+
+        Assert.Equal("new-binary-content", File.ReadAllText(current));
+        Assert.Equal("old-binary", File.ReadAllText(current + ".old"));
+        Assert.False(File.Exists(current + ".new"));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void 更新包不见了时落地失败且原文件完好不留半截文件(bool sideBySide)
+    {
+        var current = Touch(sideBySide ? "RemoteFlow-v0.25.1-win-x64.exe" : "RemoteFlow.exe", "old-binary");
+        var newPath = sideBySide ? Path.Combine(_dir, "RemoteFlow-v0.25.2-win-x64.exe") : current;
+
+        Assert.False(WpfUpdateInstaller.Install(current, newPath, Path.Combine(_dir, "missing.download")));
+
+        Assert.Equal("old-binary", File.ReadAllText(current));
+        Assert.Equal([Path.GetFileName(current)], Directory.GetFiles(_dir).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public void 新文件无法改名到位时失败并清掉临时文件()
+    {
+        var current = Touch("RemoteFlow-v0.25.1-win-x64.exe", "old-binary");
+        var package = Touch("pkg.download", "new-binary-content");
+        // 目标名被一个目录占着：临时文件能写出来，但改名到位会失败。
+        var newPath = Directory.CreateDirectory(Path.Combine(_dir, "RemoteFlow-v0.25.2-win-x64.exe")).FullName;
+
+        Assert.False(WpfUpdateInstaller.Install(current, newPath, package));
+
+        Assert.Equal("old-binary", File.ReadAllText(current));
+        Assert.False(File.Exists(newPath + ".new"));
+        Assert.False(File.Exists(newPath + ".replaces"));
+        Assert.True(File.Exists(package));
+    }
+
+    [Fact]
+    public void 失败标记只报告一次()
+    {
+        var exe = Touch("RemoteFlow.exe");
+        Assert.False(WpfUpdateInstaller.ConsumeFailureMarker(exe));
+
+        File.WriteAllText(exe + ".update-failed", "x");
+
+        Assert.True(WpfUpdateInstaller.ConsumeFailureMarker(exe));
+        Assert.False(WpfUpdateInstaller.ConsumeFailureMarker(exe));
+    }
+
+    [Fact]
+    public void 启动善后会清掉被打断留下的临时文件()
+    {
+        var exe = Touch("RemoteFlow-v0.25.2-win-x64.exe");
+        var leftover = Touch("RemoteFlow-v0.25.2-win-x64.exe.new");
+
+        WpfUpdateInstaller.CleanupPreviousVersion(exe);
+
+        Assert.False(File.Exists(leftover));
+        Assert.True(File.Exists(exe));
+    }
+
+    private string Touch(string name, string content = "x")
     {
         var path = Path.Combine(_dir, name);
-        File.WriteAllText(path, "x");
+        File.WriteAllText(path, content);
         return path;
     }
 

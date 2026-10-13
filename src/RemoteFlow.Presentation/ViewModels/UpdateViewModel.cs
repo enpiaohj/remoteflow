@@ -38,6 +38,7 @@ public sealed partial class UpdateViewModel : ObservableObject
     private readonly IUiDispatcher _ui;
     private readonly ILogger _logger;
     private readonly Version _currentVersion;
+    private CancellationTokenSource? _downloadCts;
 
     public UpdateViewModel(
         IUpdateService service,
@@ -200,7 +201,7 @@ public sealed partial class UpdateViewModel : ObservableObject
             }
 
             State = UpdateState.Failed;
-            StatusText = "检查更新失败：无法访问 GitHub，请检查网络或代理后重试。";
+            StatusText = DescribeCheckFailure(ex);
         }
         finally
         {
@@ -224,10 +225,18 @@ public sealed partial class UpdateViewModel : ObservableObject
         StatusText = $"正在下载 {LatestVersionText}…";
 
         string package;
+        var cts = new CancellationTokenSource();
+        _downloadCts = cts;
         try
         {
             var progress = new Progress<double>(value => _ui.Post(() => Progress = value));
-            package = await _service.DownloadAsync(release, progress, CancellationToken.None);
+            package = await _service.DownloadAsync(release, progress, cts.Token);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            State = UpdateState.Available;
+            StatusText = $"已取消下载。新版本 {LatestVersionText} 仍可随时下载。";
+            return;
         }
         catch (UpdateVerificationException ex)
         {
@@ -238,8 +247,13 @@ public sealed partial class UpdateViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "下载更新失败");
-            Fail("下载失败：网络中断或无法访问 GitHub。可以重试，或到下载页手动更新。");
+            Fail(DescribeDownloadFailure(ex));
             return;
+        }
+        finally
+        {
+            _downloadCts = null;
+            cts.Dispose();
         }
 
         try
@@ -249,7 +263,7 @@ public sealed partial class UpdateViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "登记更新包失败");
-            Fail("无法更新程序文件（所在目录可能没有写入权限）。请到下载页手动更新。");
+            Fail("无法更新程序文件：程序所在目录没有写入权限。请到下载页手动更新，或把程序移到有写入权限的目录。");
             return;
         }
 
@@ -257,6 +271,31 @@ public sealed partial class UpdateViewModel : ObservableObject
         State = UpdateState.ReadyToRestart;
         StatusText = $"{LatestVersionText} 已下载并校验，退出或重启后生效。文件名会跟随新版本，开机启动项与快捷方式自动指向新文件。";
     }
+
+    /// <summary>取消正在进行的下载（下载卡住或不想等时的出路）。</summary>
+    [RelayCommand]
+    private void CancelDownload() => _downloadCts?.Cancel();
+
+    private static string DescribeCheckFailure(Exception ex) => ex switch
+    {
+        HttpRequestException { StatusCode: System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.TooManyRequests }
+            => "检查更新失败：GitHub 暂时限制了请求频率，请过一会儿再试，或直接打开下载页。",
+        HttpRequestException { StatusCode: not null } http
+            => $"检查更新失败：GitHub 返回了错误（{(int)http.StatusCode!}），请稍后重试。",
+        OperationCanceledException or TimeoutException
+            => "检查更新失败：连接 GitHub 超时，请检查网络或代理后重试。",
+        System.Text.Json.JsonException
+            => "检查更新失败：GitHub 返回的内容无法识别，请稍后重试。",
+        _ => "检查更新失败：无法访问 GitHub，请检查网络或代理后重试。"
+    };
+
+    private static string DescribeDownloadFailure(Exception ex) => ex switch
+    {
+        TimeoutException => "下载失败：连接长时间没有数据。可以重试，或到下载页手动更新。",
+        IOException => "下载失败：无法写入临时目录（磁盘空间不足或没有权限）。请清理磁盘后重试，或到下载页手动更新。",
+        UnauthorizedAccessException => "下载失败：没有权限写入临时目录。请到下载页手动更新。",
+        _ => "下载失败：网络中断或无法访问 GitHub。可以重试，或到下载页手动更新。"
+    };
 
     private void Fail(string message)
     {
