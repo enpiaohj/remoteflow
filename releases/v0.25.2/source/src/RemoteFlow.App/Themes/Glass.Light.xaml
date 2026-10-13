@@ -1,0 +1,43 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        浅色玻璃覆盖层。启用系统材质（Mica / Acrylic）时由 ThemeService 合并在
+        Theme.Light.xaml 之后，只覆盖「面」的语义键，文字 / 品牌 / 状态色沿用基础调色板。
+
+        分层：
+        · 机身（窗口底、标题栏、图标栏、连接资源列）只有一层亮度薄涂，透出系统材质；
+        · 纸张（卡片、表格、详情、设置卡片）为半透明白，透出底材的色调但保证文字对比度；
+        · 凹陷 / 悬停 / 选中用低不透明度的黑或品牌色叠加，任何底色上都成立。
+    -->
+
+    <!-- 机身：55% 亮度薄涂（等同系统亚克力的 luminosity 层）。亚克力会透出窗口后方的任意内容，
+         后方是深色窗口时机身会变成中灰，三级灰字对比度实测跌到约 1.2:1；薄涂 + 文字加深后最坏情况约 3:1，
+         云母底上几乎看不出差别。 -->
+    <SolidColorBrush x:Key="Bg.Base" Color="#8CF5F5F7" />
+    <SolidColorBrush x:Key="Bg.Sidebar" Color="Transparent" />
+    <SolidColorBrush x:Key="Bg.Chrome" Color="Transparent" />
+    <!-- 工作区：磨砂面板，透出底材色调；其上的卡片再叠一层更白的纸张 -->
+    <SolidColorBrush x:Key="Bg.Workspace" Color="#66FFFFFF" />
+    <SolidColorBrush x:Key="Bg.Layer" Color="#A6FFFFFF" />
+    <!-- 弹出层没有自己的模糊，近乎不透明才能压住下方内容 -->
+    <SolidColorBrush x:Key="Bg.Popup" Color="#F7FBFBFD" />
+    <SolidColorBrush x:Key="Bg.Subtle" Color="#0A000000" />
+    <SolidColorBrush x:Key="Bg.Hover" Color="#0F000000" />
+    <SolidColorBrush x:Key="Bg.Pressed" Color="#1A000000" />
+    <SolidColorBrush x:Key="Bg.Selected" Color="#243352CE" />
+    <SolidColorBrush x:Key="Bg.SelectedHover" Color="#333352CE" />
+    <SolidColorBrush x:Key="Bg.RowSelected" Color="#1A3352CE" />
+    <SolidColorBrush x:Key="Bg.RowSelectedHover" Color="#263352CE" />
+
+    <SolidColorBrush x:Key="Stroke.Subtle" Color="#14000000" />
+    <SolidColorBrush x:Key="Stroke.Default" Color="#1F000000" />
+    <SolidColorBrush x:Key="Stroke.Strong" Color="#33000000" />
+
+    <SolidColorBrush x:Key="Brand.Subtle" Color="#1F3352CE" />
+
+    <!-- 半透明底的亮度随后方内容浮动，二 / 三级文字各加深一档，保证最坏情况下仍可读 -->
+    <SolidColorBrush x:Key="Text.Secondary" Color="#4A4A4A" />
+    <SolidColorBrush x:Key="Text.Tertiary" Color="#6B6B6B" />
+
+</ResourceDictionary>

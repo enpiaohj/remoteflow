@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs>
+  <linearGradient id="DeviceIcon-BlueDark" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#4779B8" />
+    <stop offset="1" stop-color="#234B80" />
+  </linearGradient>
+</defs>
+  <path d="M17,28 L13,7 M47,28 L51,7" fill="none" stroke="#2E4B72" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill-rule="nonzero" />
+  <rect x="6" y="27" width="53" height="29" rx="9" ry="9" fill="#001B38" fill-opacity="0.129" />
+  <rect x="4" y="24" width="56" height="29" rx="8" ry="8" fill="url(#DeviceIcon-BlueDark)" />
+  <path d="M9,28 H55 V34 H9 Z" fill="#5F83B2" fill-rule="nonzero" />
+  <ellipse cx="15" cy="43" rx="3" ry="3" fill="#55E689" />
+  <ellipse cx="25" cy="43" rx="3" ry="3" fill="#55E689" />
+  <ellipse cx="35" cy="43" rx="3" ry="3" fill="#55E689" />
+  <ellipse cx="49" cy="43" rx="4" ry="4" fill="#5BE4FF" />
+</svg>
