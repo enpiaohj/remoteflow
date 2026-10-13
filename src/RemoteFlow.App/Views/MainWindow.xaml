@@ -619,6 +619,13 @@
                         <Ellipse Width="7" Height="7" VerticalAlignment="Center"
                                  Fill="{Binding SessionStatusBrushKey, Converter={StaticResource KeyToBrush}}" />
                         <TextBlock Text="{Binding SessionStatusText}" Style="{StaticResource Text.Caption}" Margin="8,0,0,0" />
+                        <!-- 有新版本：点击跳到「关于」的软件更新区。没有更新实现或没有新版本时不占位。 -->
+                        <Button x:Name="UpdateHintButton" Style="{StaticResource Button.Subtle}"
+                                Margin="14,0,0,0" Padding="8,0" Height="20" MinHeight="20" FontSize="11.5"
+                                Foreground="{DynamicResource Brand.Default}"
+                                Content="有新版本可用"
+                                Click="OnUpdateHintClick"
+                                Visibility="{Binding Update.HasUpdate, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed, TargetNullValue=Collapsed}" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <TextBlock Text="{Binding ConnectionsPage.TotalConnectionsDisplay}" Style="{StaticResource Text.Caption}"

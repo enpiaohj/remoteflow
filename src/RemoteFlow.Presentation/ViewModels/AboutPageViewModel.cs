@@ -11,4 +11,7 @@ public sealed class AboutPageViewModel : ObservableObject
     /// <summary>展示用版本号，如 "v0.15.0"。与主窗口状态栏同源（程序集版本）。</summary>
     public string Version { get; } =
         "v" + (typeof(AboutPageViewModel).Assembly.GetName().Version?.ToString(3) ?? "0.1.0");
+
+    /// <summary>应用内更新。没有更新实现的平台为 null，关于页不显示「软件更新」区。</summary>
+    public UpdateViewModel? Update { get; init; }
 }

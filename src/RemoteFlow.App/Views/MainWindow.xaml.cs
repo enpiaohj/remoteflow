@@ -808,6 +808,8 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnUpdateHintClick(object sender, RoutedEventArgs e) => _viewModel.NavigateTo(NavigationPage.About);
+
     private void OnTabHeaderChecked(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: WorkspaceTabViewModel tab })

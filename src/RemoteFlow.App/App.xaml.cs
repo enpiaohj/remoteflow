@@ -16,6 +16,7 @@ using RemoteFlow.Infrastructure.Data;
 using RemoteFlow.Infrastructure.Logging;
 using RemoteFlow.Infrastructure.Security;
 using RemoteFlow.Infrastructure.Sync;
+using RemoteFlow.Infrastructure.Updates;
 using RemoteFlow.Infrastructure.Settings;
 using RemoteFlow.Protocol.Rdp;
 using RemoteFlow.Protocol.Ssh;
@@ -73,7 +74,11 @@ public partial class App : System.Windows.Application
         // 异常处理必须最先装好，否则启动过程中的失败会以无提示崩溃收场。
         RegisterGlobalExceptionHandlers();
 
-        if (!TryAcquireSingleInstance())
+        // 更新后重启：旧进程还在退出途中，稍等它释放单实例互斥体，而不是把自己当成重复实例退掉。
+        var afterUpdate = e.Args.Contains(WpfUpdateInstaller.AfterUpdateArgument)
+            || e.Args.Contains(WpfUpdateInstaller.UpdateFailedArgument);
+
+        if (!TryAcquireSingleInstance(afterUpdate ? TimeSpan.FromSeconds(20) : TimeSpan.Zero))
         {
             ActivateExistingInstance();
             Shutdown(0);
@@ -101,6 +106,7 @@ public partial class App : System.Windows.Application
             DateTimeDisplay.Configure(_services.GetRequiredService<AppSettings>());
 
             ShowMainWindow();
+            InitializeUpdates(afterUpdate, e.Args.Contains(WpfUpdateInstaller.UpdateFailedArgument));
         }
         catch (Exception ex)
         {
@@ -118,12 +124,12 @@ public partial class App : System.Windows.Application
 
     // ── 单实例 ────────────────────────────────────────────────────
 
-    private bool TryAcquireSingleInstance()
+    private bool TryAcquireSingleInstance(TimeSpan wait)
     {
         try
         {
-            // 已有实例持有互斥体时立即返回 false，不阻塞等待。
-            _ownsMutex = SingleInstanceMutex.WaitOne(TimeSpan.Zero, exitContext: false);
+            // 已有实例持有互斥体时返回 false；常规启动不等待，更新后重启等旧进程退出。
+            _ownsMutex = SingleInstanceMutex.WaitOne(wait, exitContext: false);
         }
         catch (AbandonedMutexException)
         {
@@ -251,6 +257,13 @@ public partial class App : System.Windows.Application
         services.AddSingleton<ISessionViewFactory, SessionViewFactory>();
         services.AddSingleton<IFileTransferLauncher, FileTransferLauncher>();
 
+        // ── 应用内更新：发布源为公开仓库的 GitHub Releases，默认不自动检查 ──
+        services.AddSingleton<IUpdateService>(_ => new GitHubUpdateService(
+            GitHubUpdateService.CreateHttpClient(typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0"),
+            "win-x64.exe"));
+        services.AddSingleton<RemoteFlow.Presentation.Host.IUpdateInstaller, WpfUpdateInstaller>();
+        services.AddSingleton<UpdateViewModel>();
+
         // ── ViewModel ─────────────────────────────────────────────
         services.AddSingleton<HomePageViewModel>();
         services.AddSingleton<ConnectionsPageViewModel>();
@@ -340,6 +353,50 @@ public partial class App : System.Windows.Application
             new FrameworkPropertyMetadata(
                 System.Windows.Markup.XmlLanguage.GetLanguage(
                     System.Globalization.CultureInfo.CurrentUICulture.IetfLanguageTag)));
+    }
+
+    /// <summary>
+    /// 更新相关的启动收尾：清理上次更新留下的旧版本文件；更新后首次启动时按当前设置重写开机启动项；
+    /// 用户开启了「启动时自动检查」才在后台检查一次（默认关闭，不联网）。
+    /// </summary>
+    private void InitializeUpdates(bool afterUpdate, bool updateFailed)
+    {
+        WpfUpdateInstaller.CleanupBackup();
+
+        if (updateFailed)
+        {
+            _logger?.LogWarning("上次退出时替换程序文件失败，已回到原版本");
+            MessageDialog.ShowMessage(
+                MainWindow,
+                "更新未完成",
+                "退出时无法替换程序文件（文件可能被占用或所在目录没有写入权限），当前仍是原版本。\n\n可以在「关于」里重试，或打开下载页手动更新。",
+                DialogKind.Warning);
+            afterUpdate = false;
+        }
+
+        var settings = Services.GetRequiredService<AppSettings>();
+        if (afterUpdate && settings.LaunchOnStartup)
+        {
+            // 原地替换不改路径，开机启动项本来就仍然有效；这里再写一次是兜底，保证它指向当前文件。
+            try
+            {
+                Services.GetRequiredService<RemoteFlow.Presentation.Host.ILaunchOnStartupService>().SetEnabled(true);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "更新后重写开机启动项失败");
+            }
+        }
+
+        if (settings.AutoCheckUpdates)
+        {
+            var update = Services.GetRequiredService<UpdateViewModel>();
+            _ = Dispatcher.InvokeAsync(async () =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(8));
+                await update.CheckOnStartupAsync();
+            });
+        }
     }
 
     private void ApplyTheme()
@@ -474,6 +531,10 @@ public partial class App : System.Windows.Application
             {
                 SingleInstanceMutex.ReleaseMutex();
             }
+
+            // 8) 应用内更新：替换程序文件必须放在最后——单文件应用运行期间换掉 exe 会让延迟加载失败；
+            //    拉起新版本也必须在释放互斥体之后，否则新进程会把自己当成重复实例直接退出。
+            WpfUpdateInstaller.CompletePendingUpdateOnExit();
         }
 
         base.OnExit(e);

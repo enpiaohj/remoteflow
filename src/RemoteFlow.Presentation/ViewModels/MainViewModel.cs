@@ -44,7 +44,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly CredentialsPageViewModel _credentialsPage;
     private readonly SettingsPageViewModel _settingsPage;
     private readonly HelpPageViewModel _helpPage = new();
-    private readonly AboutPageViewModel _aboutPage = new();
+    private readonly AboutPageViewModel _aboutPage;
     private readonly IDialogService _dialogs;
     private readonly ILogger<MainViewModel> _logger;
     private readonly IUiDispatcher _ui;
@@ -73,9 +73,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ILogger<MainViewModel> logger,
         IFileTransferLauncher? fileTransferLauncher = null,
         IFileTransferConnector? fileTransferConnector = null,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        UpdateViewModel? update = null)
     {
         _sessions = sessions;
+        Update = update;
+        _aboutPage = new AboutPageViewModel { Update = update };
         _ui = uiDispatcher;
         _timerFactory = timerFactory;
         HomePage = homePage;
@@ -138,6 +141,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     public HomePageViewModel HomePage { get; }
+
+    /// <summary>应用内更新；没有更新实现的平台为 null。状态栏的「有新版本」提示绑定它。</summary>
+    public UpdateViewModel? Update { get; }
 
     public ConnectionsPageViewModel ConnectionsPage { get; }
 

@@ -233,6 +233,11 @@ public sealed class AppSettings
     /// </summary>
     public bool PresenceProbeEnabled { get; set; } = true;
 
+    /// <summary>
+    /// 启动时自动检查更新。默认关闭：应用承诺不主动对外通信，只有用户手动检查或显式打开此项才访问发布源。
+    /// </summary>
+    public bool AutoCheckUpdates { get; set; }
+
     public AppSettings Clone()
     {
         var copy = (AppSettings)MemberwiseClone();
