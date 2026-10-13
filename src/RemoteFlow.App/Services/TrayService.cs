@@ -68,7 +68,7 @@ public sealed class TrayService : IDisposable
         {
             Icon = LoadApplicationIcon(),
             Visible = true,
-            Text = "RemoteFlow"
+            Text = $"RemoteFlow {_mainViewModel.AppVersion}"
         };
         _notifyIcon = notifyIcon;
 
@@ -497,8 +497,8 @@ public sealed class TrayService : IDisposable
 
         // NotifyIcon.Text 有 63 字符上限，这里的文案远低于该限制。
         _notifyIcon.Text = count == 0
-            ? "RemoteFlow"
-            : $"RemoteFlow — {count} 个会话已连接";
+            ? $"RemoteFlow {_mainViewModel.AppVersion}"
+            : $"RemoteFlow {_mainViewModel.AppVersion} — {count} 个会话已连接";
     }
 
     // ── 图标与资源 ────────────────────────────────────────────────
