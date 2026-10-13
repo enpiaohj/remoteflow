@@ -21,24 +21,27 @@ ViewModel（`RemoteFlow.Core` + `RemoteFlow.Presentation`），各自用平台�
 
 ## 截图
 
-> 以下截图取自 Windows 版 v0.25.2，其中的连接、主机名与凭据均为**演示数据**。
+> 截图取自 Windows 版 v0.25.2，窗口为默认的亚克力玻璃外观；其中的连接、主机名与凭据均为**演示数据**，
+> 背景是为截图铺设的渐变幕布。
 
-![首页：最近连接、收藏与最近活动](docs/images/readme-home.png)
+**连接工作台**——分组树、连接列表与详情面板，日常使用的主界面：
 
-| 连接工作台与右键菜单 | 深色主题 |
+![连接工作台：左侧分组树，中间连接列表，右侧详情面板](docs/images/readme-workbench.png)
+
+| 首页 | 右键菜单 |
 | --- | --- |
-| ![连接工作台：分组树、连接列表、详情面板与连接行右键菜单](docs/images/readme-context-menu.png) | ![深色主题下的连接工作台](docs/images/readme-dark-workbench.png) |
-| 分组树、连接列表与详情面板；右键菜单按统一约定分组，删除类操作用警示色并放在最后 | 深浅主题可跟随系统，另有亚克力 / 云母玻璃外观 |
+| ![首页：最近连接、收藏与最近活动](docs/images/readme-home.png) | ![连接行右键菜单：连接、测试、文件传输、复制地址、编辑、创建副本、收藏、移动、删除](docs/images/readme-context-menu.png) |
+| 最近连接、收藏与最近活动，打开应用即可继续上次的工作 | 全应用菜单统一分组与叫法，标注真实可用的快捷键，删除类操作用警示色并放在最后 |
 
-| 凭据 | 设置 |
+| 凭据 | 深色主题 |
 | --- | --- |
-| ![凭据列表：类型、用户名与被引用的连接数](docs/images/readme-credentials.png) | ![设置页：主题、窗口材质与透明度](docs/images/readme-settings.png) |
-| 密码与私钥由 Windows DPAPI 加密单独保存，列表只显示元数据 | 外观、日期时间格式、启动与托盘等 |
+| ![凭据列表：类型、用户名与被引用的连接数](docs/images/readme-credentials.png) | ![深色主题下的连接工作台](docs/images/readme-dark-workbench.png) |
+| 密码与私钥由 Windows DPAPI 加密单独保存，列表只显示元数据 | 浅色 / 深色 / 跟随系统 |
 
-| 软件更新 | 深色首页 |
+| 设置 | 软件更新 |
 | --- | --- |
-| ![关于页：版本信息、软件更新与隐私说明](docs/images/readme-about.png) | ![深色主题下的首页](docs/images/readme-dark-home.png) |
-| 应用内检查与安装更新，默认不自动联网 | |
+| ![设置页：主题、窗口材质与透明度](docs/images/readme-settings.png) | ![关于页：版本信息、软件更新与隐私说明](docs/images/readme-about.png) |
+| 主题、窗口材质（亚克力 / 云母 / 纯色）与透明度、日期时间格式、启动与托盘 | 应用内检查与安装更新，默认不自动联网 |
 
 远程会话（RDP / SSH / VNC）与文件传输界面需要连接真实主机，暂未提供截图。
 
