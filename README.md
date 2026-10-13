@@ -29,7 +29,7 @@ ViewModel（`RemoteFlow.Core` + `RemoteFlow.Presentation`），各自用平台�
 | 实时状态同步 | SessionManager 唯一状态源，首页/列表/详情/托盘/状态栏随会话实时一致；切换页面即刷新数据，首页与工作台按主机做轻量 TCP 在线探测 |
 | 统一视觉语言 | 12 种设备类型矢量图标（Windows / 服务器 / Linux / 域控 / 数据库 / 网络设备 / 云主机等，与协议正交）、协议徽章（RDP 蓝 / SSH 绿 / VNC 紫）、全应用一致的状态色（在线绿 / 已连接蓝 / 连接中琥珀 / 异常红 / 离线灰）；会话标签显示主机设备图标；操作图标统一为 Fluent 线性图标（导航选中为实心），凭据类型 / 设置分区 / 页面分区使用彩色身份图标（详见 [图标体系说明](docs/2026-09-27-RemoteFlow-v0.23.0-图标体系说明-v1.0.md)） |
 | 连接质量详情 | 常驻条 / 药丸的状态入口打开：连接状态、会话时长、重连次数、质量指标，可重新检测 |
-| RDP 工具 | 发送 `Ctrl+Alt+Del`、启动远端任务管理器（mstsc 官方远端语义动作 + 协议级回退）、缩放/适应窗口 |
+| RDP 工具 | 发送 `Ctrl+Alt+Del`、启动远端任务管理器（mstsc 官方远端语义动作 + 协议级回退）、缩放/适应窗口；按连接设置颜色深度（32 / 24 / 16 / 15 位，Windows）；兼容 Windows Server 2003 等较老系统 |
 | SSH 终端 | xterm.js（WebView2 / WKWebView 承载）：WebGL 渲染、六套主题、字体/字号、**右键菜单（复制 / 粘贴 / 粘贴选中 / 查找 / 清屏）**、输出内搜索（`Ctrl+Shift+F`）、粘贴安全（多行/大文本确认）、括号粘贴开关、中文输入法直输 |
 | 文件传输（Windows） | **SSH 会话内**右侧 SFTP 侧栏；也可**不建立会话**，在主窗口 Tab 里直接对主机传文件（SSH 走 SFTP，RDP 主机走 **SMB 管理共享**或 SFTP，按连接选择，VNC 不支持）。浏览 / 上传下载文件与文件夹 / 进度队列与取消 / 新建、重命名、删除 / 覆盖确认 / 复制路径，系统资源管理器同款文件图标；下载先写 `.rfpart` 再原子改名、远端文件名净化防路径穿越、不跟随符号链接。SFTP / SMB 通道未在全部环境验证，macOS 版暂无（详见 [文件传输说明](docs/2026-09-30-RemoteFlow-v0.24.0-文件传输说明-v1.1.md)） |
 | VNC 画面 | 三档缩放（等比 / 拉伸 / 1:1）、本地零延迟光标、剪贴板远端→本机 |
@@ -38,7 +38,9 @@ ViewModel（`RemoteFlow.Core` + `RemoteFlow.Presentation`），各自用平台�
 | Credential Vault | 密码 / 私钥由平台密钥库加密单独保存（Windows DPAPI / macOS Keychain），连接库只存引用 |
 | SSH Host Key 校验 | 首次连接记录指纹（TOFU），指纹变化时强警告，杜绝无感中间人 |
 | 连接测试 | 统一对话框：DNS / Ping / TCP 三步诊断，失败给原因与详情 |
-| 托盘控制 | 结构化右键菜单：新建连接（预选协议）、最近/活动会话、开机启动、退出 |
+| 托盘控制 | 托盘菜单与应用内菜单同一套样式（跟随主题、带图标）：打开 / 隐藏、新建连接（预选协议）、最近连接、活动会话（可断开全部）、设置、开机启动、检查更新、退出；悬停提示显示版本号与已连接会话数 |
+| 统一的右键菜单 | 全应用右键菜单遵循同一约定：分组顺序固定、破坏性操作用警示色并放在最后、动作带图标、同一动作叫法一致；连接 / 首页 / 会话标签 / 文件传输标签 / 凭据 / 分组 / 文件列表均有对应菜单，标注的快捷键（`Enter` / `F2` / `Del` / `F11` / `Ctrl+W`）都是真实绑定（详见 [在线更新与右键菜单说明](docs/2026-10-13-RemoteFlow-v0.25.0-在线更新与右键菜单说明-v1.0.md)） |
+| 应用内更新（Windows） | 「关于 → 软件更新」检查、下载并更新；发布源为本仓库的 GitHub Releases，下载后校验大小与 SHA-256；退出时替换程序文件，路径不变，开机启动与快捷方式继续有效；**启动时自动检查默认关闭**；产物未做代码签名（详见 [在线更新与右键菜单说明](docs/2026-10-13-RemoteFlow-v0.25.0-在线更新与右键菜单说明-v1.0.md)） |
 | 导入 / 导出 | 连接 CSV（不含 Secret）、凭据加密备份 `.rfbackup`（AES-256-GCM + PBKDF2） |
 | 深浅主题 | 默认浅色，可跟随系统 |
 | 玻璃外观 | Windows 11 22H2+ 系统材质：亚克力 / 云母 / 纯色可选，透明度 0–100% 可调；对话框统一亚克力（详见 [玻璃外观说明](docs/2026-09-27-RemoteFlow-v0.22.0-玻璃外观说明-v1.0.md)） |
@@ -53,7 +55,7 @@ RemoteFlow 本地优先，所有功能无需联网即可使用。可选启用 **
 
 - 内置的**体验服务器**为 `https://sync.appscloud.cn/`（应用默认值），开箱即可注册试用；
 - 也可以自建 AppsCloud 服务端，在「设置 → 云同步 → 使用自定义服务地址」中指向自己的部署；
-- 除你发起的远程连接与显式启用的云同步外，应用不向任何第三方发送数据，亦不含遥测。
+- 除你发起的远程连接、显式启用的云同步，以及你主动点击「检查更新」或开启「启动时自动检查更新」（默认关闭）时访问 GitHub 发布页外，应用不向任何第三方发送数据，亦不含遥测。
 
 ### 加密与同步原理
 
@@ -104,7 +106,7 @@ RemoteFlow.slnx  （不含 RemoteFlow.App.Mac —— net10.0-macos 无法跨平�
 │  ├─ RemoteFlow.Core/                   # 领域模型 + 抽象接口（平台无关，net10.0）
 │  ├─ RemoteFlow.Application/            # 应用服务 / Use Case（SessionManager、搜索、导入导出、分组、文件传输队列）
 │  ├─ RemoteFlow.Presentation/           # 平台无关的 ViewModel + 视图无关服务 —— 两端 UI 都绑这一层
-│  ├─ RemoteFlow.Infrastructure/         # 跨平台基础设施基座
+│  ├─ RemoteFlow.Infrastructure/         # 跨平台基础设施基座（含应用内更新的发布源查询与下载校验）
 │  ├─ RemoteFlow.Infrastructure.Windows/ # SQLite 仓储、DPAPI Vault、开机启动、SMB 文件系统（Windows）
 │  ├─ RemoteFlow.Infrastructure.Mac/     # Keychain Vault、LaunchAgent（macOS）
 │  ├─ RemoteFlow.Protocol.Rdp/           # RDP ActiveX 互操作与会话（Windows）
