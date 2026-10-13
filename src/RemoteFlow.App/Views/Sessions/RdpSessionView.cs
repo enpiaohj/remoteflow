@@ -6,6 +6,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
+using RemoteFlow.App.Services;
 using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Protocol.Rdp;
@@ -78,6 +79,12 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
 
         _connectStarted = true;
         _connectCts = new CancellationTokenSource();
+
+        ApplyOpaqueSurface();
+        if (ThemeService.Instance is { } theme)
+        {
+            theme.AppearanceChanged += OnAppearanceChanged;
+        }
 
         await _session.ConnectAsync(_connectCts.Token);
     }
@@ -371,6 +378,10 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         Loaded -= OnLoaded;
         SizeChanged -= OnSizeChanged;
         _viewModel.ActionRequested -= OnActionRequested;
+        if (ThemeService.Instance is { } theme)
+        {
+            theme.AppearanceChanged -= OnAppearanceChanged;
+        }
 
         _resizeTimer.Stop();
         _resizeTimer.Tick -= OnResizeTimerTick;
@@ -384,6 +395,56 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         _host.Child = null;
         _host.Dispose();
     }
+
+    // ── 玻璃外观下的不透明合成 ────────────────────────────────────
+
+    private const int GwlExStyle = -20;
+    private const nint WsExLayered = 0x00080000;
+    private const uint LwaAlpha = 0x2;
+
+    private void OnAppearanceChanged(object? sender, EventArgs e) => Dispatcher.Invoke(ApplyOpaqueSurface);
+
+    /// <summary>
+    /// 玻璃外观（亚克力 / 云母）下主窗口把 DWM 边框扩展到了整个客户区，子窗口里用 GDI 画出的像素
+    /// 不带 Alpha，会被 DWM 当成透明、透出窗口材质——画面发白几乎看不见。
+    /// 新系统的 RDP 走硬件加速路径不受影响；Windows Server 2003 这类老服务器只有 GDI 位图路径，必现。
+    /// 把 ActiveX 宿主设为分层子窗口（整体不透明度 255），DWM 即按不透明表面合成它及其子窗口。
+    /// 纯色外观下不需要，保持原样。
+    /// </summary>
+    private void ApplyOpaqueSurface()
+    {
+        if (_disposed || _session.HostControl is not { IsDisposed: false, IsHandleCreated: true } control)
+        {
+            return;
+        }
+
+        var hwnd = control.Handle;
+        var style = GetWindowLongPtr(hwnd, GwlExStyle);
+        var glass = ThemeService.Instance?.IsGlass == true;
+
+        if (glass && (style & WsExLayered) == 0)
+        {
+            SetWindowLongPtr(hwnd, GwlExStyle, style | WsExLayered);
+            if (!SetLayeredWindowAttributes(hwnd, 0, 255, LwaAlpha))
+            {
+                _logger.LogWarning("RDP 宿主窗口设置分层属性失败（错误 {Error}），玻璃外观下老服务器画面可能发白", Marshal.GetLastPInvokeError());
+            }
+        }
+        else if (!glass && (style & WsExLayered) != 0)
+        {
+            SetWindowLongPtr(hwnd, GwlExStyle, style & ~WsExLayered);
+        }
+    }
+
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static partial nint GetWindowLongPtr(nint hWnd, int index);
+
+    [LibraryImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    private static partial nint SetWindowLongPtr(nint hWnd, int index, nint value);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetLayeredWindowAttributes(nint hWnd, uint colorKey, byte alpha, uint flags);
 
     // ── 焦点互操作 ────────────────────────────────────────────────
 
