@@ -10,13 +10,13 @@ public interface IUpdateInstaller
     bool CanSelfUpdate { get; }
 
     /// <summary>
-    /// 登记已校验的更新包，程序退出时用它替换当前可执行文件（运行期间不能换）。
-    /// <b>路径保持不变</b>——开机启动项、快捷方式、任务栏固定都继续有效。
+    /// 登记已校验的更新包，程序退出时落地（运行期间不能动可执行文件）。
+    /// 平台实现负责让开机启动项、快捷方式在更新后继续有效（文件名随版本变化时一并改指向）。
     /// 所在目录不可写等能提前发现的问题在此抛异常。
     /// </summary>
     void Apply(string verifiedPackagePath);
 
-    /// <summary>退出当前进程，完成替换后启动新版本。</summary>
+    /// <summary>退出当前进程，完成落地后启动新版本。</summary>
     void Restart();
 
     void OpenUrl(string url);

@@ -194,7 +194,7 @@
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Text="启动时自动检查更新" Style="{StaticResource Text.Body}" />
                                     <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,12,0"
-                                               Text="默认关闭。开启后每次启动会访问一次 GitHub 查询最新版本，只提示、不自动下载。更新包下载后会校验 SHA-256，更新不改变程序路径，开机启动等设置保持不变。" />
+                                               Text="默认关闭。开启后每次启动会访问一次 GitHub 查询最新版本，只提示、不自动下载。更新包下载后会校验 SHA-256；更新后文件名跟随新版本，开机启动项与快捷方式会自动指向新文件。" />
                                 </StackPanel>
                                 <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
                                           IsChecked="{Binding AutoCheck}" />

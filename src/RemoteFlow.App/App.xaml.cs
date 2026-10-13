@@ -416,7 +416,15 @@ public partial class App : System.Windows.Application
     /// </summary>
     private void InitializeUpdates(bool afterUpdate, bool updateFailed)
     {
-        WpfUpdateInstaller.CleanupBackup();
+        // 清理上一次更新留下的旧版本文件。更新后重启时旧进程可能还在退出途中，后台重试几次。
+        _ = Task.Run(async () =>
+        {
+            for (var attempt = 0; attempt < 10; attempt++)
+            {
+                WpfUpdateInstaller.CleanupPreviousVersion();
+                await Task.Delay(TimeSpan.FromSeconds(1.5));
+            }
+        });
 
         if (updateFailed)
         {
@@ -432,7 +440,7 @@ public partial class App : System.Windows.Application
         var settings = Services.GetRequiredService<AppSettings>();
         if (afterUpdate && settings.LaunchOnStartup)
         {
-            // 原地替换不改路径，开机启动项本来就仍然有效；这里再写一次是兜底，保证它指向当前文件。
+            // 更新可能改了文件名：退出时已把启动项改指向新文件，这里再写一次是兜底，保证它指向当前文件。
             try
             {
                 Services.GetRequiredService<RemoteFlow.Presentation.Host.ILaunchOnStartupService>().SetEnabled(true);
@@ -608,7 +616,7 @@ public partial class App : System.Windows.Application
                 SingleInstanceMutex.ReleaseMutex();
             }
 
-            // 8) 应用内更新：替换程序文件必须放在最后——单文件应用运行期间换掉 exe 会让延迟加载失败；
+            // 8) 应用内更新：落地程序文件必须放在最后——单文件应用运行期间动了 exe 会让延迟加载失败；
             //    拉起新版本也必须在释放互斥体之后，否则新进程会把自己当成重复实例直接退出。
             WpfUpdateInstaller.CompletePendingUpdateOnExit();
         }

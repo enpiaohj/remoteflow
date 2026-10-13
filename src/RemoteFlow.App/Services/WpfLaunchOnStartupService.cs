@@ -68,17 +68,34 @@ public sealed class WpfLaunchOnStartupService : ILaunchOnStartupService
         }
     }
 
+    /// <summary>
+    /// 应用内更新改了可执行文件名之后调用：启动项仍指向旧文件时改指向新文件（带启动参数）。
+    /// 没有启动项、或启动项指向别的文件时不做任何事。
+    /// </summary>
+    public static void RetargetRegistration(string oldExecutablePath, string newExecutablePath)
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(StartupRegistryKey, writable: true);
+        if (key?.GetValue(StartupValueName) is string current && PointsTo(current, oldExecutablePath))
+        {
+            key.SetValue(StartupValueName, BuildCommand(newExecutablePath));
+        }
+    }
+
     internal static string BuildCommand(string executablePath) => $"\"{executablePath}\" {StartupArgument}";
 
     /// <summary>已有启动项指向当前可执行文件、但没有启动参数时返回 true。</summary>
     internal static bool NeedsUpgrade(string registered, string executablePath)
+        => PointsTo(registered, executablePath)
+           && !registered.Contains(StartupArgument, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>启动项命令行里的可执行文件路径是否就是给定路径（不区分大小写，带不带引号都认）。</summary>
+    internal static bool PointsTo(string registered, string executablePath)
     {
         var trimmed = registered.Trim();
         var path = trimmed.StartsWith('"')
             ? trimmed[1..].Split('"')[0]
             : trimmed.Split(' ')[0];
 
-        return string.Equals(path, executablePath, StringComparison.OrdinalIgnoreCase)
-            && !trimmed.Contains(StartupArgument, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(path, executablePath, StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -255,7 +255,7 @@ public sealed partial class UpdateViewModel : ObservableObject
 
         Progress = 100;
         State = UpdateState.ReadyToRestart;
-        StatusText = $"{LatestVersionText} 已下载并校验，退出或重启后生效。开机启动等设置保持不变。";
+        StatusText = $"{LatestVersionText} 已下载并校验，退出或重启后生效。文件名会跟随新版本，开机启动项与快捷方式自动指向新文件。";
     }
 
     private void Fail(string message)
