@@ -609,6 +609,8 @@ public static class HomeRowActions
 {
     public const string Connect = "connect";
     public const string Disconnect = "disconnect";
+    public const string NewSession = "newsession";
+    public const string Reconnect = "reconnect";
     public const string Edit = "edit";
     public const string Test = "test";
     public const string FileTransfer = "filetransfer";

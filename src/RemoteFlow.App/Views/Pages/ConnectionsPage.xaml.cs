@@ -103,13 +103,30 @@ public partial class ConnectionsPage : UserControl
             return; // 多选模式下回车不连接。
         }
 
-        if (e.Key != Key.Enter || ViewModel is not { SelectedItem: { } selected } viewModel)
+        if (ViewModel is not { SelectedItem: { } selected } viewModel)
         {
             return;
         }
 
-        e.Handled = true;
-        await viewModel.ConnectAsync(selected);
+        // 与行右键菜单标注的快捷键一致：Enter 连接、F2 编辑；Del 删除只在「我的连接」可用
+        // （收藏 / 最近是快速访问视图，菜单里同样不提供删除），且仍会弹确认。
+        switch (e.Key)
+        {
+            case Key.Enter:
+                e.Handled = true;
+                await viewModel.ConnectAsync(selected);
+                break;
+
+            case Key.F2:
+                e.Handled = true;
+                await viewModel.EditCommand.ExecuteAsync(selected);
+                break;
+
+            case Key.Delete when viewModel.Filter == ConnectionFilter.All:
+                e.Handled = true;
+                await viewModel.DeleteCommand.ExecuteAsync(selected);
+                break;
+        }
     }
 
     /// <summary>多选模式下行单击切换勾选；点 CheckBox 本身不拦截。</summary>
@@ -223,6 +240,7 @@ public partial class ConnectionsPage : UserControl
                     break;
                 case "disconnect":
                 case "newsession":
+                case "reconnect":
                     // 断开连接 / 新建会话只在存在活动会话时出现（前者关闭该连接全部活动会话，后者强制再开一个）。
                     item.Visibility = row?.HasActiveSession == true ? Visibility.Visible : Visibility.Collapsed;
                     break;
@@ -331,6 +349,14 @@ public partial class ConnectionsPage : UserControl
     }
 
     /// <summary>「断开连接」：关闭该连接的全部活动会话（含连接中 / 失败未清）。</summary>
+    private async void OnReconnectMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
+        {
+            await viewModel.ReconnectItemCommand.ExecuteAsync(item);
+        }
+    }
+
     private async void OnDisconnectMenuClick(object sender, RoutedEventArgs e)
     {
         if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
@@ -487,7 +513,7 @@ public partial class ConnectionsPage : UserControl
         {
             Header = "连接所选项",
             Command = vm.ConnectSelectedCommand
-        });
+        }.WithIcon("Ui.Connect"));
 
         var tags = await LoadTagsAsync(vm);
         if (tags.Count == 0)
@@ -496,7 +522,7 @@ public partial class ConnectionsPage : UserControl
         }
         else
         {
-            var remove = new MenuItem { Header = "移除标签…" };
+            var remove = new MenuItem { Header = "移除标签…" }.WithIcon("Ui.Tag");
             foreach (var tag in tags)
             {
                 remove.Items.Add(new MenuItem
@@ -525,31 +551,31 @@ public partial class ConnectionsPage : UserControl
         }
 
         var menu = new ContextMenu();
-        menu.Items.Add(new MenuItem { Header = "全选当前列表", Command = vm.SelectAllVisibleCommand });
+        menu.Items.Add(new MenuItem { Header = "全选当前列表", Command = vm.SelectAllVisibleCommand }.WithIcon("Ui.Checklist"));
         menu.Items.Add(new MenuItem
         {
             Header = "清空选择",
             Command = vm.ClearSelectionCommand,
             IsEnabled = vm.HasSelection
-        });
+        }.WithIcon("Ui.Clear"));
         menu.Items.Add(new Separator());
         menu.Items.Add(new MenuItem
         {
             Header = "批量连接",
             Command = vm.ConnectSelectedCommand,
             IsEnabled = vm.HasSelection
-        });
+        }.WithIcon("Ui.Connect"));
         menu.Items.Add(new MenuItem
         {
             Header = vm.FavoriteActionText,
             Command = vm.ToggleFavoriteSelectedCommand,
             IsEnabled = vm.HasSelection
-        });
+        }.WithIcon("Ui.Favorite"));
 
         var targets = vm.GroupTargets;
         if (targets.Count > 0 && vm.HasSelection)
         {
-            var move = new MenuItem { Header = "移动到分组" };
+            var move = new MenuItem { Header = "移动到分组" }.WithIcon("Ui.Folder");
             foreach (var target in targets)
             {
                 var captured = target;
@@ -563,7 +589,7 @@ public partial class ConnectionsPage : UserControl
         var tags = await LoadTagsAsync(vm);
         if (tags.Count > 0 && vm.HasSelection)
         {
-            var addTags = new MenuItem { Header = "添加标签" };
+            var addTags = new MenuItem { Header = "添加标签" }.WithIcon("Ui.Tag");
             foreach (var tag in tags)
             {
                 addTags.Items.Add(new MenuItem

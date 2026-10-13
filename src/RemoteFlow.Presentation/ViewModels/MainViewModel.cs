@@ -536,6 +536,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     await ConnectionsPage.DisconnectItemCommand.ExecuteAsync(item);
                     return;
 
+                case HomeRowActions.NewSession:
+                    // 已有会话时强制再开一个（跳过聚焦去重）。
+                    ConnectionsPage.NewSessionCommand.Execute(item);
+                    return;
+
+                case HomeRowActions.Reconnect:
+                    await ConnectionsPage.ReconnectItemCommand.ExecuteAsync(item);
+                    return;
+
                 case HomeRowActions.Manage:
                     // 跳到「我的连接」全部视图并让该连接可见、选中。
                     GlobalSearchText = string.Empty;

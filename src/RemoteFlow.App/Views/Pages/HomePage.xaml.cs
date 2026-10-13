@@ -79,9 +79,11 @@ public partial class HomePage : UserControl
             connect.Header = item?.HasActiveSession == true ? "切换到会话" : "连接";
         }
 
-        if (menu.Items.OfType<MenuItem>().FirstOrDefault(m => (m.Tag as string) == HomeRowActions.Disconnect) is { } disconnect)
+        // 断开连接 / 新建会话 / 重新连接只在已有活动会话时出现。
+        foreach (var sessionOnly in menu.Items.OfType<MenuItem>().Where(m =>
+                     (m.Tag as string) is HomeRowActions.Disconnect or HomeRowActions.NewSession or HomeRowActions.Reconnect))
         {
-            disconnect.Visibility = item?.HasActiveSession == true ? Visibility.Visible : Visibility.Collapsed;
+            sessionOnly.Visibility = item?.HasActiveSession == true ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // 收藏项 Header 随行当前收藏状态切换：已收藏→取消收藏，未收藏→收藏。

@@ -77,7 +77,7 @@ public sealed partial class ContextMenuConventionTests
     {
         var headers = MenuItemsOf(ReadApp(file), menuKey).Select(HeaderOf).ToList();
 
-        foreach (var expected in new[] { "连接", "断开连接", "测试连接", "文件传输…", "复制地址", "编辑连接", "收藏", "在工作台中显示" })
+        foreach (var expected in new[] { "连接", "新建会话", "重新连接", "断开连接", "测试连接", "文件传输…", "复制地址", "编辑连接", "收藏", "在工作台中显示" })
         {
             Assert.Contains(expected, headers);
         }

@@ -78,6 +78,7 @@
             <MenuItem Header="重新连接" views:MenuItemAssist.IconKey="Ui.Refresh" Click="OnTabReconnectClick" />
             <MenuItem Tag="filetransfer" Header="文件传输" views:MenuItemAssist.IconKey="Ui.FileTransfer" Click="OnTabFileTransferClick" />
             <MenuItem Header="复制地址" views:MenuItemAssist.IconKey="Ui.Copy" Click="OnTabCopyAddressClick" />
+            <MenuItem Header="全屏" InputGestureText="F11" views:MenuItemAssist.IconKey="Ui.FullScreen" Click="OnTabFullScreenClick" />
             <Separator />
             <MenuItem Header="关闭会话" InputGestureText="Ctrl+W" views:MenuItemAssist.IconKey="Ui.Close" Click="OnTabCloseClick" />
             <MenuItem Tag="closeOthers"
@@ -87,7 +88,7 @@
                       Header="关闭右侧会话"
                       Click="OnTabCloseRightClick" />
             <Separator />
-            <MenuItem Header="关闭全部会话" views:MenuItemAssist.IsDanger="True" Click="OnTabCloseAllClick" />
+            <MenuItem Header="关闭全部会话" views:MenuItemAssist.IconKey="Ui.Sessions" views:MenuItemAssist.IsDanger="True" Click="OnTabCloseAllClick" />
         </ContextMenu>
 
         <!-- 文件传输 Tab 右键菜单：它不是会话，只有复制地址与关闭 -->

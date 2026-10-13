@@ -77,13 +77,14 @@
             <!-- 分组约定（全应用右键菜单一致）：会话动作 → 工具 → 整理 → 跳转 → 破坏性操作（警示色，永远在最后）。 -->
             <MenuItem Tag="connect" Header="连接" InputGestureText="Enter" views:MenuItemAssist.IconKey="Ui.Connect" Click="OnConnectMenuClick" />
             <MenuItem Tag="newsession" Header="新建会话" views:MenuItemAssist.IconKey="Ui.Add" Click="OnNewSessionMenuClick" />
+            <MenuItem Tag="reconnect" Header="重新连接" views:MenuItemAssist.IconKey="Ui.Refresh" Click="OnReconnectMenuClick" />
             <MenuItem Tag="disconnect" Header="断开连接" views:MenuItemAssist.IconKey="Ui.Disconnected" Click="OnDisconnectMenuClick" />
             <Separator />
             <MenuItem Tag="test" Header="测试连接" views:MenuItemAssist.IconKey="Ui.Pending" Click="OnTestMenuClick" />
             <MenuItem Tag="filetransfer" Header="文件传输…" views:MenuItemAssist.IconKey="Ui.FileTransfer" Click="OnFileTransferMenuClick" />
             <MenuItem Tag="copyaddress" Header="复制地址" views:MenuItemAssist.IconKey="Ui.Copy" Click="OnCopyAddressMenuClick" />
             <Separator />
-            <MenuItem Tag="edit" Header="编辑连接" views:MenuItemAssist.IconKey="Ui.Edit" Click="OnEditMenuClick" />
+            <MenuItem Tag="edit" Header="编辑连接" InputGestureText="F2" views:MenuItemAssist.IconKey="Ui.Edit" Click="OnEditMenuClick" />
             <MenuItem Tag="duplicate" Header="创建副本" views:MenuItemAssist.IconKey="Ui.Clipboard" Click="OnDuplicateMenuClick" />
             <!-- 收藏 / 取消收藏：Header 与图标随行当前收藏状态切换，打开时由守卫写入 -->
             <MenuItem Tag="favorite" Header="收藏" views:MenuItemAssist.IconKey="Ui.Favorite" Click="OnToggleFavoriteMenuClick" />
@@ -93,7 +94,7 @@
             <Separator />
             <MenuItem Tag="locate" Header="在工作台中显示" views:MenuItemAssist.IconKey="Ui.Connections" Click="OnLocateMenuClick" />
             <Separator />
-            <MenuItem Tag="delete" Header="删除连接" views:MenuItemAssist.IconKey="Ui.Delete" views:MenuItemAssist.IsDanger="True" Click="OnDeleteMenuClick" />
+            <MenuItem Tag="delete" Header="删除连接" InputGestureText="Del" views:MenuItemAssist.IconKey="Ui.Delete" views:MenuItemAssist.IsDanger="True" Click="OnDeleteMenuClick" />
         </ContextMenu>
 
         <Style x:Key="ConnectionRow" TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">

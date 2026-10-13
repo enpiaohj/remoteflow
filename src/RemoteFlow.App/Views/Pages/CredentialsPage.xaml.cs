@@ -98,12 +98,41 @@ public partial class CredentialsPage : UserControl
         }
     }
 
-    private void OnListKeyDown(object sender, KeyEventArgs e)
+    private async void OnListKeyDown(object sender, KeyEventArgs e)
     {
-        if (ViewModel is { IsMultiSelect: true } vm && e.Key == Key.Escape)
+        if (ViewModel is not { } vm)
         {
-            vm.ExitMultiSelectCommand.Execute(null);
-            e.Handled = true;
+            return;
+        }
+
+        if (vm.IsMultiSelect)
+        {
+            if (e.Key == Key.Escape)
+            {
+                vm.ExitMultiSelectCommand.Execute(null);
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        // 与行右键菜单标注的快捷键一致：F2 编辑、Del 删除（删除仍会弹确认）。
+        if (CredentialList.SelectedItem is not CredentialItemViewModel selected)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.F2:
+                e.Handled = true;
+                await vm.EditCommand.ExecuteAsync(selected);
+                break;
+
+            case Key.Delete:
+                e.Handled = true;
+                await vm.DeleteCommand.ExecuteAsync(selected);
+                break;
         }
     }
 

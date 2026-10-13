@@ -895,6 +895,16 @@ public partial class MainWindow : Window
     private void OnTabFileTransferClick(object sender, RoutedEventArgs e)
         => ResolveTab(sender)?.ToggleFileTransferCommand.Execute(null);
 
+    /// <summary>与 F11 等价：先选中该会话，再按三档规则推进一档（常规 → 最大化 → 完全全屏）。</summary>
+    private void OnTabFullScreenClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveTab(sender) is { } tab)
+        {
+            _viewModel.SelectedTab = tab;
+            _viewModel.AdvanceSessionView();
+        }
+    }
+
     private void OnTabCopyAddressClick(object sender, RoutedEventArgs e)
         => ClipboardText.TryCopy(ResolveTab(sender)?.Session.Profile.Host);
 
