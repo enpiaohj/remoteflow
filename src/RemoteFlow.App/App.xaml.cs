@@ -74,16 +74,26 @@ public partial class App : System.Windows.Application
         // 异常处理必须最先装好，否则启动过程中的失败会以无提示崩溃收场。
         RegisterGlobalExceptionHandlers();
 
+        // 随系统启动（开机启动项带 --startup）：直接驻留托盘，不弹主窗口；手动打开则正常显示。
+        var startHidden = e.Args.Contains(WpfLaunchOnStartupService.StartupArgument);
+
         // 更新后重启：旧进程还在退出途中，稍等它释放单实例互斥体，而不是把自己当成重复实例退掉。
         var afterUpdate = e.Args.Contains(WpfUpdateInstaller.AfterUpdateArgument)
             || e.Args.Contains(WpfUpdateInstaller.UpdateFailedArgument);
 
         if (!TryAcquireSingleInstance(afterUpdate ? TimeSpan.FromSeconds(20) : TimeSpan.Zero))
         {
-            ActivateExistingInstance();
+            // 随系统启动的重复实例不打扰；用户手动再次打开，则让已在运行的实例显示主窗口。
+            if (!startHidden && !SignalExistingInstance())
+            {
+                ActivateExistingInstance();
+            }
+
             Shutdown(0);
             return;
         }
+
+        ListenForActivationRequests();
 
         try
         {
@@ -105,7 +115,7 @@ public partial class App : System.Windows.Application
             // 让全项目统一日期时间格式跟随用户设置（保存设置后会再次刷新）。
             DateTimeDisplay.Configure(_services.GetRequiredService<AppSettings>());
 
-            ShowMainWindow();
+            ShowMainWindow(startHidden);
             InitializeUpdates(afterUpdate, e.Args.Contains(WpfUpdateInstaller.UpdateFailedArgument));
         }
         catch (Exception ex)
@@ -138,6 +148,51 @@ public partial class App : System.Windows.Application
         }
 
         return _ownsMutex;
+    }
+
+    // 已在运行的实例监听这个事件；再次启动的实例置位它，请求显示主窗口。
+    // 不能只靠「找到对方窗口并激活」：窗口隐藏在托盘时进程没有可见的主窗口句柄。
+    private const string ActivationEventName = @"Local\RemoteFlow.Activate";
+    private EventWaitHandle? _activationEvent;
+    private RegisteredWaitHandle? _activationWait;
+
+    private void ListenForActivationRequests()
+    {
+        try
+        {
+            _activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivationEventName);
+            _activationWait = ThreadPool.RegisterWaitForSingleObject(
+                _activationEvent,
+                (_, _) => Dispatcher.BeginInvoke(() => _tray?.ShowMainWindow()),
+                state: null,
+                millisecondsTimeOutInterval: Timeout.Infinite,
+                executeOnlyOnce: false);
+        }
+        catch (Exception)
+        {
+            // 监听建不起来只影响「再次打开时唤出窗口」，退回按窗口句柄激活的老办法。
+        }
+    }
+
+    /// <summary>通知已在运行的实例显示主窗口；对方没有在监听（旧版本）时返回 false。</summary>
+    private static bool SignalExistingInstance()
+    {
+        try
+        {
+            if (EventWaitHandle.TryOpenExisting(ActivationEventName, out var handle))
+            {
+                using (handle)
+                {
+                    return handle.Set();
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // 打不开就走回退路径。
+        }
+
+        return false;
     }
 
     /// <summary>把已在运行的实例窗口带到前台。</summary>
@@ -410,7 +465,8 @@ public partial class App : System.Windows.Application
         theme.StartListeningToSystemTheme();
     }
 
-    private void ShowMainWindow()
+    /// <param name="startHidden">随系统启动时为 true：只建托盘图标，不显示主窗口。</param>
+    private void ShowMainWindow(bool startHidden)
     {
         var window = Services.GetRequiredService<MainWindow>();
         MainWindow = window;
@@ -427,7 +483,24 @@ public partial class App : System.Windows.Application
             Services.GetRequiredService<ILogger<TrayService>>());
         _tray.Initialize();
 
-        window.Show();
+        // 旧版本写入的开机启动项不带启动参数：升级一次，之后随系统启动才能被识别出来。
+        try
+        {
+            WpfLaunchOnStartupService.UpgradeExistingRegistration();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "升级开机启动项失败");
+        }
+
+        if (startHidden)
+        {
+            _logger?.LogInformation("随系统启动：驻留托盘，不显示主窗口");
+        }
+        else
+        {
+            window.Show();
+        }
 
         // 云同步：恢复会话并按周期后台同步（未启用云同步时内部直接空转）。
         Services.GetRequiredService<CloudSyncAutoRunner>().Start(TimeSpan.FromMinutes(3));
@@ -525,6 +598,9 @@ public partial class App : System.Windows.Application
 
             // 6) 关闭 Serilog，刷新并释放日志（须在 Save 之后，Save 失败还能记日志）。
             LoggingSetup.Shutdown();
+
+            _activationWait?.Unregister(null);
+            _activationEvent?.Dispose();
 
             // 7) 释放单实例互斥体。
             if (_ownsMutex)

@@ -426,6 +426,9 @@ public sealed class TrayService : IDisposable
     }
 
     /// <summary>打开并置前主窗口：还原 → 显示 → Activate → SetForegroundWindow，不只设 Visibility。</summary>
+    /// <summary>显示并置前主窗口（再次启动应用时由已在运行的实例调用）。</summary>
+    public void ShowMainWindow() => RestoreWindow();
+
     private void RestoreWindow()
     {
         if (!_window.Dispatcher.CheckAccess())
