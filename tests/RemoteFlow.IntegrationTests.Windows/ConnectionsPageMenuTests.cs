@@ -17,7 +17,7 @@ public sealed class ConnectionsPageMenuTests
         var markup = File.ReadAllText(FindConnectionsPageMarkup());
 
         Assert.Contains(
-            "<MenuItem Tag=\"move\" Header=\"移动到分组\" SubmenuOpened=\"OnMoveToGroupSubmenuOpened\">",
+            "<MenuItem Tag=\"move\" Header=\"移动到分组\" views:MenuItemAssist.IconKey=\"Ui.Folder\" SubmenuOpened=\"OnMoveToGroupSubmenuOpened\">",
             markup,
             StringComparison.Ordinal);
         Assert.Contains("<MenuItem Header=\"加载分组…\" IsEnabled=\"False\" />", markup, StringComparison.Ordinal);

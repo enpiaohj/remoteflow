@@ -1,6 +1,7 @@
 <Window x:Class="RemoteFlow.App.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:RemoteFlow.App.Views"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
         xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
@@ -74,16 +75,26 @@
         <ContextMenu x:Key="SessionTabContextMenu"
                      x:Shared="False"
                      Opened="OnTabContextMenuOpened">
-            <MenuItem Header="重新连接" Click="OnTabReconnectClick" />
+            <MenuItem Header="重新连接" views:MenuItemAssist.IconKey="Ui.Refresh" Click="OnTabReconnectClick" />
+            <MenuItem Tag="filetransfer" Header="文件传输" views:MenuItemAssist.IconKey="Ui.FileTransfer" Click="OnTabFileTransferClick" />
+            <MenuItem Header="复制地址" views:MenuItemAssist.IconKey="Ui.Copy" Click="OnTabCopyAddressClick" />
             <Separator />
-            <MenuItem Header="关闭会话" InputGestureText="Ctrl+W" Click="OnTabCloseClick" />
+            <MenuItem Header="关闭会话" InputGestureText="Ctrl+W" views:MenuItemAssist.IconKey="Ui.Close" Click="OnTabCloseClick" />
             <MenuItem Tag="closeOthers"
                       Header="关闭其他会话"
                       Click="OnTabCloseOthersClick" />
             <MenuItem Tag="closeRight"
                       Header="关闭右侧会话"
                       Click="OnTabCloseRightClick" />
-            <MenuItem Header="关闭全部会话" Click="OnTabCloseAllClick" />
+            <Separator />
+            <MenuItem Header="关闭全部会话" views:MenuItemAssist.IsDanger="True" Click="OnTabCloseAllClick" />
+        </ContextMenu>
+
+        <!-- 文件传输 Tab 右键菜单：它不是会话，只有复制地址与关闭 -->
+        <ContextMenu x:Key="FileTransferTabContextMenu" x:Shared="False">
+            <MenuItem Header="复制地址" views:MenuItemAssist.IconKey="Ui.Copy" Click="OnTransferTabCopyAddressClick" />
+            <Separator />
+            <MenuItem Header="关闭文件传输" InputGestureText="Ctrl+W" views:MenuItemAssist.IconKey="Ui.Close" Click="OnTransferTabCloseClick" />
         </ContextMenu>
 
         <!-- 标题栏窗口按钮：不使用系统按钮，以便跟随应用主题 -->
@@ -383,7 +394,8 @@
                                                 <RadioButton Style="{StaticResource WorkspaceTabHeader}"
                                                              IsChecked="{Binding IsActive, Mode=OneWay}"
                                                              Checked="OnTabHeaderChecked"
-                                                             ContextMenuOpening="OnTabContextMenuOpening">
+                                                             ContextMenuOpening="OnTabContextMenuOpening"
+                                                             ContextMenu="{DynamicResource FileTransferTabContextMenu}">
                                                     <StackPanel Orientation="Horizontal" Margin="12,0,8,0"
                                                                 ToolTip="{Binding TabToolTip}">
                                                         <Image Width="16" Height="16" VerticalAlignment="Center"

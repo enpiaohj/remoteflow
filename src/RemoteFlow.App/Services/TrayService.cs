@@ -1,20 +1,28 @@
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls.Primitives;
 using System.Windows.Forms;
+using System.Windows.Interop;
 using Microsoft.Extensions.Logging;
 using RemoteFlow.Presentation.ViewModels;
+using RemoteFlow.App.Converters;
 using RemoteFlow.App.Views;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 using RemoteFlow.Presentation.Services;
+using WpfContextMenu = System.Windows.Controls.ContextMenu;
+using WpfMenuItem = System.Windows.Controls.MenuItem;
+using WpfSeparator = System.Windows.Controls.Separator;
 
 namespace RemoteFlow.App.Services;
 
 /// <summary>
 /// 系统托盘图标与右键结构化菜单。
 /// <para>
+/// 菜单用应用自己的 WPF 菜单样式（与应用内右键菜单同一套模板、图标与配色，跟随深浅色主题），
+/// 而不是 WinForms 的系统默认菜单；在托盘图标右键抬起时于光标处弹出。
 /// 菜单在每次打开时整树重建，保证「最近连接 / 活动会话」等动态数据不过期；
 /// 会话状态一律实时读 <see cref="SessionManager"/> 快照，托盘不单独缓存连接状态。
 /// 当「关闭窗口时最小化到通知区域」开启时，托盘是用户真正退出应用的入口；
@@ -36,7 +44,7 @@ public sealed class TrayService : IDisposable
     private readonly ILogger<TrayService> _logger;
 
     private NotifyIcon? _notifyIcon;
-    private readonly ContextMenuStrip _menu = new();
+    private WpfContextMenu? _menu;
     private readonly System.Windows.Threading.DispatcherTimer _clickTimer = new();
 
     /// <summary>单击去抖标记：单击不立即动作，等 DoubleClickTime 内是否跟来双击。</summary>
@@ -72,12 +80,9 @@ public sealed class TrayService : IDisposable
         };
         _notifyIcon = notifyIcon;
 
-        // 首次建立菜单骨架（随后每次打开再整树重建）。
-        RebuildMenu();
-        notifyIcon.ContextMenuStrip = _menu;
-
-        // 每次打开菜单都整树重建：最近连接读库、活动会话读 SessionManager 实时快照。
-        _menu.Opening += (_, _) => RebuildMenu();
+        // 右键抬起时弹出菜单；每次打开都整树重建：最近连接读库、活动会话读 SessionManager 实时快照。
+        notifyIcon.MouseUp += OnNotifyIconMouseUp;
+        UpdateTooltip();
 
         // 会话集合变化（创建 / 任意状态跳变 / 移除）都会改变提示文字；
         // 事件可在协议后台线程触发，UpdateTooltip 内部 marshal 回 UI 线程再更新。
@@ -89,130 +94,154 @@ public sealed class TrayService : IDisposable
         notifyIcon.MouseDoubleClick += OnNotifyIconMouseDoubleClick;
     }
 
-    // ── 菜单整树重建 ─────────────────────────────────────────────
+    // ── 菜单弹出与整树重建 ───────────────────────────────────────
 
-    private void RebuildMenu()
+    private void OnNotifyIconMouseUp(object? sender, MouseEventArgs e)
     {
-        ClearMenu();
+        if (e.Button == MouseButtons.Right)
+        {
+            ShowMenu();
+        }
+    }
+
+    private void ShowMenu()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (_menu is { IsOpen: true } open)
+        {
+            open.IsOpen = false;
+        }
+
+        var menu = BuildMenu();
+        _menu = menu;
+        menu.Placement = PlacementMode.MousePoint;
+        menu.IsOpen = true;
+
+        // 托盘菜单不属于任何已激活的窗口：把菜单自己的弹出窗口设为前台，
+        // 这样点击菜单以外的任何位置、或按 Esc 都能正常关闭它。
+        if (PresentationSource.FromVisual(menu) is HwndSource source)
+        {
+            SetForegroundWindow(source.Handle);
+        }
+    }
+
+    /// <summary>
+    /// 分组约定与应用内右键菜单一致：窗口 → 连接与会话 → 设置类 → 退出。
+    /// </summary>
+    private WpfContextMenu BuildMenu()
+    {
+        var menu = new WpfContextMenu();
 
         var activeSessions = _sessions.ActiveSessions
             .OrderBy(s => s.Profile.Name, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
 
         // 1) 打开 / 隐藏（按主窗口状态动态文案）。
-        var toggle = new ToolStripMenuItem(IsMainWindowShown() ? "隐藏 RemoteFlow" : "打开 RemoteFlow");
-        toggle.Click += (_, _) => ToggleMainWindow();
-        _menu.Items.Add(toggle);
+        var shown = IsMainWindowShown();
+        menu.Items.Add(Item(shown ? "隐藏 RemoteFlow" : "打开 RemoteFlow", shown ? "Ui.Hide" : "Ui.Reveal", ToggleMainWindow));
 
-        AddSeparator();
+        menu.Items.Add(new WpfSeparator());
 
-        // 2) 新建连接 ▸ RDP / SSH / VNC。
-        var newConnection = new ToolStripMenuItem("新建连接");
-        newConnection.DropDownItems.Add(CreateNewProtocolItem(ProtocolType.Rdp, "RDP 连接"));
-        newConnection.DropDownItems.Add(CreateNewProtocolItem(ProtocolType.Ssh, "SSH 连接"));
-        newConnection.DropDownItems.Add(CreateNewProtocolItem(ProtocolType.Vnc, "VNC 连接"));
-        _menu.Items.Add(newConnection);
+        // 2) 连接与会话：新建连接 ▸ / 最近连接 ▸ / 活动会话（N）▸。
+        var newConnection = Item("新建连接", "Ui.Add");
+        newConnection.Items.Add(Item("RDP 连接", UiIconResources.ProtocolKey(ProtocolType.Rdp), () => OpenNewConnection(ProtocolType.Rdp)));
+        newConnection.Items.Add(Item("SSH 连接", UiIconResources.ProtocolKey(ProtocolType.Ssh), () => OpenNewConnection(ProtocolType.Ssh)));
+        newConnection.Items.Add(Item("VNC 连接", UiIconResources.ProtocolKey(ProtocolType.Vnc), () => OpenNewConnection(ProtocolType.Vnc)));
+        menu.Items.Add(newConnection);
+        menu.Items.Add(BuildRecentMenu());
+        menu.Items.Add(BuildActiveSessionsMenu(activeSessions));
 
-        AddSeparator();
+        menu.Items.Add(new WpfSeparator());
 
-        // 3) 最近连接 ▸（读库 ≤5 + 查看全部）。
-        _menu.Items.Add(BuildRecentMenu());
+        // 3) 设置类：设置 / 开机启动（勾选反映当前设置）/ 检查更新（有更新实现时）。
+        menu.Items.Add(Item("设置", "Ui.Settings", OpenSettings));
 
-        AddSeparator();
+        var startup = Item("开机启动", null, ToggleLaunchOnStartup);
+        startup.IsCheckable = true;
+        startup.IsChecked = _settingsPage.LaunchOnStartup;
+        menu.Items.Add(startup);
 
-        // 4) 活动会话（N）▸（实时读 SessionManager；N==0 禁用不展开）。
-        _menu.Items.Add(BuildActiveSessionsMenu(activeSessions));
-
-        AddSeparator();
-
-        // 5) 设置：打开 RemoteFlow → 设置页。
-        var settingsItem = new ToolStripMenuItem("设置");
-        settingsItem.Click += (_, _) => OpenSettings();
-        _menu.Items.Add(settingsItem);
-
-        // 6) 开机启动：Check 反映当前设置，点击双向同步到注册表与设置页。
-        var startupItem = new ToolStripMenuItem("开机启动") { Checked = _settingsPage.LaunchOnStartup };
-        startupItem.Click += (_, _) => ToggleLaunchOnStartup();
-        _menu.Items.Add(startupItem);
-
-        AddSeparator();
-
-        // 7) 退出。
-        var exitItem = new ToolStripMenuItem("退出 RemoteFlow");
-        exitItem.Click += (_, _) => RequestExit();
-        _menu.Items.Add(exitItem);
-
-        UpdateTooltip();
-    }
-
-    private void ClearMenu()
-    {
-        while (_menu.Items.Count > 0)
+        if (_mainViewModel.Update is { } update)
         {
-            var item = _menu.Items[0];
-            _menu.Items.RemoveAt(0);
-            item.Dispose();
+            var label = update.IsReadyToRestart ? "重启以完成更新" : update.HasUpdate ? "有新版本可用…" : "检查更新";
+            menu.Items.Add(Item(label, "Ui.Refresh", () => OpenUpdates(update)));
         }
+
+        menu.Items.Add(new WpfSeparator());
+
+        // 4) 退出。
+        menu.Items.Add(Item("退出 RemoteFlow", "Ui.Power", RequestExit));
+
+        return menu;
     }
 
-    private void AddSeparator() => _menu.Items.Add(new ToolStripSeparator());
-
-    private ToolStripMenuItem CreateNewProtocolItem(ProtocolType protocol, string text)
+    private static WpfMenuItem Item(string header, string? iconKey, Action? onClick = null)
     {
-        var item = new ToolStripMenuItem(text);
-        item.Click += (_, _) => OpenNewConnection(protocol);
+        var item = new WpfMenuItem { Header = EscapeAccessKey(header) };
+        if (iconKey is not null)
+        {
+            MenuItemAssist.SetIconKey(item, iconKey);
+        }
+
+        if (onClick is not null)
+        {
+            item.Click += (_, _) => onClick();
+        }
+
         return item;
     }
 
-    private ToolStripMenuItem BuildRecentMenu()
+    private WpfMenuItem BuildRecentMenu()
     {
-        var recent = new ToolStripMenuItem("最近连接");
+        var recent = Item("最近连接", "Ui.Recent");
 
         var profiles = LoadRecentProfiles();
         if (profiles.Count == 0)
         {
-            recent.DropDownItems.Add(new ToolStripMenuItem("暂无最近连接") { Enabled = false });
+            var empty = Item("暂无最近连接", null);
+            empty.IsEnabled = false;
+            recent.Items.Add(empty);
             return recent;
         }
 
         foreach (var profile in profiles)
         {
-            var item = new ToolStripMenuItem(FormatRecentLabel(profile));
-            item.Click += (_, _) => OpenRecentProfile(profile);
-            recent.DropDownItems.Add(item);
+            recent.Items.Add(Item(profile.Name, UiIconResources.ProtocolKey(profile.Protocol), () => OpenRecentProfile(profile)));
         }
 
-        recent.DropDownItems.Add(new ToolStripSeparator());
-        var viewAll = new ToolStripMenuItem("查看全部最近连接");
-        viewAll.Click += (_, _) => NavigateToPage(NavigationPage.Recent);
-        recent.DropDownItems.Add(viewAll);
+        recent.Items.Add(new WpfSeparator());
+        recent.Items.Add(Item("查看全部最近连接", null, () => NavigateToPage(NavigationPage.Recent)));
 
         return recent;
     }
 
-    private ToolStripMenuItem BuildActiveSessionsMenu(IReadOnlyList<IRemoteSession> activeSessions)
+    private WpfMenuItem BuildActiveSessionsMenu(IReadOnlyList<IRemoteSession> activeSessions)
     {
-        var menu = new ToolStripMenuItem($"活动会话（{activeSessions.Count}）");
+        var menu = Item($"活动会话（{activeSessions.Count}）", "Ui.Sessions");
 
         if (activeSessions.Count == 0)
         {
-            menu.Enabled = false;
+            menu.IsEnabled = false;
             return menu;
         }
 
         foreach (var session in activeSessions)
         {
-            var label = $"● {EscapeMnemonic(session.Profile.Name)}（{FormatProtocolName(session.Profile.Protocol)}）";
-            var item = new ToolStripMenuItem(label);
             var sessionId = session.SessionId;
-            item.Click += (_, _) => ActivateSession(sessionId);
-            menu.DropDownItems.Add(item);
+            menu.Items.Add(Item(
+                session.Profile.Name,
+                UiIconResources.ProtocolKey(session.Profile.Protocol),
+                () => ActivateSession(sessionId)));
         }
 
-        menu.DropDownItems.Add(new ToolStripSeparator());
-        var disconnectAll = new ToolStripMenuItem("断开全部会话");
-        disconnectAll.Click += OnDisconnectAllSessionsClick;
-        menu.DropDownItems.Add(disconnectAll);
+        menu.Items.Add(new WpfSeparator());
+        var disconnectAll = Item("断开全部会话", "Ui.Disconnected", () => OnDisconnectAllSessionsClick(null, EventArgs.Empty));
+        MenuItemAssist.SetIsDanger(disconnectAll, true);
+        menu.Items.Add(disconnectAll);
 
         return menu;
     }
@@ -242,18 +271,8 @@ public sealed class TrayService : IDisposable
         }
     }
 
-    private static string FormatRecentLabel(ConnectionProfile profile)
-        => $"{EscapeMnemonic(profile.Name)}（{FormatProtocolName(profile.Protocol)}）";
-
-    /// <summary>WinForms 菜单项把 <c>&amp;</c> 当作助记符前缀；名称里的字面 <c>&amp;</c> 需转义为 <c>&amp;&amp;</c>。</summary>
-    private static string EscapeMnemonic(string text) => text.Replace("&", "&&");
-
-    private static string FormatProtocolName(ProtocolType protocol) => protocol switch
-    {
-        ProtocolType.Rdp => "RDP",
-        ProtocolType.Ssh => "SSH",
-        _ => "VNC"
-    };
+    /// <summary>WPF 菜单项把下划线当作访问键前缀；名称里的字面下划线需写成两个。</summary>
+    private static string EscapeAccessKey(string text) => text.Replace("_", "__");
 
     // ── 菜单动作 ──────────────────────────────────────────────────
 
@@ -304,6 +323,17 @@ public sealed class TrayService : IDisposable
     {
         RestoreWindow();
         _mainViewModel.NavigateTo(NavigationPage.Settings);
+    }
+
+    /// <summary>打开「关于」里的软件更新区；还没检查过就顺手检查一次（这是用户主动点的）。</summary>
+    private void OpenUpdates(UpdateViewModel update)
+    {
+        RestoreWindow();
+        _mainViewModel.NavigateTo(NavigationPage.About);
+        if (update is { HasUpdate: false, IsReadyToRestart: false } && update.CheckCommand.CanExecute(null))
+        {
+            update.CheckCommand.Execute(null);
+        }
     }
 
     private void NavigateToPage(NavigationPage page)
@@ -550,12 +580,17 @@ public sealed class TrayService : IDisposable
         {
             // 必须先隐藏：否则进程退出后托盘会残留一个「僵尸图标」，
             // 直到用户把鼠标划过通知区域才消失。
+            _notifyIcon.MouseUp -= OnNotifyIconMouseUp;
             _notifyIcon.Visible = false;
             _notifyIcon.Dispose();
             _notifyIcon = null;
         }
 
-        ClearMenu();
-        _menu.Dispose();
+        if (_menu is { IsOpen: true } menu)
+        {
+            menu.IsOpen = false;
+        }
+
+        _menu = null;
     }
 }

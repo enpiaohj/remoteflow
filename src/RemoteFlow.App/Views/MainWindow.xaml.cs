@@ -830,6 +830,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (sender is FrameworkElement { DataContext: FileTransferTabViewModel transfer })
+        {
+            _viewModel.SelectedTab = transfer;
+            return;
+        }
+
         e.Handled = true;
     }
 
@@ -847,6 +853,14 @@ public partial class MainWindow : Window
                 .Skip(tabIndex + 1)
                 .OfType<SessionTabViewModel>()
                 .Any();
+
+        // 文件传输侧栏只有 SSH 会话有：其它协议不显示该项；文案随侧栏展开状态切换。
+        if (menu.Items.OfType<MenuItem>().FirstOrDefault(item =>
+                Equals(item.Tag, "filetransfer")) is { } fileTransfer)
+        {
+            fileTransfer.Visibility = tab.SupportsFileTransfer ? Visibility.Visible : Visibility.Collapsed;
+            fileTransfer.Header = tab.IsFileTransferOpen ? "收起文件传输" : "文件传输";
+        }
 
         if (menu.Items.OfType<MenuItem>().FirstOrDefault(item =>
                 Equals(item.Tag, "closeOthers")) is { } closeOthers)
@@ -877,6 +891,26 @@ public partial class MainWindow : Window
 
     private void OnTabReconnectClick(object sender, RoutedEventArgs e)
         => ResolveTab(sender)?.ReconnectCommand.Execute(null);
+
+    private void OnTabFileTransferClick(object sender, RoutedEventArgs e)
+        => ResolveTab(sender)?.ToggleFileTransferCommand.Execute(null);
+
+    private void OnTabCopyAddressClick(object sender, RoutedEventArgs e)
+        => ClipboardText.TryCopy(ResolveTab(sender)?.Session.Profile.Host);
+
+    private static FileTransferTabViewModel? ResolveTransferTab(object sender)
+    {
+        var menu = (sender as MenuItem)?.Parent as ContextMenu;
+        return (sender as FrameworkElement)?.DataContext as FileTransferTabViewModel
+            ?? menu?.DataContext as FileTransferTabViewModel
+            ?? (menu?.PlacementTarget as FrameworkElement)?.DataContext as FileTransferTabViewModel;
+    }
+
+    private void OnTransferTabCopyAddressClick(object sender, RoutedEventArgs e)
+        => ClipboardText.TryCopy(ResolveTransferTab(sender)?.Profile.Host);
+
+    private void OnTransferTabCloseClick(object sender, RoutedEventArgs e)
+        => ResolveTransferTab(sender)?.CloseCommand.Execute(null);
 
     private void OnTabCloseClick(object sender, RoutedEventArgs e)
         => ResolveTab(sender)?.CloseCommand.Execute(null);

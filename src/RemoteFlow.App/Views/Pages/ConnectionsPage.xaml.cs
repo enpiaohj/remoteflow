@@ -222,8 +222,12 @@ public partial class ConnectionsPage : UserControl
                     item.Header = row?.HasActiveSession == true ? "切换到会话" : "连接";
                     break;
                 case "disconnect":
-                    // 断开连接只在存在活动会话时可用（关闭该 Profile 全部活动会话）。
+                case "newsession":
+                    // 断开连接 / 新建会话只在存在活动会话时出现（前者关闭该连接全部活动会话，后者强制再开一个）。
                     item.Visibility = row?.HasActiveSession == true ? Visibility.Visible : Visibility.Collapsed;
+                    break;
+                case "copyaddress":
+                    item.IsEnabled = !string.IsNullOrEmpty(row?.Host);
                     break;
                 case "duplicate":
                 case "move":
@@ -240,9 +244,9 @@ public partial class ConnectionsPage : UserControl
                     break;
                 case "favorite":
                     // 收藏页（Filter=Favorites）展示的都是收藏，恒「取消收藏」；其它页按行当前状态。
-                    item.Header = vm.Filter == ConnectionFilter.Favorites || row?.IsFavorite == true
-                        ? "取消收藏"
-                        : "收藏";
+                    var favorited = vm.Filter == ConnectionFilter.Favorites || row?.IsFavorite == true;
+                    item.Header = favorited ? "取消收藏" : "收藏";
+                    MenuItemAssist.SetIconKey(item, favorited ? "Ui.Favorite.Filled" : "Ui.Favorite");
                     break;
             }
         }
@@ -375,6 +379,23 @@ public partial class ConnectionsPage : UserControl
         }
     }
 
+    /// <summary>已有会话时强制再开一个（跳过「聚焦已有会话」的去重）。</summary>
+    private void OnNewSessionMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
+        {
+            viewModel.NewSessionCommand.Execute(item);
+        }
+    }
+
+    private void OnCopyAddressMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveItem(sender) is { } item)
+        {
+            ClipboardText.TryCopy(item.Host);
+        }
+    }
+
     /// <summary>在工作区打开文件传输 Tab（不建立会话）。</summary>
     private void OnFileTransferMenuClick(object sender, RoutedEventArgs e)
     {
@@ -384,7 +405,7 @@ public partial class ConnectionsPage : UserControl
         }
     }
 
-    /// <summary>「管理连接」：切到全部视图并让该连接可见、选中。</summary>
+    /// <summary>「在工作台中显示」：切到全部视图并让该连接可见、选中。</summary>
     private void OnLocateMenuClick(object sender, RoutedEventArgs e)
     {
         if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
@@ -561,7 +582,7 @@ public partial class ConnectionsPage : UserControl
             Header = "删除所选",
             Command = vm.DeleteSelectedCommand,
             IsEnabled = vm.HasSelection
-        });
+        }.WithIcon("Ui.Delete").AsDanger());
 
         OpenBatchMenu(button, menu);
     }
@@ -575,10 +596,10 @@ public partial class ConnectionsPage : UserControl
         }
 
         var menu = new ContextMenu();
-        menu.Items.Add(new MenuItem { Header = "复制连接", Command = vm.DuplicateCommand, CommandParameter = item });
-        menu.Items.Add(new MenuItem { Header = "测试连接", Command = vm.TestConnectionCommand, CommandParameter = item });
+        menu.Items.Add(new MenuItem { Header = "测试连接", Command = vm.TestConnectionCommand, CommandParameter = item }.WithIcon("Ui.Pending"));
+        menu.Items.Add(new MenuItem { Header = "创建副本", Command = vm.DuplicateCommand, CommandParameter = item }.WithIcon("Ui.Clipboard"));
         menu.Items.Add(new Separator());
-        menu.Items.Add(new MenuItem { Header = "删除", Command = vm.DeleteCommand, CommandParameter = item });
+        menu.Items.Add(new MenuItem { Header = "删除连接", Command = vm.DeleteCommand, CommandParameter = item }.WithIcon("Ui.Delete").AsDanger());
 
         OpenBatchMenu(button, menu);
     }

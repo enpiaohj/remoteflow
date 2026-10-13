@@ -836,14 +836,9 @@ public partial class SessionHostView : UserControl
             {
                 Header = current.Title,
                 IsChecked = ReferenceEquals(current, _main.SelectedTab),
-                Icon = new System.Windows.Shapes.Path
-                {
-                    Style = TryFindResource("UiIcon") as Style,
-                    Data = UiIconResources.Find(UiIconResources.ProtocolKey(current.Protocol)),
-                    Width = 15,
-                    Height = 15
-                }
+                FontWeight = ReferenceEquals(current, _main.SelectedTab) ? FontWeights.SemiBold : FontWeights.Normal
             };
+            MenuItemAssist.SetIconKey(item, UiIconResources.ProtocolKey(current.Protocol));
             item.Click += (_, _) => _main.SelectedTab = current;
             _sessionMenu.Items.Add(item);
         }

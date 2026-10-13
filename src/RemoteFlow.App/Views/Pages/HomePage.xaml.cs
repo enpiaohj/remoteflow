@@ -88,6 +88,7 @@ public partial class HomePage : UserControl
         if (menu.Items.OfType<MenuItem>().FirstOrDefault(m => (m.Tag as string) == HomeRowActions.Favorite) is { } favorite)
         {
             favorite.Header = item?.IsFavorite == true ? "取消收藏" : "收藏";
+            MenuItemAssist.SetIconKey(favorite, item?.IsFavorite == true ? "Ui.Favorite.Filled" : "Ui.Favorite");
         }
 
         // VNC 没有文件传输通道：置灰并说明原因，而不是隐藏。
@@ -111,6 +112,14 @@ public partial class HomePage : UserControl
             && menu.DataContext is ConnectionItemViewModel item)
         {
             ViewModel?.RequestConnectionAction(item, action);
+        }
+    }
+
+    private void OnCopyAddressClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { DataContext: ConnectionItemViewModel item })
+        {
+            ClipboardText.TryCopy(item.Host);
         }
     }
 

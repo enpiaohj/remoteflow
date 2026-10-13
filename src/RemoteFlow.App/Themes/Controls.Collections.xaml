@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:views="clr-namespace:RemoteFlow.App.Views">
 
     <!--
         集合类控件样式：滚动条、列表、树、下拉框、会话 Tab、菜单。
@@ -592,10 +593,20 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="16" />
                                 </Grid.ColumnDefinitions>
-                                <ContentPresenter x:Name="Icon"
-                                                  ContentSource="Icon"
-                                                  Margin="0,0,10,0"
-                                                  VerticalAlignment="Center" />
+                                <!-- 图标列固定占位（16 + 间距），带 / 不带图标的菜单项文字始终对齐。
+                                     图标来自 views:MenuItemAssist.IconKey，颜色跟随菜单项文字；
+                                     可勾选项在没有图标时显示对勾。 -->
+                                <Grid Width="16" Height="16" Margin="0,0,10,0" VerticalAlignment="Center">
+                                    <Path x:Name="ItemIcon"
+                                          Width="16" Height="16" Stretch="Uniform"
+                                          Fill="{TemplateBinding Foreground}"
+                                          Data="{Binding Path=(views:MenuItemAssist.IconGeometry), RelativeSource={RelativeSource TemplatedParent}}" />
+                                    <Path x:Name="CheckMark"
+                                          Width="14" Height="14" Stretch="Uniform"
+                                          Fill="{DynamicResource Brand.Default}"
+                                          Data="{StaticResource Ui.Accept}"
+                                          Visibility="Collapsed" />
+                                </Grid>
                                 <ContentPresenter Grid.Column="1"
                                                   ContentSource="Header"
                                                   VerticalAlignment="Center"
@@ -641,6 +652,18 @@
                         </Trigger>
                         <Trigger Property="IsHighlighted" Value="True">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                        </Trigger>
+                        <!-- 勾选标记只在没有图标时占用图标位；带图标的项由文案表达状态 -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsChecked" Value="True" />
+                                <Condition Property="views:MenuItemAssist.IconGeometry" Value="{x:Null}" />
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="CheckMark" Property="Visibility" Value="Visible" />
+                        </MultiTrigger>
+                        <!-- 破坏性操作用警示色；禁用态放在其后，禁用时仍按禁用色显示 -->
+                        <Trigger Property="views:MenuItemAssist.IsDanger" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Status.Danger}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground" Value="{DynamicResource Text.Disabled}" />

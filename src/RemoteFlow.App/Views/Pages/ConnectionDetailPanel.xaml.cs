@@ -28,14 +28,7 @@ public partial class ConnectionDetailPanel : UserControl
             return;
         }
 
-        try
-        {
-            Clipboard.SetText(item.Host);
-        }
-        catch
-        {
-            // 剪贴板被占用等偶发失败不打扰用户。
-        }
+        ClipboardText.TryCopy(item.Host);
     }
 
     /// <summary>「连接 / 打开会话 ▾」的备选动作菜单。有活动会话时提供
@@ -53,27 +46,28 @@ public partial class ConnectionDetailPanel : UserControl
         var menu = new ContextMenu();
         if (item.HasActiveSession)
         {
-            menu.Items.Add(new MenuItem { Header = "新建会话", Command = vm.NewSessionCommand, CommandParameter = item });
-            menu.Items.Add(new MenuItem { Header = "重新连接", Command = vm.ReconnectItemCommand, CommandParameter = item });
-            menu.Items.Add(new MenuItem { Header = "断开连接", Command = vm.DisconnectItemCommand, CommandParameter = item });
+            menu.Items.Add(new MenuItem { Header = "新建会话", Command = vm.NewSessionCommand, CommandParameter = item }.WithIcon("Ui.Add"));
+            menu.Items.Add(new MenuItem { Header = "重新连接", Command = vm.ReconnectItemCommand, CommandParameter = item }.WithIcon("Ui.Refresh"));
+            menu.Items.Add(new MenuItem { Header = "断开连接", Command = vm.DisconnectItemCommand, CommandParameter = item }.WithIcon("Ui.Disconnected"));
             menu.Items.Add(new Separator());
         }
 
-        menu.Items.Add(new MenuItem { Header = "测试连接（Ping）", Command = vm.TestConnectionCommand, CommandParameter = item });
+        menu.Items.Add(new MenuItem { Header = "测试连接", Command = vm.TestConnectionCommand, CommandParameter = item }.WithIcon("Ui.Pending"));
         menu.Items.Add(new MenuItem
         {
             Header = "文件传输…",
             Command = vm.OpenFileTransferCommand,
             CommandParameter = item,
             ToolTip = item.FileTransferHint
-        });
-        menu.Items.Add(new MenuItem { Header = "编辑连接", Command = vm.EditCommand, CommandParameter = item });
+        }.WithIcon("Ui.FileTransfer"));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem { Header = "编辑连接", Command = vm.EditCommand, CommandParameter = item }.WithIcon("Ui.Edit"));
         menu.PlacementTarget = button;
         menu.Placement = PlacementMode.Bottom;
         menu.IsOpen = true;
     }
 
-    /// <summary>「更多」菜单：低频动作收纳（复制 IP / 收藏 / 复制连接 / 预留项）。</summary>
+    /// <summary>「更多」菜单：低频动作收纳（复制地址 / 收藏 / 创建副本）。</summary>
     private void OnActionsMoreClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button
@@ -84,7 +78,7 @@ public partial class ConnectionDetailPanel : UserControl
         }
 
         var menu = new ContextMenu();
-        var copyHostItem = new MenuItem { Header = "复制 IP" };
+        var copyHostItem = new MenuItem { Header = "复制地址" }.WithIcon("Ui.Copy");
         copyHostItem.Click += OnCopyHostMenuClick;
         menu.Items.Add(copyHostItem);
         menu.Items.Add(new MenuItem
@@ -92,11 +86,8 @@ public partial class ConnectionDetailPanel : UserControl
             Header = item.IsFavorite ? "取消收藏" : "收藏",
             Command = vm.ToggleFavoriteCommand,
             CommandParameter = item
-        });
-        menu.Items.Add(new MenuItem { Header = "复制连接", Command = vm.DuplicateCommand, CommandParameter = item });
-        menu.Items.Add(new Separator());
-        menu.Items.Add(new MenuItem { Header = "Traceroute", IsEnabled = false, ToolTip = "SSH 连接可用，后续版本提供" });
-        menu.Items.Add(new MenuItem { Header = "打开 Web", IsEnabled = false, ToolTip = "打开设备的 Web 管理页：后续版本提供" });
+        }.WithIcon(item.IsFavorite ? "Ui.Favorite.Filled" : "Ui.Favorite"));
+        menu.Items.Add(new MenuItem { Header = "创建副本", Command = vm.DuplicateCommand, CommandParameter = item }.WithIcon("Ui.Clipboard"));
         menu.PlacementTarget = button;
         menu.Placement = PlacementMode.Bottom;
         menu.IsOpen = true;

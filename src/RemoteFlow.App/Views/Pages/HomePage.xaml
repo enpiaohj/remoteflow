@@ -1,6 +1,7 @@
 <UserControl x:Class="RemoteFlow.App.Views.Pages.HomePage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:RemoteFlow.App.Views"
              xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
              xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -43,16 +44,18 @@
              Opened 时把该行设为选中，依行 IsFavorite 写入收藏项 Header，
              并按行会话状态把 connect 改名 / 显隐 disconnect（与「我的连接」行菜单同一约定）。 -->
         <ContextMenu x:Key="HomeRowMenu" x:Shared="False" Opened="OnHomeRowMenuOpened">
-            <MenuItem Tag="connect" Header="连接" Click="OnRowActionClick" />
-            <MenuItem Tag="disconnect" Header="断开连接" Click="OnRowActionClick" />
-            <MenuItem Tag="edit" Header="编辑" Click="OnRowActionClick" />
+            <MenuItem Tag="connect" Header="连接" views:MenuItemAssist.IconKey="Ui.Connect" Click="OnRowActionClick" />
+            <MenuItem Tag="disconnect" Header="断开连接" views:MenuItemAssist.IconKey="Ui.Disconnected" Click="OnRowActionClick" />
             <Separator />
-            <MenuItem Tag="test" Header="测试连接" Click="OnRowActionClick" />
-            <MenuItem Tag="filetransfer" Header="文件传输…" Click="OnRowActionClick" />
-            <!-- 收藏 / 取消收藏：Header 随行当前收藏状态切换，打开时由 OnHomeRowMenuOpened 写入 -->
-            <MenuItem Tag="favorite" Header="收藏" Click="OnRowActionClick" />
+            <MenuItem Tag="test" Header="测试连接" views:MenuItemAssist.IconKey="Ui.Pending" Click="OnRowActionClick" />
+            <MenuItem Tag="filetransfer" Header="文件传输…" views:MenuItemAssist.IconKey="Ui.FileTransfer" Click="OnRowActionClick" />
+            <MenuItem Tag="copyaddress" Header="复制地址" views:MenuItemAssist.IconKey="Ui.Copy" Click="OnCopyAddressClick" />
             <Separator />
-            <MenuItem Tag="manage" Header="管理连接" Click="OnRowActionClick" />
+            <MenuItem Tag="edit" Header="编辑连接" views:MenuItemAssist.IconKey="Ui.Edit" Click="OnRowActionClick" />
+            <!-- 收藏 / 取消收藏：Header 与图标随行当前收藏状态切换，打开时由 OnHomeRowMenuOpened 写入 -->
+            <MenuItem Tag="favorite" Header="收藏" views:MenuItemAssist.IconKey="Ui.Favorite" Click="OnRowActionClick" />
+            <Separator />
+            <MenuItem Tag="manage" Header="在工作台中显示" views:MenuItemAssist.IconKey="Ui.Connections" Click="OnRowActionClick" />
         </ContextMenu>
 
         <!-- 最近连接：大号快捷卡片。是首页最突出的快捷入口，给足高度和图标尺寸 -->

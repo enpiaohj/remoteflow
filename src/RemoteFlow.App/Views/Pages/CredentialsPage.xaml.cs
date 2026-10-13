@@ -123,6 +123,15 @@ public partial class CredentialsPage : UserControl
         }
     }
 
+    /// <summary>只复制用户名（含域）；密码与私钥不提供复制入口。</summary>
+    private void OnCopyUsernameMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveItem(sender) is { } item)
+        {
+            ClipboardText.TryCopy(item.Username);
+        }
+    }
+
     /// <summary>从菜单项、菜单自身或 PlacementTarget 解析右键目标凭据。</summary>
     private static CredentialItemViewModel? ResolveItem(object sender)
     {

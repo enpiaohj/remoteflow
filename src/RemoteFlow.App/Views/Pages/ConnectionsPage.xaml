@@ -1,6 +1,7 @@
 <UserControl x:Class="RemoteFlow.App.Views.Pages.ConnectionsPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:RemoteFlow.App.Views"
              xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
              xmlns:pages="clr-namespace:RemoteFlow.App.Views.Pages"
              xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
@@ -73,23 +74,26 @@
         <ContextMenu x:Key="ConnectionRowMenu" x:Shared="False" Opened="OnRowContextMenuOpened">
             <!-- 主操作组首项按行会话状态在守卫里改名：无活动=「连接」；有活动=「切换到会话」；
                  同时按状态显隐第二项「断开连接」（连接行与首页快捷菜单同一套约定）。 -->
-            <MenuItem Tag="connect" Header="连接" InputGestureText="Enter" Click="OnConnectMenuClick" />
-            <MenuItem Tag="disconnect" Header="断开连接" Click="OnDisconnectMenuClick" />
-            <MenuItem Tag="edit" Header="编辑" Click="OnEditMenuClick" />
+            <!-- 分组约定（全应用右键菜单一致）：会话动作 → 工具 → 整理 → 跳转 → 破坏性操作（警示色，永远在最后）。 -->
+            <MenuItem Tag="connect" Header="连接" InputGestureText="Enter" views:MenuItemAssist.IconKey="Ui.Connect" Click="OnConnectMenuClick" />
+            <MenuItem Tag="newsession" Header="新建会话" views:MenuItemAssist.IconKey="Ui.Add" Click="OnNewSessionMenuClick" />
+            <MenuItem Tag="disconnect" Header="断开连接" views:MenuItemAssist.IconKey="Ui.Disconnected" Click="OnDisconnectMenuClick" />
             <Separator />
-            <MenuItem Tag="duplicate" Header="复制连接" Click="OnDuplicateMenuClick" />
-            <MenuItem Tag="test" Header="测试连接" Click="OnTestMenuClick" />
-            <MenuItem Tag="filetransfer" Header="文件传输…" Click="OnFileTransferMenuClick" />
-            <!-- 收藏 / 取消收藏：Header 随行当前收藏状态切换，打开时由守卫写入 -->
-            <MenuItem Tag="favorite" Header="收藏" IsCheckable="True"
-                      IsChecked="{Binding IsFavorite, Mode=OneWay}"
-                      Click="OnToggleFavoriteMenuClick" />
+            <MenuItem Tag="test" Header="测试连接" views:MenuItemAssist.IconKey="Ui.Pending" Click="OnTestMenuClick" />
+            <MenuItem Tag="filetransfer" Header="文件传输…" views:MenuItemAssist.IconKey="Ui.FileTransfer" Click="OnFileTransferMenuClick" />
+            <MenuItem Tag="copyaddress" Header="复制地址" views:MenuItemAssist.IconKey="Ui.Copy" Click="OnCopyAddressMenuClick" />
             <Separator />
-            <MenuItem Tag="move" Header="移动到分组" SubmenuOpened="OnMoveToGroupSubmenuOpened">
+            <MenuItem Tag="edit" Header="编辑连接" views:MenuItemAssist.IconKey="Ui.Edit" Click="OnEditMenuClick" />
+            <MenuItem Tag="duplicate" Header="创建副本" views:MenuItemAssist.IconKey="Ui.Clipboard" Click="OnDuplicateMenuClick" />
+            <!-- 收藏 / 取消收藏：Header 与图标随行当前收藏状态切换，打开时由守卫写入 -->
+            <MenuItem Tag="favorite" Header="收藏" views:MenuItemAssist.IconKey="Ui.Favorite" Click="OnToggleFavoriteMenuClick" />
+            <MenuItem Tag="move" Header="移动到分组" views:MenuItemAssist.IconKey="Ui.Folder" SubmenuOpened="OnMoveToGroupSubmenuOpened">
                 <MenuItem Header="加载分组…" IsEnabled="False" />
             </MenuItem>
-            <MenuItem Tag="delete" Header="删除" Click="OnDeleteMenuClick" />
-            <MenuItem Tag="locate" Header="管理连接" Click="OnLocateMenuClick" />
+            <Separator />
+            <MenuItem Tag="locate" Header="在工作台中显示" views:MenuItemAssist.IconKey="Ui.Connections" Click="OnLocateMenuClick" />
+            <Separator />
+            <MenuItem Tag="delete" Header="删除连接" views:MenuItemAssist.IconKey="Ui.Delete" views:MenuItemAssist.IsDanger="True" Click="OnDeleteMenuClick" />
         </ContextMenu>
 
         <Style x:Key="ConnectionRow" TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">
