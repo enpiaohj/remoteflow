@@ -36,8 +36,12 @@ coverage*.info
 *.nuget.targets
 
 ## ── 发布产物（大文件不入 Git History，改用 GitHub Releases）─
-## 本地 releases/vX.Y.Z/ 快照保留 source/ 与 CHANGELOG.md，
-## 排除其中的可执行/安装包/压缩包。
+## releases/<tag>/ 只入库 CHANGELOG.md。
+## 源码快照（source/）自 2026-10-13 起不再入库：每个版本的源码由对应的 Tag 保存，
+## 需要时用 `git archive <tag>` 导出。唯一的例外是 releases/v0.16.0/source/——该版本没有 Tag，
+## 快照是它仅存的源码副本，继续保留在仓库里（已跟踪的文件不受下面的忽略规则影响）。
+## 可执行 / 安装包 / 压缩包一律不入库，走 GitHub Releases。
+releases/**/source/
 releases/**/*.exe
 releases/**/*.msi
 releases/**/*.dmg

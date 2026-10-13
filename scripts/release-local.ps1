@@ -37,7 +37,7 @@ $tag = "v$Version"
 $outDir = Join-Path $root "releases\$tag"
 $pubDir = Join-Path $env:TEMP "rf-publish-$Version"
 
-if (-not (Test-Path $outDir)) { throw "快照目录不存在：$outDir（先提交 release: RemoteFlow $tag 的 source/ 快照）" }
+if (-not (Test-Path $outDir)) { throw "快照目录不存在：$outDir（先完成封版：提交 release: RemoteFlow $tag 并打 Tag）" }
 
 Write-Host "[release-local] 构建 $tag ……" -ForegroundColor Cyan
 if (-not $SkipTests) {

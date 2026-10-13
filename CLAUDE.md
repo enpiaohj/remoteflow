@@ -69,13 +69,14 @@
    启动产物确认：能起、主界面正常、状态栏版本 = 新版本号、能进设置、干净退出（exit 0）、
    无 `remoteflow.db-wal/-shm` 残留。
 7. **本地留存** `releases/vX.Y.Z/`：
-   - `source/`——`git archive HEAD <白名单> | tar -x`（**入库**；commit 前导出，tag 即此源码）。
-     若快照含历史遗留的未脱敏内容，先在快照内修正并注明。
    - `CHANGELOG.md` 副本（**入库**）。
+   - **不再创建、也不入库 `source/` 源码快照**（2026-10-13 起，覆盖全局规则里「每个版本留源码快照」的默认要求）：
+     每个版本的源码由对应的 Tag 永久保存，需要时 `git archive --format=zip -o <文件> vX.Y.Z` 原样导出。
+     `.gitignore` 已忽略 `releases/**/source/`。例外：`releases/v0.16.0/source/` 没有对应 Tag，是该版本仅存的源码副本，保留在库中，不得删除。
    - 产物 `RemoteFlow-vX.Y.Z-win-x64.exe` / `.zip`（`.gitignore` 排除，本地留存）。
 8. **提交与推送**：
    - `chore: 版本号提升至 X.Y.Z`（props + 根 CHANGELOG）
-   - `release: RemoteFlow vX.Y.Z`（releases/vX.Y.Z/ 的 source + CHANGELOG 副本）
+   - `release: RemoteFlow vX.Y.Z`（releases/vX.Y.Z/CHANGELOG.md 副本）
    - `git tag -a vX.Y.Z` → `git push origin main` + `git push origin vX.Y.Z`
 9. **GitHub Release**：
    ```

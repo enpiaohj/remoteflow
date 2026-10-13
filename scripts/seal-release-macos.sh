@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# seal-release-macos.sh —— 封版 RemoteFlow macOS 版：创建不可变源码快照 → Commit → Tag。
+# seal-release-macos.sh —— 封版 RemoteFlow macOS 版：提交发布记录 → Tag（源码由 Tag 追溯）。
 #
 # 对应 Windows 版的 scripts/seal-release.ps1，差别：
 #   - 版本取自 src/RemoteFlow.App.Mac/RemoteFlow.App.Mac.csproj 的 <ApplicationDisplayVersion>
 #   - Tag 用 macos-v<X.Y.Z>（Windows 是 v<X.Y.Z>）
 #   - 快照目录 releases/macos-v<X.Y.Z>/
-#   - 只做「可追溯的源码快照 + release 提交 + tag」这部分；构建 / 打包 / DMG 由
+#   - 只做「release 提交 + tag」这部分；构建 / 打包 / DMG 由
 #     scripts/release-local-macos.sh 在本机完成（不再依赖 GitHub Actions）。
 #     两条命令的顺序是：先本脚本封版，再 release-local-macos.sh 出产物 + 建 Release。
 #
@@ -14,7 +14,7 @@
 #   scripts/seal-release-macos.sh 0.2.0           # 显式指定，需与 csproj 一致
 #   scripts/seal-release-macos.sh 0.2.0 --allow-retag   # tag 已存在时允许移动（仅草稿未发布时用）
 #
-# 产出：releases/macos-v<X.Y.Z>/source/  + 一个 `release: RemoteFlow macos-v<X.Y.Z>` 提交
+# 产出：一个 `release: RemoteFlow macos-v<X.Y.Z>` 提交（含 releases/macos-v<X.Y.Z>/CHANGELOG.md）
 #       + 注解 tag macos-v<X.Y.Z>（指向该提交）。脚本不 push，请自行 `git push origin main --follow-tags`。
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -53,29 +53,17 @@ head -1 "$REL/CHANGELOG.md" | grep -q "RemoteFlow macOS v$VERSION" \
 echo "== 3/6 解决方案可还原（快速健全性检查）=="
 dotnet restore RemoteFlow.slnx --nologo -v q
 
-echo "== 4/6 创建源码快照 → $REL/source/ =="
-rm -rf "$REL/source"
-mkdir -p "$REL/source"
-# 快照 = 当前 HEAD 的精确跟踪状态，但要排除**内部内容**：
-#   releases/   防止快照里再套一层历史发布目录（递归嵌套）。
-#   docs/       内部产品设计 / 提示词 / 测试文档，不属于可重建源码。
-#   .github/    CI 配置，内部。
-#   CLAUDE.md   项目内部规则。
-# 白名单口径与 CLAUDE.md 里 Windows 侧的 `git archive <白名单>` 一致：
-# 「内部内容不入本仓」。早先这里只排除了 releases/，导致 docs/ 与 CLAUDE.md 被打进
-# 公开快照并随 tag 发布，其中含内网 IP、内部主机名与内部项目代号
-# （2026-09-28 已重写历史清除，并在此处堵住来源）。
-git archive --format=tar HEAD \
-  -- ':(exclude)releases' ':(exclude)docs' ':(exclude).github' ':(exclude)CLAUDE.md' \
-  | tar -x -C "$REL/source"
-SNAP_N="$(find "$REL/source" -type f | wc -l | tr -d ' ')"
-echo "  $SNAP_N 个文件"
-# 冗余保险：快照里不应出现构建产物。
-find "$REL/source" -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} + 2>/dev/null || true
+echo "== 4/6 源码快照 =="
+# 2026-10-13 起不再把源码快照（releases/<tag>/source/）提交进仓库：
+# 每个版本的源码由对应的 Tag 永久保存，需要时用
+#   git archive --format=zip -o RemoteFlow-$TAG-source.zip $TAG
+# 原样导出即可。入库的快照与 Tag 内容重复，却让仓库里九成以上的文件变成历史副本。
+echo "  已跳过：源码由 Tag $TAG 追溯"
 
 echo "== 5/6 Commit =="
-git add "$REL/source" "$REL/CHANGELOG.md"
-git commit -q -m "release: RemoteFlow $TAG"
+git add "$REL/CHANGELOG.md"
+# CHANGELOG 可能已随别的提交入库；仍保留一个独立的 release 提交，让 Tag 有明确的指向。
+git commit -q --allow-empty -m "release: RemoteFlow $TAG"
 echo "  $(git log --oneline -1)"
 
 echo "== 6/6 Tag =="

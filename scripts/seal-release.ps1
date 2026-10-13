@@ -45,10 +45,9 @@ dotnet publish src/RemoteFlow.App -c Release -v q --nologo
 if ($LASTEXITCODE) { throw "发布失败。" }
 
 Write-Host "== 7/8 创建 Release Snapshot ==" -ForegroundColor Cyan
-New-Item -ItemType Directory -Force "$rel/source" | Out-Null
-# 源码快照 = 当前 HEAD 的精确跟踪状态；显式排除 releases/ 防止快照里再套一层
-# 历史发布目录（递归嵌套），源码快照只放源码。
-git archive --format=tar HEAD -- ':(exclude)releases' | tar -x -C "$rel/source"
+New-Item -ItemType Directory -Force $rel | Out-Null
+# 2026-10-13 起不再把源码快照（releases/<tag>/source/）提交进仓库：
+# 每个版本的源码由对应的 Tag 永久保存，需要时用 `git archive --format=zip -o <文件> <tag>` 原样导出。
 # 规范命名的 Binary Artifact（本地磁盘保留，.gitignore 已排除大文件，改上传 GitHub Releases）
 Copy-Item "$pub/RemoteFlow.exe" "$rel/RemoteFlow-$tag-win-x64.exe"
 Compress-Archive -Path "$pub/*" -DestinationPath "$rel/RemoteFlow-$tag-win-x64.zip" -Force -CompressionLevel Optimal
@@ -68,10 +67,9 @@ Read-Host "  按回车继续"
 if (-not (Test-Path "$rel/CHANGELOG.md")) { throw "$rel/CHANGELOG.md 不存在，已中止（不打 Tag）。" }
 
 Write-Host "== 8/8 Commit + Tag ==" -ForegroundColor Cyan
-# source/ 内的构建产物清理
-Get-ChildItem "$rel/source" -Recurse -Directory -Include bin,obj | Remove-Item -Recurse -Force -EA SilentlyContinue
-git add "$rel/source" "$rel/CHANGELOG.md"
-git commit -m "release: RemoteFlow $tag"
+git add "$rel/CHANGELOG.md"
+# CHANGELOG 可能已随别的提交入库；仍保留一个独立的 release 提交，让 Tag 有明确的指向。
+git commit --allow-empty -m "release: RemoteFlow $tag"
 git tag -a $tag -m "RemoteFlow $tag"
 
 Write-Host ""
