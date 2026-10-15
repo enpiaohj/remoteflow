@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
              xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
+             xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
              mc:Ignorable="d"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -32,18 +33,64 @@
                       ToolTip="当前会话：右键可重新连接 / 关闭会话 / 关闭全部会话"
                       Click="OnToggleClick">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Path x:Name="HeaderIcon" Style="{StaticResource UiIcon}" Width="15" Height="15" VerticalAlignment="Center" Fill="{DynamicResource Text.Secondary}" />
-                <TextBlock x:Name="HeaderTitle"
-                           Margin="7,0,0,0"
-                           MaxWidth="150"
-                           TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center"
-                           FontSize="13"
-                           Foreground="{DynamicResource Text.Primary}" />
+                <!-- 图标 + 会话数角标。角标排在图标右侧、互不重叠：
+                     叠在图标右上角会切断协议图标的框线（实测压掉 37%~55% 笔迹，
+                     框形图标的右上角正是边框所在），协议因此难以辨认。
+                     只在会话数 ≥ 2 时出现，N ≤ 1 时整块收起、与旧版逐像素一致。 -->
+                <Path x:Name="HeaderIcon"
+                      Style="{StaticResource UiIcon}"
+                      Width="15" Height="15"
+                      VerticalAlignment="Center"
+                      Fill="{DynamicResource Text.Secondary}" />
+                <!-- 角标 + 标题共用一个有上限的 Grid：角标列 Auto、标题列星号。
+                     角标出现时星号列自动收缩、标题随之省略，不必在代码里按位数
+                     换算标题上限（也就不会出现「99+」时算少了把箭头挤出去）。
+                     上限 132 是实测反推：头部其余固定件约 101px，132 + 101 = 233 < 240，
+                     留 7px 余量；角标隐藏时标题得 132 − 8（间距）= 124，与旧版持平。 -->
+                <Grid MaxWidth="132" VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="HeaderCountBadge"
+                            Grid.Column="0"
+                            Style="{StaticResource SessionCountBadge}"
+                            Margin="4,0,0,0"
+                            Visibility="Collapsed"
+                            IsHitTestVisible="False"
+                            ToolTipService.IsEnabled="False">
+                        <TextBlock x:Name="HeaderCountText"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Text.OnAccent}" />
+                    </Border>
+                    <TextBlock x:Name="HeaderTitle"
+                               Grid.Column="1"
+                               Margin="8,0,0,0"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"
+                               FontSize="13"
+                               Foreground="{DynamicResource Text.Primary}" />
+                </Grid>
                 <Ellipse x:Name="HeaderDot"
                          Width="7" Height="7"
                          Margin="7,0,0,0"
                          VerticalAlignment="Center" />
+                <!-- 关闭当前会话：折叠态原先必须先展开下拉才能点到 ×，这里直接给出。
+                     排在箭头之前（Windows Terminal / 浏览器惯例），箭头因此恒定锚在最右、
+                     不随 × 的出现与消失而位移。 -->
+                <Button x:Name="HeaderClose"
+                        Style="{StaticResource Button.Icon}"
+                        Width="24" Height="24"
+                        MinWidth="24" MinHeight="24"
+                        Margin="4,0,0,0"
+                        FontSize="11"
+                        Content="{StaticResource Ui.Close}"
+                        ToolTip="关闭会话 (Ctrl+W)"
+                        Visibility="Collapsed"
+                        Click="OnHeaderCloseClick" />
                 <TextBlock Text="&#xE70D;"
                            FontFamily="{StaticResource IconFont}"
                            FontSize="10"
@@ -98,8 +145,9 @@
                          Style="{StaticResource List.Plain}"
                          SelectionChanged="OnSessionsListSelectionChanged"
                          PreviewKeyDown="OnSessionsListPreviewKeyDown">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
+                    <ListBox.Resources>
+                        <!-- 会话行：设备图标 + 名称/主机 · 协议 + 状态 + 关闭 -->
+                        <DataTemplate DataType="{x:Type vm:SessionTabViewModel}">
                             <Grid Margin="6,0" MinHeight="38" Background="Transparent">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -146,10 +194,48 @@
                                         Click="OnRowCloseClick" />
                             </Grid>
                         </DataTemplate>
-                    </ListBox.ItemTemplate>
+
+                        <!-- 文件传输 Tab 行：不是会话，因此没有连接状态点 -->
+                        <DataTemplate DataType="{x:Type vm:FileTransferTabViewModel}">
+                            <Grid Margin="6,0" MinHeight="38" Background="Transparent">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <Image Grid.Column="0" Style="{StaticResource DeviceIcon.Image}"
+                                       Width="20" Height="20" VerticalAlignment="Center"
+                                       Source="{Binding DeviceIconKey, Converter={StaticResource KeyToImageSource}}" />
+
+                                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Title}"
+                                               FontSize="13"
+                                               TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource Text.Primary}" />
+                                    <TextBlock Text="{Binding TabHostLine}"
+                                               FontSize="11"
+                                               FontFamily="{StaticResource MonoFont}"
+                                               TextTrimming="CharacterEllipsis"
+                                               Margin="0,1,0,0"
+                                               Foreground="{DynamicResource Text.Tertiary}" />
+                                </StackPanel>
+
+                                <Button Grid.Column="2"
+                                        Style="{StaticResource Button.Icon}"
+                                        Width="26" Height="26"
+                                        Margin="8,0,-4,0"
+                                        FontSize="11"
+                                        Content="{StaticResource Ui.Close}"
+                                        ToolTip="关闭文件传输 (Ctrl+W)"
+                                        Click="OnRowCloseClick" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.Resources>
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">
-                            <!-- 右键复用主窗口共享的会话菜单（重新连接 / 关闭会话 / 关闭其他…） -->
+                            <!-- 右键复用主窗口共享的会话菜单（重新连接 / 关闭会话 / 关闭其他…）；
+                                 文件传输行由 OnTabContextMenuOpening 换成它自己的菜单。 -->
                             <Setter Property="ContextMenu" Value="{DynamicResource SessionTabContextMenu}" />
                         </Style>
                     </ListBox.ItemContainerStyle>

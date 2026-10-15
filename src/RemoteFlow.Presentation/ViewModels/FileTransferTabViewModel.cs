@@ -32,6 +32,9 @@ public sealed partial class FileTransferTabViewModel : WorkspaceTabViewModel, ID
 
     public string TabToolTip => $"文件传输 · {Profile.Name}（{Profile.Host}）";
 
+    /// <summary>会话选择器第二行：主机 · 类型。与 <see cref="SessionTabViewModel.TabHostLine"/> 对称，便于两行并排展示。</summary>
+    public string TabHostLine => $"{Profile.Host} · 文件传输";
+
     [RelayCommand]
     private Task CloseAsync() => _closeCallback(this);
 

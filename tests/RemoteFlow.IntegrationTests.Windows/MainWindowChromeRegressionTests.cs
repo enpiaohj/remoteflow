@@ -96,6 +96,94 @@ public sealed class MainWindowChromeRegressionTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// 收起态头部：会话数角标 + 当前会话关闭按钮。
+    /// 这两件都必须常驻头部，而不是只在展开的下拉里——那正是用户反馈的缺口。
+    /// </summary>
+    [Fact]
+    public void CompactSelectorHeader_ShowsSessionCountBadgeAndCloseButton()
+    {
+        var selector = File.ReadAllText(FindProjectFile(
+            "src", "RemoteFlow.App", "Views", "Sessions", "SessionTabSelector.xaml"));
+        var selectorCode = File.ReadAllText(FindProjectFile(
+            "src", "RemoteFlow.App", "Views", "Sessions", "SessionTabSelector.xaml.cs"));
+
+        // 头部元素存在。
+        Assert.Contains("x:Name=\"HeaderCountBadge\"", selector, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"HeaderCountText\"", selector, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"HeaderClose\"", selector, StringComparison.Ordinal);
+
+        // 角标排在图标右侧、不吃点击；不得叠在图标上——
+        // 压在框形图标右上角会切断协议图标的框线（实测压掉 37%~55% 笔迹）。
+        Assert.Contains("IsHitTestVisible=\"False\"", selector, StringComparison.Ordinal);
+        var badgeIndex = selector.IndexOf("x:Name=\"HeaderCountBadge\"", StringComparison.Ordinal);
+        var iconIndex = selector.IndexOf("x:Name=\"HeaderIcon\"", StringComparison.Ordinal);
+        Assert.True(iconIndex > 0 && badgeIndex > iconIndex,
+            "会话数角标应排在图标之后（右侧），不得叠在图标上。");
+        Assert.DoesNotContain("Canvas.Right", selector, StringComparison.Ordinal);
+
+        // 角标参与布局宽度，必须与标题同处一个有上限的 Grid：
+        // 角标出现时标题所在星号列自动收缩，否则头部会顶到 240 上限、把箭头挤出可视区。
+        Assert.Contains("<Grid MaxWidth=", selector, StringComparison.Ordinal);
+        Assert.Contains("<ColumnDefinition Width=\"Auto\" />", selector, StringComparison.Ordinal);
+        Assert.Contains("<ColumnDefinition Width=\"*\" />", selector, StringComparison.Ordinal);
+
+        // 关闭按钮排在箭头之前：箭头恒定锚在最右，不随 × 出现而位移。
+        var closeIndex = selector.IndexOf("x:Name=\"HeaderClose\"", StringComparison.Ordinal);
+        var chevronIndex = selector.IndexOf("&#xE70D;", StringComparison.Ordinal);
+        Assert.True(closeIndex > 0 && chevronIndex > closeIndex,
+            "关闭按钮应排在下拉箭头之前，使箭头位置恒定。");
+
+        // 计数口径：会话数不含文件传输 Tab；≥2 才显示，上限 99。
+        Assert.Contains("CountBadgeMax", selectorCode, StringComparison.Ordinal);
+        Assert.Contains(
+            "_listedTabs.Count(static t => t is SessionTabViewModel)",
+            selectorCode,
+            StringComparison.Ordinal);
+
+        // 头部整块是 ToggleButton，关闭必须拦截冒泡，否则会顺带打开下拉。
+        Assert.Contains("OnHeaderCloseClick", selector, StringComparison.Ordinal);
+        Assert.Contains("e.Handled = true;", selectorCode, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 文件传输 Tab 在折叠态必须有入口：它既要在下拉列表里可切换 / 可关闭，
+    /// 选中它时头部也要正确显示它自己的标题与图标（而不是退回「活动连接」）。
+    /// </summary>
+    [Fact]
+    public void CompactSelector_IncludesFileTransferTab()
+    {
+        var selector = File.ReadAllText(FindProjectFile(
+            "src", "RemoteFlow.App", "Views", "Sessions", "SessionTabSelector.xaml"));
+        var selectorCode = File.ReadAllText(FindProjectFile(
+            "src", "RemoteFlow.App", "Views", "Sessions", "SessionTabSelector.xaml.cs"));
+
+        // 列表要同时容纳会话与文件传输两种行模板。
+        Assert.Contains(
+            "DataType=\"{x:Type vm:SessionTabViewModel}\"",
+            selector,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "DataType=\"{x:Type vm:FileTransferTabViewModel}\"",
+            selector,
+            StringComparison.Ordinal);
+
+        // 选中文件传输 Tab 时头部显示它自己，而不是回退成工作台头部。
+        Assert.Contains("ShowTransferHeader", selectorCode, StringComparison.Ordinal);
+        Assert.Contains("_headerTransferTab", selectorCode, StringComparison.Ordinal);
+
+        // 头部的 × 同时服务会话与文件传输两种 Tab，提示语必须跟着切换：
+        // XAML 里的默认值是「关闭会话」，文件传输分支若不覆盖就会写错。
+        Assert.Contains(
+            "HeaderClose.ToolTip = \"关闭会话 (Ctrl+W)\";",
+            selectorCode,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "HeaderClose.ToolTip = \"关闭文件传输 (Ctrl+W)\";",
+            selectorCode,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void SessionOverlay_IsActiveOnlyInScreenFullMode()
     {
