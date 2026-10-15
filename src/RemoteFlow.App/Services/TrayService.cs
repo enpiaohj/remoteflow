@@ -50,6 +50,15 @@ public sealed class TrayService : IDisposable
     /// <summary>单击去抖标记：单击不立即动作，等 DoubleClickTime 内是否跟来双击。</summary>
     private bool _singleClickPending;
 
+    /// <summary>
+    /// 双击后忽略 MouseClick 的截止时刻（<see cref="Environment.TickCount64"/>，毫秒）。
+    /// NotifyIcon 的 MouseClick 在按钮抬起时触发，因此双击的第二下「抬起」会在
+    /// <see cref="OnNotifyIconMouseDoubleClick"/> 之后又触发一次 MouseClick；
+    /// 不吞掉它就会重新武装去抖定时器，把双击刚 RestoreWindow 的窗口再 Toggle 隐藏
+    /// （表现为「双击显示了又隐藏」，窗口状态隔次翻转）。
+    /// </summary>
+    private long _suppressClickUntilTick;
+
     private bool _disposed;
 
     public TrayService(
@@ -477,6 +486,12 @@ public sealed class TrayService : IDisposable
             return;
         }
 
+        // 双击第二下「抬起」补发的 MouseClick：落在双击处理之后，吞掉（见字段注释）。
+        if (Environment.TickCount64 < _suppressClickUntilTick)
+        {
+            return;
+        }
+
         // 双击的第一击也会先到 MouseClick；延迟到双击时间窗后执行，双击到达则取消。
         _singleClickPending = true;
         _clickTimer.Stop();
@@ -493,6 +508,8 @@ public sealed class TrayService : IDisposable
 
         _clickTimer.Stop();
         _singleClickPending = false;
+        // 双击的第二下「抬起」还会补发一次 MouseClick，在双击时间窗内忽略它。
+        _suppressClickUntilTick = Environment.TickCount64 + SystemInformation.DoubleClickTime;
         RestoreWindow();
     }
 
