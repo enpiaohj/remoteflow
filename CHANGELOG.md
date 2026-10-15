@@ -7,6 +7,45 @@
 
 ---
 
+## [0.26.1] — 2026-10-15
+
+修复托盘图标双击「显示了又隐藏」的问题。
+本版本仅发布 Windows（win-x64）；macOS 未含产物。
+
+### 修复
+- 双击托盘图标时窗口先显示、约半秒后又隐藏，状态隔次翻转：
+  NotifyIcon 的 `MouseClick` 在按钮抬起时触发，双击第二下「抬起」会在
+  `MouseDoubleClick`（已恢复窗口）之后补发一次 `MouseClick`，重新武装单击去抖定时器，
+  定时器到点执行切换把刚显示的窗口隐藏。现于双击时间窗内忽略该补发的
+  `MouseClick`；单击切换、双击打开置前、右键菜单行为不变。
+
+### Artifacts
+- `RemoteFlow-v0.26.1-win-x64.exe`
+  - Size：75,229,876 bytes
+  - SHA-256：`EAF17AF6093BAE7F90EED68B53C9C128B07089797022DD08070A5099CAA7C4B4`
+- `RemoteFlow-v0.26.1-win-x64.zip`
+  - Size：69,634,820 bytes
+  - SHA-256：`4BA0E29D16B4A736CB5FBA7E251717149581F0199A72B3EB8C7643B70936B1BE`
+
+### Verification
+- Build：`dotnet build RemoteFlow.slnx -c Release` —— 0 警告 / 0 错误
+  （首次构建因验收实例锁定产物出现 MSB3026 重试警告，关闭实例后重建为干净 0/0）
+- Tests：RemoteFlow.Core.Tests 151/151 通过；RemoteFlow.IntegrationTests 455 通过、5 跳过（Mac 专属用例在 Windows 上跳过，属预期）；
+  RemoteFlow.IntegrationTests.Windows 183/183 通过
+- 修复验证：托盘双击修复由人工在开发构建上目视验收（双击不再隐藏、单击切换正常）；
+  托盘交互无法自动化，发布产物上未重放双击验证
+- 实机走查（发布产物 `RemoteFlow-v0.26.1-win-x64.exe`）：启动正常、进程存活、FileVersion 0.26.1.0、
+  优雅退出 exit 0、无 `remoteflow.db-wal` / `-shm` 残留
+- 未执行：macOS 构建与验证
+- Platform：Windows 11（win-x64）
+
+### Git
+- 源码提交：版本号提升提交（chore: 版本号提升至 0.26.1）；Tag `v0.26.1` 指向随后的 `release: RemoteFlow v0.26.1` 提交
+- 修复提交：托盘双击修复（fix(tray)）
+- 2026-10-15 发布：推送 main 与 Tag，创建 GitHub Release（Latest）
+
+---
+
 ## [0.26.0] — 2026-10-15
 
 紧凑模式（折叠态）会话选择器补齐三处缺口：会话数角标、头部关闭按钮、文件传输 Tab 入口。
