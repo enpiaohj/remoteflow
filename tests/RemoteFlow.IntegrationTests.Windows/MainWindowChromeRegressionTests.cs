@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace RemoteFlow.IntegrationTests;
@@ -182,6 +183,47 @@ public sealed class MainWindowChromeRegressionTests
             "HeaderClose.ToolTip = \"关闭文件传输 (Ctrl+W)\";",
             selectorCode,
             StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 托盘「退出」同样要确认已连接会话：应用缩在托盘时后台可能挂着多个会话，
+    /// 一键退出静默断开它们正是要避免的事故。
+    /// 另一条不变式：取消退出必须清掉 _isExiting——否则托盘确认框点取消后，
+    /// 再点窗口关闭按钮会被当成真退出，绕过「最小化到托盘」设置直接关掉应用。
+    /// </summary>
+    [Fact]
+    public void TrayExit_ConfirmsSessionsAndResetsExitingFlagOnCancel()
+    {
+        var code = File.ReadAllText(FindProjectFile(
+            "src", "RemoteFlow.App", "Views", "MainWindow.xaml.cs"));
+
+        var closing = ExtractSection(
+            code,
+            "protected override void OnClosing",
+            "private void CancelExit");
+
+        // 托盘退出仍跳过「最小化到托盘」岔路（那是给关闭按钮的去路），
+        // 但有会话时走「退出 / 取消」确认；窗口隐藏时不以它为对话框 owner。
+        Assert.Contains(
+            "if (!_isExiting && _settings.CloseBehavior == WindowCloseBehavior.MinimizeToTray)",
+            closing,
+            StringComparison.Ordinal);
+        Assert.Contains("if (_isExiting)", closing, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.OpenSessionCount", closing, StringComparison.Ordinal);
+        Assert.Contains("MessageDialog.ShowConfirm(", closing, StringComparison.Ordinal);
+        Assert.Contains("IsVisible ? this : null", closing, StringComparison.Ordinal);
+
+        // 关闭按钮路径保留三选一：退出 / 最小化到托盘 / 取消。
+        Assert.Contains("最小化到托盘", closing, StringComparison.Ordinal);
+
+        // 会话确认与文件传输确认的取消都走 CancelExit，由它复位 _isExiting。
+        Assert.Equal(2, Regex.Matches(closing, @"CancelExit\(e\);").Count);
+
+        var cancelExit = ExtractSection(
+            code,
+            "private void CancelExit",
+            "private static class NativeMethods");
+        Assert.Contains("_isExiting = false;", cancelExit, StringComparison.Ordinal);
     }
 
     [Fact]

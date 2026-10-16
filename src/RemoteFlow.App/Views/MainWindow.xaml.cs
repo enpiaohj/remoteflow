@@ -1004,23 +1004,41 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        // _isExiting 由托盘「退出」置位：那是用户主动点选的明确动作，不再二次追问。
-        if (!_isExiting)
+        // _isExiting 由托盘「退出」置位：真退出不再走「最小化到托盘」岔路，
+        // 但已连接会话的确认同样适用——应用缩在托盘时后台可能挂着多个会话，
+        // 一键退出把它们全部静默断开正是要避免的事故。
+        if (!_isExiting && _settings.CloseBehavior == WindowCloseBehavior.MinimizeToTray)
         {
-            // 设置为「最小化到托盘」时，关闭按钮不退出应用，
-            // 这样后台会话得以保留（托盘图标提供真正的退出入口）。
-            if (_settings.CloseBehavior == WindowCloseBehavior.MinimizeToTray)
-            {
-                e.Cancel = true;
-                Hide();
-                return;
-            }
+            e.Cancel = true;
+            Hide();
+            return;
+        }
 
-            // 关窗即退出，而退出会连带结束全部会话。还开着会话时先问一句，
-            // 免得单击窗口按钮就把正在进行的连接静默丢掉（并给一条留住会话的出路）。
-            var openSessions = _viewModel.OpenSessionCount;
-            if (openSessions > 0)
+        // 还开着会话：无论从关闭按钮还是托盘退出，退出都会断开与远端的全部连接，先问一句。
+        var openSessions = _viewModel.OpenSessionCount;
+        if (openSessions > 0)
+        {
+            if (_isExiting)
             {
+                // 托盘退出时应用可能已缩在托盘，「最小化到托盘」没有意义，只给「退出 / 取消」。
+                // 窗口隐藏时不用它当 owner：CenterOwner 会对着一块看不见的窗口取位置。
+                var confirmed = MessageDialog.ShowConfirm(
+                    IsVisible ? this : null,
+                    "退出 RemoteFlow？",
+                    $"当前还开着 {openSessions} 个会话。退出会关闭全部会话，并断开与远端的连接。",
+                    "退出",
+                    isDanger: true);
+
+                if (!confirmed)
+                {
+                    CancelExit(e);
+                    return;
+                }
+            }
+            else
+            {
+                // 关窗即退出，而退出会连带结束全部会话。还开着会话时先问一句，
+                // 免得单击窗口按钮就把正在进行的连接静默丢掉（并给一条留住会话的出路）。
                 var choice = MessageDialog.ShowChoice(
                     this,
                     "退出 RemoteFlow？",
@@ -1047,19 +1065,30 @@ public partial class MainWindow : Window
         // 文件传输 Tab 里还有进行中的传输：退出会取消它们并清理尚未完成的临时文件，先问一句。
         if (_viewModel.HasActiveFileTransfers
             && !MessageDialog.ShowConfirm(
-                this,
+                IsVisible ? this : null,
                 "退出 RemoteFlow？",
                 "还有文件正在传输。退出会取消这些传输，并清理尚未完成的临时文件。",
                 "退出",
                 isDanger: true))
         {
-            e.Cancel = true;
+            CancelExit(e);
             return;
         }
 
         RemoveKeyboardHook();
 
         base.OnClosing(e);
+    }
+
+    /// <summary>
+    /// 取消一次退出。托盘「退出」留下的 <see cref="_isExiting"/> 必须一并清掉：
+    /// 否则用户在确认框里点了取消之后，下次点窗口关闭按钮会被当成真退出，
+    /// 绕过「最小化到托盘」设置直接把应用关掉。
+    /// </summary>
+    private void CancelExit(CancelEventArgs e)
+    {
+        _isExiting = false;
+        e.Cancel = true;
     }
 
     private static class NativeMethods
