@@ -28,6 +28,7 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
 
     private ResolvedCredential? _credential;
     private volatile bool _disposed;
+    private RdpDisplaySettings? _displaySettings;
 
     /// <summary>
     /// 会话级连接取消源：连接中关闭会话（Disconnect / Dispose）时取消它，
@@ -334,9 +335,17 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
     /// 控件版本过低时退回 SmartSizing 缩放，保证功能可用而不是直接失败。
     /// </para>
     /// </summary>
-    public void UpdateDisplaySize(int width, int height)
+    public void UpdateDisplaySize(int width, int height, double dpiScale = 1)
     {
-        if (State != ConnectionState.Connected || width <= 0 || height <= 0)
+        if (_disposed || width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        // 连接完成前也保留最新参数，首次握手就能协商正确 DPI。
+        var settings = RdpDisplaySettings.Create(Profile.Rdp, width, height, dpiScale);
+        _displaySettings = settings;
+        if (State != ConnectionState.Connected || Profile.Rdp.DisplayMode != RdpDisplayMode.FitToWindow)
         {
             return;
         }
@@ -351,8 +360,10 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         {
             dynamic client = ocx;
             client.UpdateSessionDisplaySettings(
-                (uint)width, (uint)height, (uint)width, (uint)height,
-                /* orientation */ 0u, /* desktopScaleFactor */ 100u, /* deviceScaleFactor */ 100u);
+                (uint)settings.Width, (uint)settings.Height, settings.PhysicalWidth, settings.PhysicalHeight,
+                /* orientation */ 0u, settings.DesktopScaleFactor, settings.DeviceScaleFactor);
+            _logger.LogDebug("RDP 会话 {SessionId} 显示已调整为 {Width}x{Height}，缩放 {Scale}%",
+                SessionId, settings.Width, settings.Height, settings.DesktopScaleFactor);
         }
         catch (Exception ex)
         {
@@ -441,15 +452,25 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
 
         // 桌面尺寸必须在 Connect 之前确定。适应窗口模式下先用宿主控件的当前尺寸，
         // 连接建立后再通过 UpdateDisplaySize 动态跟随。
-        var (width, height) = options.DisplayMode == RdpDisplayMode.FixedResolution
-            ? (options.DesktopWidth, options.DesktopHeight)
-            : (Math.Max(_host.Width, 1024), Math.Max(_host.Height, 768));
+        var display = _displaySettings ?? RdpDisplaySettings.Create(
+            options, _host.ClientSize.Width, _host.ClientSize.Height, _host.DeviceDpi / 96.0);
 
-        client.DesktopWidth = width;
-        client.DesktopHeight = height;
+        client.DesktopWidth = display.Width;
+        client.DesktopHeight = display.Height;
         client.ColorDepth = options.ColorDepth;
 
+        TrySet("DesktopScaleFactor", () => SetDisplayScale("DesktopScaleFactor", display.DesktopScaleFactor));
+        TrySet("DeviceScaleFactor", () => SetDisplayScale("DeviceScaleFactor", display.DeviceScaleFactor));
+        _logger.LogDebug("RDP 会话 {SessionId} 初始显示 {Width}x{Height}，缩放 {Scale}%",
+            SessionId, display.Width, display.Height, display.DesktopScaleFactor);
+
         ConfigureAdvancedSettings(client, options, credential);
+
+        void SetDisplayScale(string name, uint scale)
+        {
+            object value = scale;
+            ((IMsRdpExtendedSettings)ocx).set_Property(name, ref value);
+        }
     }
 
     /// <summary>

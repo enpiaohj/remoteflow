@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using RemoteFlow.App.Services;
 using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Core.Models;
+using RemoteFlow.Core.Sessions;
 using RemoteFlow.Protocol.Rdp;
 using Forms = System.Windows.Forms;
 
@@ -65,8 +66,10 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
 
         Loaded += OnLoaded;
         SizeChanged += OnSizeChanged;
+        IsVisibleChanged += OnIsVisibleChanged;
 
         _viewModel.ActionRequested += OnActionRequested;
+        _session.StateChanged += OnSessionStateChanged;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -74,6 +77,7 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         // Tab 切换会反复触发 Loaded，只在首次真正发起连接。
         if (_connectStarted)
         {
+            ScheduleDisplayUpdate();
             return;
         }
 
@@ -86,12 +90,39 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
             theme.AppearanceChanged += OnAppearanceChanged;
         }
 
+        UpdateDisplaySize();
         await _session.ConnectAsync(_connectCts.Token);
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+        => ScheduleDisplayUpdate();
+
+    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (_session.Profile.Rdp.DisplayMode != RdpDisplayMode.FitToWindow)
+        if (IsVisible)
+        {
+            ScheduleDisplayUpdate();
+        }
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        ScheduleDisplayUpdate();
+    }
+
+    private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs e)
+    {
+        // 初始 SizeChanged 可能早于登录完成；之前的更新会被会话忽略，必须在登录/自动重连后补发。
+        if (e.NewState == ConnectionState.Connected)
+        {
+            Dispatcher.BeginInvoke(() => ScheduleDisplayUpdate());
+        }
+    }
+
+    private void ScheduleDisplayUpdate()
+    {
+        if (_disposed || _session.Profile.Rdp.DisplayMode != RdpDisplayMode.FitToWindow)
         {
             return;
         }
@@ -104,8 +135,12 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
     private void OnResizeTimerTick(object? sender, EventArgs e)
     {
         _resizeTimer.Stop();
+        UpdateDisplaySize();
+    }
 
-        if (_disposed || ActualWidth <= 0 || ActualHeight <= 0)
+    private void UpdateDisplaySize()
+    {
+        if (_disposed || !IsVisible || ActualWidth <= 0 || ActualHeight <= 0)
         {
             return;
         }
@@ -116,7 +151,7 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         var width = (int)Math.Round(ActualWidth * scale.DpiScaleX);
         var height = (int)Math.Round(ActualHeight * scale.DpiScaleY);
 
-        _session.UpdateDisplaySize(width, height);
+        _session.UpdateDisplaySize(width, height, scale.DpiScaleX);
     }
 
     private async void OnActionRequested(object? sender, SessionAction action)
@@ -377,7 +412,9 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
 
         Loaded -= OnLoaded;
         SizeChanged -= OnSizeChanged;
+        IsVisibleChanged -= OnIsVisibleChanged;
         _viewModel.ActionRequested -= OnActionRequested;
+        _session.StateChanged -= OnSessionStateChanged;
         if (ThemeService.Instance is { } theme)
         {
             theme.AppearanceChanged -= OnAppearanceChanged;

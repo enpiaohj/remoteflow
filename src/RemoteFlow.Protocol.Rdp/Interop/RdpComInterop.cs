@@ -21,6 +21,19 @@ internal sealed class RdpAxHost(string clsid) : AxHost(clsid)
     public object? ActiveXInstance => IsHandleCreated ? GetOcx() : null;
 }
 
+/// <summary>连接前设置远端 DPI；这些属性不在默认 IDispatch 接口上，必须 QueryInterface。</summary>
+[ComImport]
+[Guid("302D8188-0052-4807-806A-362B628F9AC5")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IMsRdpExtendedSettings
+{
+    void set_Property([MarshalAs(UnmanagedType.BStr)] string name,
+        [In, MarshalAs(UnmanagedType.Struct)] ref object value);
+
+    [return: MarshalAs(UnmanagedType.Struct)]
+    object get_Property([MarshalAs(UnmanagedType.BStr)] string name);
+}
+
 public enum RdpRemoteSessionAction
 {
     TaskManager = 6

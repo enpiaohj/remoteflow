@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RemoteFlow.Core\RemoteFlow.Core.csproj" />
+    <InternalsVisibleTo Include="RemoteFlow.IntegrationTests.Windows" />
   </ItemGroup>
 
   <ItemGroup>
