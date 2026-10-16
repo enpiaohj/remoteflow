@@ -7,6 +7,46 @@
 
 ---
 
+## [0.26.2] — 2026-10-16
+
+托盘「退出」同样确认已连接会话；修复取消退出后关闭按钮被误当真退出的问题。
+本版本仅发布 Windows（win-x64）；macOS 未含产物。
+
+### 修复
+- **托盘「退出」静默断开全部会话**：托盘菜单的退出原先跳过所有确认，
+  应用缩在托盘时挂着的后台会话会被一键全部断开。现在与关闭按钮同一口径——
+  还开着会话时先弹「退出 / 取消」确认（窗口隐藏时不以它为对话框 owner）；
+  关闭按钮路径的三选一（退出 / 最小化到托盘 / 取消）保持不变。
+- **取消托盘退出后，关闭按钮被误当真退出**：托盘确认框点「取消」后
+  退出标记未复位，之后再点窗口关闭按钮会绕过「关闭窗口时最小化到通知区域」
+  设置直接退出。现取消退出统一复位标记。
+
+### Artifacts
+- `RemoteFlow-v0.26.2-win-x64.exe`
+  - Size：75,229,965 bytes
+  - SHA-256：`45CF09880143104CCB3B985376B9D46C9ACA0E082581062D6B9223011DF82D2A`
+- `RemoteFlow-v0.26.2-win-x64.zip`
+  - Size：69,635,006 bytes
+  - SHA-256：`0DF09161D77D78A611BC1BEAE376D3E2F6B1BE58B44C12288DB08CDBF0525AAA`
+
+### Verification
+- Build：`dotnet build RemoteFlow.slnx -c Release` —— 0 警告 / 0 错误
+- Tests：RemoteFlow.Core.Tests 151/151 通过；RemoteFlow.IntegrationTests 455 通过、5 跳过（Mac 专属用例在 Windows 上跳过，属预期）；
+  RemoteFlow.IntegrationTests.Windows 184/184 通过（新增回归测试：托盘退出确认会话、取消退出复位 _isExiting）
+- 修复验证：托盘退出确认 / 取消复位由人工在开发构建上目视验收（含「取消后关闭按钮仍最小化到托盘」）；
+  托盘交互无法自动化，发布产物上未重放
+- 实机走查（发布产物 `RemoteFlow-v0.26.2-win-x64.exe`）：启动正常、进程存活、FileVersion 0.26.2.0、
+  优雅退出 exit 0、无 `remoteflow.db-wal` / `-shm` 残留
+- 未执行：macOS 构建与验证
+- Platform：Windows 11（win-x64）
+
+### Git
+- 源码提交：版本号提升提交（chore: 版本号提升至 0.26.2）；Tag `v0.26.2` 指向随后的 `release: RemoteFlow v0.26.2` 提交
+- 修复提交：托盘退出确认会话与退出标记复位（fix(tray)）
+- 2026-10-16 发布：推送 main 与 Tag，创建 GitHub Release（Latest）
+
+---
+
 ## [0.26.1] — 2026-10-15
 
 修复托盘图标双击「显示了又隐藏」的问题。
