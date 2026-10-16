@@ -1,0 +1,97 @@
+## ── 构建输出 ──────────────────────────────────────────────
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+
+## ── Visual Studio / Rider / VS Code ───────────────────────
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.DotSettings.user
+
+## ── 测试与覆盖率 ──────────────────────────────────────────
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+coverage*.info
+
+## ── NuGet ────────────────────────────────────────────────
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+## ── 发布产物（大文件不入 Git History，改用 GitHub Releases）─
+## releases/<tag>/ 只入库 CHANGELOG.md。
+## 源码快照（source/）自 2026-10-13 起不再入库：每个版本的源码由对应的 Tag 保存，
+## 需要时用 `git archive <tag>` 导出。唯一的例外是 releases/v0.16.0/source/——该版本没有 Tag，
+## 快照是它仅存的源码副本，继续保留在仓库里（已跟踪的文件不受下面的忽略规则影响）。
+## 可执行 / 安装包 / 压缩包一律不入库，走 GitHub Releases。
+releases/**/source/
+releases/**/*.exe
+releases/**/*.msi
+releases/**/*.dmg
+releases/**/*.pkg
+releases/**/*.zip
+releases/**/*.tar.gz
+publish/
+
+## ── WebView2 运行时数据 ──────────────────────────────────
+**/WebView2/
+
+## ── 操作系统 ─────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+## ── 机密 / 本地配置（绝不入库）───────────────────────────
+*.env
+.env.*
+!.env.example
+appsettings.*.local.json
+secrets.json
+*.pfx
+*.p12
+*.key
+*.pem
+
+## ── 运行时数据库（用户数据，不入库）─────────────────────
+*.db
+*.db-shm
+*.db-wal
+vault.dat
+
+## ── Claude Code 会话运行时（本地工具状态，不入库）───────
+.claude/
+dist/
+
+## ── native 构建产物（源码 native/rdp/*.c 入库，dylib 由 build.sh 现编）──
+src/RemoteFlow.Protocol.Rdp.Mac/runtimes/**/native/*.dylib
+
+# 自建 FreeRDP（源码/构建/产物，不入库）
+native/rdp/freerdp-src/
+native/rdp/freerdp-build*/
+native/rdp/freerdp-dist/
+
+# 本地构建产物（上传 GitHub Releases 后本地留存）
+/RemoteFlow-v*-win-x64.exe
+/RemoteFlow-v*-win-x64.zip
+
+# 视觉设计讨论工作区（brainstorming 视觉稿，非产品源码）
+.superpowers/

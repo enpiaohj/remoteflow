@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs>
+  <linearGradient id="DeviceIcon-BlueDark" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#4779B8" />
+    <stop offset="1" stop-color="#234B80" />
+  </linearGradient>
+</defs>
+  <rect x="8" y="18" width="39" height="16" rx="5" ry="5" fill="#001845" fill-opacity="0.141" />
+  <rect x="8" y="37" width="39" height="16" rx="5" ry="5" fill="#001845" fill-opacity="0.141" />
+  <rect x="6" y="15" width="40" height="16" rx="4" ry="4" fill="url(#DeviceIcon-BlueDark)" />
+  <rect x="6" y="34" width="40" height="16" rx="4" ry="4" fill="url(#DeviceIcon-BlueDark)" />
+  <path d="M10,18 H41 V21 H10 Z M10,37 H41 V40 H10 Z" fill="#7FCDFB" fill-rule="nonzero" />
+  <ellipse cx="12" cy="24" rx="1.7" ry="1.7" fill="#59D1FF" />
+  <ellipse cx="18" cy="24" rx="1.7" ry="1.7" fill="#36D48A" />
+  <ellipse cx="12" cy="43" rx="1.7" ry="1.7" fill="#59D1FF" />
+  <ellipse cx="18" cy="43" rx="1.7" ry="1.7" fill="#36D48A" />
+  <rect x="37" y="28" width="21" height="23" rx="4" ry="4" fill="#EFF8FF" />
+  <path d="M40,32 L47,31 L47,39 L40,39 Z M49,30.7 L56,29.7 L56,39 L49,39 Z M40,41 L47,41 L47,49 L40,48 Z M49,41 L56,41 L56,50 L49,49 Z" fill="#278CE9" fill-rule="nonzero" />
+</svg>

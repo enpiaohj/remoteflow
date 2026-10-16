@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs>
+  <linearGradient id="Id-Blue" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#46C7FF" />
+    <stop offset="0.52" stop-color="#1685E8" />
+    <stop offset="1" stop-color="#2453D5" />
+  </linearGradient>
+</defs>
+  <rect x="7" y="11" width="53" height="44" rx="6" ry="6" fill="#000000" fill-opacity="0.165" />
+  <rect x="4" y="8" width="53" height="44" rx="6" ry="6" fill="url(#Id-Blue)" />
+  <path d="M4,40 L22,26 L32,34 L44,22 L57,34 V46 A6,6 0 0 1 51,52 H10 A6,6 0 0 1 4,46 Z" fill="#FFFFFF" fill-opacity="0.200" fill-rule="nonzero" />
+  <rect x="16" y="5" width="32" height="10" rx="5" ry="5" fill="#000000" fill-opacity="0.149" />
+  <rect x="14" y="3" width="32" height="10" rx="5" ry="5" fill="#FFFFFF" />
+  <g fill="#2453D5"><ellipse cx="21" cy="8" rx="2" ry="2" /><ellipse cx="30" cy="8" rx="2" ry="2" /><ellipse cx="39" cy="8" rx="2" ry="2" /></g>
+  <path d="M11,33 V45 H23 M50,33 V45 H38" fill="none" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill-rule="nonzero" />
+</svg>
