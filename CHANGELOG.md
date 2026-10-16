@@ -7,6 +7,52 @@
 
 ---
 
+## [0.26.3] — 2026-10-16
+
+修复 Windows RDP 在高 DPI 场景下字体、图标过小、看起来分辨率异常偏高的问题。
+本版本仅发布 Windows（win-x64）；macOS 未改动、未含产物。
+
+### 修复
+- **远端缩放协商**：首次连接前按本机 DPI 设置 DesktopScaleFactor / DeviceScaleFactor，
+  动态调整时不再强制使用 100% 缩放；像素尺寸与毫米尺寸分别计算，避免单位混用。
+- **显示同步时序**：登录完成、自动重连、跨屏 DPI 变化以及隐藏会话 Tab 切回时补发显示更新；
+  适应窗口模式按协议约束处理动态尺寸，手动固定分辨率保持配置值。
+- **资源释放**：视图释放时退订新增事件并停止延迟更新，避免迟到回调重启显示调整。
+
+### 验证
+- 定向回归：18 项通过，包含本机真实 ActiveX 的连接前 DPI 属性读写，
+  以及登录完成、DPI 变化、隐藏 Tab 切回、释放后回调的生命周期验证。
+- 修复效果：用户已在开发构建上确认问题解决，并已确认正式产物的主界面、版本显示与设置页正常。
+- 发布级构建：`dotnet build RemoteFlow.slnx -c Release --artifacts-path artifacts/release-v0.26.3 --nologo -m:1 -nr:false`
+  —— 0 警告 / 0 错误；使用独立输出目录，避免覆盖仍在运行的开发实例。
+- 发布级测试：Core 151 通过；IntegrationTests 455 通过、5 项预设跳过；Windows 201 通过
+  （排除未跟踪、会写备份目录的临时 `ZzCtxProbe`）；Mac 专属测试在 Windows 上 10 项预期跳过。
+- 正式产物：win-x64 自包含单文件，FileVersion `0.26.3.0`；用户确认主界面、界面版本与设置页正常，
+  退出后 `CleanExit=true`，无 `remoteflow.db-wal` / `-shm` 残留；监测未返回进程退出码数值。
+
+### 安装与升级
+- 下载 `RemoteFlow-v0.26.3-win-x64.exe` 或 `.zip`；Windows 11 x64，自包含，无需安装 .NET。
+- 退出旧程序后运行新版本，并重新建立 RDP 连接使首次握手的 DPI 设置生效。
+  本次没有数据库迁移，不修改保存的连接配置与凭据。
+
+### 已知问题
+- 远端缩放与动态调整仍取决于服务器及 ActiveX 的支持；不支持动态调整时保留 SmartSizing 回退。
+- 未执行 macOS 构建；未含 macOS 产物。发布产物未做代码签名。
+
+### Artifacts
+- `RemoteFlow-v0.26.3-win-x64.exe`
+  - Size：75,231,975 bytes
+  - SHA-256：`041116DFC894899A60A84163D689897B11D566FB5689DA7A6EBA9F0267406300`
+- `RemoteFlow-v0.26.3-win-x64.zip`
+  - Size：69,765,878 bytes
+  - SHA-256：`C398D9FB51BAA81139E2961305BA6F6E6185AF2ACE484C1C7BE3E15D47BEEBA9`
+
+### Git
+- 修复提交：`a4104b9`（fix(rdp): 修正高 DPI 远端缩放与显示同步）。
+- 版本 Tag：`v0.26.3`，对应 `release: RemoteFlow v0.26.3` 发布提交；源码快照为 `releases/v0.26.3/source/`。
+
+---
+
 ## [0.26.2] — 2026-10-16
 
 托盘「退出」同样确认已连接会话；修复取消退出后关闭按钮被误当真退出的问题。
