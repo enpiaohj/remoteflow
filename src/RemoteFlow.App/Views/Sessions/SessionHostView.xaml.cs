@@ -102,7 +102,11 @@ public partial class SessionHostView : UserControl
     private bool _dragging;
     private Point _dragAnchorPx;
     private double _dragStartH;
-    private double _dragStartV;
+
+    private ContextMenu? _pillContextMenu;
+
+    private bool IsToolbarMenuOpen => _sessionMenu is { IsOpen: true }
+        || _pillContextMenu is { IsOpen: true };
 
     /// <summary>会话切换下拉菜单（代码构建，独立 HWND，可盖在 airspace 之上）。</summary>
     private ContextMenu? _sessionMenu;
@@ -196,6 +200,7 @@ public partial class SessionHostView : UserControl
             _revealTimer.Stop();
             RemoveMouseHook();
             CloseQualityFlyout();
+            CloseToolbarMenus();
             FullScreenHint.Visibility = Visibility.Collapsed;
             ToolbarPopup.IsOpen = false;
         }
@@ -209,6 +214,7 @@ public partial class SessionHostView : UserControl
         _edgeWatch.Stop();
         RemoveMouseHook();
         CloseQualityFlyout();
+        CloseToolbarMenus();
         ToolbarPopup.IsOpen = false;
 
         if (_window is not null)
@@ -278,6 +284,13 @@ public partial class SessionHostView : UserControl
         if (e.PropertyName == nameof(SessionTabViewModel.IsFileTransferOpen) && sender is SessionTabViewModel tab)
         {
             ApplyFileTransferLayout(tab.IsFileTransferOpen);
+        }
+
+        if (e.PropertyName == nameof(SessionTabViewModel.IsInterrupted)
+            && _tab?.IsInterrupted == true && IsLoaded && IsVisible && IsScreenFullTier)
+        {
+            _autoHideTimer.Stop();
+            ShowToolbar();
         }
     }
 
@@ -386,6 +399,7 @@ public partial class SessionHostView : UserControl
             // 退到窗口最大化或常规档：先关闭可能锚定在药丸按钮上的 Flyout，
             // 再拆除药丸及其计时器 / 钩子，避免保留失效的定位锚点。
             CloseQualityFlyout();
+            CloseToolbarMenus();
             _edgeWatch.Stop();
             _autoHideTimer.Stop();
             _revealTimer.Stop();
@@ -551,7 +565,7 @@ public partial class SessionHostView : UserControl
     {
         _autoHideTimer.Stop();
 
-        if (_pinned || _dragging || PillBar.IsMouseOver || _sessionMenu is { IsOpen: true } || _flyout is { IsVisible: true })
+        if (_pinned || _dragging || PillBar.IsMouseOver || IsToolbarMenuOpen || _flyout is { IsVisible: true })
         {
             return;
         }
@@ -562,7 +576,7 @@ public partial class SessionHostView : UserControl
     private void ScheduleAutoHide(TimeSpan delay)
     {
         // 连接质量 Flyout 打开期间不自动收起药丸（Flyout 由它呼出，需保持可见）。
-        if (_pinned || _flyout is { IsVisible: true })
+        if (_pinned || IsToolbarMenuOpen || _flyout is { IsVisible: true })
         {
             return;
         }
@@ -586,7 +600,7 @@ public partial class SessionHostView : UserControl
 
     private void HideToolbar(bool immediate)
     {
-        if (!ToolbarPopup.IsOpen || _pinned || _dragging)
+        if (!ToolbarPopup.IsOpen || _pinned || _dragging || IsToolbarMenuOpen)
         {
             return;
         }
@@ -634,7 +648,7 @@ public partial class SessionHostView : UserControl
     private nint LowLevelMouseHook(int nCode, nint wParam, nint lParam)
     {
         // 连接质量 Flyout 打开期间不因「点击药丸以外」收起药丸——Flyout 也需要被交互。
-        if (nCode >= 0 && !_pinned && _flyout is not { IsVisible: true } && IsButtonDown(wParam))
+        if (nCode >= 0 && !_pinned && !IsToolbarMenuOpen && _flyout is not { IsVisible: true } && IsButtonDown(wParam))
         {
             var x = Marshal.ReadInt32(lParam);
             var y = Marshal.ReadInt32(lParam, 4);
@@ -700,7 +714,6 @@ public partial class SessionHostView : UserControl
         _userMoved = true;
         _dragAnchorPx = new Point(p.X, p.Y);
         _dragStartH = ToolbarPopup.HorizontalOffset;
-        _dragStartV = ToolbarPopup.VerticalOffset;
         _autoHideTimer.Stop();
         PillBar.CaptureMouse();
         e.Handled = true;
@@ -729,7 +742,7 @@ public partial class SessionHostView : UserControl
         var delta = toDiu.Transform(new Vector(p.X - _dragAnchorPx.X, p.Y - _dragAnchorPx.Y));
 
         ToolbarPopup.HorizontalOffset = ClampHorizontal(_dragStartH + delta.X);
-        ToolbarPopup.VerticalOffset = ClampVertical(_dragStartV + delta.Y);
+        ToolbarPopup.VerticalOffset = 0;
     }
 
     private void OnToolbarDragEnd(object sender, MouseButtonEventArgs e)
@@ -788,7 +801,7 @@ public partial class SessionHostView : UserControl
         if (_userMoved)
         {
             h = ClampHorizontal(ToolbarPopup.HorizontalOffset);
-            v = ClampVertical(ToolbarPopup.VerticalOffset);
+            v = 0;
         }
         else
         {
@@ -811,13 +824,63 @@ public partial class SessionHostView : UserControl
         return Math.Clamp(value, min, max);
     }
 
-    private double ClampVertical(double value)
+    // ── 会话切换 / 窗口控制 ──────────────────────────────────────
+
+    private void OnPillContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        var max = Math.Max(0, RootGrid.ActualHeight - MinVisibleExtent / 2);
-        return Math.Clamp(value, 0, max);
+        e.Handled = true;
+        if (_tab is null || _window?.TryFindResource("SessionTabContextMenu") is not ContextMenu menu)
+        {
+            return;
+        }
+
+        if (_sessionMenu is not null)
+        {
+            _sessionMenu.IsOpen = false;
+        }
+        if (_pillContextMenu is not null)
+        {
+            _pillContextMenu.IsOpen = false;
+        }
+
+        _pillContextMenu = menu;
+        menu.DataContext = _tab;
+        menu.PlacementTarget = PillBar;
+        menu.Placement = PlacementMode.MousePoint;
+        menu.Closed += OnPillContextMenuClosed;
+        _autoHideTimer.Stop();
+        menu.IsOpen = true;
     }
 
-    // ── 会话切换 / 窗口控制 ──────────────────────────────────────
+    private void OnPillContextMenuClosed(object sender, RoutedEventArgs e)
+    {
+        if (sender is ContextMenu menu)
+        {
+            menu.Closed -= OnPillContextMenuClosed;
+            if (ReferenceEquals(_pillContextMenu, menu))
+            {
+                _pillContextMenu = null;
+            }
+        }
+
+        if (IsLoaded && IsVisible && IsScreenFullTier)
+        {
+            ScheduleAutoHide(ResolveHideDelay());
+        }
+    }
+
+    private void CloseToolbarMenus()
+    {
+        if (_sessionMenu is not null)
+        {
+            _sessionMenu.IsOpen = false;
+        }
+
+        if (_pillContextMenu is not null)
+        {
+            _pillContextMenu.IsOpen = false;
+        }
+    }
 
     private void OnSessionSwitchClick(object sender, RoutedEventArgs e)
     {

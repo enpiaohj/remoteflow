@@ -7,7 +7,8 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
-             d:DataContext="{d:DesignInstance Type=vm:SessionTabViewModel}">
+             d:DataContext="{d:DesignInstance Type=vm:SessionTabViewModel}"
+             TextElement.Foreground="{DynamicResource Text.Primary}">
 
     <UserControl.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
@@ -60,7 +61,8 @@
                             HorizontalContentAlignment="Stretch"
                             VerticalContentAlignment="Stretch"
                             HorizontalAlignment="Stretch"
-                            VerticalAlignment="Stretch" />
+                            VerticalAlignment="Stretch"
+                            Visibility="{Binding IsInterrupted, Converter={StaticResource InverseBoolToVisibility}}" />
 
             <!-- 质量详情 Flyout 的定位锚：标题栏工具条的状态入口点击后，Flyout 弹在此下方 -->
             <Border x:Name="QualityFlyoutAnchor"
@@ -95,7 +97,9 @@
             </Border>
 
             <!-- 断线 / 失败：会话内部状态层 + 重新连接，不弹模态错误框 -->
-            <Border Background="#D9141414"
+            <!-- 中断后收起原生协议宿主，避免 ActiveX airspace 遮住状态卡片。 -->
+            <Border x:Name="InterruptedOverlay"
+                    Background="{DynamicResource Bg.Session}"
                     Visibility="{Binding IsInterrupted, Converter={StaticResource BoolToVisibility}}">
                 <Border Style="{StaticResource Surface.Card}"
                         MaxWidth="440"
@@ -110,11 +114,20 @@
                                        Margin="10,0,0,0"
                                        VerticalAlignment="Center" />
                         </StackPanel>
+                        <TextBlock Text="{Binding Title}"
+                                   Style="{StaticResource Text.BodySecondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,12,0,0" />
                         <TextBlock Text="{Binding InterruptionMessage}"
                                    Style="{StaticResource Text.BodySecondary}"
                                    TextWrapping="Wrap"
                                    Margin="0,14,0,0" />
                         <StackPanel Orientation="Horizontal" Margin="0,22,0,0" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource Button.Subtle}"
+                                    Content="退出全屏"
+                                    Margin="0,0,8,0"
+                                    Visibility="{Binding DataContext.IsScreenFull, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}"
+                                    Command="{Binding ExitFullScreenCommand}" />
                             <Button Style="{StaticResource Button.Secondary}"
                                     Content="关闭会话"
                                     Command="{Binding CloseCommand}" />
@@ -157,7 +170,7 @@
              全屏隐藏了应用标题栏与 Tab 栏，这条药丸承担会话切换、窗口控制、
              退出全屏。RDP 会话内嵌原生 ActiveX（airspace），普通 WPF 浮层会被
              它盖住、也收不到其上的鼠标事件；用 Popup（独立顶层窗口）承载，
-             顶沿唤出由代码后置轮询光标实现。整条可拖动。 -->
+             顶沿唤出由代码后置轮询光标实现。整条只沿顶部横向拖动。 -->
         <Popup x:Name="ToolbarPopup"
                PlacementTarget="{Binding ElementName=RootGrid}"
                Placement="Relative"
@@ -175,12 +188,16 @@
                     BorderBrush="{DynamicResource Stroke.Subtle}"
                     BorderThickness="1,0,1,1"
                     CornerRadius="0,0,10,10"
+                    ContextMenuOpening="OnPillContextMenuOpening"
                     MouseLeftButtonDown="OnToolbarDragStart"
                     MouseMove="OnToolbarDragMove"
                     MouseLeftButtonUp="OnToolbarDragEnd">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="14" ShadowDepth="2" Direction="270" Opacity="0.28" Color="#000000" />
                 </Border.Effect>
+                <Border.ContextMenu>
+                    <ContextMenu />
+                </Border.ContextMenu>
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 
