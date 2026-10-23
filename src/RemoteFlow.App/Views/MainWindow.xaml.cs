@@ -122,6 +122,11 @@ public partial class MainWindow : Window
     private const int WmSysKeyDown = 0x0104;
     private const int WmSysKeyUp = 0x0105;
     private const int VkF11 = 0x7A;
+    private const int VkF12 = 0x7B;
+    private const int VkHome = 0x24;
+
+    internal event EventHandler? ToolbarRevealRequested;
+    private int _toolbarRevealKey;
     /// <summary>
     /// 已按下、尚未收到抬起的键。用于抑制长按自动重复——F11 改成逐档循环后，
     /// 自动重复会连跳两档，比「被吞掉」更刺眼。
@@ -163,9 +168,15 @@ public partial class MainWindow : Window
             return NativeMethods.CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
         }
 
-        // 抬起：清掉「已按下」标记，让下一次真实按键能进档。必须放行，不吞。
+        // 找回快捷键的抬起与按下成对消费；F11 抬起只清除重复标记并放行。
         if (wParam == WmKeyUp || wParam == WmSysKeyUp)
         {
+            if (Marshal.ReadInt32(lParam) == _toolbarRevealKey)
+            {
+                _toolbarRevealKey = 0;
+                return 1;
+            }
+
             if (Marshal.ReadInt32(lParam) == _keyDownVk)
             {
                 _keyDownVk = 0;
@@ -180,6 +191,38 @@ public partial class MainWindow : Window
         }
 
         var vkCode = Marshal.ReadInt32(lParam);
+        if (_toolbarRevealKey == vkCode)
+        {
+            return 1;
+        }
+
+        if (vkCode is VkF12 or VkHome
+            && NativeMethods.GetForegroundWindow() == _hwnd
+            && _viewModel.IsScreenFull
+            && _viewModel.SelectedTab is SessionTabViewModel
+            && (NativeMethods.GetAsyncKeyState(0x11) & 0x8000) != 0
+            && (NativeMethods.GetAsyncKeyState(0x12) & 0x8000) != 0
+            && (NativeMethods.GetAsyncKeyState(0x10) & 0x8000) == 0
+            && (NativeMethods.GetAsyncKeyState(0x5B) & 0x8000) == 0
+            && (NativeMethods.GetAsyncKeyState(0x5C) & 0x8000) == 0)
+        {
+            if (_toolbarRevealKey != vkCode)
+            {
+                _toolbarRevealKey = vkCode;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (NativeMethods.GetForegroundWindow() == _hwnd
+                        && _viewModel.IsScreenFull
+                        && _viewModel.SelectedTab is SessionTabViewModel)
+                    {
+                        ToolbarRevealRequested?.Invoke(this, EventArgs.Empty);
+                    }
+                }));
+            }
+
+            return 1;
+        }
+
         if (vkCode != VkF11)
         {
             return NativeMethods.CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
@@ -1093,6 +1136,9 @@ public partial class MainWindow : Window
 
     private static class NativeMethods
     {
+        [DllImport("user32.dll")]
+        public static extern short GetAsyncKeyState(int virtualKey);
+
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         public static extern nint GetModuleHandle(string? moduleName);
 

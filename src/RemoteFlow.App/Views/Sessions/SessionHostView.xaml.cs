@@ -60,18 +60,18 @@ public partial class SessionHostView : UserControl
     private static readonly TimeSpan MinVisibleTime = TimeSpan.FromMilliseconds(450);
 
     /// <summary>
-    /// 未展开时，认定“鼠标贴到顶沿”的判定高度（DIU）。
-    /// 取值刻意放宽：无边框全屏若定位有几像素误差（窗口上沿略高 / 略低于显示器上沿），
-    /// 光标贴到屏幕最顶端时相对 <see cref="RootGrid"/> 的 Y 会偏离 0 十几像素；
-    /// 严格的边到边定位由 <c>MainWindow.SnapToMonitorBounds</c> 保证，这里只是兜底。
+    /// 未展开时顶沿热区高度（物理像素），避免高 DPI 下感应带随缩放变宽。
+    /// 横向只覆盖胶囊本体；找不到位置时可用快捷键居中找回。
     /// </summary>
-    private const double EdgeRevealBand = 20;
+    private const double EdgeRevealBand = 3;
 
     /// <summary>展开时，药丸左右各留多少 DIU 作为“停留”感应区。</summary>
-    private const double KeepZonePadX = 52;
+    private const double KeepZonePadX = 8;
 
     /// <summary>展开时，药丸下沿再向下留多少 DIU 作为“停留”感应区。</summary>
-    private const double KeepZonePadY = 14;
+    private const double KeepZonePadY = 6;
+
+    private DateTime _forcedVisibleUntil = DateTime.MinValue;
 
     /// <summary>拖动后药丸至少保留多少像素在可视区内。</summary>
     private const double MinVisibleExtent = 96;
@@ -161,6 +161,12 @@ public partial class SessionHostView : UserControl
             _main.PropertyChanged += OnMainViewModelChanged;
         }
 
+        if (_window is MainWindow mainWindow)
+        {
+            mainWindow.ToolbarRevealRequested -= OnToolbarRevealRequested;
+            mainWindow.ToolbarRevealRequested += OnToolbarRevealRequested;
+        }
+
         if (_window is not null)
         {
             _window.LocationChanged -= OnWindowMovedOrResized;
@@ -216,6 +222,11 @@ public partial class SessionHostView : UserControl
         CloseQualityFlyout();
         CloseToolbarMenus();
         ToolbarPopup.IsOpen = false;
+
+        if (_window is MainWindow mainWindow)
+        {
+            mainWindow.ToolbarRevealRequested -= OnToolbarRevealRequested;
+        }
 
         if (_window is not null)
         {
@@ -516,13 +527,17 @@ public partial class SessionHostView : UserControl
         return true;
     }
 
-    /// <summary>光标是否落在顶沿唤出带（全宽，含上下容差）。</summary>
+    /// <summary>仅在胶囊对应的屏幕顶沿窄带唤出；高度按物理像素换算。</summary>
     private bool IsInRevealBand(Point rel)
     {
-        // 两侧都用 EdgeRevealBand 容差：窗口上沿被顶出可视区时 rel.Y 落在带的上方，
-        // 窗口上沿略低于显示器上沿时落在带的下方，两种都要能唤出。
-        return rel.X >= 0 && rel.X <= ActualWidth
-            && rel.Y >= -EdgeRevealBand && rel.Y <= EdgeRevealBand;
+        var dpi = VisualTreeHelper.GetDpi(RootGrid);
+        var height = EdgeRevealBand / dpi.DpiScaleY;
+        var width = PillBar.ActualWidth > 0 ? PillBar.ActualWidth : 320;
+        var left = _userMoved
+            ? ToolbarPopup.HorizontalOffset + PillBar.Margin.Left
+            : Math.Max(0, (RootGrid.ActualWidth - width) / 2);
+        return rel.X >= Math.Max(0, left) && rel.X <= Math.Min(RootGrid.ActualWidth, left + width)
+            && rel.Y >= 0 && rel.Y <= height;
     }
 
     /// <summary>悬停意图计时到点：复核光标仍贴着顶沿带才唤出（装表后光标可能早已离开）。</summary>
@@ -537,6 +552,27 @@ public partial class SessionHostView : UserControl
         }
 
         ShowToolbar();
+    }
+
+    private void OnToolbarRevealRequested(object? sender, EventArgs e)
+    {
+        if (!IsLoaded || !IsVisible || !IsScreenFullTier
+            || !ReferenceEquals(_main?.SelectedTab, _tab))
+        {
+            return;
+        }
+
+        if (_dragging)
+        {
+            EndDrag();
+        }
+
+        _userMoved = false;
+        _forcedVisibleUntil = DateTime.UtcNow.AddSeconds(5);
+        _revealTimer.Stop();
+        ShowToolbar();
+        RepositionPopup();
+        ScheduleAutoHide(TimeSpan.FromSeconds(5));
     }
 
     /// <summary>顶沿悬停唤出延迟——按当前全屏档位从设置实时解析，改设置即生效。</summary>
@@ -602,6 +638,13 @@ public partial class SessionHostView : UserControl
     {
         if (!ToolbarPopup.IsOpen || _pinned || _dragging || IsToolbarMenuOpen)
         {
+            return;
+        }
+
+        var remaining = _forcedVisibleUntil - DateTime.UtcNow;
+        if (remaining > TimeSpan.Zero)
+        {
+            ScheduleAutoHide(remaining);
             return;
         }
 

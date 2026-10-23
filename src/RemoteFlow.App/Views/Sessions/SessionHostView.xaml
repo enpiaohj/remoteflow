@@ -361,7 +361,7 @@
                             VerticalAlignment="Center"
                             Background="{DynamicResource Brand.Default}"
                             CornerRadius="5">
-                        <TextBlock Text="工具条会自动隐藏 · 鼠标移到顶部区域再唤出"
+                        <TextBlock Text="移到工具条所在顶边唤出 · Ctrl+Alt+F12 居中找回（亦可 Ctrl+Alt+Home）"
                                    FontSize="11"
                                    Foreground="White"
                                    VerticalAlignment="Center" />
