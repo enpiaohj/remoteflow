@@ -22,6 +22,7 @@ public sealed class NavigationRefreshTests : IDisposable
     private readonly MainViewModel _main;
     private readonly SessionManager _sessions;
     private readonly ScriptedSshProvider _provider = new();
+    private readonly NullDialogService _dialogs = new();
     private readonly FileTransferLauncher _launcher = new();
     private readonly FakeTransferConnector _connector = new();
     private readonly CredentialsPageViewModel _credentialsPage;
@@ -53,7 +54,7 @@ public sealed class NavigationRefreshTests : IDisposable
         var settingsStore = new JsonSettingsStore(
             Path.Combine(_workspace.Root, "settings.json"),
             NullLogger<JsonSettingsStore>.Instance);
-        var dialogs = new NullDialogService();
+        var dialogs = _dialogs;
 
         var home = new HomePageViewModel(
             connections,
@@ -320,6 +321,7 @@ public sealed class NavigationRefreshTests : IDisposable
         SimulateViewsThatConnectOnlyWhenSelected(static p => new VisibilityGatedSession(p) { NeverStarts = p.Name == "主机3" });
 
         _main.BatchStartTimeout = TimeSpan.FromMilliseconds(300);
+        _main.BatchSettleTimeout = TimeSpan.FromMilliseconds(300);
 
         await _main.OpenSessionsSequentiallyAsync(NineProfiles()).WaitAsync(TimeSpan.FromSeconds(30));
 
@@ -328,9 +330,98 @@ public sealed class NavigationRefreshTests : IDisposable
         Assert.Equal(8, tabs.Count(t => t.Session.State != ConnectionState.Idle));
     }
 
+    [Fact]
+    public async Task 批量连接_创建失败的主机不逐个弹框_结束后汇总一次()
+    {
+        _main.BatchSettleTimeout = TimeSpan.FromMilliseconds(300);
+        SimulateViewsThatConnectOnlyWhenSelected(static p => p.Name is "主机2" or "主机5"
+            ? throw new ConnectionException(ConnectionErrorCode.ComponentUnavailable, "找不到协议组件")
+            : new VisibilityGatedSession(p));
+
+        await _main.OpenSessionsSequentiallyAsync(NineProfiles());
+
+        Assert.Equal(7, _main.Tabs.OfType<SessionTabViewModel>().Count());
+        var message = Assert.Single(_dialogs.Messages);
+        Assert.Equal("批量连接", message.Title);
+        Assert.Contains("已发起 7 台连接", message.Message);
+        Assert.Contains("2 台未能连接", message.Message);
+        Assert.Contains("主机2：找不到协议组件", message.Message);
+        Assert.Contains("主机5：找不到协议组件", message.Message);
+    }
+
+    [Fact]
+    public async Task 批量连接_全部成功时不弹任何提示()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected();
+
+        await _main.OpenSessionsSequentiallyAsync(NineProfiles());
+
+        Assert.Empty(_dialogs.Messages);
+    }
+
+    [Fact]
+    public async Task 批量连接_达到并发上限时提前停止并只提示一次()
+    {
+        _main.BatchSettleTimeout = TimeSpan.FromMilliseconds(300);
+        _sessions.MaxConcurrentSessions = 3;
+        SimulateViewsThatConnectOnlyWhenSelected();
+
+        await _main.OpenSessionsSequentiallyAsync(NineProfiles());
+
+        Assert.Equal(3, _main.Tabs.OfType<SessionTabViewModel>().Count());
+        var message = Assert.Single(_dialogs.Messages);
+        Assert.Contains("并发会话上限（3 个）", message.Message);
+        Assert.Contains("6 台没有打开", message.Message);
+        Assert.Contains("主机4", message.Message);
+    }
+
+    [Fact]
+    public async Task 批量连接_连接中途失败的会话也并入汇总并保留标签页()
+    {
+        _main.BatchSettleTimeout = TimeSpan.FromSeconds(3);
+        SimulateViewsThatConnectOnlyWhenSelected(static p => new VisibilityGatedSession(p) { FailOnConnect = p.Name == "主机4" });
+
+        await _main.OpenSessionsSequentiallyAsync(NineProfiles());
+
+        Assert.Equal(9, _main.Tabs.OfType<SessionTabViewModel>().Count());
+        var message = Assert.Single(_dialogs.Messages);
+        Assert.Contains("已发起 8 台连接", message.Message);
+        Assert.Contains("1 台未能连接", message.Message);
+        Assert.Contains("主机4：远端拒绝", message.Message);
+        Assert.Contains("重新连接", message.Message);
+    }
+
+    [Fact]
+    public async Task 批量连接_失败太多时只列前几条并说明还有多少()
+    {
+        _main.BatchSettleTimeout = TimeSpan.FromMilliseconds(300);
+        SimulateViewsThatConnectOnlyWhenSelected(static p =>
+            throw new ConnectionException(ConnectionErrorCode.ComponentUnavailable, "不可用"));
+
+        await _main.OpenSessionsSequentiallyAsync(NineProfiles());
+
+        var message = Assert.Single(_dialogs.Messages);
+        Assert.Contains("没有成功发起任何连接", message.Message);
+        Assert.Contains("9 台未能连接", message.Message);
+        Assert.Contains("另有 1 台", message.Message);
+    }
+
+    [Fact]
+    public async Task 单个连接创建失败时仍然直接弹框()
+    {
+        _provider.Factory = static _ => throw new ConnectionException(ConnectionErrorCode.ComponentUnavailable, "找不到协议组件");
+
+        await _main.OpenSessionAsync(new ConnectionProfile { Name = "单台", Host = "h", Protocol = ProtocolType.Ssh });
+
+        var message = Assert.Single(_dialogs.Messages);
+        Assert.Equal("无法建立连接", message.Title);
+        Assert.Contains("找不到协议组件", message.Message);
+    }
     private sealed class VisibilityGatedSession(ConnectionProfile profile) : RemoteSessionBase
     {
         public bool NeverStarts { get; init; }
+
+        public bool FailOnConnect { get; init; }
 
         public override ProtocolType Protocol => profile.Protocol;
 
@@ -339,6 +430,14 @@ public sealed class NavigationRefreshTests : IDisposable
         public override Task ConnectAsync(CancellationToken cancellationToken = default)
         {
             SetState(ConnectionState.Connecting);
+            if (FailOnConnect)
+            {
+                ErrorCode = ConnectionErrorCode.RemoteClosed;
+                ErrorMessage = "远端拒绝";
+                SetState(ConnectionState.Failed);
+                return Task.CompletedTask;
+            }
+
             SetState(ConnectionState.Connected);
             return Task.CompletedTask;
         }
@@ -557,8 +656,13 @@ public sealed class NavigationRefreshTests : IDisposable
         public Task<bool> ConfirmAsync(string title, string message, string confirmText = "确定", bool isDanger = false)
             => Task.FromResult(false);
 
+        public List<(string Title, string Message, DialogKind Kind)> Messages { get; } = [];
+
         public Task ShowMessageAsync(string title, string message, DialogKind kind = DialogKind.Info)
-            => Task.CompletedTask;
+        {
+            Messages.Add((title, message, kind));
+            return Task.CompletedTask;
+        }
 
         public Task CopyToClipboardAsync(string text) => Task.CompletedTask;
 

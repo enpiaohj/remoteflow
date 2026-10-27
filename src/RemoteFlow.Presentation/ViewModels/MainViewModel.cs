@@ -846,7 +846,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// 不新建；正在创建中（连点）则忽略本次；否则创建新会话，由 SessionCreated 开新 Tab。
     /// <paramref name="forceNew"/> 供「新建会话」动作跳过去重聚焦，强制再开一个会话。
     /// </summary>
-    public async Task OpenSessionAsync(ConnectionProfile profile, bool forceNew = false)
+    public Task OpenSessionAsync(ConnectionProfile profile, bool forceNew = false)
+        => OpenSessionCoreAsync(profile, forceNew, failures: null);
+
+    /// <summary>一台主机在批量连接里没能打开的原因。</summary>
+    private sealed record BatchFailure(string Name, string Reason);
+
+    /// <param name="failures">
+    /// 非 null（批量连接）时，创建失败只记录到这里、不逐个弹框：模态框会卡住整批后面的连接，
+    /// 失败几台就连弹几次。由批量流程在结束时统一汇总提示。null 时保持单个连接的原有弹框行为。
+    /// </param>
+    private async Task OpenSessionCoreAsync(ConnectionProfile profile, bool forceNew, List<BatchFailure>? failures)
     {
         if (!forceNew)
         {
@@ -872,19 +882,31 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         catch (ConnectionException ex)
         {
             _openingProfileIds.Remove(profile.Id);
-            await _dialogs.ShowMessageAsync("无法建立连接", ex.Message, DialogKind.Error);
+            await ReportOpenFailureAsync(profile, ex.Message, DialogKind.Error, failures);
         }
         catch (InvalidOperationException ex)
         {
             _openingProfileIds.Remove(profile.Id);
-            await _dialogs.ShowMessageAsync("无法建立连接", ex.Message, DialogKind.Warning);
+            await ReportOpenFailureAsync(profile, ex.Message, DialogKind.Warning, failures);
         }
         catch (Exception ex)
         {
             _openingProfileIds.Remove(profile.Id);
             _logger.LogError(ex, "创建会话失败：{ConnectionName}", profile.Name);
-            await _dialogs.ShowMessageAsync("无法建立连接", "创建会话时发生未知错误，详情请查看日志。", DialogKind.Error);
+            await ReportOpenFailureAsync(profile, "创建会话时发生未知错误，详情请查看日志。", DialogKind.Error, failures);
         }
+    }
+
+    private Task ReportOpenFailureAsync(
+        ConnectionProfile profile, string message, DialogKind kind, List<BatchFailure>? failures)
+    {
+        if (failures is null)
+        {
+            return _dialogs.ShowMessageAsync("无法建立连接", message, kind);
+        }
+
+        failures.Add(new BatchFailure(profile.Name, message));
+        return Task.CompletedTask;
     }
 
     /// <summary>单个会话「开始连接」的最长等待。超时就继续下一个，不让一个迟迟不动的会话卡住整批。</summary>
@@ -904,11 +926,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public async Task OpenSessionsSequentiallyAsync(IReadOnlyList<ConnectionProfile> profiles)
     {
         SessionTabViewModel? first = null;
+        var createdTabs = new List<SessionTabViewModel>();
+        var failures = new List<BatchFailure>();
+        var notOpened = new List<string>();
 
-        foreach (var profile in profiles)
+        for (var i = 0; i < profiles.Count; i++)
         {
+            var profile = profiles[i];
+
+            // 已达并发上限：后面没有已开会话的设备都开不了，提前结束并统一说明，
+            // 而不是对剩下的每一台都弹一次「已达到并发会话上限」。
+            if (_sessions.ActiveSessionCount >= _sessions.MaxConcurrentSessions
+                && !Tabs.OfType<SessionTabViewModel>().Any(t => t.Session.Profile.Id == profile.Id))
+            {
+                notOpened.AddRange(profiles.Skip(i)
+                    .Where(p => !Tabs.OfType<SessionTabViewModel>().Any(t => t.Session.Profile.Id == p.Id))
+                    .Select(p => p.Name));
+                break;
+            }
+
             var before = Tabs.OfType<SessionTabViewModel>().ToHashSet();
-            await OpenSessionAsync(profile);
+            await OpenSessionCoreAsync(profile, forceNew: false, failures);
 
             // 本次新建出来的 Tab（聚焦已有会话 / 创建失败时没有新 Tab，直接下一个）。
             var created = Tabs.OfType<SessionTabViewModel>()
@@ -919,6 +957,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             }
 
             first ??= created;
+            createdTabs.Add(created);
             await WaitForSessionToStartAsync(created);
         }
 
@@ -926,6 +965,82 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             SelectedTab = first;
         }
+
+        // 给刚发起的会话一点时间出结果，把连接中途失败的也并进同一条汇总。
+        await WaitForSessionsToSettleAsync(createdTabs);
+        foreach (var tab in createdTabs.Where(t => Tabs.Contains(t) && t.Session.State == ConnectionState.Failed))
+        {
+            var reason = string.IsNullOrWhiteSpace(tab.Session.ErrorMessage)
+                ? ConnectionException.Describe(tab.Session.ErrorCode)
+                : tab.Session.ErrorMessage;
+            failures.Add(new BatchFailure(tab.Session.Profile.Name, reason));
+        }
+
+        var summary = BuildBatchSummary(createdTabs.Count(t => Tabs.Contains(t) && t.Session.State != ConnectionState.Failed),
+            failures, notOpened, _sessions.MaxConcurrentSessions);
+        if (summary is not null)
+        {
+            await _dialogs.ShowMessageAsync("批量连接", summary, DialogKind.Warning);
+        }
+    }
+
+    /// <summary>批量连接结束后等刚发起的会话出结果（离开「连接中」）的最长时间。</summary>
+    public TimeSpan BatchSettleTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+    private async Task WaitForSessionsToSettleAsync(IReadOnlyList<SessionTabViewModel> tabs)
+    {
+        var deadline = DateTime.UtcNow + BatchSettleTimeout;
+        while (DateTime.UtcNow < deadline
+               && tabs.Any(t => Tabs.Contains(t)
+                                && t.Session.State is ConnectionState.Idle or ConnectionState.Connecting or ConnectionState.Reconnecting))
+        {
+            await Task.Delay(BatchStartPoll);
+        }
+    }
+
+    /// <summary>
+    /// 批量连接的汇总文案。全部成功返回 null（不打扰）；否则列出没打开 / 失败的主机及原因，
+    /// 太长时只列前几条。失败的会话仍保留在各自的 Tab 里，可以在那里「重新连接」。
+    /// </summary>
+    private static string? BuildBatchSummary(
+        int opened, IReadOnlyList<BatchFailure> failures, IReadOnlyList<string> notOpened, int concurrencyLimit)
+    {
+        if (failures.Count == 0 && notOpened.Count == 0)
+        {
+            return null;
+        }
+
+        const int MaxListed = 8;
+        var lines = new List<string>
+        {
+            opened > 0 ? $"已发起 {opened} 台连接。" : "没有成功发起任何连接。",
+        };
+
+        if (failures.Count > 0)
+        {
+            lines.Add(string.Empty);
+            lines.Add($"{failures.Count} 台未能连接：");
+            lines.AddRange(failures.Take(MaxListed).Select(f => $"• {f.Name}：{f.Reason}"));
+            if (failures.Count > MaxListed)
+            {
+                lines.Add($"…另有 {failures.Count - MaxListed} 台，详见各自的会话标签页。");
+            }
+
+            lines.Add("连接失败的会话保留在标签页里，可在其中点「重新连接」。");
+        }
+
+        if (notOpened.Count > 0)
+        {
+            lines.Add(string.Empty);
+            lines.Add($"已达到并发会话上限（{concurrencyLimit} 个），以下 {notOpened.Count} 台没有打开，请先关闭部分会话再试：");
+            lines.AddRange(notOpened.Take(MaxListed).Select(n => $"• {n}"));
+            if (notOpened.Count > MaxListed)
+            {
+                lines.Add($"…另有 {notOpened.Count - MaxListed} 台。");
+            }
+        }
+
+        return string.Join("\n", lines);
     }
 
     private async Task WaitForSessionToStartAsync(SessionTabViewModel tab)
