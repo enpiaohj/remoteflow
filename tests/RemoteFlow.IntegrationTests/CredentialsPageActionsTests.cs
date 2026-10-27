@@ -10,7 +10,7 @@ using Xunit;
 
 namespace RemoteFlow.IntegrationTests;
 
-/// <summary>凭据页右键菜单动作：创建副本、用此凭据新建主机连接（引用账户 / 引用名称）、空白处新建。</summary>
+/// <summary>凭据页右键菜单动作：创建副本、新建主机连接（直接引用此凭据，连接名预填账户名）、空白处新建。</summary>
 public sealed class CredentialsPageActionsTests : IDisposable
 {
     private readonly TempWorkspace _workspace = new();
@@ -37,6 +37,32 @@ public sealed class CredentialsPageActionsTests : IDisposable
     {
         SqliteConnection.ClearAllPools();
         _workspace.Dispose();
+    }
+
+    [Fact]
+    public async Task 类型筛选偏离默认值才显示清除筛选_清除后恢复全部且保留搜索词()
+    {
+        await _credentials.CreateAsync(
+            new Credential { Name = "域账号", Type = CredentialType.WindowsDomain, Domain = "CORP", Username = "ops" }, "pw", null);
+        await _credentials.CreateAsync(
+            new Credential { Name = "跳板机", Type = CredentialType.SshPassword, Username = "root" }, "pw", null);
+        await _page.LoadAsync();
+        Assert.False(_page.HasActiveFilters);
+
+        var raised = new List<string?>();
+        _page.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        _page.TypeOption = _page.TypeOptions.Single(o => o.Value == CredentialTypeFilter.SshPassword);
+        Assert.True(_page.HasActiveFilters);
+        Assert.Contains(nameof(_page.HasActiveFilters), raised);
+        Assert.Equal("跳板机", _page.Items.Single().Name);
+
+        _page.SearchText = "跳";
+        _page.ClearFiltersCommand.Execute(null);
+
+        Assert.False(_page.HasActiveFilters);
+        Assert.Equal(CredentialTypeFilter.All, _page.TypeOption.Value);
+        Assert.Equal("跳", _page.SearchText);
     }
 
     [Fact]

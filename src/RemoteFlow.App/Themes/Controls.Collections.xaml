@@ -423,6 +423,107 @@
         </Setter>
     </Style>
 
+    <!-- 筛选胶囊：列表上方的协议 / 标签 / 状态筛选。选中首项（「全部…」= 不筛选）时是中性浅底；
+         选了具体值就换品牌色浅底 + 品牌色文字，一眼看出哪个筛选在生效。无边框、全圆角。
+         依赖「首项即默认」的约定（协议 / 标签 / 状态三个选项列表都满足）。 -->
+    <Style x:Key="Filter.Pill.ComboBox" TargetType="ComboBox">
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
+        <Setter Property="Background" Value="{DynamicResource Bg.Selected}" />
+        <Setter Property="MinHeight" Value="30" />
+        <Setter Property="Padding" Value="12,0,10,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="15"
+                                SnapsToDevicePixels="True" />
+
+                        <ToggleButton Style="{StaticResource ComboBoxToggle}"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" />
+
+                        <Grid Margin="{TemplateBinding Padding}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 字段名（Tag）+ 当前值：「协议 全部」。字段名比值淡一档，值是视觉重点。 -->
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" IsHitTestVisible="False">
+                                <TextBlock x:Name="FieldLabel"
+                                           Text="{TemplateBinding Tag}"
+                                           Margin="0,0,6,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Text.Tertiary}" />
+                                <ContentPresenter Content="{TemplateBinding SelectionBoxItem}"
+                                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}"
+                                                  TextElement.FontWeight="{TemplateBinding FontWeight}"
+                                                  VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="&#xE70D;"
+                                       FontFamily="{StaticResource IconFont}"
+                                       FontSize="9"
+                                       Margin="7,0,0,0"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Popup x:Name="PART_Popup"
+                               IsOpen="{TemplateBinding IsDropDownOpen}"
+                               Placement="Bottom"
+                               VerticalOffset="4"
+                               AllowsTransparency="True"
+                               PopupAnimation="Fade"
+                               Focusable="False">
+                            <Border Background="{DynamicResource Bg.Popup}"
+                                    BorderBrush="{DynamicResource Stroke.Default}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource Radius.Medium}"
+                                    MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                    MaxHeight="320"
+                                    Padding="4">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.18" Direction="270" />
+                                </Border.Effect>
+                                <ScrollViewer>
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Style.Triggers>
+            <!-- 首项 = 默认 = 未筛选：中性浅底 + 次级文字，值不加粗 -->
+            <Trigger Property="SelectedIndex" Value="0">
+                <Setter Property="Background" Value="{DynamicResource Bg.Subtle}" />
+                <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+                <Setter Property="FontWeight" Value="Normal" />
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource Bg.Hover}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- 排序胶囊：形状同筛选胶囊，但始终中性色（排序不是筛选，不该显示成「生效中」）。 -->
+    <Style x:Key="Filter.Pill.ComboBox.Neutral" TargetType="ComboBox" BasedOn="{StaticResource Filter.Pill.ComboBox}">
+        <Setter Property="Background" Value="{DynamicResource Bg.Subtle}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+        <Setter Property="FontWeight" Value="Normal" />
+    </Style>
+
     <Style TargetType="ComboBoxItem">
         <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
         <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />

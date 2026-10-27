@@ -98,6 +98,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Tabs = [WorkspaceTab];
         SelectedTab = WorkspaceTab;
 
+        // 会话增减时刷新导航栏的会话数角标与中断状态。
+        Tabs.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(OpenSessionCount));
+            OnPropertyChanged(nameof(HasInterruptedSession));
+        };
+
         // 会话由各页面通过 SessionManager 创建，主窗口只负责把它呈现为 Tab。
         _sessions.SessionCreated += OnSessionCreated;
         _sessions.SessionClosed += OnSessionClosed;
@@ -185,7 +192,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // 两个派生属性都必须通知，否则 XAML 侧绑定会静默失效（全屏了但 chrome 还在）。
         OnPropertyChanged(nameof(IsSessionFullScreen));
         OnPropertyChanged(nameof(IsScreenFull));
+        OnPropertyChanged(nameof(IsNavRailHidden));
     }
+
+    /// <summary>
+    /// 左侧模块导航栏是否收起：当前选中会话（任意档位）或处于全屏档时收起，让远程画面铺满。
+    /// <para>
+    /// 会话里导航栏用不上（回工作区走标题栏的工作区 Tab），浅色窄栏贴着深色远程画面还很跳，
+    /// 且它按「当前页面」高亮，会话中仍亮着「连接工作台」，语义上是误导。切回页面 Tab 时自动出现。
+    /// </para>
+    /// </summary>
+    public bool IsNavRailHidden => IsSessionSelected || IsSessionFullScreen;
 
     /// <summary>
     /// 是否处于任意全屏档（窗口最大化 / 完全全屏）。此档位下折起左侧导航、
@@ -271,6 +288,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public int OpenSessionCount => Tabs.Count(t => t is SessionTabViewModel);
 
     /// <summary>
+    /// 是否有会话处于中断（失败 / 已断开）状态。左侧导航「连接工作台」的会话数角标据此转警示色。
+    /// 直接读会话状态（状态事件触发时已更新），不读 Tab 的派生属性——后者的更新与本通知谁先到不确定。
+    /// </summary>
+    public bool HasInterruptedSession => Tabs.OfType<SessionTabViewModel>()
+        .Any(t => t.Session.State is ConnectionState.Failed or ConnectionState.Disconnected);
+
+    /// <summary>
     /// 版本号，放底部状态栏常驻显示——之前只在设置页「常规」标签最底下才能看到，
     /// 每次要看都得点进设置，不方便。
     /// </summary>
@@ -309,6 +333,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         OnPropertyChanged(nameof(IsSessionSelected));
+        OnPropertyChanged(nameof(IsNavRailHidden));
 
         // 离开会话时回到常规档，避免用户回到列表却看不到导航。
         if (newValue is not SessionTabViewModel)
@@ -331,6 +356,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void NavigateTo(NavigationPage page)
     {
+        // 「关于」（含软件更新）是设置页的一个选项卡：按「设置页 + 关于选项卡」导航，
+        // 让左侧导航高亮落在「设置」上（侧栏不再单独放「关于」）。
+        if (page == NavigationPage.About)
+        {
+            _settingsPage.ActiveTab = SettingsTab.About;
+            page = NavigationPage.Settings;
+        }
+
         if (CurrentPage != page)
         {
             // 属性变更 hook 是切页与刷新的唯一入口。
@@ -774,6 +807,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         OnPropertyChanged(nameof(SessionStatusText));
         OnPropertyChanged(nameof(SessionStatusBrushKey));
+        OnPropertyChanged(nameof(HasInterruptedSession));
     }
 
     // ── 文件传输 Tab ──────────────────────────────────────────────

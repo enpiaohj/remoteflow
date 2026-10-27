@@ -586,20 +586,15 @@ public partial class ConnectionsPage : UserControl
         }
 
         var menu = new ContextMenu();
-        menu.Items.Add(new MenuItem
-        {
-            Header = "连接所选项",
-            Command = vm.ConnectSelectedCommand
-        }.WithIcon("Ui.Connect"));
 
         var tags = await LoadTagsAsync(vm);
         if (tags.Count == 0)
         {
-            menu.Items.Add(new MenuItem { Header = "移除标签…", IsEnabled = false });
+            menu.Items.Add(new MenuItem { Header = "移除标签", IsEnabled = false });
         }
         else
         {
-            var remove = new MenuItem { Header = "移除标签…" }.WithIcon("Ui.Tag");
+            var remove = new MenuItem { Header = "移除标签" }.WithIcon("Ui.Tag");
             foreach (var tag in tags)
             {
                 remove.Items.Add(new MenuItem
@@ -620,6 +615,17 @@ public partial class ConnectionsPage : UserControl
     /// 动作条「批量操作 ▾」：全选 / 取消选择与批量动作的快捷菜单
     /// （多选模式的开关在筛选行末的图标 ToggleButton 上）。
     /// </summary>
+    /// <summary>列头点击排序：Tag 里放排序方式（Name / Protocol / LastConnected）。</summary>
+    private void OnSortHeaderClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string tag }
+            && Enum.TryParse<ConnectionSortMode>(tag, out var mode))
+        {
+            ViewModel?.SortByCommand.Execute(mode);
+            e.Handled = true;
+        }
+    }
+
     private async void OnBatchOperationsClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button || ViewModel is not { } vm)
@@ -682,7 +688,7 @@ public partial class ConnectionsPage : UserControl
         menu.Items.Add(new Separator());
         menu.Items.Add(new MenuItem
         {
-            Header = "删除所选",
+            Header = "删除所选项",
             Command = vm.DeleteSelectedCommand,
             IsEnabled = vm.HasSelection
         }.WithIcon("Ui.Delete").AsDanger());

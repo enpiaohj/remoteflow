@@ -160,13 +160,9 @@ public partial class CredentialsPage : UserControl
         }
     }
 
-    /// <summary>「引用账户」：新连接引用该凭据，连接名预填为账户名。</summary>
+    /// <summary>「新建主机连接」：新连接直接引用该凭据，连接名预填为账户名。</summary>
     private void OnNewConnectionByAccountClick(object sender, RoutedEventArgs e)
         => ViewModel?.CreateConnectionFromCredential(ResolveItem(sender), useAccountAsName: true);
-
-    /// <summary>「引用名称」：新连接引用该凭据，连接名预填为凭据名称。</summary>
-    private void OnNewConnectionByNameClick(object sender, RoutedEventArgs e)
-        => ViewModel?.CreateConnectionFromCredential(ResolveItem(sender), useAccountAsName: false);
 
     // 空白处右键菜单：新建凭据 / 新建主机连接 / 刷新。
     private void OnBlankNewCredentialClick(object sender, RoutedEventArgs e)

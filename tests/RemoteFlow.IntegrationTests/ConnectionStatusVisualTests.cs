@@ -28,6 +28,32 @@ public sealed class ConnectionStatusVisualTests
     }
 
     [Fact]
+    public void 只有会话相关状态用胶囊强调_在线离线只画圆点()
+    {
+        var item = CreateItem();
+        var raised = new List<string?>();
+        item.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        item.SetProbeResult(online: true);
+        Assert.False(item.IsStatusEmphasized);
+
+        item.SetProbeResult(online: false);
+        Assert.False(item.IsStatusEmphasized);
+
+        item.IsConnected = true;
+        Assert.True(item.IsStatusEmphasized);
+        Assert.Contains(nameof(item.IsStatusEmphasized), raised);
+
+        item.IsConnected = false;
+        item.IsFailed = true;
+        Assert.True(item.IsStatusEmphasized);
+
+        item.IsFailed = false;
+        item.IsConnecting = true;
+        Assert.True(item.IsStatusEmphasized);
+    }
+
+    [Fact]
     public void 连接失败状态使用红色异常语义()
     {
         var item = CreateItem();

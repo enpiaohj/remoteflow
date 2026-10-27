@@ -153,9 +153,21 @@
         <Border CornerRadius="10" HorizontalAlignment="Left" VerticalAlignment="Center"
                 ToolTip="{Binding ConnectionStatusTooltip}">
             <Grid>
+                <!-- 胶囊底色只给会话相关状态（已连接 / 连接中 / 异常）；在线 / 离线只留圆点 + 文字 -->
                 <Border CornerRadius="10"
                         Background="{Binding ConnectionStatusBrushKey, Converter={StaticResource Controls.KeyToBrush}}"
-                        Opacity="0.11" />
+                        Opacity="0.11">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsStatusEmphasized}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
                 <StackPanel Orientation="Horizontal" Margin="8,3,9,3">
                     <Grid Width="9" Height="9" VerticalAlignment="Center">
                         <Ellipse Width="9" Height="9"

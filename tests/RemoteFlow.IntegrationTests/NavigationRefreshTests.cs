@@ -417,6 +417,49 @@ public sealed class NavigationRefreshTests : IDisposable
         Assert.Equal("无法建立连接", message.Title);
         Assert.Contains("找不到协议组件", message.Message);
     }
+    [Fact]
+    public async Task 选中会话时收起左侧导航栏_回到页面时恢复()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected();
+        var changed = new List<string?>();
+        _main.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        Assert.False(_main.IsNavRailHidden);
+
+        await _main.OpenSessionAsync(new ConnectionProfile { Name = "主机A", Host = "a", Protocol = ProtocolType.Ssh });
+
+        Assert.True(_main.IsSessionSelected);
+        Assert.True(_main.IsNavRailHidden);
+        Assert.Contains(nameof(MainViewModel.IsNavRailHidden), changed);
+
+        changed.Clear();
+        _main.SelectedTab = _main.WorkspaceTab;
+
+        Assert.False(_main.IsNavRailHidden);
+        Assert.Contains(nameof(MainViewModel.IsNavRailHidden), changed);
+    }
+
+    [Fact]
+    public async Task 会话数角标随会话增减通知_中断时标记警示()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected(static p => new VisibilityGatedSession(p) { FailOnConnect = p.Name == "坏主机" });
+        var changed = new List<string?>();
+        _main.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        await _main.OpenSessionAsync(new ConnectionProfile { Name = "好主机", Host = "a", Protocol = ProtocolType.Ssh });
+        Assert.Equal(1, _main.OpenSessionCount);
+        Assert.Contains(nameof(MainViewModel.OpenSessionCount), changed);
+        Assert.False(_main.HasInterruptedSession);
+
+        await _main.OpenSessionAsync(new ConnectionProfile { Name = "坏主机", Host = "b", Protocol = ProtocolType.Ssh });
+        var bad = _main.Tabs.OfType<SessionTabViewModel>().Single(t => t.Session.Profile.Name == "坏主机");
+        changed.Clear();
+        await bad.Session.ConnectAsync();
+
+        Assert.Equal(2, _main.OpenSessionCount);
+        Assert.True(_main.HasInterruptedSession);
+        Assert.Contains(nameof(MainViewModel.HasInterruptedSession), changed);
+    }
     private sealed class VisibilityGatedSession(ConnectionProfile profile) : RemoteSessionBase
     {
         public bool NeverStarts { get; init; }

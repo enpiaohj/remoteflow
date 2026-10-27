@@ -24,6 +24,15 @@
         <conv:DepthToMarginConverter x:Key="DepthToMargin" />
         <conv:NullToVisibilityConverter x:Key="NullToVisibility" />
 
+        <!-- 批量栏按钮里的小图标：颜色跟随按钮文字色（主按钮白、删除红、其余次级色），与文字同一基线 -->
+        <Style x:Key="Batch.ButtonIcon" TargetType="Path" BasedOn="{StaticResource UiIcon}">
+            <Setter Property="Width" Value="13" />
+            <Setter Property="Height" Value="13" />
+            <Setter Property="Margin" Value="0,0,5,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Fill" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+        </Style>
+
         <!-- 顶部「多选」Toggle 的样式。注意不能用 Button.* 系列（TargetType=Button），
              否则应用到 ToggleButton 上会抛 “TargetType does not match” 运行时异常崩溃。 -->
         <Style x:Key="MultiSelectToggle" TargetType="ToggleButton">
@@ -103,7 +112,7 @@
 
         <!-- 空白处（列表下方的空白 / 空状态）右键：新建入口 + 刷新。行上右键仍是上面的行菜单。 -->
         <ContextMenu x:Key="ConnectionsBlankMenu" x:Shared="False">
-            <MenuItem Header="新建主机连接" views:MenuItemAssist.IconKey="Ui.Add" Click="OnBlankNewConnectionClick" />
+            <MenuItem Header="新建连接" views:MenuItemAssist.IconKey="Ui.Add" Click="OnBlankNewConnectionClick" />
             <MenuItem Header="新建凭据" views:MenuItemAssist.IconKey="Ui.Credential" Click="OnBlankNewCredentialClick" />
             <Separator />
             <MenuItem Header="刷新" views:MenuItemAssist.IconKey="Ui.Refresh" Click="OnBlankRefreshClick" />
@@ -114,7 +123,7 @@
             <EventSetter Event="ContextMenuOpening" Handler="OnRowContextMenuOpening" />
         </Style>
 
-        <!-- 连接行（扁平列表）。行高 40 对齐设计稿的紧凑密度；
+        <!-- 连接行（扁平列表）。行高 40（保持紧凑）、列间距 28（原先 12~16，字段挤在一起）；
              设备图标在表格行内用 28 规格（44 规格保留给首页 / 详情大图标）。 -->
         <DataTemplate x:Key="ConnRowTemplate" DataType="{x:Type vm:ConnectionItemViewModel}">
             <Grid Height="40">
@@ -125,9 +134,10 @@
                     <ColumnDefinition Width="Auto" MinWidth="100" SharedSizeGroup="ColHost" />
                     <ColumnDefinition Width="Auto" MinWidth="42" SharedSizeGroup="ColProto" />
                     <ColumnDefinition Width="Auto" MinWidth="48" SharedSizeGroup="ColTags" />
-                    <ColumnDefinition Width="*" MinWidth="0" />
+                    <ColumnDefinition Width="Auto" MinWidth="72" MaxWidth="160" SharedSizeGroup="ColGroup" />
                     <ColumnDefinition Width="Auto" MinWidth="58" SharedSizeGroup="ColPresence" />
                     <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="ColRecent" />
+                    <ColumnDefinition Width="*" MinWidth="0" />
                     <ColumnDefinition Width="26" />
                     <ColumnDefinition Width="26" />
                 </Grid.ColumnDefinitions>
@@ -175,14 +185,14 @@
                 </StackPanel>
 
                 <TextBlock Grid.Column="2" Text="{Binding HostDisplay}" Style="{StaticResource Text.BodySecondary}"
-                           FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="12,0,0,0"
+                           FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="28,0,0,0"
                            MaxWidth="170" TextTrimming="CharacterEllipsis" />
                 <!-- 统一协议徽章：协议色图标 + 协议缩写。 -->
                 <ContentControl Grid.Column="3" Content="{Binding}"
                                 ContentTemplate="{StaticResource ProtocolBadge.Template}"
-                                VerticalAlignment="Center" HorizontalAlignment="Left" Margin="14,0,0,0" />
+                                VerticalAlignment="Center" HorizontalAlignment="Left" Margin="28,0,0,0" />
 
-                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="28,0,0,0">
                     <ItemsControl ItemsSource="{Binding Tags}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -208,14 +218,19 @@
                                Visibility="{Binding OverflowTagCount, Converter={StaticResource CountToVisibility}}" />
                 </StackPanel>
 
+                <!-- 分组：次级灰文字，超长截断，tooltip 给出完整分组路径 -->
+                <TextBlock Grid.Column="5" Text="{Binding GroupName}" ToolTip="{Binding GroupPath}"
+                           Style="{StaticResource Text.BodySecondary}" FontSize="12" Margin="28,0,0,0"
+                           VerticalAlignment="Center" MaxWidth="140" TextTrimming="CharacterEllipsis" />
+
                 <!-- 统一状态指示：在线绿 / 已连接蓝 / 离线灰 / 异常红 / 连接中琥珀。 -->
                 <!-- 右侧留 14 与「最近连接」拉开，避免状态胶囊与时间文字贴在一起；左 8 与列头「在线」对齐 -->
                 <ContentControl Grid.Column="6" Content="{Binding}"
                                 ContentTemplate="{StaticResource ConnectionStatus.Template}"
-                                VerticalAlignment="Center" HorizontalAlignment="Left" Margin="8,0,14,0" />
+                                VerticalAlignment="Center" HorizontalAlignment="Left" Margin="28,0,28,0" />
 
                 <!-- 悬停快捷操作：鼠标移到行上时在弹性列里就地浮出「连接」，省去双击 / 走详情面板。 -->
-                <StackPanel Grid.Column="5" Orientation="Horizontal" HorizontalAlignment="Right"
+                <StackPanel Grid.Column="8" Orientation="Horizontal" HorizontalAlignment="Right"
                             VerticalAlignment="Center" Margin="0,0,8,0">
                     <StackPanel.Style>
                         <Style TargetType="StackPanel">
@@ -241,7 +256,7 @@
                 </StackPanel>
 
                 <!-- 收藏列：星标常驻，点击切换 -->
-                <Button Grid.Column="8" Width="24" Height="24" MinWidth="24" MinHeight="24" FontSize="12" HorizontalAlignment="Center"
+                <Button Grid.Column="9" Width="24" Height="24" MinWidth="24" MinHeight="24" FontSize="12" HorizontalAlignment="Center"
                         ToolTip="收藏 / 取消收藏"
                         Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                         CommandParameter="{Binding}">
@@ -261,14 +276,14 @@
 
                 <!-- Button.Icon 自带 MinWidth/MinHeight=36，会顶掉这里的 Width/Height，
                      36 的按钮塞进 26 的列就被裁掉一截（「三个点显示不全」）；这里显式压低最小尺寸。 -->
-                <Button Grid.Column="9" Style="{StaticResource Button.Icon}" Width="26" Height="26"
+                <Button Grid.Column="10" Style="{StaticResource Button.Icon}" Width="26" Height="26"
                         MinWidth="26" MinHeight="26"
                         Content="{StaticResource Ui.More}" ToolTip="更多操作" Click="OnMoreClick" />
 
                 <!-- 行底发丝分隔线（概念稿 v0.2 的表格节奏）。
-                     必须显式跨全部 10 列：Grid 子元素不指定 ColumnSpan 时只落在第 0 列，
+                     必须显式跨全部 11 列：Grid 子元素不指定 ColumnSpan 时只落在第 0 列，
                      会渲染成勾选框列宽的残缺短线（v0.20.0 的「行左横杠印记」根因）。 -->
-                <Border Grid.ColumnSpan="10" HorizontalAlignment="Stretch" Height="1" VerticalAlignment="Bottom"
+                <Border Grid.ColumnSpan="11" HorizontalAlignment="Stretch" Height="1" VerticalAlignment="Bottom"
                         Background="{DynamicResource Stroke.Subtle}" Opacity="0.55" />
             </Grid>
         </DataTemplate>
@@ -317,6 +332,8 @@
                 <Button Style="{StaticResource Button.Secondary}" MinHeight="30" Padding="12,0" Margin="10,0,0,0"
                         Click="OnBatchOperationsClick">
                     <StackPanel Orientation="Horizontal">
+                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Checklist}" Width="14" Height="14"
+                              Margin="0,0,6,0" VerticalAlignment="Center" />
                         <TextBlock Text="批量操作" VerticalAlignment="Center" />
                         <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
                                    FontSize="9" Margin="6,0,0,0"
@@ -378,7 +395,8 @@
             <!-- 下拉筛选（非最近视图）：高度 34→28、宽度与间距同步缩小一号 -->
             <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center"
                         Visibility="{Binding IsRecentView, Converter={StaticResource InverseBoolToVisibility}}">
-                <ComboBox Style="{StaticResource Input.ComboBox}" MinWidth="108" Height="28"
+                <ComboBox Style="{StaticResource Filter.Pill.ComboBox}" MinWidth="96" Height="30"
+                          Tag="协议" ToolTip="按协议筛选"
                           ItemsSource="{Binding ProtocolFilterOptions}" SelectedItem="{Binding ProtocolFilter}">
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
@@ -388,7 +406,7 @@
                                         <Setter Property="Text" Value="{Binding Converter={StaticResource EnumDisplay}}" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding}" Value="All">
-                                                <Setter Property="Text" Value="全部协议" />
+                                                <Setter Property="Text" Value="全部" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -398,7 +416,8 @@
                     </ComboBox.ItemTemplate>
                 </ComboBox>
 
-                <ComboBox Style="{StaticResource Input.ComboBox}" MinWidth="108" Height="28" Margin="6,0,0,0"
+                <ComboBox Style="{StaticResource Filter.Pill.ComboBox}" MinWidth="96" Height="30" Margin="6,0,0,0"
+                          Tag="标签" ToolTip="按标签筛选"
                           ItemsSource="{Binding TagFilterOptions}" SelectedItem="{Binding TagFilter}">
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
@@ -407,13 +426,27 @@
                                       Visibility="{Binding Id, Converter={StaticResource NullToVisibility}}"
                                       Data="{Binding Icon, Converter={StaticResource KeyToGeometry}, ConverterParameter=TagIcon.Tag}"
                                       Fill="{Binding Color, Converter={StaticResource ColorToBrush}}" />
-                                <TextBlock Text="{Binding Name}" Margin="6,0,0,0" />
+                                <!-- 首项（Id 为空）是「不筛选」：字段名已在胶囊前缀里，这里只写「全部」 -->
+                                <TextBlock Margin="6,0,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="{Binding Name}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Id}" Value="{x:Null}">
+                                                    <Setter Property="Text" Value="全部" />
+                                                    <Setter Property="Margin" Value="0" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </StackPanel>
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
 
-                <ComboBox Style="{StaticResource Input.ComboBox}" MinWidth="100" Height="28" Margin="6,0,0,0"
+                <ComboBox Style="{StaticResource Filter.Pill.ComboBox}" MinWidth="96" Height="30" Margin="6,0,0,0"
+                          Tag="状态" ToolTip="按在线状态筛选"
                           ItemsSource="{Binding PresenceFilterOptions}" SelectedItem="{Binding PresenceFilter}"
                           Visibility="{Binding PresenceProbeEnabled, Converter={StaticResource BoolToVisibility}}">
                     <ComboBox.ItemTemplate>
@@ -421,13 +454,13 @@
                             <TextBlock>
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
-                                        <Setter Property="Text" Value="全部状态" />
+                                        <Setter Property="Text" Value="全部" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding}" Value="Online">
-                                                <Setter Property="Text" Value="仅在线" />
+                                                <Setter Property="Text" Value="在线" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding}" Value="Offline">
-                                                <Setter Property="Text" Value="仅离线" />
+                                                <Setter Property="Text" Value="离线" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -437,20 +470,23 @@
                     </ComboBox.ItemTemplate>
                 </ComboBox>
 
-                <ComboBox Style="{StaticResource Input.ComboBox}" MinWidth="116" Height="28" Margin="6,0,0,0"
+                <!-- 排序：与协议 / 标签 / 状态同一排的胶囊，永远是中性色（排序不是筛选，不参与「清除筛选」）；
+                     点列头排序与这里联动 -->
+                <ComboBox Style="{StaticResource Filter.Pill.ComboBox.Neutral}" MinWidth="96" Height="30" Margin="6,0,0,0"
+                          Tag="排序" ToolTip="排序方式（也可点击列头）"
                           ItemsSource="{Binding SortModeOptions}" SelectedItem="{Binding SortMode}">
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
                             <TextBlock>
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
-                                        <Setter Property="Text" Value="按名称排序" />
+                                        <Setter Property="Text" Value="名称" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding}" Value="LastConnected">
-                                                <Setter Property="Text" Value="按最近连接排序" />
+                                                <Setter Property="Text" Value="最近连接" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding}" Value="Protocol">
-                                                <Setter Property="Text" Value="按协议排序" />
+                                                <Setter Property="Text" Value="协议" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -459,6 +495,12 @@
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
+
+                <!-- 清除筛选：仅在协议 / 标签 / 状态有任一偏离默认值时出现（不含排序） -->
+                <Button Style="{StaticResource Button.Subtle}" Content="清除筛选" MinHeight="28" Padding="8,0"
+                          FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"
+                          Command="{Binding ClearFiltersCommand}"
+                          Visibility="{Binding HasActiveFilters, Converter={StaticResource BoolToVisibility}}" />
                 <!-- 批量选择开关：单击进入多选模式（行勾选框出现），再点退出并清空选择。
                      与凭据页「多选」开关同一套 IsMultiSelect 状态机；禁用焦点虚线，
                      未选中态保持干净。 -->
@@ -470,15 +512,33 @@
                 </ToggleButton>
             </StackPanel>
 
-            <!-- 最近连接：时间范围 chip（与下拉互斥占位，与搜索框同行） -->
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center"
+            <!-- 最近连接：时间范围，与协议 / 标签 / 状态同款胶囊（与下拉互斥占位，与搜索框同行）。
+                 用中性色版本：「全部」不是「有筛选在生效」，不该显示成品牌色。 -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center"
                         Visibility="{Binding IsRecentView, Converter={StaticResource BoolToVisibility}}">
-                <RadioButton Style="{StaticResource Segment}" GroupName="RecentRange" Content="今天"
-                             IsChecked="{Binding RecentRange, Converter={StaticResource EnumToBool}, ConverterParameter=Today, Mode=TwoWay}" />
-                <RadioButton Style="{StaticResource Segment}" GroupName="RecentRange" Content="7 天"
-                             IsChecked="{Binding RecentRange, Converter={StaticResource EnumToBool}, ConverterParameter=Week, Mode=TwoWay}" />
-                <RadioButton Style="{StaticResource Segment}" GroupName="RecentRange" Content="全部" Margin="0"
-                             IsChecked="{Binding RecentRange, Converter={StaticResource EnumToBool}, ConverterParameter=All, Mode=TwoWay}" />
+                <ComboBox Style="{StaticResource Filter.Pill.ComboBox.Neutral}" MinWidth="96" Height="30"
+                          Tag="时间" ToolTip="按连接时间筛选"
+                          ItemsSource="{Binding RecentRangeOptions}" SelectedItem="{Binding RecentRange}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock>
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="今天" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding}" Value="Week">
+                                                <Setter Property="Text" Value="近 7 天" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding}" Value="All">
+                                                <Setter Property="Text" Value="全部" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
             </StackPanel>
         </Grid>
 
@@ -581,9 +641,10 @@
                                 <ColumnDefinition Width="Auto" MinWidth="100" SharedSizeGroup="ColHost" />
                                 <ColumnDefinition Width="Auto" MinWidth="42" SharedSizeGroup="ColProto" />
                                 <ColumnDefinition Width="Auto" MinWidth="48" SharedSizeGroup="ColTags" />
-                                <ColumnDefinition Width="*" MinWidth="8" />
+                                <ColumnDefinition Width="Auto" MinWidth="72" MaxWidth="160" SharedSizeGroup="ColGroup" />
                                 <ColumnDefinition Width="Auto" MinWidth="58" SharedSizeGroup="ColPresence" />
                                 <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="ColRecent" />
+                                <ColumnDefinition Width="*" MinWidth="8" />
                                 <ColumnDefinition Width="26" />
                                 <ColumnDefinition Width="26" />
                             </Grid.ColumnDefinitions>
@@ -606,7 +667,9 @@
                                 </CheckBox.Style>
                             </CheckBox>
 
-                            <TextBlock Grid.Column="1" Text="名称">
+                            <TextBlock Grid.Column="1" Text="{Binding NameHeaderText}" Background="Transparent"
+                                       Cursor="Hand" ToolTip="按名称排序" Tag="Name"
+                                       MouseLeftButtonUp="OnSortHeaderClick">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Label}">
                                         <Setter Property="Margin" Value="38,0,0,0" />
@@ -618,12 +681,17 @@
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
-                            <TextBlock Grid.Column="2" Text="IP / 主机" Style="{StaticResource Text.Label}" Margin="16,0,0,0" />
-                            <TextBlock Grid.Column="3" Text="协议" Style="{StaticResource Text.Label}" Margin="16,0,0,0" />
-                            <TextBlock Grid.Column="4" Text="标签" Style="{StaticResource Text.Label}" Margin="16,0,0,0" />
-                            <TextBlock Grid.Column="6" Text="在线" Style="{StaticResource Text.Label}" Margin="8,0,14,0" />
-                            <TextBlock Grid.Column="7" Text="最近连接" Style="{StaticResource Text.Label}" Margin="0,0,10,0" />
-                            <TextBlock Grid.Column="8" Text="收藏" Style="{StaticResource Text.Label}" />
+                            <TextBlock Grid.Column="2" Text="IP / 主机" Style="{StaticResource Text.Label}" Margin="32,0,0,0" />
+                            <TextBlock Grid.Column="3" Text="{Binding ProtocolHeaderText}" Style="{StaticResource Text.Label}" Margin="30,0,0,0"
+                                       Background="Transparent" Cursor="Hand" ToolTip="按协议排序" Tag="Protocol"
+                                       MouseLeftButtonUp="OnSortHeaderClick" />
+                            <TextBlock Grid.Column="4" Text="标签" Style="{StaticResource Text.Label}" Margin="30,0,0,0" />
+                            <TextBlock Grid.Column="5" Text="分组" Style="{StaticResource Text.Label}" Margin="28,0,0,0" />
+                            <TextBlock Grid.Column="6" Text="状态" Style="{StaticResource Text.Label}" Margin="28,0,28,0" />
+                            <TextBlock Grid.Column="7" Text="{Binding RecentHeaderText}" Style="{StaticResource Text.Label}" Margin="0,0,10,0"
+                                       Background="Transparent" Cursor="Hand" ToolTip="按最近连接排序" Tag="LastConnected"
+                                       MouseLeftButtonUp="OnSortHeaderClick" />
+                            <TextBlock Grid.Column="9" Text="收藏" Style="{StaticResource Text.Label}" />
                         </Grid>
 
                         <!-- 批量操作栏（勾选 ≥1 项时替换列头） -->
@@ -653,13 +721,29 @@
                             <TextBlock Grid.Column="1" Style="{StaticResource Text.Body}" FontSize="12" FontWeight="SemiBold"
                                        VerticalAlignment="Center" Margin="6,0,0,0" Text="{Binding SelectionSummary}" />
                             <Button Grid.Column="1" Style="{StaticResource Button.Subtle}" MinHeight="22" Padding="6,0"
-                                    Margin="76,0,0,0" Content="取消选择" FontSize="11" VerticalAlignment="Center"
-                                    Command="{Binding ClearSelectionCommand}" />
+                                    Margin="76,0,0,0" FontSize="11" VerticalAlignment="Center"
+                                    Command="{Binding ClearSelectionCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Style="{StaticResource Batch.ButtonIcon}" Data="{StaticResource Ui.Clear}" />
+                                    <TextBlock Text="取消选择" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
 
                             <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                                <!-- 批量连接：勾选后就在手边，不必再绕到页头的「批量操作 ▾」里找 -->
+                                <Button Style="{StaticResource Button.Primary}" MinHeight="24" Padding="10,0"
+                                        Margin="0,0,8,0" FontSize="11"
+                                        ToolTip="依次连接所选的全部主机"
+                                        Command="{Binding ConnectSelectedCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Style="{StaticResource Batch.ButtonIcon}" Data="{StaticResource Ui.Connect}" />
+                                        <TextBlock Text="批量连接" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
                                 <Button Style="{StaticResource Button.Secondary}" MinHeight="24" Padding="8,0"
                                         FontSize="11" Click="OnBatchMoveClick" Tag="move">
                                     <StackPanel Orientation="Horizontal">
+                                        <Path Style="{StaticResource Batch.ButtonIcon}" Data="{StaticResource Ui.Folder}" />
                                         <TextBlock Text="移动到分组" VerticalAlignment="Center" />
                                         <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
                                                    FontSize="9" Margin="5,0,0,0"
@@ -669,6 +753,7 @@
                                 <Button Style="{StaticResource Button.Secondary}" MinHeight="24" Padding="8,0"
                                         Margin="5,0,0,0" FontSize="11" Click="OnBatchTagClick" Tag="tag">
                                     <StackPanel Orientation="Horizontal">
+                                        <Path Style="{StaticResource Batch.ButtonIcon}" Data="{StaticResource Ui.Tag}" />
                                         <TextBlock Text="添加标签" VerticalAlignment="Center" />
                                         <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
                                                    FontSize="9" Margin="5,0,0,0"
@@ -677,11 +762,16 @@
                                 </Button>
                                 <Button Style="{StaticResource Button.Secondary}" MinHeight="24" Padding="8,0"
                                         Margin="5,0,0,0" FontSize="11"
-                                        Content="{Binding FavoriteActionText}"
-                                        Command="{Binding ToggleFavoriteSelectedCommand}" />
+                                        Command="{Binding ToggleFavoriteSelectedCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Style="{StaticResource Batch.ButtonIcon}" Data="{StaticResource Ui.Favorite}" />
+                                        <TextBlock Text="{Binding FavoriteActionText}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
                                 <Button Style="{StaticResource Button.Secondary}" MinHeight="24" Padding="8,0"
                                         Margin="5,0,0,0" FontSize="11" Click="OnBatchMoreClick" Tag="more">
                                     <StackPanel Orientation="Horizontal">
+                                        <Path Style="{StaticResource Batch.ButtonIcon}" Data="{StaticResource Ui.More}" />
                                         <TextBlock Text="更多" VerticalAlignment="Center" />
                                         <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
                                                    FontSize="9" Margin="5,0,0,0"
@@ -690,8 +780,13 @@
                                 </Button>
                                 <Button Style="{StaticResource Button.Secondary}" MinHeight="24" Padding="8,0"
                                         Margin="8,0,0,0" FontSize="11"
-                                        Content="删除" Foreground="{DynamicResource Status.Danger}"
-                                        Command="{Binding DeleteSelectedCommand}" />
+                                        Foreground="{DynamicResource Status.Danger}"
+                                        Command="{Binding DeleteSelectedCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Style="{StaticResource Batch.ButtonIcon}" Data="{StaticResource Ui.Delete}" />
+                                        <TextBlock Text="删除" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Grid>
                     </Grid>

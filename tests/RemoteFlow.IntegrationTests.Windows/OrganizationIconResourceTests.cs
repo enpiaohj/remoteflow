@@ -74,7 +74,9 @@ public sealed class OrganizationIconResourceTests
         // 已选中的导航钮再次点击不会改变 CurrentPage：必须另行处理，才能从会话 Tab 回到当前页并刷新。
         var railButtons = System.Text.RegularExpressions.Regex.Matches(
             mainWindow, "<RadioButton Style=\"\\{StaticResource Nav.RailItem\\}\"[^>]*>");
-        Assert.Equal(6, railButtons.Count);
+        // 首页 / 连接工作台 / 凭据 / 设置 / 帮助。「关于」（含软件更新）已并入 设置 → 关于，不再单独占位。
+        Assert.Equal(5, railButtons.Count);
+        Assert.DoesNotContain("ConverterParameter=About", string.Concat(railButtons.Select(m => m.Value)), StringComparison.Ordinal);
         Assert.All(railButtons, m => Assert.Contains("PreviewMouseLeftButtonUp=\"OnNavRailSameItemClick\"", m.Value));
     }
 

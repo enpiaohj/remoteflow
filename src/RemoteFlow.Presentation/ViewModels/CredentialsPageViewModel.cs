@@ -88,7 +88,18 @@ public sealed partial class CredentialsPageViewModel(
         RefreshSelectionSummary();
     }
 
-    partial void OnTypeOptionChanged(CredentialTypeOption value) => ApplyFilter();
+    partial void OnTypeOptionChanged(CredentialTypeOption value)
+    {
+        OnPropertyChanged(nameof(HasActiveFilters));
+        ApplyFilter();
+    }
+
+    /// <summary>类型筛选偏离默认值（决定「清除筛选」是否显示；与连接工作台同一约定，不含搜索词）。</summary>
+    public bool HasActiveFilters => TypeOption.Value != CredentialTypeFilter.All;
+
+    /// <summary>把类型筛选恢复为「全部」；搜索词不动。</summary>
+    [RelayCommand]
+    private void ClearFilters() => TypeOption = TypeOptions[0];
 
     /// <summary>一条凭据都没有（与「筛选无结果」区分）。</summary>
     public bool IsEmpty => _all.Count == 0;

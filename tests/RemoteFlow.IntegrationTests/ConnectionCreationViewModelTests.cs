@@ -45,6 +45,51 @@ public sealed class ConnectionCreationViewModelTests
         Assert.Same(saved, requested);
     }
 
+    private static ConnectionsPageViewModel CreateBareViewModel() => new(
+        null!, null!, null!, null!, null!, new CapturingDialogService(), null!, null!, null!,
+        SynchronousUiDispatcher.Instance, null!);
+
+    [Fact]
+    public void 筛选偏离默认值才显示清除筛选_清除后恢复默认()
+    {
+        var viewModel = CreateBareViewModel();
+        Assert.False(viewModel.HasActiveFilters);
+
+        var raised = new List<string?>();
+        viewModel.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        viewModel.ProtocolFilter = ProtocolFilterOption.Rdp;
+        Assert.True(viewModel.HasActiveFilters);
+        Assert.Contains(nameof(viewModel.HasActiveFilters), raised);
+
+        viewModel.PresenceFilter = PresenceFilterOption.Online;
+        viewModel.ClearFiltersCommand.Execute(null);
+
+        Assert.False(viewModel.HasActiveFilters);
+        Assert.Equal(ProtocolFilterOption.All, viewModel.ProtocolFilter);
+        Assert.Equal(PresenceFilterOption.All, viewModel.PresenceFilter);
+        Assert.Null(viewModel.TagFilter.Id);
+    }
+
+    [Fact]
+    public void 点列头切换排序_当前排序列的列头带方向箭头()
+    {
+        var viewModel = CreateBareViewModel();
+        Assert.Equal("名称 ↑", viewModel.NameHeaderText);
+        Assert.Equal("协议", viewModel.ProtocolHeaderText);
+        Assert.Equal("最近连接", viewModel.RecentHeaderText);
+
+        viewModel.SortByCommand.Execute(ConnectionSortMode.LastConnected);
+
+        Assert.Equal(ConnectionSortMode.LastConnected, viewModel.SortMode);
+        Assert.Equal("名称", viewModel.NameHeaderText);
+        Assert.Equal("最近连接 ↓", viewModel.RecentHeaderText);
+
+        viewModel.SortByCommand.Execute(ConnectionSortMode.Protocol);
+        Assert.Equal("协议 ↑", viewModel.ProtocolHeaderText);
+        Assert.Equal("最近连接", viewModel.RecentHeaderText);
+    }
+
     private sealed class CapturingDialogService : IDialogService, IConnectionEditorDialogService
     {
         public Guid? DefaultGroupId { get; private set; }

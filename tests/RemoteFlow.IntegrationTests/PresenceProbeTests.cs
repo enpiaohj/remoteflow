@@ -95,10 +95,10 @@ public sealed class PresenceProbeTests
         Assert.Equal("已连接", item.ConnectionStatusDisplay);
         Assert.Equal("Status.Info", item.ConnectionStatusBrushKey);
 
-        // 行快捷动作按活动会话切换：无会话 = 连接；有会话（含连接中）= 打开会话。
+        // 行快捷动作按活动会话切换：无会话 = 连接；有会话（含连接中）= 切换到会话。
         Assert.Equal("连接", item.QuickActionText);
         item.HasActiveSession = true;
-        Assert.Equal("打开会话", item.QuickActionText);
+        Assert.Equal("切换到会话", item.QuickActionText);
 
         // 清空探测态回到未探测
         item.IsConnected = false;

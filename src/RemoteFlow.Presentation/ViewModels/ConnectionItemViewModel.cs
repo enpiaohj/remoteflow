@@ -167,7 +167,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
     /// 行 / 详情主按钮文案：无活动会话 = 「连接」；有活动会话（含连接中）= 「打开会话」
     /// （点击走统一漏斗聚焦既有 Tab，不再二次发起连接）。
     /// </summary>
-    public string QuickActionText => HasActiveSession ? "打开会话" : "连接";
+    public string QuickActionText => HasActiveSession ? "切换到会话" : "连接";
 
     /// <summary>
     /// 原始在线探测文字。列表统一展示使用 <see cref="ConnectionStatusDisplay"/>，
@@ -201,6 +201,12 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
                 ? "异常"
                 : PresenceDisplay;
 
+    /// <summary>
+    /// 状态是否需要胶囊强调：只有会话相关状态（已连接 / 连接中 / 异常）用带底色胶囊，
+    /// 在线 / 离线这类探测结果只画小圆点 + 文字，让需要注意的行一眼可见。
+    /// </summary>
+    public bool IsStatusEmphasized => IsConnected || IsConnecting || IsFailed;
+
     public string ConnectionStatusBrushKey => IsConnected
         ? "Status.Info"
         : IsConnecting
@@ -210,7 +216,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
                 : PresenceBrushKey;
 
     public string ConnectionStatusTooltip => IsConnected
-        ? "存在已连接会话，双击或“打开会话”可聚焦"
+        ? "存在已连接会话，双击或“切换到会话”可聚焦"
         : IsConnecting
             ? "会话正在建立连接"
             : IsFailed
@@ -232,6 +238,7 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
         OnPropertyChanged(nameof(PresenceBrushKey));
         OnPropertyChanged(nameof(PresenceTooltip));
         OnPropertyChanged(nameof(ConnectionStatusDisplay));
+        OnPropertyChanged(nameof(IsStatusEmphasized));
         OnPropertyChanged(nameof(ConnectionStatusBrushKey));
         OnPropertyChanged(nameof(ConnectionStatusTooltip));
     }

@@ -85,6 +85,7 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
                         <!-- 图标系统标准尺寸（44）。首页大卡片与收藏/活动行继续用，此处保留 -->
@@ -122,6 +123,15 @@
                                 </Style>
                             </Button.Style>
                         </Button>
+
+                        <!-- 更多：低频动作（复制地址 / 收藏 / 创建副本）收在名称行右侧，不再占动作行的位置 -->
+                        <Button Grid.Column="3"
+                                Style="{StaticResource Button.Icon}"
+                                Width="30" Height="30" Margin="2,0,0,0"
+                                FontSize="14"
+                                Content="{StaticResource Ui.More}"
+                                ToolTip="更多操作"
+                                Click="OnActionsMoreClick" />
                     </Grid>
 
                     <!-- 主机副标题：紧跟名称下方，一眼确认目标地址 -->
@@ -144,9 +154,15 @@
                         </Grid.ColumnDefinitions>
                         <Button Grid.Column="0"
                                 Style="{StaticResource Button.Primary}"
-                                Content="{Binding QuickActionText}"
                                 Command="{Binding DataContext.ConnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                CommandParameter="{Binding}" />
+                                CommandParameter="{Binding}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Connect}" Width="14" Height="14"
+                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding QuickActionText}" Margin="7,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <Button Grid.Column="1"
                                 Style="{StaticResource Button.Primary}"
                                 MinWidth="30"
@@ -159,44 +175,59 @@
                                 Click="OnConnectMoreClick" />
                     </Grid>
 
-                    <!-- 高频动作行：编辑 / Ping / 更多。低频动作（复制 IP、收藏、复制连接、
-                         Traceroute、打开 Web）收进「更多」，减少按钮堆叠 -->
+                    <!-- 高频动作行：编辑 / 测试 / 传输，一行三个等宽的扁平按钮（图标在左、文字在右，高 30）。
+                         栏宽约 250，每个按钮约 80：图标 13 + 文字两个汉字刚好放下，完整名称放在悬停提示里。
+                         低频动作（复制地址、收藏、创建副本）收进名称行右侧的「更多」 -->
                     <Grid Margin="0,8,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Grid.Resources>
                             <Style TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
                                 <Setter Property="MinHeight" Value="30" />
-                                <Setter Property="FontSize" Value="11" />
+                                <Setter Property="MinWidth" Value="0" />
+                                <Setter Property="Padding" Value="4,0" />
+                                <Setter Property="FontSize" Value="12" />
                                 <Setter Property="HorizontalContentAlignment" Value="Center" />
+                            </Style>
+                            <Style x:Key="Detail.ActionIcon" TargetType="Path" BasedOn="{StaticResource UiIcon}">
+                                <Setter Property="Width" Value="13" />
+                                <Setter Property="Height" Value="13" />
+                                <Setter Property="Margin" Value="0,0,5,0" />
+                                <Setter Property="VerticalAlignment" Value="Center" />
+                                <Setter Property="Fill" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                             </Style>
                         </Grid.Resources>
                         <Button Grid.Column="0" Margin="0,0,4,0"
                                 ToolTip="编辑连接"
                                 Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                 CommandParameter="{Binding}">
-                            <StackPanel Orientation="Horizontal">
-                                <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Edit}" Width="12.5" Height="12.5" VerticalAlignment="Center" />
-                                <TextBlock Text="编辑" Margin="5,0,0,0" VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Path Style="{StaticResource Detail.ActionIcon}" Data="{StaticResource Ui.Edit}" />
+                                <TextBlock Text="编辑" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                         <Button Grid.Column="1" Margin="0,0,4,0"
                                 ToolTip="测试连接：DNS → Ping → TCP 三步诊断"
                                 Command="{Binding DataContext.TestConnectionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                 CommandParameter="{Binding}">
-                            <StackPanel Orientation="Horizontal">
-                                <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Refresh}" Width="12.5" Height="12.5" VerticalAlignment="Center" />
-                                <TextBlock Text="Ping" Margin="5,0,0,0" VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Path Style="{StaticResource Detail.ActionIcon}" Data="{StaticResource Ui.Pending}" />
+                                <TextBlock Text="测试" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button Grid.Column="2" MinWidth="34" Padding="0"
-                                FontFamily="{StaticResource IconFont}" FontSize="10"
-                                Content="{StaticResource Ui.More}"
-                                ToolTip="更多操作"
-                                Click="OnActionsMoreClick" />
+                        <!-- VNC 协议没有文件传输通道：按钮置灰并在提示里说明原因，而不是隐藏 -->
+                        <Button Grid.Column="2"
+                                ToolTip="{Binding FileTransferHint}"
+                                Command="{Binding DataContext.OpenFileTransferCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Path Style="{StaticResource Detail.ActionIcon}" Data="{StaticResource Ui.FileTransfer}" />
+                                <TextBlock Text="传输" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </Grid>
                 </StackPanel>
             </Border>
@@ -391,8 +422,12 @@
                         </Expander.Header>
                         <StackPanel>
 
-                    <TextBlock Text="最近 10 次连接" Style="{StaticResource Text.Label}" Margin="0,0,0,10"
-                               Visibility="{Binding DataContext.SelectedItemHasHistory, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}" />
+                    <Grid Margin="0,0,0,10"
+                          Visibility="{Binding DataContext.SelectedItemHasHistory, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="最近 10 次连接" Style="{StaticResource Text.Label}" />
+                        <TextBlock Text="{Binding DataContext.SelectedSparklineSummary, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                   Style="{StaticResource Text.Caption}" HorizontalAlignment="Right" />
+                    </Grid>
                     <Border Background="{DynamicResource Bg.Subtle}"
                             BorderBrush="{DynamicResource Stroke.Subtle}"
                             BorderThickness="1"

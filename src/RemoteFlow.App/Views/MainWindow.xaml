@@ -194,11 +194,13 @@
             导航栏项：Content 为 Ui.* 基础图标键（字符串），常态画线性图标、选中换 .Filled 填充变体；
             无障碍名称取 ToolTip，避免把图标键读给屏幕阅读器。
         -->
+        <!-- 导航项：Windows 11 导航同款——选中为浅底 + 左侧品牌色竖条，图标始终是同一套线性图标
+             （不再切换实心：实心 / 线性混排视觉重量跳变）。36 方块点击区，项间留出节奏。 -->
         <Style x:Key="Nav.RailItem" TargetType="RadioButton">
             <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}" />
-            <Setter Property="Width" Value="34" />
-            <Setter Property="Height" Value="34" />
-            <Setter Property="Margin" Value="0,2" />
+            <Setter Property="Width" Value="38" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Margin" Value="0,3" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
             <Setter Property="Template">
@@ -208,9 +210,18 @@
                                 Background="Transparent"
                                 CornerRadius="8"
                                 SnapsToDevicePixels="True">
-                            <Path x:Name="Glyph" Style="{StaticResource UiIcon}" Width="19" Height="19"
-                                  Fill="{TemplateBinding Foreground}"
-                                  Data="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource UiIconGeometry}}" />
+                            <Grid>
+                                <Border x:Name="Indicator"
+                                        Width="3" Height="16"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        CornerRadius="1.5"
+                                        Background="{DynamicResource Brand.Default}"
+                                        Visibility="Collapsed" />
+                                <Path x:Name="Glyph" Style="{StaticResource UiIcon}" Width="19" Height="19"
+                                      Fill="{TemplateBinding Foreground}"
+                                      Data="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource UiIconGeometry}}" />
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -218,15 +229,35 @@
                                 <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Glyph" Property="Data"
-                                        Value="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource UiIconGeometry}, ConverterParameter=.Filled}" />
                                 <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Selected}" />
+                                <Setter TargetName="Indicator" Property="Visibility" Value="Visible" />
                                 <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- 导航项右上角的数量角标（连接工作台：打开的会话数）。有中断会话时转警示色。 -->
+        <Style x:Key="Nav.CountBadge" TargetType="Border">
+            <Setter Property="MinWidth" Value="15" />
+            <Setter Property="Height" Value="15" />
+            <Setter Property="Padding" Value="4,0" />
+            <Setter Property="CornerRadius" Value="7.5" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="0,2,2,0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="Background" Value="{DynamicResource Brand.Default}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding OpenSessionCount}" Value="0">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding HasInterruptedSession}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Status.Danger}" />
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
     </Window.Resources>
 
@@ -249,18 +280,18 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <!-- 列：模块图标栏 | 内容。图标栏跨标题栏行（logo 在栏顶，见下方 Rail）。
-                 会话的窗口最大化 / 完全全屏两档都收起本列（会话铺满）；
+                 选中会话（任意档位）或处于全屏档时收起本列，让远程画面铺满；切回页面 Tab 自动出现。
                  标题栏行的 Tab 条与工具条不受影响（单行标题栏）。 -->
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="RailColumn"
-                                  Width="{Binding IsSessionFullScreen, Converter={StaticResource FullScreenSize}, ConverterParameter=48}" />
+                                  Width="{Binding IsNavRailHidden, Converter={StaticResource FullScreenSize}, ConverterParameter=52}" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
             <!-- ══ 标题栏：纯拖拽区 + 窗口按钮。logo 在图标栏栏顶，
                  全局搜索由工作台页内搜索承担（概念设计 v0.2）。 ══ -->
             <Grid Grid.Row="0" Grid.Column="1"
-                  Background="{DynamicResource Bg.Chrome}"
+                  Background="{DynamicResource Bg.Sidebar}"
                   Visibility="{Binding IsScreenFull, Converter={StaticResource InverseBoolToVisibility}}"
                   MouseRightButtonUp="OnTitleBarSystemMenu">
                 <Grid.ColumnDefinitions>
@@ -277,14 +308,14 @@
                      与栏顶 LOGO 垂直居中对齐成连续品牌单元；非交互展示件，
                      保留在标题栏拖拽区内（可右键系统菜单） -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0,4,0">
-                    <!-- 会话最大化 / 全屏档左侧图标栏整列收起，栏顶 LOGO 随之消失；
+                    <!-- 左侧图标栏整列收起（选中会话 / 全屏档）时栏顶 LOGO 随之消失；
                          此时在品牌区补显示产品 LOGO，常态隐藏避免与栏顶重复 -->
                     <Image Width="20" Height="20"
                            Source="pack://application:,,,/Assets/RemoteFlow-logo.png"
                            RenderOptions.BitmapScalingMode="HighQuality"
-                           VerticalAlignment="Center" Margin="0,0,7,0">
+                           VerticalAlignment="Center" Margin="10,0,7,0">
                         <Image.Visibility>
-                            <Binding Path="IsSessionFullScreen" Converter="{StaticResource BoolToVisibility}" />
+                            <Binding Path="IsNavRailHidden" Converter="{StaticResource BoolToVisibility}" />
                         </Image.Visibility>
                     </Image>
                     <TextBlock Text="RemoteFlow" FontSize="15" FontWeight="SemiBold" Margin="2,0,0,0" VerticalAlignment="Center" />
@@ -570,10 +601,28 @@
 
                 <!-- ── 模块图标栏：只承担「换页面」。收藏 / 最近连接降为
                      工作台内的智能视图（资源树顶部），不再占用导航位。 ── -->
-                <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="0"
+                <!-- 栏顶产品 LOGO：属于标题栏那一行，背景与标题栏同色（Bg.Sidebar），
+                     与右侧的产品名连成一个品牌单元。不要放进下面的图标栏里——
+                     图标栏有自己的底色（Bg.Sidebar）和右边框线，放进去会在标题栏中间画出一条竖线
+                     并形成两块不同颜色，看起来像拼接。
+                     RemoteFlow.ico 全部帧为 PNG 压缩，WPF ICO 解码器不支持，
+                     故使用从 ICO 提取的同源 PNG（Assets/RemoteFlow-logo.png） -->
+                <Border Grid.Row="0" Grid.Column="0"
                         Background="{DynamicResource Bg.Sidebar}"
-                        BorderBrush="{DynamicResource Stroke.Subtle}"
-                        BorderThickness="0,0,1,0">
+                        ClipToBounds="True"
+                        ToolTip="RemoteFlow"
+                        Visibility="{Binding IsScreenFull, Converter={StaticResource InverseBoolToVisibility}}">
+                    <Image Width="24" Height="24"
+                           Source="pack://application:,,,/Assets/RemoteFlow-logo.png"
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+
+                <!-- 图标栏底色只从标题栏下面开始（Row 1）。
+                     不画右边框线：右侧内容区白卡片自带一圈描边（含左上圆角），
+                     再画一条直线会在圆角处比卡片描边多伸出一截（出界），还会与卡片左边框叠成双线。 -->
+                <Border Grid.Row="1" Grid.Column="0"
+                        Background="{DynamicResource Bg.Sidebar}">
                   <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
@@ -581,44 +630,37 @@
                     </Grid.RowDefinitions>
 
                     <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                        <StackPanel>
-                            <!-- 栏顶产品 LOGO（与标题栏同行高的视觉锚点）：
-                                 RemoteFlow.ico 全部帧为 PNG 压缩，WPF ICO 解码器不支持，
-                                 故使用从 ICO 提取的同源 PNG（Assets/RemoteFlow-logo.png） -->
-                            <Border Width="44" Height="44" Background="{DynamicResource Bg.Sidebar}"
-                                    ToolTip="RemoteFlow">
-                                <Image Width="24" Height="24"
-                                       Source="pack://application:,,,/Assets/RemoteFlow-logo.png"
-                                       RenderOptions.BitmapScalingMode="HighQuality"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
+                        <StackPanel Margin="0,6,0,0">
 
                             <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="首页"
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Home, Mode=TwoWay}"
                                          Tag="{x:Static vm:NavigationPage.Home}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Home" />
-                            <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="连接工作台"
-                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Connections, Mode=TwoWay}"
-                                         Tag="{x:Static vm:NavigationPage.Connections}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Connections" />
-
-                            <Border Style="{StaticResource Surface.Divider}" Margin="12,8" />
-
+                            <!-- 连接工作台 + 打开的会话数角标（会话里侧栏收起，回到页面时一眼看到还开着几个） -->
+                            <Grid HorizontalAlignment="Center">
+                                <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="连接工作台"
+                                             IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Connections, Mode=TwoWay}"
+                                             Tag="{x:Static vm:NavigationPage.Connections}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Connections" />
+                                <Border Style="{StaticResource Nav.CountBadge}"
+                                        ToolTip="{Binding OpenSessionCount, StringFormat=已打开 {0} 个会话}">
+                                    <TextBlock Text="{Binding OpenSessionCount}" FontSize="9.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Text.OnAccent}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </Grid>
                             <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="凭据"
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Credentials, Mode=TwoWay}"
                                          Tag="{x:Static vm:NavigationPage.Credentials}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Credential" />
-                            <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="设置"
-                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Settings, Mode=TwoWay}"
-                                         Tag="{x:Static vm:NavigationPage.Settings}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Settings" />
                         </StackPanel>
                     </ScrollViewer>
 
-                    <!-- 底部：帮助 / 关于 -->
-                    <StackPanel Grid.Row="1" Margin="0,0,0,8">
+                    <!-- 底部：设置 / 帮助。「关于」（含软件更新）已在 设置 → 关于，不再单独占位。 -->
+                    <StackPanel Grid.Row="1" Margin="0,0,0,10">
+                        <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="设置"
+                                     IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Settings, Mode=TwoWay}"
+                                     Tag="{x:Static vm:NavigationPage.Settings}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Settings" />
                         <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="帮助"
                                      IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Help, Mode=TwoWay}"
-                                         Tag="{x:Static vm:NavigationPage.Help}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Help" />
-                        <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="关于"
-                                     IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=About, Mode=TwoWay}"
-                                         Tag="{x:Static vm:NavigationPage.About}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Info" />
+                                     Tag="{x:Static vm:NavigationPage.Help}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Help" />
                     </StackPanel>
                   </Grid>
                 </Border>

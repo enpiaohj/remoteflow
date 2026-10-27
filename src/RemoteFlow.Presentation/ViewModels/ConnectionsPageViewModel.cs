@@ -339,6 +339,11 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     public bool SelectedItemHasHistory => SelectedItemHistory.Count > 0;
 
+    private string _selectedSparklineSummary = string.Empty;
+
+    /// <summary>迷你图上方的一行摘要：「8 成功 · 2 失败」（与柱子同一批最近记录）。</summary>
+    public string SelectedSparklineSummary => _selectedSparklineSummary;
+
     partial void OnSelectedItemChanged(ConnectionItemViewModel? value)
     {
         OnPropertyChanged(nameof(HasSelectedItem));
@@ -349,6 +354,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     {
         SelectedItemHistory.Clear();
         SelectedItemSparkline.Clear();
+        _selectedSparklineSummary = string.Empty;
+        OnPropertyChanged(nameof(SelectedSparklineSummary));
 
         if (item is null)
         {
@@ -397,6 +404,12 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                     entry.Result == ConnectionResult.Success ? "Status.Success" : "Status.Danger",
                     $"{DateTimeDisplay.Compact(entry.StartedAt)} · {(entry.Duration is { } d ? FormatDuration(d) : "未完成")}"));
             }
+
+            var succeeded = recent.Count(e => e.Result == ConnectionResult.Success);
+            _selectedSparklineSummary = recent.Count == 0
+                ? string.Empty
+                : $"{succeeded} 成功 · {recent.Count - succeeded} 失败";
+            OnPropertyChanged(nameof(SelectedSparklineSummary));
         }
         catch (Exception ex)
         {
@@ -581,6 +594,10 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     public IReadOnlyList<ConnectionSortMode> SortModeOptions { get; } =
         [ConnectionSortMode.Name, ConnectionSortMode.LastConnected, ConnectionSortMode.Protocol];
 
+    /// <summary>「最近连接」视图的时间范围选项（下拉胶囊用）。</summary>
+    public IReadOnlyList<RecentRange> RecentRangeOptions { get; } =
+        [RecentRange.Today, RecentRange.Week, RecentRange.All];
+
     [ObservableProperty]
     private bool _isLoading;
 
@@ -633,13 +650,55 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     partial void OnPageFilterTextChanged(string value) => ApplyFilter();
 
-    partial void OnProtocolFilterChanged(ProtocolFilterOption value) => ApplyFilter();
+    partial void OnProtocolFilterChanged(ProtocolFilterOption value)
+    {
+        OnPropertyChanged(nameof(HasActiveFilters));
+        ApplyFilter();
+    }
 
-    partial void OnTagFilterChanged(TagFilterOption value) => ApplyFilter();
+    partial void OnTagFilterChanged(TagFilterOption value)
+    {
+        OnPropertyChanged(nameof(HasActiveFilters));
+        ApplyFilter();
+    }
 
-    partial void OnPresenceFilterChanged(PresenceFilterOption value) => ApplyFilter();
+    partial void OnPresenceFilterChanged(PresenceFilterOption value)
+    {
+        OnPropertyChanged(nameof(HasActiveFilters));
+        ApplyFilter();
+    }
 
-    partial void OnSortModeChanged(ConnectionSortMode value) => ApplyFilter();
+    partial void OnSortModeChanged(ConnectionSortMode value)
+    {
+        OnPropertyChanged(nameof(NameHeaderText));
+        OnPropertyChanged(nameof(ProtocolHeaderText));
+        OnPropertyChanged(nameof(RecentHeaderText));
+        ApplyFilter();
+    }
+
+    /// <summary>协议 / 标签 / 状态任一筛选偏离默认值（决定「清除筛选」是否显示）。</summary>
+    public bool HasActiveFilters => ProtocolFilter != ProtocolFilterOption.All
+        || TagFilter.Id is not null
+        || PresenceFilter != PresenceFilterOption.All;
+
+    /// <summary>把协议 / 标签 / 状态筛选恢复为默认；搜索词与排序不动。</summary>
+    [RelayCommand]
+    private void ClearFilters()
+    {
+        ProtocolFilter = ProtocolFilterOption.All;
+        TagFilter = TagFilterOptions[0];
+        PresenceFilter = PresenceFilterOption.All;
+    }
+
+    /// <summary>点列头排序。排序方式取代原先的下拉框，当前排序列的列头文字带方向箭头。</summary>
+    [RelayCommand]
+    private void SortBy(ConnectionSortMode mode) => SortMode = mode;
+
+    public string NameHeaderText => SortMode == ConnectionSortMode.Name ? "名称 ↑" : "名称";
+
+    public string ProtocolHeaderText => SortMode == ConnectionSortMode.Protocol ? "协议 ↑" : "协议";
+
+    public string RecentHeaderText => SortMode == ConnectionSortMode.LastConnected ? "最近连接 ↓" : "最近连接";
 
     partial void OnRecentRangeChanged(RecentRange value)
     {
