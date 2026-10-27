@@ -224,8 +224,141 @@ public sealed class NavigationRefreshTests : IDisposable
         Assert.True(condition(), "等待条件超时。");
     }
 
+    /// <summary>
+    /// 模拟 RDP / SSH 画面控件：只有 Tab 被选中（可见）时才会开始连接，隐藏的 Tab 一直停在「准备中」。
+    /// 批量连接若连发打开会话，每个新 Tab 只被选中一瞬间，来不及开始就被顶掉。
+    /// </summary>
+    private void SimulateViewsThatConnectOnlyWhenSelected(Func<ConnectionProfile, IRemoteSession>? factory = null)
+    {
+        _provider.Factory = factory ?? (static p => new VisibilityGatedSession(p));
+        _main.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(MainViewModel.SelectedTab)
+                || _main.SelectedTab is not SessionTabViewModel { Session: VisibilityGatedSession session } tab)
+            {
+                return;
+            }
+
+            // 画面控件的 Loaded 发生在选中之后、布局渲染完成时：这段时间里若已被切走，就不会开始连接。
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(100);
+                if (ReferenceEquals(_main.SelectedTab, tab))
+                {
+                    session.OnBecameVisible();
+                }
+            });
+        };
+    }
+
+    [Fact]
+    public async Task 对照_连发打开会话时被顶掉的Tab停在准备中()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected();
+
+        // 旧的批量连接写法：不等待、连发打开。
+        foreach (var profile in NineProfiles())
+        {
+            await _main.OpenSessionAsync(profile);
+        }
+
+        await Task.Delay(400);
+
+        var tabs = _main.Tabs.OfType<SessionTabViewModel>().ToList();
+        Assert.Equal(9, tabs.Count);
+        Assert.Contains(tabs, t => t.Session.State == ConnectionState.Idle);
+    }
+
+    private static List<ConnectionProfile> NineProfiles()
+        => Enumerable.Range(1, 9)
+            .Select(i => new ConnectionProfile { Name = $"主机{i}", Host = $"host-{i}", Protocol = ProtocolType.Ssh })
+            .ToList();
+
+    [Fact]
+    public async Task 批量连接逐个开始_九台全部离开准备中()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected();
+
+        await _main.OpenSessionsSequentiallyAsync(NineProfiles());
+
+        var tabs = _main.Tabs.OfType<SessionTabViewModel>().ToList();
+        Assert.Equal(9, tabs.Count);
+        Assert.All(tabs, t => Assert.NotEqual(ConnectionState.Idle, t.Session.State));
+        Assert.Equal(9, tabs.Select(t => t.Session.Profile.Id).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task 批量连接结束后回到这批第一个会话()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected();
+        var profiles = NineProfiles();
+
+        await _main.OpenSessionsSequentiallyAsync(profiles);
+
+        var selected = Assert.IsType<SessionTabViewModel>(_main.SelectedTab);
+        Assert.Equal(profiles[0].Id, selected.Session.Profile.Id);
+    }
+
+    [Fact]
+    public async Task 批量连接遇到已有会话的设备只聚焦不重复建()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected();
+        var profiles = NineProfiles();
+        await _main.OpenSessionAsync(profiles[2]);
+
+        await _main.OpenSessionsSequentiallyAsync(profiles);
+
+        var tabs = _main.Tabs.OfType<SessionTabViewModel>().ToList();
+        Assert.Equal(9, tabs.Count);
+        Assert.Equal(1, tabs.Count(t => t.Session.Profile.Id == profiles[2].Id));
+    }
+
+    [Fact]
+    public async Task 批量连接中某个会话迟迟不开始也不会卡住整批()
+    {
+        // 第 3 个永远不开始连接（模拟异常）：超时后继续，其余照常。
+        SimulateViewsThatConnectOnlyWhenSelected(static p => new VisibilityGatedSession(p) { NeverStarts = p.Name == "主机3" });
+
+        _main.BatchStartTimeout = TimeSpan.FromMilliseconds(300);
+
+        await _main.OpenSessionsSequentiallyAsync(NineProfiles()).WaitAsync(TimeSpan.FromSeconds(30));
+
+        var tabs = _main.Tabs.OfType<SessionTabViewModel>().ToList();
+        Assert.Equal(9, tabs.Count);
+        Assert.Equal(8, tabs.Count(t => t.Session.State != ConnectionState.Idle));
+    }
+
+    private sealed class VisibilityGatedSession(ConnectionProfile profile) : RemoteSessionBase
+    {
+        public bool NeverStarts { get; init; }
+
+        public override ProtocolType Protocol => profile.Protocol;
+
+        public override ConnectionProfile Profile => profile;
+
+        public override Task ConnectAsync(CancellationToken cancellationToken = default)
+        {
+            SetState(ConnectionState.Connecting);
+            SetState(ConnectionState.Connected);
+            return Task.CompletedTask;
+        }
+
+        /// <summary>画面控件 Loaded：首次可见时才发起连接。</summary>
+        public void OnBecameVisible()
+        {
+            if (!NeverStarts && State == ConnectionState.Idle)
+            {
+                _ = ConnectAsync();
+            }
+        }
+
+        protected override ValueTask PerformTeardownAsync() => ValueTask.CompletedTask;
+    }
+
     private sealed class ScriptedSshProvider : IConnectionProvider
     {
+        public Func<ConnectionProfile, IRemoteSession>? Factory { get; set; }
+
         public bool FailTabCreation { get; set; }
 
         public ProtocolType Protocol => ProtocolType.Ssh;
@@ -238,7 +371,8 @@ public sealed class NavigationRefreshTests : IDisposable
             return true;
         }
 
-        public IRemoteSession CreateSession(SessionRequest request) => new ScriptedSession(request.Profile, FailTabCreation);
+        public IRemoteSession CreateSession(SessionRequest request)
+            => Factory?.Invoke(request.Profile) ?? new ScriptedSession(request.Profile, FailTabCreation);
     }
 
     /// <summary>

@@ -1880,13 +1880,37 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         }
     }
 
-    /// <summary>批量连接：逐个走统一漏斗；已开设备由漏斗自动聚焦，不重复建。</summary>
+    /// <summary>
+    /// 请求批量打开会话。由主视图模型逐个处理（每个会话要被选中、真正开始连接后再开下一个）。
+    /// </summary>
+    public event EventHandler<IReadOnlyList<ConnectionProfile>>? OpenConnectionsRequested;
+
+    /// <summary>
+    /// 批量连接：走统一漏斗；已开设备由漏斗自动聚焦，不重复建。
+    /// <para>
+    /// 不能在这里循环连发「打开会话」：RDP / SSH 的画面控件要可见（被选中）才会开始连接，
+    /// 连发时每个新 Tab 只被选中一瞬间就被下一个顶掉，只有一两个来得及开始，
+    /// 其余停在「准备中」，要逐个点开才连。所以交给主视图模型按顺序处理。
+    /// </para>
+    /// </summary>
     [RelayCommand]
     private void ConnectSelected()
     {
-        foreach (var item in SelectedConnections.ToList())
+        var profiles = SelectedConnections.Select(i => i.Profile).ToList();
+        if (profiles.Count == 0)
         {
-            OpenConnectionRequested?.Invoke(this, item.Profile);
+            return;
+        }
+
+        if (OpenConnectionsRequested is not null)
+        {
+            OpenConnectionsRequested.Invoke(this, profiles);
+            return;
+        }
+
+        foreach (var profile in profiles)
+        {
+            OpenConnectionRequested?.Invoke(this, profile);
         }
     }
 

@@ -24,7 +24,8 @@ public enum SettingsTab
     Vnc,
     Security,
     Cloud,
-    Data
+    Data,
+    About
 }
 
 /// <summary>
@@ -160,6 +161,12 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     /// <summary>「Cloud Sync」子面板。</summary>
     public CloudSyncViewModel Cloud { get; }
+
+    /// <summary>
+    /// 「关于」选项卡的内容（版本 / 许可 / 软件更新 / 隐私）。由主视图模型注入，
+    /// 与「关于」入口（导航栏、托盘检查更新、状态栏更新提示）共用同一份更新状态。
+    /// </summary>
+    public AboutPageViewModel? About { get; set; }
 
     /// <summary>导入 / 导出 / 备份改动了本地数据，外部需要据此刷新连接与凭据列表。</summary>
     public event EventHandler? DataChanged;

@@ -85,6 +85,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ConnectionsPage = connectionsPage;
         _credentialsPage = credentialsPage;
         _settingsPage = settingsPage;
+        _settingsPage.About = _aboutPage;
         _dialogs = dialogs;
         _logger = logger;
         _fileTransferLauncher = fileTransferLauncher;
@@ -117,6 +118,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // 首页 / 连接页所有「点设备→开会话」都收敛到这里统一处理：去重、聚焦、失败提示。
         HomePage.OpenConnectionRequested += async (_, profile) => await OpenSessionAsync(profile);
         ConnectionsPage.OpenConnectionRequested += async (_, profile) => await OpenSessionAsync(profile);
+
+        // 批量连接：按顺序逐个打开，每个会话等到真正开始连接再开下一个（见 OpenSessionsSequentiallyAsync）。
+        ConnectionsPage.OpenConnectionsRequested += async (_, profiles) => await OpenSessionsSequentiallyAsync(profiles);
 
         // 详情「打开会话 ▾ → 新建会话」：跳过去重聚焦，强制为同一设备再开一个会话。
         ConnectionsPage.NewSessionRequested += async (_, profile) => await OpenSessionAsync(profile, forceNew: true);
@@ -402,10 +406,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 break;
 
             case NavigationPage.About:
-                WorkspaceTab.Page = _aboutPage;
-                WorkspaceTab.Title = "关于";
-                WorkspaceTab.Icon = ""; // Icon.Info
-                WorkspaceTab.IconKey = "Ui.Info";
+                // 「关于」（含软件更新）放在 设置 → 关于 选项卡里：用户去设置里找更新入口就能找到。
+                // 导航栏 ℹ、托盘「检查更新」、状态栏更新提示等所有「关于」入口都落到这里。
+                _settingsPage.ReloadStartup();
+                _settingsPage.ActiveTab = SettingsTab.About;
+                WorkspaceTab.Page = _settingsPage;
+                WorkspaceTab.Title = "设置";
+                WorkspaceTab.Icon = ""; // Icon.Settings
+                WorkspaceTab.IconKey = "Ui.Settings";
                 break;
         }
 
@@ -876,6 +884,64 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             _openingProfileIds.Remove(profile.Id);
             _logger.LogError(ex, "创建会话失败：{ConnectionName}", profile.Name);
             await _dialogs.ShowMessageAsync("无法建立连接", "创建会话时发生未知错误，详情请查看日志。", DialogKind.Error);
+        }
+    }
+
+    /// <summary>单个会话「开始连接」的最长等待。超时就继续下一个，不让一个迟迟不动的会话卡住整批。</summary>
+    public TimeSpan BatchStartTimeout { get; set; } = TimeSpan.FromSeconds(8);
+
+    private static readonly TimeSpan BatchStartPoll = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>
+    /// 批量打开会话：一个一个来，每个新会话保持选中（可见），等它离开「准备中」、真正开始连接后再开下一个。
+    /// <para>
+    /// RDP / SSH 的画面控件要可见才会发起连接，而新 Tab 创建时就会被选中；
+    /// 连发的话每个 Tab 只被选中一瞬间，来不及开始连接就被顶掉，停在「准备中」，要手动点开才连。
+    /// 逐个等待把这件事变成顺序保证。已有会话的设备由 <see cref="OpenSessionAsync"/> 聚焦，不重复建也不等待。
+    /// </para>
+    /// 全部处理完后回到这批里第一个新建的会话。
+    /// </summary>
+    public async Task OpenSessionsSequentiallyAsync(IReadOnlyList<ConnectionProfile> profiles)
+    {
+        SessionTabViewModel? first = null;
+
+        foreach (var profile in profiles)
+        {
+            var before = Tabs.OfType<SessionTabViewModel>().ToHashSet();
+            await OpenSessionAsync(profile);
+
+            // 本次新建出来的 Tab（聚焦已有会话 / 创建失败时没有新 Tab，直接下一个）。
+            var created = Tabs.OfType<SessionTabViewModel>()
+                .FirstOrDefault(t => !before.Contains(t) && t.Session.Profile.Id == profile.Id);
+            if (created is null)
+            {
+                continue;
+            }
+
+            first ??= created;
+            await WaitForSessionToStartAsync(created);
+        }
+
+        if (first is not null && Tabs.Contains(first))
+        {
+            SelectedTab = first;
+        }
+    }
+
+    private async Task WaitForSessionToStartAsync(SessionTabViewModel tab)
+    {
+        var deadline = DateTime.UtcNow + BatchStartTimeout;
+        while (tab.Session.State == ConnectionState.Idle
+               && DateTime.UtcNow < deadline
+               && Tabs.Contains(tab))
+        {
+            // 此期间保持选中：它的视图要可见才会开始连接。用户手动切走则不抢回，直接放行。
+            if (!ReferenceEquals(SelectedTab, tab))
+            {
+                return;
+            }
+
+            await Task.Delay(BatchStartPoll);
         }
     }
 
