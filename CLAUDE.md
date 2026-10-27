@@ -111,5 +111,8 @@ Release Commit 格式：`release: RemoteFlow vX.Y.Z`。提交前先看 `git stat
 dotnet build RemoteFlow.slnx -c Release          # 全解决方案（slnx 不含 App.Mac）
 dotnet test tests/RemoteFlow.Core.Tests -c Release
 dotnet run --project src/RemoteFlow.App
+# 隔离运行：数据库 / 保险库 / 设置 / 日志全部落在指定目录，不碰真实数据，也不与已在运行的实例互斥
+# （.NET 不认 LOCALAPPDATA 环境变量，所以需要这个显式开关）。重拍 README 截图、做破坏性试验时用。
+$env:REMOTEFLOW_DATA_DIR = 'D:\Temp\rf-demo\data'; dotnet run --project src/RemoteFlow.App
 dotnet publish src/RemoteFlow.App -c Release -r win-x64   # 发布 win-x64 单文件
 ```

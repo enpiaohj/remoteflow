@@ -57,6 +57,12 @@ public partial class App : System.Windows.Application
     private static readonly Mutex SingleInstanceMutex = new(initiallyOwned: false, @"Local\RemoteFlow.SingleInstance");
     private bool _ownsMutex;
 
+    /// <summary>开发 / 测试用环境变量：指向一个目录时，数据与设置全部落在那里（见 <see cref="ResolvePaths"/>）。</summary>
+    internal const string IsolatedDataDirectoryVariable = "REMOTEFLOW_DATA_DIR";
+
+    private static bool IsIsolatedInstance()
+        => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(IsolatedDataDirectoryVariable));
+
     /// <summary>进入退出流程的标记：此后界面异常处理器不再尝试弹窗。</summary>
     private bool _isShuttingDown;
 
@@ -81,7 +87,11 @@ public partial class App : System.Windows.Application
         var afterUpdate = e.Args.Contains(WpfUpdateInstaller.AfterUpdateArgument)
             || e.Args.Contains(WpfUpdateInstaller.UpdateFailedArgument);
 
-        if (!TryAcquireSingleInstance(afterUpdate ? TimeSpan.FromSeconds(20) : TimeSpan.Zero))
+        // 用隔离数据目录（REMOTEFLOW_DATA_DIR）启动的实例与真实实例互不相干：不参与单实例互斥，
+        // 也不监听「显示主窗口」事件——否则它会把真实实例的激活请求抢走，或被真实实例吞掉。
+        var isolated = IsIsolatedInstance();
+
+        if (!isolated && !TryAcquireSingleInstance(afterUpdate ? TimeSpan.FromSeconds(20) : TimeSpan.Zero))
         {
             // 随系统启动的重复实例不打扰；用户手动再次打开，则让已在运行的实例显示主窗口。
             if (!startHidden && !SignalExistingInstance())
@@ -93,7 +103,10 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        ListenForActivationRequests();
+        if (!isolated)
+        {
+            ListenForActivationRequests();
+        }
 
         try
         {
@@ -236,6 +249,15 @@ public partial class App : System.Windows.Application
     /// </summary>
     private static AppPaths ResolvePaths()
     {
+        // 开发 / 测试用：REMOTEFLOW_DATA_DIR 指向某个目录时，数据库、保险库、设置与日志全部落在那里，
+        // 完全不碰用户真实数据（例如用演示数据重拍 README 截图）。.NET 的 LocalApplicationData
+        // 不认 LOCALAPPDATA 环境变量，所以需要这个显式开关；普通用户不会设置它。
+        var isolatedDirectory = Environment.GetEnvironmentVariable(IsolatedDataDirectoryVariable);
+        if (!string.IsNullOrWhiteSpace(isolatedDirectory))
+        {
+            return new AppPaths(isolatedDirectory);
+        }
+
         var defaultPaths = new AppPaths();
 
         using var bootstrapLoggerFactory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Warning));
