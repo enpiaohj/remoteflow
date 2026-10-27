@@ -32,6 +32,9 @@ public sealed partial class SessionTabSelector : UserControl
     private MainViewModel? _main;
     private INotifyCollectionChanged? _subscribedTabs;
 
+    /// <summary>是否已订阅 <see cref="_main"/> 的 Tabs / SelectedTab 变化（Loaded / Unloaded 成对切换）。</summary>
+    private bool _attached;
+
     /// <summary>正在以代码同步 ListBox 选中项，抑制「用户选择」分支。</summary>
     private bool _syncingSelection;
 
@@ -51,30 +54,41 @@ public sealed partial class SessionTabSelector : UserControl
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         SessionsList.ItemsSource = _listedTabs;
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (_main is not null)
-        {
-            _main.PropertyChanged -= OnMainPropertyChanged;
-        }
-
+        Detach();
         _main = e.NewValue as MainViewModel;
+        Attach();
+    }
 
-        if (_subscribedTabs is not null)
-        {
-            _subscribedTabs.CollectionChanged -= OnTabsCollectionChanged;
-            _subscribedTabs = null;
-        }
+    /// <summary>
+    /// 卸载后重新加载（窗口句柄重建——进出全屏、窗口样式 / 材质切换——或主题切换时 WPF 都会
+    /// 先 Unloaded 再 Loaded）。DataContext 没有变，不会再触发 DataContextChanged，
+    /// 所以必须在这里恢复订阅并按最新 Tabs 重建镜像，否则期间开关的会话不会反映到列表和数量角标。
+    /// </summary>
+    private void OnLoaded(object sender, RoutedEventArgs e) => Attach();
 
-        if (_main is null)
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        Detach();
+        DetachHeaderTab();
+        SelectorPopup.IsOpen = false;
+    }
+
+    /// <summary>订阅当前 <see cref="_main"/> 并重建镜像。幂等：已订阅时不重复订阅。</summary>
+    private void Attach()
+    {
+        if (_attached || _main is null)
         {
             return;
         }
 
+        _attached = true;
         _main.PropertyChanged += OnMainPropertyChanged;
 
         if (_main.Tabs is INotifyCollectionChanged changed)
@@ -86,8 +100,15 @@ public sealed partial class SessionTabSelector : UserControl
         RebuildSessionTabs();
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    /// <summary>退订；保留 <see cref="_main"/>，供重新 Loaded 时恢复。</summary>
+    private void Detach()
     {
+        if (!_attached)
+        {
+            return;
+        }
+
+        _attached = false;
         if (_main is not null)
         {
             _main.PropertyChanged -= OnMainPropertyChanged;
@@ -96,10 +117,8 @@ public sealed partial class SessionTabSelector : UserControl
         if (_subscribedTabs is not null)
         {
             _subscribedTabs.CollectionChanged -= OnTabsCollectionChanged;
+            _subscribedTabs = null;
         }
-
-        DetachHeaderTab();
-        SelectorPopup.IsOpen = false;
     }
 
     // ── 会话列表同步 ─────────────────────────────────────────────

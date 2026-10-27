@@ -20,6 +20,8 @@ public sealed class NavigationRefreshTests : IDisposable
     private readonly TempWorkspace _workspace = new();
     private readonly CountingCredentialRepository _credentialRepository = new();
     private readonly MainViewModel _main;
+    private readonly SessionManager _sessions;
+    private readonly ScriptedSshProvider _provider = new();
     private readonly FileTransferLauncher _launcher = new();
     private readonly FakeTransferConnector _connector = new();
     private readonly CredentialsPageViewModel _credentialsPage;
@@ -36,8 +38,8 @@ public sealed class NavigationRefreshTests : IDisposable
             new InMemoryCredentialVault(),
             NullLogger<CredentialService>.Instance);
         var history = new EmptyHistoryRepository();
-        var sessions = new SessionManager(
-            Array.Empty<IConnectionProvider>(),
+        var sessions = _sessions = new SessionManager(
+            new IConnectionProvider[] { _provider },
             credentials,
             connectionsRepository,
             history,
@@ -190,6 +192,95 @@ public sealed class NavigationRefreshTests : IDisposable
         _main.SelectedTab = _main.WorkspaceTab;
 
         Assert.Equal(2, _credentialRepository.GetAllCount);
+    }
+
+    [Fact]
+    public async Task 会话Tab创建失败时关闭该会话并释放创建占位()
+    {
+        var profile = new ConnectionProfile { Name = "主机C", Host = "host-c", Protocol = ProtocolType.Ssh };
+
+        _provider.FailTabCreation = true;
+        await _main.OpenSessionAsync(profile);
+
+        // Tab 没建出来的会话不能留在管理器里：否则状态栏 / 托盘会多算，而工作区里看不到也关不掉。
+        await WaitUntilAsync(() => _sessions.ActiveSessionCount == 0);
+        Assert.Empty(_main.Tabs.OfType<SessionTabViewModel>());
+
+        // 创建占位也要释放，否则这台设备此后再点会被当成「正在创建」而静默忽略。
+        _provider.FailTabCreation = false;
+        await _main.OpenSessionAsync(profile);
+
+        Assert.Single(_main.Tabs.OfType<SessionTabViewModel>());
+        Assert.Equal(1, _sessions.ActiveSessionCount);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        for (var i = 0; i < 100 && !condition(); i++)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.True(condition(), "等待条件超时。");
+    }
+
+    private sealed class ScriptedSshProvider : IConnectionProvider
+    {
+        public bool FailTabCreation { get; set; }
+
+        public ProtocolType Protocol => ProtocolType.Ssh;
+
+        public int DefaultPort => 22;
+
+        public bool IsAvailable(out string? unavailableReason)
+        {
+            unavailableReason = null;
+            return true;
+        }
+
+        public IRemoteSession CreateSession(SessionRequest request) => new ScriptedSession(request.Profile, FailTabCreation);
+    }
+
+    /// <summary>
+    /// 管理器订阅 StateChanged 是第 1 次，Tab 订阅是第 2 次；<paramref name="failSecondSubscriber"/> 时第 2 次抛出，
+    /// 以此模拟 SessionCreated 处理里 Tab 构造失败。
+    /// </summary>
+    private sealed class ScriptedSession(ConnectionProfile profile, bool failSecondSubscriber) : IRemoteSession
+    {
+        private int _subscribers;
+        private EventHandler<SessionStateChangedEventArgs>? _stateChanged;
+
+        public Guid SessionId { get; } = Guid.NewGuid();
+
+        public ProtocolType Protocol => profile.Protocol;
+
+        public ConnectionProfile Profile => profile;
+
+        public ConnectionState State => ConnectionState.Idle;
+
+        public ConnectionErrorCode ErrorCode => ConnectionErrorCode.None;
+
+        public string? ErrorMessage => null;
+
+        public event EventHandler<SessionStateChangedEventArgs>? StateChanged
+        {
+            add
+            {
+                if (failSecondSubscriber && ++_subscribers == 2)
+                {
+                    throw new InvalidOperationException("模拟 Tab 构造失败。");
+                }
+
+                _stateChanged += value;
+            }
+            remove => _stateChanged -= value;
+        }
+
+        public Task ConnectAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task DisconnectAsync() => Task.CompletedTask;
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class CountingCredentialRepository : ICredentialRepository

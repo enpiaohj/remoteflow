@@ -622,14 +622,28 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var tab = new SessionTabViewModel(session, CloseSessionAsync, ReconnectAsync, _ui, _timerFactory, _dialogs, _logger);
+        SessionTabViewModel tab;
+        try
+        {
+            tab = new SessionTabViewModel(session, CloseSessionAsync, ReconnectAsync, _ui, _timerFactory, _dialogs, _logger);
 
-        // 会话工具条里的「全屏」由主窗口层处理（隐藏导航/详情、窗口去边框铺满）；
-        // 协议专属动作（缩放、Ctrl+Alt+Del 等）由各协议视图自己订阅处理。
-        tab.ActionRequested += OnSessionActionRequested;
+            // 会话工具条里的「全屏」由主窗口层处理（隐藏导航/详情、窗口去边框铺满）；
+            // 协议专属动作（缩放、Ctrl+Alt+Del 等）由各协议视图自己订阅处理。
+            tab.ActionRequested += OnSessionActionRequested;
 
-        Tabs.Add(tab);
-        SelectedTab = tab;
+            Tabs.Add(tab);
+            SelectedTab = tab;
+        }
+        catch (Exception ex)
+        {
+            // Tab 没建出来，会话却已登记在 SessionManager 里：不收尾的话它会一直计入状态栏 / 托盘 /
+            // 「已有会话」判断，却在工作区里看不到也关不掉；同时该连接的创建占位也不会释放，
+            // 之后再点这台设备会被当成「正在创建」而静默忽略。
+            _logger.LogError(ex, "为会话 {SessionId} 创建 Tab 失败，关闭该会话", session.SessionId);
+            _openingProfileIds.Remove(session.Profile.Id);
+            _ = CloseOrphanSessionAsync(session.SessionId);
+            return;
+        }
 
         // 状态栏文案 / 圆点刷新统一由 _sessions.SessionsChanged → OnSessionsChanged 覆盖（创建即触发），
         // 这里不再逐会话订阅 StateChanged；下方即时 OnPropertyChanged 可保留作立刻刷新（无害）。
@@ -639,6 +653,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         OnPropertyChanged(nameof(SessionStatusText));
         OnPropertyChanged(nameof(SessionStatusBrushKey));
+    }
+
+    private async Task CloseOrphanSessionAsync(Guid sessionId)
+    {
+        try
+        {
+            await _sessions.CloseSessionAsync(sessionId);
+            await _dialogs.ShowMessageAsync("无法建立连接", "创建会话窗口时发生错误，该会话已关闭，详情请查看日志。", DialogKind.Error);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "关闭无 Tab 的会话 {SessionId} 失败", sessionId);
+        }
     }
 
     private void OnSessionActionRequested(object? sender, SessionAction action)
@@ -859,17 +886,36 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private async Task ReconnectAsync(ConnectionProfile profile)
     {
+        // 与 OpenSessionAsync 共用创建占位：OnSessionCreated 无论来源都会释放该 Profile 的占位，
+        // 重连若不登记，会把同一设备上正在进行的「打开」的占位提前放掉，连点就能再开出重复会话。
+        var registered = _openingProfileIds.Add(profile.Id);
         try
         {
             await _sessions.CreateSessionAsync(profile);
         }
         catch (ConnectionException ex)
         {
+            ReleaseOpeningPlaceholder(profile.Id, registered);
             await _dialogs.ShowMessageAsync("无法重新连接", ex.Message, DialogKind.Error);
         }
         catch (InvalidOperationException ex)
         {
+            ReleaseOpeningPlaceholder(profile.Id, registered);
             await _dialogs.ShowMessageAsync("无法重新连接", ex.Message, DialogKind.Warning);
+        }
+        catch
+        {
+            ReleaseOpeningPlaceholder(profile.Id, registered);
+            throw;
+        }
+    }
+
+    /// <summary>仅释放本次调用自己登记的占位，不动别的创建请求留下的。</summary>
+    private void ReleaseOpeningPlaceholder(Guid profileId, bool registered)
+    {
+        if (registered)
+        {
+            _openingProfileIds.Remove(profileId);
         }
     }
 
