@@ -289,6 +289,12 @@
                                 Content="{StaticResource Ui.Keyboard}"
                                 ToolTip="发送 Ctrl+Alt+Del"
                                 Command="{Binding SendCtrlAltDeleteCommand}" />
+                        <!-- 全屏下应用标题栏隐藏，药丸同样提供文件传输入口（新标签页，切走会话画面） -->
+                        <Button Style="{StaticResource Session.BarButton}"
+                                Content="{StaticResource Ui.FileTransfer}"
+                                ToolTip="{Binding FileTransferTabToolTip}"
+                                Command="{Binding OpenFileTransferTabCommand}"
+                                Visibility="{Binding CanOpenFileTransferTab, Converter={StaticResource BoolToVisibility}}" />
                         <Button Style="{StaticResource Session.BarButton}"
                                 Content="{StaticResource Ui.TaskManager}"
                                 ToolTip="启动任务管理器"

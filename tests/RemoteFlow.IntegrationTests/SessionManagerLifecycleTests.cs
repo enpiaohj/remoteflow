@@ -88,6 +88,46 @@ public sealed class SessionManagerLifecycleTests : IDisposable
     }
 
     [Fact]
+    public async Task 连接成功后最近连接时间落库完成才发出LastConnectedUpdated()
+    {
+        var repository = new SqliteConnectionRepository(_database);
+        var profile = NewProfile("最近连接");
+        await repository.AddAsync(profile);
+        Assert.Null((await repository.GetByIdAsync(profile.Id))!.LastConnectedAt);
+
+        // 事件触发那一刻读库：必须已经能读到新的最近连接时间，否则界面据此刷新仍会拿到旧值。
+        var observed = new TaskCompletionSource<DateTimeOffset?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _manager.LastConnectedUpdated += (_, id) =>
+            observed.TrySetResult(repository.GetByIdAsync(id).GetAwaiter().GetResult()?.LastConnectedAt);
+
+        var session = await _manager.CreateSessionAsync(profile);
+        await session.ConnectAsync();
+
+        var lastConnectedAt = await observed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.NotNull(lastConnectedAt);
+    }
+
+    [Fact]
+    public async Task 连接失败不发出LastConnectedUpdated()
+    {
+        var repository = new SqliteConnectionRepository(_database);
+        var profile = NewProfile("失败不更新");
+        await repository.AddAsync(profile);
+        _provider.SessionFactory = static p => new FakeSession(p) { FailOnConnect = true };
+
+        var raised = 0;
+        _manager.LastConnectedUpdated += (_, _) => Interlocked.Increment(ref raised);
+
+        var session = await _manager.CreateSessionAsync(profile);
+        await session.ConnectAsync();
+        await _manager.CloseSessionAsync(session.SessionId);
+        await Task.Delay(200);
+
+        Assert.Equal(0, Volatile.Read(ref raised));
+        Assert.Null((await repository.GetByIdAsync(profile.Id))!.LastConnectedAt);
+    }
+
+    [Fact]
     public async Task 重复关闭幂等()
     {
         var session = await _manager.CreateSessionAsync(NewProfile("幂等关闭"));

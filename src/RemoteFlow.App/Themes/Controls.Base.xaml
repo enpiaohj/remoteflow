@@ -1,7 +1,8 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime"
-                    xmlns:conv="clr-namespace:RemoteFlow.App.Converters">
+                    xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
+                    xmlns:views="clr-namespace:RemoteFlow.App.Views">
 
     <!-- 本字典内模板必须就地解析 converter；不能依赖合并它的上层字典后置声明。 -->
     <conv:ResourceKeyToBrushConverter x:Key="Controls.KeyToBrush" />
@@ -536,8 +537,10 @@
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{StaticResource Radius.Small}"
                                 SnapsToDevicePixels="True" />
+                        <!-- 不要再给 PART_ContentHost 绑 Margin=Padding：WPF 已把 Control.Padding 自动
+                             应用到内容宿主，再绑一次会让文字缩进翻倍（Padding=10 时离边框 ~22 而非 ~12，
+                             看起来像开头多了空格）。 -->
                         <ScrollViewer x:Name="PART_ContentHost"
-                                      Margin="{TemplateBinding Padding}"
                                       VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                       Focusable="False"
                                       HorizontalScrollBarVisibility="Hidden"
@@ -590,6 +593,8 @@
         <Setter Property="Padding" Value="10,0" />
         <Setter Property="MinHeight" Value="32" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <!-- 大写锁定提示：获得焦点且 Caps Lock 开启时，模板右侧显示「大写锁定已开启」。 -->
+        <Setter Property="views:CapsLockIndicator.IsMonitored" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="PasswordBox">
@@ -600,10 +605,24 @@
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{StaticResource Radius.Small}"
                                 SnapsToDevicePixels="True" />
+                        <!-- 同 Input.TextBox：Padding 由 WPF 自动应用到内容宿主，不再重复绑 Margin。 -->
                         <ScrollViewer x:Name="PART_ContentHost"
-                                      Margin="{TemplateBinding Padding}"
                                       VerticalAlignment="Center"
                                       Focusable="False" />
+                        <StackPanel x:Name="CapsLockHint"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,10,0"
+                                    IsHitTestVisible="False"
+                                    Visibility="Collapsed"
+                                    ToolTip="大写锁定已开启，输入的字母将为大写">
+                            <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Warning}"
+                                  Width="13" Height="13" Fill="{DynamicResource Status.Warning}" />
+                            <TextBlock Text="大写锁定已开启" FontSize="11" Margin="5,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Status.Warning}" />
+                        </StackPanel>
                         <Border x:Name="FocusLine"
                                 Height="2"
                                 VerticalAlignment="Bottom"
@@ -618,6 +637,11 @@
                         </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter TargetName="FocusLine" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <!-- 提示占据右侧约 110：内容宿主让出右边距，输入很长的密码时点不会压在提示下面。 -->
+                        <Trigger Property="views:CapsLockIndicator.IsActive" Value="True">
+                            <Setter TargetName="CapsLockHint" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="PART_ContentHost" Property="Margin" Value="0,0,112,0" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Subtle}" />

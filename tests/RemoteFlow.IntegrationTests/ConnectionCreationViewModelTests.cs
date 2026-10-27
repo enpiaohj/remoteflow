@@ -23,6 +23,28 @@ public sealed class ConnectionCreationViewModelTests
         Assert.Equal(groupId, dialogs.DefaultGroupId);
     }
 
+    /// <summary>
+    /// 「保存并连接」时，新保存的连接不一定在当前列表里（如处于「最近连接」「收藏」筛选视图，
+    /// 它还没连过 / 没收藏），此时选中项为空。原先「选中项为空就不连」会让保存并连接静默什么都不做。
+    /// </summary>
+    [Fact]
+    public async Task SaveAndConnect_ConnectsEvenWhenSavedItemIsNotInCurrentList()
+    {
+        var viewModel = new ConnectionsPageViewModel(
+            null!, null!, null!, null!, null!, new CapturingDialogService(), null!, null!, null!,
+            SynchronousUiDispatcher.Instance, null!);
+        var saved = new ConnectionProfile { Name = "刚保存", Host = "h", Protocol = ProtocolType.Ssh };
+
+        ConnectionProfile? requested = null;
+        viewModel.OpenConnectionRequested += (_, profile) => requested = profile;
+
+        var connect = typeof(ConnectionsPageViewModel).GetMethod(
+            "ConnectSavedAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        await (Task)connect.Invoke(viewModel, [saved.Id, saved])!;
+
+        Assert.Same(saved, requested);
+    }
+
     private sealed class CapturingDialogService : IDialogService, IConnectionEditorDialogService
     {
         public Guid? DefaultGroupId { get; private set; }

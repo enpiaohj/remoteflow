@@ -261,6 +261,18 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
 
     public DateTimeOffset? LastConnectedAt => Profile.LastConnectedAt;
 
+    /// <summary>
+    /// 会话连接成功后同步「最近连接时间」。时间只写数据库，行里缓存的 Profile 不会自己变，
+    /// 不刷新的话列表 / 详情会一直显示「从未连接」，最近连接视图也看不到它。
+    /// </summary>
+    public void ApplyLastConnectedAt(DateTimeOffset? value)
+    {
+        Profile.LastConnectedAt = value;
+        OnPropertyChanged(nameof(LastConnectedAt));
+        OnPropertyChanged(nameof(LastConnectedDisplay));
+        OnPropertyChanged(nameof(LastConnectedCompact));
+    }
+
     /// <summary>最近连接：刚刚 / N 分钟前；更早则用统一紧凑时间。从未连接给占位。</summary>
     public string LastConnectedDisplay
         => Profile.LastConnectedAt is { } time ? DateTimeDisplay.RelativeRecent(time) : "从未连接";

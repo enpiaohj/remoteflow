@@ -28,7 +28,8 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         IReadOnlyList<Tag> tags,
         AppSettings defaults,
         Guid? defaultGroupId = null,
-        ProtocolType? preselectedProtocol = null)
+        ProtocolType? preselectedProtocol = null,
+        Services.ConnectionEditorSeed? seed = null)
     {
         _isNew = existing is null;
         _profile = existing is null ? new ConnectionProfile() : existing.Clone(existing.Name);
@@ -66,6 +67,20 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
             _profile.Vnc.ClipboardToLocal = defaults.VncDefaultClipboardToLocal;
             // 新建连接默认进入默认分组「我的设备」（§9）。
             _profile.GroupId = defaultGroupId;
+
+            // 「用此凭据新建主机连接」等入口的预填：只是起点，对话框里仍可改。
+            if (seed is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(seed.Name))
+                {
+                    _profile.Name = seed.Name.Trim();
+                }
+
+                if (seed.CredentialId is { } credentialId && credentials.Any(c => c.Id == credentialId))
+                {
+                    _profile.CredentialId = credentialId;
+                }
+            }
         }
 
         Title = _isNew ? "新建连接" : "编辑连接";

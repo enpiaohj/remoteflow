@@ -177,7 +177,7 @@ public partial class ConnectionsPage : UserControl
             return;
         }
 
-        PopulateMoveToGroup(menu, row.DataContext as ConnectionItemViewModel);
+        PopulateRowSubmenus(menu, row.DataContext as ConnectionItemViewModel);
         menu.PlacementTarget = button;
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
         menu.IsOpen = true;
@@ -196,7 +196,7 @@ public partial class ConnectionsPage : UserControl
                 viewModel.SelectedItem = item;
             }
 
-            PopulateMoveToGroup(menu, item);
+            PopulateRowSubmenus(menu, item);
         }
     }
 
@@ -249,6 +249,7 @@ public partial class ConnectionsPage : UserControl
                     break;
                 case "duplicate":
                 case "move":
+                case "credential":
                 case "delete":
                     item.Visibility = isAll ? Visibility.Visible : Visibility.Collapsed;
                     break;
@@ -271,6 +272,82 @@ public partial class ConnectionsPage : UserControl
 
         ContextMenuSeparators.Normalize(menu);
     }
+
+    /// <summary>行菜单里需要按行动态填充的子菜单：移动到分组、更改凭据。</summary>
+    private void PopulateRowSubmenus(ContextMenu menu, ConnectionItemViewModel? connection)
+    {
+        PopulateMoveToGroup(menu, connection);
+        PopulateChangeCredential(menu, connection);
+    }
+
+    /// <summary>「更改凭据」子菜单的一项：Tag 携带目标凭据（null = 未指定）。</summary>
+    private sealed record CredentialChoice(Guid? Id);
+
+    private void PopulateChangeCredential(ContextMenu menu, ConnectionItemViewModel? connection)
+    {
+        var credentialItem = menu.Items
+            .OfType<MenuItem>()
+            .FirstOrDefault(m => Equals(m.Tag, "credential"));
+        if (credentialItem is null || ViewModel is null)
+        {
+            return;
+        }
+
+        menu.DataContext = connection;
+        credentialItem.Items.Clear();
+        credentialItem.IsEnabled = connection is not null;
+
+        var current = connection?.Profile.CredentialId;
+        credentialItem.Items.Add(CreateCredentialChoice("未指定", null, connection, current));
+        foreach (var choice in ViewModel.CredentialChoices)
+        {
+            credentialItem.Items.Add(CreateCredentialChoice(choice.Value, choice.Key, connection, current));
+        }
+    }
+
+    private MenuItem CreateCredentialChoice(string name, Guid? id, ConnectionItemViewModel? connection, Guid? current)
+    {
+        var item = new MenuItem
+        {
+            // 当前引用的那项置灰并标注，和「移动到分组」一致。
+            Header = id == current ? $"{name}（当前）" : name,
+            Tag = new CredentialChoice(id),
+            DataContext = connection,
+            IsEnabled = connection is not null && id != current,
+        };
+        item.Click += OnChangeCredentialClick;
+        return item;
+    }
+
+    private void OnChangeCredentialSubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Parent: ContextMenu menu })
+        {
+            var connection = menu.DataContext as ConnectionItemViewModel
+                ?? (menu.PlacementTarget as FrameworkElement)?.DataContext as ConnectionItemViewModel;
+            PopulateChangeCredential(menu, connection);
+        }
+    }
+
+    private async void OnChangeCredentialClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: CredentialChoice choice }
+            && ResolveItem(sender) is { } connection
+            && ViewModel is { } viewModel)
+        {
+            await viewModel.ChangeCredentialAsync(connection, choice.Id);
+        }
+    }
+
+    // 空白处右键菜单：新建主机连接 / 新建凭据 / 刷新。
+    private void OnBlankNewConnectionClick(object sender, RoutedEventArgs e)
+        => ViewModel?.CreateCommand.Execute(null);
+
+    private void OnBlankNewCredentialClick(object sender, RoutedEventArgs e)
+        => ViewModel?.RequestNewCredentialCommand.Execute(null);
+
+    private void OnBlankRefreshClick(object sender, RoutedEventArgs e)
+        => ViewModel?.RefreshCommand.Execute(null);
 
     private void PopulateMoveToGroup(ContextMenu menu, ConnectionItemViewModel? connection)
     {
@@ -540,7 +617,7 @@ public partial class ConnectionsPage : UserControl
     }
 
     /// <summary>
-    /// 动作条「批量操作 ▾」：全选 / 清空选择与批量动作的快捷菜单
+    /// 动作条「批量操作 ▾」：全选 / 取消选择与批量动作的快捷菜单
     /// （多选模式的开关在筛选行末的图标 ToggleButton 上）。
     /// </summary>
     private async void OnBatchOperationsClick(object sender, RoutedEventArgs e)
@@ -554,7 +631,7 @@ public partial class ConnectionsPage : UserControl
         menu.Items.Add(new MenuItem { Header = "全选当前列表", Command = vm.SelectAllVisibleCommand }.WithIcon("Ui.Checklist"));
         menu.Items.Add(new MenuItem
         {
-            Header = "清空选择",
+            Header = "取消选择",
             Command = vm.ClearSelectionCommand,
             IsEnabled = vm.HasSelection
         }.WithIcon("Ui.Clear"));

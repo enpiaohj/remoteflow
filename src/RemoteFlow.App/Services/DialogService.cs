@@ -21,7 +21,7 @@ public sealed class DialogService(
     DefaultGroupResolver defaultGroup,
     ICredentialRepository credentials,
     AppSettings settings,
-    ILoggerFactory loggerFactory) : IDialogService, IConnectionEditorDialogService
+    ILoggerFactory loggerFactory) : IDialogService, IConnectionEditorDialogService, IConnectionSeedDialogService
 {
     /// <summary>取当前活动窗口作为对话框宿主，保证居中显示且正确模态。</summary>
     private static Window? Owner =>
@@ -56,10 +56,14 @@ public sealed class DialogService(
         Guid defaultGroupId)
         => EditConnectionCoreAsync(existing, preselectedProtocol, defaultGroupId);
 
+    public Task<ConnectionEditorResult?> EditConnectionAsync(ConnectionProfile? existing, ConnectionEditorSeed seed)
+        => EditConnectionCoreAsync(existing, seed.Protocol, seed.GroupId, seed);
+
     private async Task<ConnectionEditorResult?> EditConnectionCoreAsync(
         ConnectionProfile? existing,
         ProtocolType? preselectedProtocol,
-        Guid? defaultGroupId)
+        Guid? defaultGroupId,
+        ConnectionEditorSeed? seed = null)
     {
         // 编辑器需要凭据、分组、标签作为下拉数据源，先在后台取齐再开对话框。
         var credentialList = await credentials.GetAllAsync();
@@ -79,7 +83,8 @@ public sealed class DialogService(
                 tags,
                 settings,
                 resolvedGroupId,
-                preselectedProtocol);
+                preselectedProtocol,
+                seed);
             var dialog = new ConnectionEditorDialog(viewModel, ManageTagsAsync) { Owner = Owner };
 
             return dialog.ShowDialog() == true && dialog.Result is { } profile

@@ -91,10 +91,22 @@
             <MenuItem Tag="move" Header="移动到分组" views:MenuItemAssist.IconKey="Ui.Folder" SubmenuOpened="OnMoveToGroupSubmenuOpened">
                 <MenuItem Header="加载分组…" IsEnabled="False" />
             </MenuItem>
+            <!-- 只改这条连接引用的凭据，不动凭据本身；列表打开时按当前凭据动态填充。 -->
+            <MenuItem Tag="credential" Header="更改凭据" views:MenuItemAssist.IconKey="Ui.Credential" SubmenuOpened="OnChangeCredentialSubmenuOpened">
+                <MenuItem Header="加载凭据…" IsEnabled="False" />
+            </MenuItem>
             <Separator />
             <MenuItem Tag="locate" Header="在工作台中显示" views:MenuItemAssist.IconKey="Ui.Connections" Click="OnLocateMenuClick" />
             <Separator />
             <MenuItem Tag="delete" Header="删除连接" InputGestureText="Del" views:MenuItemAssist.IconKey="Ui.Delete" views:MenuItemAssist.IsDanger="True" Click="OnDeleteMenuClick" />
+        </ContextMenu>
+
+        <!-- 空白处（列表下方的空白 / 空状态）右键：新建入口 + 刷新。行上右键仍是上面的行菜单。 -->
+        <ContextMenu x:Key="ConnectionsBlankMenu" x:Shared="False">
+            <MenuItem Header="新建主机连接" views:MenuItemAssist.IconKey="Ui.Add" Click="OnBlankNewConnectionClick" />
+            <MenuItem Header="新建凭据" views:MenuItemAssist.IconKey="Ui.Credential" Click="OnBlankNewCredentialClick" />
+            <Separator />
+            <MenuItem Header="刷新" views:MenuItemAssist.IconKey="Ui.Refresh" Click="OnBlankRefreshClick" />
         </ContextMenu>
 
         <Style x:Key="ConnectionRow" TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">
@@ -229,7 +241,7 @@
                 </StackPanel>
 
                 <!-- 收藏列：星标常驻，点击切换 -->
-                <Button Grid.Column="8" Width="24" Height="24" FontSize="12" HorizontalAlignment="Center"
+                <Button Grid.Column="8" Width="24" Height="24" MinWidth="24" MinHeight="24" FontSize="12" HorizontalAlignment="Center"
                         ToolTip="收藏 / 取消收藏"
                         Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                         CommandParameter="{Binding}">
@@ -247,7 +259,10 @@
                     </Button.Style>
                 </Button>
 
+                <!-- Button.Icon 自带 MinWidth/MinHeight=36，会顶掉这里的 Width/Height，
+                     36 的按钮塞进 26 的列就被裁掉一截（「三个点显示不全」）；这里显式压低最小尺寸。 -->
                 <Button Grid.Column="9" Style="{StaticResource Button.Icon}" Width="26" Height="26"
+                        MinWidth="26" MinHeight="26"
                         Content="{StaticResource Ui.More}" ToolTip="更多操作" Click="OnMoreClick" />
 
                 <!-- 行底发丝分隔线（概念稿 v0.2 的表格节奏）。
@@ -338,6 +353,7 @@
                     <TextBox x:Name="PageFilterBox" Grid.Column="1"
                              Text="{Binding PageFilterText, UpdateSourceTrigger=PropertyChanged, Delay=120}"
                              Background="Transparent" BorderThickness="0" FontSize="13"
+                             Foreground="{DynamicResource Text.Primary}" CaretBrush="{DynamicResource Text.Primary}"
                              VerticalContentAlignment="Center" Margin="8,0,10,0" />
                     <TextBlock Grid.Column="1" Text="搜索名称、IP、标签、备注… (Ctrl+K)" IsHitTestVisible="False"
                                Foreground="{DynamicResource Text.Tertiary}" FontSize="12" VerticalAlignment="Center" Margin="9,0">
@@ -694,7 +710,7 @@
                     </Border>
 
                     <!-- ── 连接列表（恒扁平；分组维度在左树）──────────────── -->
-                    <Grid Grid.Row="2">
+                    <Grid Grid.Row="2" Background="Transparent" ContextMenu="{StaticResource ConnectionsBlankMenu}">
                         <ListBox x:Name="ConnectionList"
                                  ItemContainerStyle="{StaticResource ConnectionRow}"
                                  ItemTemplate="{StaticResource ConnRowTemplate}"

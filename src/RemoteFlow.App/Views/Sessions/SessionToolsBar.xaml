@@ -72,6 +72,12 @@
                         Content="{StaticResource Ui.Keyboard}"
                         ToolTip="发送 Ctrl+Alt+Del"
                         Command="{Binding SendCtrlAltDeleteCommand}" />
+                <!-- RDP 没有会话内侧栏：在新标签页打开该主机的文件传输（SMB / SFTP），与连接列表的「文件传输…」同一入口 -->
+                <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                        Content="{StaticResource Ui.FileTransfer}"
+                        ToolTip="{Binding FileTransferTabToolTip}"
+                        Command="{Binding OpenFileTransferTabCommand}"
+                        Visibility="{Binding CanOpenFileTransferTab, Converter={StaticResource BoolToVisibility}}" />
                 <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
                         Content="{StaticResource Ui.TaskManager}"
                         ToolTip="启动任务管理器"

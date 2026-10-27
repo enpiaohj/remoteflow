@@ -405,6 +405,25 @@ public sealed class SessionManager : IAsyncDisposable
         });
     }
 
+    /// <summary>
+    /// 某连接的「最近连接时间」已写入数据库（会话到达 Connected 之后）。载荷为连接 Profile 的 Id。
+    /// 事件在线程池线程触发，消费者需自行 marshal 到 UI 线程。
+    /// </summary>
+    public event EventHandler<Guid>? LastConnectedUpdated;
+
+    private void RaiseLastConnectedUpdated(Guid profileId)
+    {
+        try
+        {
+            LastConnectedUpdated?.Invoke(this, profileId);
+        }
+        catch (Exception ex)
+        {
+            // 订阅方的界面刷新失败不能影响会话。
+            _logger.LogWarning(ex, "处理最近连接更新通知失败：{ProfileId}", profileId);
+        }
+    }
+
     /// <summary>触发 <see cref="SessionsChanged"/>（会话集合变化后广播一次，覆盖 UI 重算）。</summary>
     private void RaiseSessionsChanged() => SessionsChanged?.Invoke(this, EventArgs.Empty);
 
@@ -421,6 +440,9 @@ public sealed class SessionManager : IAsyncDisposable
 
             case ConnectionState.Connected:
                 await _connections.TouchLastConnectedAsync(session.Profile.Id, DateTimeOffset.Now);
+                // SessionsChanged 在状态跳变的同一刻就已触发，早于上面这次落库；界面据此重读「最近连接」
+                // 会读到旧值。落库完成后再单独通知一次，让各页面刷新最近连接时间与排序。
+                RaiseLastConnectedUpdated(session.Profile.Id);
                 break;
 
             case ConnectionState.Failed:

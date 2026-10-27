@@ -121,6 +121,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // 详情「打开会话 ▾ → 新建会话」：跳过去重聚焦，强制为同一设备再开一个会话。
         ConnectionsPage.NewSessionRequested += async (_, profile) => await OpenSessionAsync(profile, forceNew: true);
 
+        // 凭据页 → 新建主机连接（可带「引用此凭据」「连接名称」预填）；连接页 → 新建凭据。
+        // 两页互相只发请求，由主视图模型切页并打开对应编辑器，页面 VM 之间不互相引用。
+        _credentialsPage.NewConnectionRequested += async (_, seed) => await CreateConnectionFromSeedAsync(seed);
+        ConnectionsPage.NewCredentialRequested += async (_, _) => await NewCredentialAsync();
+
         // 「文件传输…」入口：不建会话，直接在工作区开一个文件传输 Tab。
         if (_fileTransferLauncher is not null)
         {
@@ -604,6 +609,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         return ConnectionsPage.CreateConnectionAsync(preselectedProtocol);
     }
 
+    private Task CreateConnectionFromSeedAsync(ConnectionEditorSeed? seed)
+    {
+        NavigateTo(NavigationPage.Connections);
+        return ConnectionsPage.CreateConnectionAsync(seed?.Protocol, seed?.GroupId, seed);
+    }
+
+    private async Task NewCredentialAsync()
+    {
+        NavigateTo(NavigationPage.Credentials);
+        await _credentialsPage.CreateCommand.ExecuteAsync(null);
+    }
+
     /// <summary>Ctrl+K：聚焦全局搜索。实际聚焦由视图处理。</summary>
     public event EventHandler? FocusSearchRequested;
 
@@ -625,7 +642,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         SessionTabViewModel tab;
         try
         {
-            tab = new SessionTabViewModel(session, CloseSessionAsync, ReconnectAsync, _ui, _timerFactory, _dialogs, _logger);
+            tab = new SessionTabViewModel(
+                session, CloseSessionAsync, ReconnectAsync, _ui, _timerFactory, _dialogs, _logger,
+                _fileTransferLauncher is null ? null : _fileTransferLauncher.Open);
 
             // 会话工具条里的「全屏」由主窗口层处理（隐藏导航/详情、窗口去边框铺满）；
             // 协议专属动作（缩放、Ctrl+Alt+Del 等）由各协议视图自己订阅处理。

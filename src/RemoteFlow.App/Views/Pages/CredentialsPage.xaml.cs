@@ -152,6 +152,32 @@ public partial class CredentialsPage : UserControl
         }
     }
 
+    private async void OnDuplicateMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
+        {
+            await viewModel.DuplicateCommand.ExecuteAsync(item);
+        }
+    }
+
+    /// <summary>「引用账户」：新连接引用该凭据，连接名预填为账户名。</summary>
+    private void OnNewConnectionByAccountClick(object sender, RoutedEventArgs e)
+        => ViewModel?.CreateConnectionFromCredential(ResolveItem(sender), useAccountAsName: true);
+
+    /// <summary>「引用名称」：新连接引用该凭据，连接名预填为凭据名称。</summary>
+    private void OnNewConnectionByNameClick(object sender, RoutedEventArgs e)
+        => ViewModel?.CreateConnectionFromCredential(ResolveItem(sender), useAccountAsName: false);
+
+    // 空白处右键菜单：新建凭据 / 新建主机连接 / 刷新。
+    private void OnBlankNewCredentialClick(object sender, RoutedEventArgs e)
+        => ViewModel?.CreateCommand.Execute(null);
+
+    private void OnBlankNewConnectionClick(object sender, RoutedEventArgs e)
+        => ViewModel?.CreateConnectionCommand.Execute(null);
+
+    private void OnBlankRefreshClick(object sender, RoutedEventArgs e)
+        => ViewModel?.RefreshCommand.Execute(null);
+
     /// <summary>只复制用户名（含域）；密码与私钥不提供复制入口。</summary>
     private void OnCopyUsernameMenuClick(object sender, RoutedEventArgs e)
     {
@@ -169,7 +195,14 @@ public partial class CredentialsPage : UserControl
             return null;
         }
 
-        var menu = item.Parent as ContextMenu;
+        // 子菜单项（如「用此凭据新建主机连接」下的两项）的 Parent 是上级菜单项，一路向上找到菜单本身。
+        DependencyObject? parent = item.Parent;
+        while (parent is MenuItem parentItem)
+        {
+            parent = parentItem.Parent;
+        }
+
+        var menu = parent as ContextMenu;
 
         return item.DataContext as CredentialItemViewModel
             ?? menu?.DataContext as CredentialItemViewModel

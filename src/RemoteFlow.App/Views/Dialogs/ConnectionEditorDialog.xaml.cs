@@ -28,14 +28,8 @@ public partial class ConnectionEditorDialog : Window
         _manageTags = manageTags;
         DataContext = viewModel;
 
-        // 无系统标题栏，允许拖拽标题区移动窗口。
-        TitleBar.MouseLeftButtonDown += (_, e) =>
-        {
-            if (e.ButtonState == MouseButtonState.Pressed)
-            {
-                DragMove();
-            }
-        };
+        // 无系统标题栏：窗口任意空白处都可拖动（不止标题区，与其它对话框一致）。
+        DialogDrag.EnableWholeWindow(this);
 
         Loaded += (_, _) =>
         {

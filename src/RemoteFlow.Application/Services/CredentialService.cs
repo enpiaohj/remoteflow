@@ -59,6 +59,55 @@ public sealed class CredentialService(
     }
 
     /// <summary>
+    /// 创建副本：沿用类型 / 域 / 用户名 / 备注，Secret 从保险库取出后以副本自己的引用另存一份
+    /// （与原凭据互不影响，改其一不会连带另一个）。名称为空时自动生成不冲突的「原名称 - 副本」。
+    /// <para>
+    /// 原凭据声明了密码 / 私钥却已从保险库丢失时拒绝复制：否则会悄悄复制出一个没有 Secret 的凭据，
+    /// 连接时才表现为「认证失败」。
+    /// </para>
+    /// </summary>
+    public async Task<Credential> DuplicateAsync(Guid sourceId, string? newName = null, CancellationToken ct = default)
+    {
+        var source = await repository.GetByIdAsync(sourceId, ct)
+            ?? throw new InvalidOperationException("要复制的凭据不存在。");
+
+        using var resolved = await vault.ResolveAsync(source, ct);
+        if (resolved.SecretMissing)
+        {
+            throw new InvalidOperationException(
+                "原凭据已保存的密码或私钥在本机保险库中找不到，无法复制。请先编辑原凭据重新保存。");
+        }
+
+        var name = string.IsNullOrWhiteSpace(newName)
+            ? NextCopyName(source.Name, (await repository.GetAllAsync(ct)).Select(c => c.Name))
+            : newName.Trim();
+
+        var copy = new Credential
+        {
+            Name = name,
+            Type = source.Type,
+            Username = source.Username,
+            Domain = source.Domain,
+            Description = source.Description,
+        };
+
+        return await CreateAsync(copy, resolved.Password, resolved.PrivateKey, ct);
+    }
+
+    /// <summary>「原名称 - 副本」，已存在则依次「- 副本 2」「- 副本 3」…（不区分大小写）。</summary>
+    internal static string NextCopyName(string sourceName, IEnumerable<string> existingNames)
+    {
+        var taken = existingNames.ToHashSet(StringComparer.CurrentCultureIgnoreCase);
+        var candidate = $"{sourceName} - 副本";
+        for (var n = 2; taken.Contains(candidate); n++)
+        {
+            candidate = $"{sourceName} - 副本 {n}";
+        }
+
+        return candidate;
+    }
+
+    /// <summary>
     /// 更新凭据。<paramref name="password"/> / <paramref name="privateKey"/> 传 null 表示
     /// 「保持原值不变」，传空字符串表示「清除该 Secret」。
     /// 这样 UI 的密码框留空即可安全地表示不修改密码。

@@ -147,6 +147,45 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         if (_sessions is not null)
         {
             _sessions.SessionsChanged += OnSessionsChanged;
+            _sessions.LastConnectedUpdated += OnLastConnectedUpdated;
+        }
+    }
+
+    /// <summary>
+    /// 会话连接成功并写完「最近连接时间」后，把行里缓存的时间同步过来并重排 / 重算计数。
+    /// 事件在线程池线程触发；列表行是 UI 对象，先 marshal 回 UI 线程。
+    /// </summary>
+    private void OnLastConnectedUpdated(object? sender, Guid profileId)
+    {
+        if (_ui.RequeueIfNeeded(() => OnLastConnectedUpdated(sender, profileId)))
+        {
+            return;
+        }
+
+        _ = RefreshLastConnectedAsync(profileId);
+    }
+
+    private async Task RefreshLastConnectedAsync(Guid profileId)
+    {
+        try
+        {
+            var fresh = await _connections.GetByIdAsync(profileId);
+            var item = _allItems.FirstOrDefault(i => i.Id == profileId);
+            if (fresh is null || item is null)
+            {
+                return;
+            }
+
+            item.ApplyLastConnectedAt(fresh.LastConnectedAt);
+
+            // 最近连接视图的成员 / 排序 / 计数都由 LastConnectedAt 决定，需要重新应用筛选。
+            ApplyFilter();
+            RaiseViewCounts();
+            OnPropertyChanged(nameof(SelectedLastConnectedText));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "刷新连接 {ProfileId} 的最近连接时间失败", profileId);
         }
     }
 
@@ -738,6 +777,37 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             : "未指定";
     }
 
+    /// <summary>可供「更改凭据」选择的凭据（按名称排序）。</summary>
+    public IReadOnlyList<KeyValuePair<Guid, string>> CredentialChoices
+        => [.. _credentialNames.OrderBy(p => p.Value, StringComparer.CurrentCultureIgnoreCase)];
+
+    /// <summary>
+    /// 请求新建凭据。凭据页由 MainViewModel 承载，这里只发请求（空白处右键 / 菜单「新建凭据」）。
+    /// </summary>
+    public event EventHandler? NewCredentialRequested;
+
+    [RelayCommand]
+    private void RequestNewCredential() => NewCredentialRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
+    /// 更改连接引用的凭据；<paramref name="credentialId"/> 为 null 表示改为「未指定」。
+    /// 只改引用，不触碰凭据本身。
+    /// </summary>
+    public async Task ChangeCredentialAsync(ConnectionItemViewModel? item, Guid? credentialId)
+    {
+        item ??= SelectedItem;
+        if (item is null || item.Profile.CredentialId == credentialId)
+        {
+            return;
+        }
+
+        item.Profile.CredentialId = credentialId;
+        item.Profile.UpdatedAt = DateTimeOffset.Now;
+        await _connections.UpdateAsync(item.Profile);
+
+        ApplyCredentialName(item);
+    }
+
     private ConnectionItemViewModel CreateItem(ConnectionProfile profile)
     {
         const int MaxVisibleTags = 2;
@@ -1289,12 +1359,14 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// </summary>
     public async Task CreateConnectionAsync(
         ProtocolType? preselectedProtocol = null,
-        Guid? defaultGroupId = null)
+        Guid? defaultGroupId = null,
+        ConnectionEditorSeed? seed = null)
     {
         var result = await OpenConnectionEditorAsync(
             null,
             preselectedProtocol,
-            defaultGroupId);
+            defaultGroupId,
+            seed);
         if (result is null)
         {
             return;
@@ -1305,17 +1377,41 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
         SelectedItem = Items.FirstOrDefault(i => i.Id == result.Profile.Id);
 
-        if (result.ConnectImmediately && SelectedItem is not null)
+        if (result.ConnectImmediately)
         {
-            await ConnectAsync(SelectedItem);
+            await ConnectSavedAsync(result.Profile.Id, result.Profile);
         }
+    }
+
+    /// <summary>
+    /// 「保存并连接」：保存后发起连接。
+    /// <para>
+    /// 不能依赖 <see cref="SelectedItem"/>：当前处于「最近连接」「收藏」等筛选视图时，新保存的连接
+    /// 不在当前列表里，选中项为空，原先「选中项为空就不连」会让保存并连接静默什么都不做。
+    /// 优先用列表里的那份（与行共享同一个 Profile），没有就直接用保存结果。
+    /// </para>
+    /// </summary>
+    private Task ConnectSavedAsync(Guid profileId, ConnectionProfile saved)
+    {
+        var profile = _allItems.FirstOrDefault(i => i.Id == profileId)?.Profile ?? saved;
+        OpenConnectionRequested?.Invoke(this, profile);
+        return Task.CompletedTask;
     }
 
     private Task<ConnectionEditorResult?> OpenConnectionEditorAsync(
         ConnectionProfile? existing,
         ProtocolType? preselectedProtocol,
-        Guid? defaultGroupId)
+        Guid? defaultGroupId,
+        ConnectionEditorSeed? seed = null)
     {
+        // 带预填（凭据 / 名称）的新建：平台支持就走预填通道，否则退回只预选协议。
+        if (seed is not null && _dialogs is IConnectionSeedDialogService seedDialogs)
+        {
+            return seedDialogs.EditConnectionAsync(
+                existing,
+                seed with { Protocol = seed.Protocol ?? preselectedProtocol, GroupId = seed.GroupId ?? defaultGroupId });
+        }
+
         if (defaultGroupId is { } groupId
             && _dialogs is IConnectionEditorDialogService groupedDialogs)
         {
@@ -1325,7 +1421,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                 groupId);
         }
 
-        return _dialogs.EditConnectionAsync(existing, preselectedProtocol);
+        return _dialogs.EditConnectionAsync(existing, seed?.Protocol ?? preselectedProtocol);
     }
 
     [RelayCommand]
@@ -1348,9 +1444,9 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
         SelectedItem = Items.FirstOrDefault(i => i.Id == result.Profile.Id);
 
-        if (result.ConnectImmediately && SelectedItem is not null)
+        if (result.ConnectImmediately)
         {
-            await ConnectAsync(SelectedItem);
+            await ConnectSavedAsync(result.Profile.Id, result.Profile);
         }
     }
 

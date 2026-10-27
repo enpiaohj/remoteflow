@@ -63,6 +63,20 @@ public sealed partial class HomePageViewModel : ObservableObject
         // 不再依赖切页重新 LoadAsync。事件可能在任意线程触发，OnSessionsChanged 内 marshal 回 UI。
         // 单例常驻、App 退出由容器整体释放，不提供 Dispose 退订——与 ConnectionsPageViewModel 等其它单例 VM 一致。
         _sessions.SessionsChanged += OnSessionsChanged;
+
+        // 「最近连接时间」在状态跳变之后才落库，状态事件触发的去抖重载可能读到旧值；
+        // 落库完成后的专门通知再重载一次，保证最近连接卡片与排序是新的。
+        _sessions.LastConnectedUpdated += OnLastConnectedUpdated;
+    }
+
+    private void OnLastConnectedUpdated(object? sender, Guid profileId)
+    {
+        if (_ui.RequeueIfNeeded(() => OnLastConnectedUpdated(sender, profileId)))
+        {
+            return;
+        }
+
+        ScheduleDebouncedReload();
     }
 
     /// <summary>收藏 / 最近活动分区最多展示的条目数，超出的到对应页面查看全部。</summary>

@@ -23,6 +23,9 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     private readonly Func<Guid, Task> _closeCallback;
     private readonly Func<ConnectionProfile, Task> _reconnectCallback;
 
+    /// <summary>在工作区为该主机开一个独立的文件传输 Tab（主视图模型提供；测试 / 不支持的平台为 null）。</summary>
+    private readonly Action<ConnectionProfile>? _openFileTransferTab;
+
     /// <summary>会话时长走秒刷新；仅在已连接（含自动重连期间）运行，空闲不打扰。</summary>
     private readonly IUiTimer _durationTimer;
 
@@ -38,11 +41,13 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         IUiDispatcher uiDispatcher,
         IUiTimerFactory timerFactory,
         IDialogService? dialogs = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        Action<ConnectionProfile>? openFileTransferTab = null)
     {
         Session = session;
         _closeCallback = closeCallback;
         _reconnectCallback = reconnectCallback;
+        _openFileTransferTab = openFileTransferTab;
         _ui = uiDispatcher;
 
         Title = session.Profile.Name;
@@ -109,6 +114,33 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         if (IsFileTransferOpen)
         {
             await FileTransfer.EnsureConnectedAsync();
+        }
+    }
+
+    /// <summary>
+    /// 在新标签页打开该主机的文件传输：给没有会话内侧栏的协议（RDP）用。RDP 本身没有文件传输通道，
+    /// 走连接设置里选的 SMB 管理共享或 SFTP，与连接列表里的「文件传输…」是同一个入口，
+    /// 不占用当前 RDP 会话，也不需要重新连接。VNC 没有可用通道，SSH 已有侧栏，均不显示。
+    /// </summary>
+    public bool CanOpenFileTransferTab
+        => _openFileTransferTab is not null
+           && FileTransfer is null
+           && Profile.FileTransfer.ResolveChannel(Profile.Protocol) is not null;
+
+    /// <summary>入口按钮的提示：带上实际走的通道，并说明是新标签页。</summary>
+    public string FileTransferTabToolTip => Profile.FileTransfer.ResolveChannel(Profile.Protocol) switch
+    {
+        FileTransferChannel.Smb => "文件传输（SMB 管理共享）· 在新标签页打开",
+        FileTransferChannel.Sftp => "文件传输（SFTP）· 在新标签页打开",
+        _ => "文件传输",
+    };
+
+    [RelayCommand]
+    private void OpenFileTransferTab()
+    {
+        if (CanOpenFileTransferTab)
+        {
+            _openFileTransferTab!(Profile);
         }
     }
 

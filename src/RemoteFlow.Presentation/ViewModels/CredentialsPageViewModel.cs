@@ -213,6 +213,74 @@ public sealed partial class CredentialsPageViewModel(
         await LoadAsync();
     }
 
+    /// <summary>
+    /// 创建副本：同类型 / 账号 / 备注，密码或私钥另存一份，名称自动避让为「原名称 - 副本」。
+    /// 复制后选中副本，方便立刻重命名或改账号。
+    /// </summary>
+    [RelayCommand]
+    private async Task DuplicateAsync(CredentialItemViewModel? item)
+    {
+        item ??= SelectedItem;
+        if (item is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var copy = await credentials.DuplicateAsync(item.Id);
+
+            // 清掉可能把副本滤掉的搜索 / 类型筛选，保证选得中。
+            SearchText = string.Empty;
+            TypeOption = TypeOptions[0];
+            await LoadAsync();
+            SelectedItem = Items.FirstOrDefault(i => i.Id == copy.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await dialogs.ShowMessageAsync("无法创建副本", ex.Message, DialogKind.Warning);
+        }
+    }
+
+    /// <summary>
+    /// 请求新建主机连接。连接页由 MainViewModel 承载：这里只发请求，由它切到连接页并打开编辑器。
+    /// 载荷为预填内容，null 表示空白新建。
+    /// </summary>
+    public event EventHandler<ConnectionEditorSeed?>? NewConnectionRequested;
+
+    /// <summary>空白处右键 / 菜单「新建主机连接」：不预填任何内容。</summary>
+    [RelayCommand]
+    private void CreateConnection() => NewConnectionRequested?.Invoke(this, null);
+
+    /// <summary>
+    /// 「用此凭据新建主机连接」：连接引用这条凭据，协议按凭据类型预选。
+    /// <paramref name="useAccountAsName"/> 为 true 时连接名称预填为账号（域\用户名），
+    /// 否则预填为凭据名称；两种都只是起点，编辑器里仍可修改名称，也可改引用的凭据。
+    /// </summary>
+    public void CreateConnectionFromCredential(CredentialItemViewModel? item, bool useAccountAsName)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        var suggestedName = useAccountAsName && !string.IsNullOrWhiteSpace(item.Username)
+            ? item.Username
+            : item.Name;
+
+        NewConnectionRequested?.Invoke(
+            this,
+            new ConnectionEditorSeed(item.Id, suggestedName, ProtocolFor(item.Credential.Type)));
+    }
+
+    /// <summary>凭据类型对应的连接协议：Windows 账号走 RDP，SSH 口令 / 私钥走 SSH，VNC 口令走 VNC。</summary>
+    internal static ProtocolType ProtocolFor(CredentialType type) => type switch
+    {
+        CredentialType.WindowsDomain or CredentialType.LocalPassword => ProtocolType.Rdp,
+        CredentialType.SshPassword or CredentialType.SshPrivateKey => ProtocolType.Ssh,
+        _ => ProtocolType.Vnc,
+    };
+
     [RelayCommand]
     private async Task DeleteAsync(CredentialItemViewModel? item)
     {
