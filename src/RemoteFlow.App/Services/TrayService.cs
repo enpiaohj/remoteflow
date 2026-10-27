@@ -543,12 +543,11 @@ public sealed class TrayService : IDisposable
             return;
         }
 
-        var count = _sessions.ConnectedSessionCount;
-
-        // NotifyIcon.Text 有 63 字符上限，这里的文案远低于该限制。
-        _notifyIcon.Text = count == 0
-            ? $"RemoteFlow {_mainViewModel.AppVersion}"
-            : $"RemoteFlow {_mainViewModel.AppVersion} — {count} 个会话已连接";
+        // 详细信息：版本号 + 各状态会话数 + 会话名（文案见 TrayTooltip，已截到 NotifyIcon.Text 的长度上限内）。
+        var sessions = _sessions.ActiveSessions
+            .Select(s => (s.Profile.Name, s.State))
+            .ToList();
+        _notifyIcon.Text = TrayTooltip.Build(_mainViewModel.AppVersion, sessions);
     }
 
     // ── 图标与资源 ────────────────────────────────────────────────
