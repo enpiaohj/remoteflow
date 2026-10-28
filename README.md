@@ -19,7 +19,7 @@ ViewModel（`RemoteFlow.Core` + `RemoteFlow.Presentation`），各自用平台�
 
 ## 目录
 
-- [亮点](#亮点) · [截图](#截图) · [下载与安装](#下载与安装) · [快速上手](#快速上手)
+- [亮点](#亮点) · [截图](#截图) · [系统要求](#系统要求) · [下载与安装](#下载与安装) · [快速上手](#快速上手)
 - [功能](#功能) · [云同步（可选）](#云同步可选) · [安全模型](#安全模型)
 - [技术栈](#技术栈) · [解决方案结构](#解决方案结构) · [构建与运行](#构建与运行windows)
 - [反馈与贡献](#反馈与贡献) · [License](#license)
@@ -66,6 +66,33 @@ ViewModel（`RemoteFlow.Core` + `RemoteFlow.Presentation`），各自用平台�
 | 主题、窗口材质（亚克力 / 云母 / 纯色）与透明度、日期时间格式、启动与托盘 | 位于「设置 → 关于」：应用内检查与安装更新，默认不自动联网 |
 
 远程会话（RDP / SSH / VNC）与文件传输界面需要连接真实主机，暂未提供截图。
+
+---
+
+## 系统要求
+
+| | Windows | macOS |
+| --- | --- | --- |
+| 系统 | **Windows 11，x64**（开发与验证环境）；Windows 10 / Windows Server 未做系统验证，见下方说明 | macOS 13+ |
+| 运行时 | 无需另装 .NET（单文件、自包含）；体积约 75 MB | 见 [macOS 构建说明](#构建与运行macos) |
+| SSH 终端 | 需要 [Microsoft Edge WebView2 运行时](https://developer.microsoft.com/microsoft-edge/webview2/)（Windows 11 通常已内置） | 系统自带 WKWebView |
+| RDP | 使用系统自带的 `mstscax.dll`（远程桌面客户端组件） | 内嵌 FreeRDP |
+| 玻璃外观 | 亚克力 / 云母需要 Windows 11 22H2+；不满足或系统关闭透明效果时显示为纯色，不影响功能 | — |
+| 其他 | 放在有写入权限的目录（应用内更新需要）；本机 SQLite 数据与凭据加密保存在当前用户目录 | — |
+
+默认端口：RDP 3389、SSH 22、VNC 5900；对 RDP 主机做「文件传输」走 SMB 时需要目标 445 端口可达。
+
+**在较老的 Windows 上运行（Windows 10 之前 / Windows Server 2012 R2 等）**
+
+以下来自用户反馈与推断，**没有在这些系统上做完整验证**，仅供参考：
+
+- 启动时报「无法启动此程序，因为计算机中丢失 `api-ms-win-crt-*.dll`」：系统缺少通用 C 运行库（Universal CRT）。
+  Windows Update 补到最新，或安装微软的 *Update for Universal C Runtime in Windows*（KB2999226）、
+  [Visual C++ 2015–2022 可再发行组件（x64）](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist)；
+  Windows Server 2012 R2 上这些更新另有前置更新，以微软官方说明为准。
+- .NET 10 对 Windows Server 2012 R2 是否仍在官方支持范围内未能确认，补完运行库后若仍无法启动，请以微软 .NET 10 系统要求为准。
+- WebView2 常青版运行时已不再支持 Windows Server 2012 R2 等较老系统，在这类系统上 **SSH 终端可能无法使用**；
+  RDP / VNC 不依赖 WebView2。
 
 ---
 
