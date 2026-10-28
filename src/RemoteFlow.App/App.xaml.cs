@@ -509,6 +509,13 @@ public partial class App : System.Windows.Application
     {
         var window = Services.GetRequiredService<MainWindow>();
         MainWindow = window;
+        if (Environment.GetCommandLineArgs().Contains("--vmware-console-spike"))
+        {
+            window.Loaded += (_, _) => new RemoteFlow.App.Views.Dialogs.VmwareConsoleSpikeWindow
+            {
+                Owner = window
+            }.Show();
+        }
 
         // 托盘图标让「关闭即最小化」有一个明确的退出入口。
         // 菜单动作（新建连接 / 最近连接 / 切换会话 / 设置）统一收敛到 MainViewModel，托盘不重复实现。
