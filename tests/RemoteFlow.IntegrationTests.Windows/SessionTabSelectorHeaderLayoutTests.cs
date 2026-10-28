@@ -123,7 +123,7 @@ public sealed class SessionTabSelectorHeaderLayoutTests
                 close.Visibility = Visibility.Visible;
                 Relayout(selector);
 
-                // 头部子元素顺序（含未命名的箭头 TextBlock）：
+                // 头部子元素顺序（含未命名的箭头 Path（几何图标，不依赖系统字体））：
                 // 图标盒 → 标题 → 状态点 → 关闭按钮 → 下拉箭头。
                 // 箭头排在最后，因此它的位置不随 × 的出现与消失而改变。
                 var panel = FindHeaderPanel(toggle);
@@ -133,7 +133,7 @@ public sealed class SessionTabSelectorHeaderLayoutTests
                 Assert.True(closeIndex >= 0, "关闭按钮不在头部面板内");
 
                 var last = children[^1];
-                Assert.IsType<TextBlock>(last);
+                Assert.IsType<System.Windows.Shapes.Path>(last);
                 Assert.True(
                     ReferenceEquals(last, children[^1]) && closeIndex < children.Count - 1,
                     "关闭按钮应排在下拉箭头之前，使箭头位置恒定。");

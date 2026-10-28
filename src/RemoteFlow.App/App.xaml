@@ -12,6 +12,7 @@
                 <ResourceDictionary Source="Themes/Theme.Light.xaml" />
                 <ResourceDictionary Source="Themes/Icons.xaml" />
                 <ResourceDictionary Source="Themes/UiIcons.xaml" />
+                <ResourceDictionary Source="Themes/WindowIcons.xaml" />
                 <ResourceDictionary Source="Themes/IdentityIcons.xaml" />
                 <ResourceDictionary Source="Themes/DeviceIcons.xaml" />
                 <ResourceDictionary Source="Themes/OrganizationIcons.xaml" />

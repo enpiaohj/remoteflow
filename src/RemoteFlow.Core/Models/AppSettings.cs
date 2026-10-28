@@ -162,6 +162,17 @@ public sealed class AppSettings
     public bool RdpDefaultRedirectAudio { get; set; }
     public bool RdpDefaultUseMultimon { get; set; }
 
+    /// <summary>RDP 连接超时（秒），作用于所有 RDP 连接。默认 120，与 mstsc 一致；取值范围见 <see cref="RdpConnectionTimeoutMin"/> ~ <see cref="RdpConnectionTimeoutMax"/>。</summary>
+    public int RdpConnectionTimeoutSeconds { get; set; } = RdpConnectionTimeoutDefault;
+
+    public const int RdpConnectionTimeoutDefault = 120;
+    public const int RdpConnectionTimeoutMin = 10;
+    public const int RdpConnectionTimeoutMax = 600;
+
+    // ── 日志 ──────────────────────────────────────────────
+    /// <summary>日志级别。默认「信息」；排查连接问题时可切到「调试」（记录更多连接过程细节，日志文件会更大），改动立即生效。</summary>
+    public AppLogLevel LogLevel { get; set; } = AppLogLevel.Information;
+
     // ── SSH 默认值 ────────────────────────────────────────
     public string SshDefaultEncoding { get; set; } = "UTF-8";
     public string SshFontFamily { get; set; } = "Cascadia Mono, Consolas, 微软雅黑";
@@ -244,4 +255,14 @@ public sealed class AppSettings
         copy.CollapsedGroupIds = [.. CollapsedGroupIds];
         return copy;
     }
+}
+
+/// <summary>应用日志级别（用户可选）。日志内容始终脱敏，不含密码与密钥。</summary>
+public enum AppLogLevel
+{
+    /// <summary>信息：记录运行与连接的关键事件（默认）。</summary>
+    Information = 0,
+
+    /// <summary>调试：额外记录连接过程与控件属性等细节，用于排查问题。</summary>
+    Debug = 1,
 }

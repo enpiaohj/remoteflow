@@ -120,7 +120,7 @@
 
             <!-- 窗口最大化档与完全全屏的切换入口（与 F11 等价） -->
             <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
-                    Content="{StaticResource Icon.WindowMaximize}"
+                    Content="{StaticResource Ui.WindowMaximize}"
                     ToolTip="窗口最大化（收起侧边，会话铺满窗口）"
                     Command="{Binding AdvanceFullScreenCommand}" />
             <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"

@@ -19,10 +19,18 @@ namespace RemoteFlow.Infrastructure.Logging;
 /// </summary>
 public static class LoggingSetup
 {
+    /// <summary>运行时可调的最低日志级别：设置里改日志级别后立即生效，无需重启。</summary>
+    private static readonly LoggingLevelSwitch LevelSwitch = new(LogEventLevel.Information);
+
+    /// <summary>切换调试 / 信息级别（立即生效）。</summary>
+    public static void SetDebug(bool debug)
+        => LevelSwitch.MinimumLevel = debug ? LogEventLevel.Debug : LogEventLevel.Information;
+
     public static ILoggerFactory Create(string logFileTemplate, bool verbose = false)
     {
+        SetDebug(verbose);
         var serilogLogger = new LoggerConfiguration()
-            .MinimumLevel.Is(verbose ? LogEventLevel.Debug : LogEventLevel.Information)
+            .MinimumLevel.ControlledBy(LevelSwitch)
             .Enrich.With(new SecretRedactingEnricher())
             .WriteTo.File(
                 path: logFileTemplate,
@@ -39,7 +47,8 @@ public static class LoggingSetup
         return LoggerFactory.Create(builder =>
         {
             builder.AddSerilog(serilogLogger, dispose: true);
-            builder.SetMinimumLevel(verbose ? LogLevel.Debug : LogLevel.Information);
+            // 过滤交给 Serilog 的 LevelSwitch：这里放开到 Debug，运行时切级别才不会被上游挡住。
+            builder.SetMinimumLevel(LogLevel.Debug);
         });
     }
 

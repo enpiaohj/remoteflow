@@ -786,7 +786,7 @@ public partial class MainWindow : Window
     private void OnWindowStateChanged(object? sender, EventArgs e)
     {
         // 最大化后按钮语义变为「还原」，图标需要同步切换。
-        MaximizeButton.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
+        MaximizeButton.Content = FindResource(WindowState == WindowState.Maximized ? "Ui.WindowRestore" : "Ui.WindowMaximize");
         MaximizeButton.ToolTip = WindowState == WindowState.Maximized ? "向下还原" : "最大化";
 
         UpdateRootPadding();

@@ -91,12 +91,11 @@
                         ToolTip="关闭会话 (Ctrl+W)"
                         Visibility="Collapsed"
                         Click="OnHeaderCloseClick" />
-                <TextBlock Text="&#xE70D;"
-                           FontFamily="{StaticResource IconFont}"
-                           FontSize="10"
-                           Margin="8,0,0,0"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource Text.Secondary}" />
+                <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronDown}"
+                      Width="13" Height="13"
+                      Margin="8,0,0,0"
+                      VerticalAlignment="Center"
+                      Fill="{DynamicResource Text.Secondary}" />
             </StackPanel>
             <ToggleButton.Template>
                 <ControlTemplate TargetType="ToggleButton">
@@ -130,6 +129,7 @@
                AllowsTransparency="True"
                PopupAnimation="Fade"
                StaysOpen="False"
+               Opened="OnPopupOpened"
                Closed="OnPopupClosed">
             <Border Background="{DynamicResource Bg.Popup}"
                     BorderBrush="{DynamicResource Stroke.Default}"

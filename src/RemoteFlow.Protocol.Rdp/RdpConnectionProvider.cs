@@ -8,7 +8,7 @@ namespace RemoteFlow.Protocol.Rdp;
 /// <summary>
 /// RDP 协议 Provider。依赖本机 mstscax.dll 提供的 RDP Client ActiveX 控件。
 /// </summary>
-public sealed class RdpConnectionProvider(ILoggerFactory loggerFactory) : IConnectionProvider
+public sealed class RdpConnectionProvider(ILoggerFactory loggerFactory, AppSettings settings) : IConnectionProvider
 {
     private readonly ILogger _logger = loggerFactory.CreateLogger<RdpConnectionProvider>();
 
@@ -41,6 +41,7 @@ public sealed class RdpConnectionProvider(ILoggerFactory loggerFactory) : IConne
 
         _logger.LogDebug("使用 RDP 控件 {ProgId}", control.ProgId);
 
-        return new RdpSession(request, control.Clsid.ToString("B"), _logger);
+        // 创建会话时读取当前设置：改了「RDP 连接超时」之后，新开的连接即生效。
+        return new RdpSession(request, control.Clsid.ToString("B"), _logger, settings.RdpConnectionTimeoutSeconds);
     }
 }

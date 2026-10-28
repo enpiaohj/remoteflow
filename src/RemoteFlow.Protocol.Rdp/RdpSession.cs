@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Windows.Forms;
@@ -22,7 +23,19 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
     private readonly SessionRequest _request;
     private readonly ILogger _logger;
 
+    /// <summary>
+    /// 控件自身的连接超时（秒）：由「设置 → RDP → 连接超时」决定，默认 120，与 mstsc 一致。
+    /// 域控制器、带「登录消息」（法律声明）需要手工点确认的服务器，从握手到登录完成常常超过半分钟；
+    /// 之前写死 30 秒会在这类场景下被控件以「两台计算机无法在分配的时间内连接」（原因码 264）掐断，
+    /// 而 mstsc 连同一台没问题。主机不可达的快速失败由连接前的 TCP 预检负责，不受此值影响。
+    /// </summary>
+    private readonly int _controlConnectionTimeoutSeconds;
+
+    /// <summary>连接前 TCP 预检的时限：主机不可达 / 端口不通时快速报错，不必等控件超时。</summary>
+    private static readonly TimeSpan PreflightTimeout = TimeSpan.FromSeconds(10);
+
     private readonly RdpAxHost _host;
+    private readonly Stopwatch _connectClock = new();
     private IConnectionPoint? _connectionPoint;
     private int _adviseCookie;
 
@@ -39,8 +52,14 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
     /// <summary>连接完成（成功或失败）的信号，用于让 ConnectAsync 等待 COM 事件回调。</summary>
     private TaskCompletionSource<bool>? _connectSignal;
 
-    public RdpSession(SessionRequest request, string clsid, ILogger logger)
+    public RdpSession(
+        SessionRequest request,
+        string clsid,
+        ILogger logger,
+        int connectionTimeoutSeconds = AppSettings.RdpConnectionTimeoutDefault)
     {
+        _controlConnectionTimeoutSeconds = Math.Clamp(
+            connectionTimeoutSeconds, AppSettings.RdpConnectionTimeoutMin, AppSettings.RdpConnectionTimeoutMax);
         _request = request;
         _credential = request.Credential;
         _logger = logger;
@@ -109,12 +128,18 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
                     ConnectionErrorCode.ComponentUnavailable,
                     "远程桌面控件未能初始化，请确认本机的远程桌面客户端组件完整。");
 
+            await PreflightAsync(linkedCts.Token);
+
             Configure(ocx);
             SubscribeEvents(ocx);
 
             _connectSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             dynamic client = ocx;
+            _connectClock.Restart();
+            _logger.LogInformation(
+                "RDP 会话 {SessionId} 开始连接 {Host}:{Port}（控件 {Control}，超时 {Timeout} 秒）",
+                SessionId, Profile.Host, Profile.Port, RdpControlLocator.Locate()?.ProgId ?? "?", _controlConnectionTimeoutSeconds);
             client.Connect();
 
             // 连接结果通过 COM 事件回调返回，这里等待信号或取消。
@@ -398,6 +423,52 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
     // ── 控件配置 ──────────────────────────────────────────────────
 
     /// <summary>
+    /// 连接前的 TCP 预检：只对「肯定连不上」的情况快速失败（解析不了、拒绝、不可达、超时）。
+    /// 其余意外错误只记日志、照常交给控件去连——预检不能比控件更挑剔。
+    /// </summary>
+    private async Task PreflightAsync(CancellationToken ct)
+    {
+        var host = Profile.Host;
+        var port = Profile.Port;
+        if (string.IsNullOrWhiteSpace(host) || port is <= 0 or > 65535)
+        {
+            return;
+        }
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(PreflightTimeout);
+        var started = Stopwatch.StartNew();
+        try
+        {
+            using var tcp = new System.Net.Sockets.TcpClient();
+            await tcp.ConnectAsync(host, port, timeout.Token);
+            _logger.LogDebug("RDP 会话 {SessionId} TCP 预检通过，用时 {Elapsed} ms", SessionId, started.ElapsedMilliseconds);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new ConnectionException(
+                ConnectionErrorCode.Timeout,
+                $"连接 {host}:{port} 超时（{PreflightTimeout.TotalSeconds:0} 秒内没有响应），请检查主机地址、端口和网络 / 防火墙。");
+        }
+        catch (System.Net.Sockets.SocketException ex) when (ex.SocketErrorCode is System.Net.Sockets.SocketError.HostNotFound or System.Net.Sockets.SocketError.NoData)
+        {
+            throw new ConnectionException(ConnectionErrorCode.HostNotFound, ConnectionException.Describe(ConnectionErrorCode.HostNotFound), ex);
+        }
+        catch (System.Net.Sockets.SocketException ex) when (ex.SocketErrorCode is System.Net.Sockets.SocketError.ConnectionRefused
+            or System.Net.Sockets.SocketError.NetworkUnreachable or System.Net.Sockets.SocketError.HostUnreachable
+            or System.Net.Sockets.SocketError.TimedOut)
+        {
+            throw new ConnectionException(
+                ConnectionErrorCode.NetworkUnreachable,
+                $"无法连接 {host}:{port}（{ex.SocketErrorCode}），请检查远程桌面服务是否开启、端口是否正确、网络 / 防火墙是否放行。", ex);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "RDP 会话 {SessionId} TCP 预检出现意外错误，交给控件继续连接", SessionId);
+        }
+    }
+
+    /// <summary>
     /// 等待 ActiveX 控件就绪。控件由 UI 加入可视树后才创建句柄，
     /// 这里以轮询方式等待，避免在 UI 尚未布局完成时访问 COM 对象。
     /// </summary>
@@ -522,8 +593,8 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         TrySet("EnableAutoReconnect", () => advanced.EnableAutoReconnect = true);
 
         // 连接超时相关（单位：秒）。
-        TrySet("singleConnectionTimeout", () => advanced.singleConnectionTimeout = 30);
-        TrySet("overallConnectionTimeout", () => advanced.overallConnectionTimeout = 30);
+        TrySet("singleConnectionTimeout", () => advanced.singleConnectionTimeout = _controlConnectionTimeoutSeconds);
+        TrySet("overallConnectionTimeout", () => advanced.overallConnectionTimeout = _controlConnectionTimeoutSeconds);
 
         // 连接质量（体验）：Auto 不写入，让控件/系统自行决定；其余按 IMsRdpClientAdvancedSettings7
         // NetworkConnectionType 的文档常量映射（LAN=6 / 高速宽带=4 / 低带宽=2），远端据此调整体验。
@@ -556,7 +627,9 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "RDP 会话 {SessionId} 不支持设置 {Property}，已跳过", SessionId, propertyName);
+            // Information：老版本控件（如 Windows 7 / Server 2012 R2 自带）缺属性是常见情况，
+            // 出现「连接卡住」类问题时，这些记录是定位依据，默认日志级别就要能看到。
+            _logger.LogInformation("RDP 会话 {SessionId} 控件不支持设置 {Property}，已跳过（{Reason}）", SessionId, propertyName, ex.GetType().Name);
         }
     }
 
@@ -648,15 +721,32 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
 
     private void SafeDisconnect()
     {
-        TryInvoke("断开连接", ocx =>
+        var ocx = _host.ActiveXInstance;
+        if (ocx is null)
+        {
+            return;
+        }
+
+        try
         {
             dynamic client = ocx;
             // Connected: 0 = 已断开，1 = 连接中，2 = 已连接。
-            if ((int)client.Connected != 0)
+            var connected = (int)client.Connected;
+            if (connected != 0)
             {
                 client.Disconnect();
             }
-        });
+        }
+        catch (COMException ex)
+        {
+            // 连接中（握手阶段）调用 Disconnect，部分控件版本（如 Server 2012 R2 自带）会返回 E_FAIL。
+            // 这是预期的：随后释放宿主控件会终止这次连接，不必当作故障告警。
+            _logger.LogDebug(ex, "RDP 会话 {SessionId} 控件拒绝了断开调用（0x{HResult:X8}），将通过释放控件结束连接", SessionId, ex.HResult);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "RDP 会话 {SessionId} 执行「断开连接」失败", SessionId);
+        }
     }
 
     /// <summary>
@@ -681,7 +771,7 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
     // ── IMsTscAxEvents 回调 ───────────────────────────────────────
 
     public void OnConnecting()
-        => _logger.LogDebug("RDP 会话 {SessionId} 正在连接 {Host}", SessionId, Profile.Host);
+        => _logger.LogInformation("RDP 会话 {SessionId} 控件开始连接 {Host}（{Elapsed} ms）", SessionId, Profile.Host, _connectClock.ElapsedMilliseconds);
 
     public void OnConnected()
     {
@@ -698,7 +788,7 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
             SetState(ConnectionState.Connected);
         }
 
-        _logger.LogDebug("RDP 会话 {SessionId} 传输层已连接", SessionId);
+        _logger.LogInformation("RDP 会话 {SessionId} 传输层已连接（{Elapsed} ms）", SessionId, _connectClock.ElapsedMilliseconds);
     }
 
     /// <summary>登录完成才算真正建立可用会话。</summary>
@@ -716,7 +806,8 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
             SetState(ConnectionState.Connected);
             _connectSignal?.TrySetResult(true);
 
-            _logger.LogInformation("RDP 会话 {SessionId} 已连接 {Host}:{Port}", SessionId, Profile.Host, Profile.Port);
+            _logger.LogInformation("RDP 会话 {SessionId} 已连接 {Host}:{Port}（登录完成，用时 {Elapsed} ms）",
+                SessionId, Profile.Host, Profile.Port, _connectClock.ElapsedMilliseconds);
         }
     }
 
@@ -733,7 +824,9 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
         // 连接中 / 自动重连失败等非已连接阶段断开：按失败统一收口（退订 + 断开 + Failed）。
         var code = MapDisconnectReason(discReason);
         ErrorMessage = DescribeDisconnect(discReason) ?? ConnectionException.Describe(code);
-        _logger.LogDebug("RDP 会话 {SessionId} 连接阶段断开，原因码 {Reason}", SessionId, discReason);
+        _logger.LogWarning(
+            "RDP 会话 {SessionId} 连接阶段断开，原因码 {Reason}，扩展原因 {Extended}，{Description}（已用时 {Elapsed} ms）",
+            SessionId, discReason, ReadExtendedReason(), ErrorMessage, _connectClock.ElapsedMilliseconds);
         FailCleanup(code, null);
     }
 
@@ -771,6 +864,19 @@ public sealed class RdpSession : IRemoteSession, IMsTscAxEvents
 
         // 交由控件按自身策略继续重连，UI 通过状态层展示断线提示。
         continueReconnecting = true;
+    }
+
+    private int ReadExtendedReason()
+    {
+        try
+        {
+            dynamic client = _host.ActiveXInstance!;
+            return (int)client.ExtendedDisconnectReason;
+        }
+        catch
+        {
+            return -1;
+        }
     }
 
     /// <summary>取控件自带的本地化错误描述，比自造文案更准确。</summary>

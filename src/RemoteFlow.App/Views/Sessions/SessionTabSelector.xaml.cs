@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.App.Converters;
@@ -78,6 +79,7 @@ public sealed partial class SessionTabSelector : UserControl
         Detach();
         DetachHeaderTab();
         SelectorPopup.IsOpen = false;
+        UnhookWheel();
     }
 
     /// <summary>订阅当前 <see cref="_main"/> 并重建镜像。幂等：已订阅时不重复订阅。</summary>
@@ -459,7 +461,112 @@ public sealed partial class SessionTabSelector : UserControl
     }
 
     /// <summary>收起态勾选样式随 Popup 开关，避免展开后按钮仍呈「选中」底色。</summary>
-    private void OnPopupClosed(object sender, EventArgs e) => SelectorToggle.IsChecked = false;
+    private void OnPopupClosed(object sender, EventArgs e)
+    {
+        SelectorToggle.IsChecked = false;
+        UnhookWheel();
+    }
+
+    private void OnPopupOpened(object sender, EventArgs e) => HookWheel();
+
+    // ── 鼠标滚轮 ─────────────────────────────────────────────────
+    // Windows 10 / 11 把滚轮交给「鼠标下面的窗口」；Windows 8.1 / Server 2012 R2 及更早则交给「有键盘焦点的窗口」。
+    // 会话里键盘焦点在 RDP 控件（原生 HWND）上，下拉 Popup 没有焦点，滚轮就落到了远程桌面上：列表不滚、
+    // 远端还可能被误滚。这里在线程消息泵里先一步截获滚轮：光标在下拉列表上就直接滚列表并吞掉这条消息，
+    // 各系统行为一致。
+
+    private const int WmMouseWheel = 0x020A;
+    private bool _wheelHooked;
+
+    private void HookWheel()
+    {
+        if (_wheelHooked)
+        {
+            return;
+        }
+
+        _wheelHooked = true;
+        ComponentDispatcher.ThreadPreprocessMessage += OnThreadMessage;
+    }
+
+    private void UnhookWheel()
+    {
+        if (!_wheelHooked)
+        {
+            return;
+        }
+
+        _wheelHooked = false;
+        ComponentDispatcher.ThreadPreprocessMessage -= OnThreadMessage;
+    }
+
+    private void OnThreadMessage(ref MSG msg, ref bool handled)
+    {
+        if (handled || msg.message != WmMouseWheel || !SelectorPopup.IsOpen)
+        {
+            return;
+        }
+
+        // WM_MOUSEWHEEL：lParam = 光标屏幕坐标（物理像素，低 / 高 16 位带符号），wParam 高 16 位 = 滚动量（120 为一格）。
+        var lParam = msg.lParam.ToInt64();
+        var x = (short)(lParam & 0xFFFF);
+        var y = (short)((lParam >> 16) & 0xFFFF);
+        var delta = (short)((msg.wParam.ToInt64() >> 16) & 0xFFFF);
+
+        if (delta == 0 || !IsOverPopup(x, y) || FindScrollViewer(SessionsList) is not { } viewer)
+        {
+            return;
+        }
+
+        // 每格滚 3 行，与系统默认一致；高精度滚轮的小增量也至少滚一行。
+        var lines = Math.Max(1, Math.Abs(delta) * 3 / 120);
+        for (var i = 0; i < lines; i++)
+        {
+            if (delta > 0)
+            {
+                viewer.LineUp();
+            }
+            else
+            {
+                viewer.LineDown();
+            }
+        }
+
+        handled = true;
+    }
+
+    private bool IsOverPopup(int screenX, int screenY)
+    {
+        if (SelectorPopup.Child is not FrameworkElement root
+            || PresentationSource.FromVisual(root) is not { CompositionTarget: not null } source)
+        {
+            return false;
+        }
+
+        var topLeft = root.PointToScreen(new Point(0, 0));
+        var size = source.CompositionTarget.TransformToDevice.Transform(new Vector(root.ActualWidth, root.ActualHeight));
+        return screenX >= topLeft.X && screenX <= topLeft.X + size.X
+            && screenY >= topLeft.Y && screenY <= topLeft.Y + size.Y;
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is ScrollViewer viewer)
+            {
+                return viewer;
+            }
+
+            if (FindScrollViewer(child) is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>仅服务本控件的列表镜像集合：Reset 与单个增删都触发 Reset 通知。</summary>
     private sealed class ObservableCollectionCore : System.Collections.ObjectModel.ObservableCollection<WorkspaceTabViewModel>

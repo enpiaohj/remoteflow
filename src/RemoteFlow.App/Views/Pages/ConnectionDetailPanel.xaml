@@ -168,9 +168,8 @@
                                 MinWidth="30"
                                 Margin="2,0,0,0"
                                 Padding="0"
-                                FontFamily="{StaticResource IconFont}"
-                                FontSize="10"
-                                Content="{StaticResource Icon.ChevronDown}"
+                                FontSize="12"
+                                Content="{StaticResource Ui.ChevronDown}"
                                 ToolTip="更多操作"
                                 Click="OnConnectMoreClick" />
                     </Grid>

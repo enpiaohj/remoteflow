@@ -11,6 +11,7 @@ using RemoteFlow.Core.Abstractions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Infrastructure;
 using RemoteFlow.Infrastructure.Data;
+using RemoteFlow.Infrastructure.Logging;
 using RemoteFlow.Infrastructure.Settings;
 
 namespace RemoteFlow.Presentation.ViewModels;
@@ -39,6 +40,8 @@ public enum SettingsTab
 public sealed partial class SettingsPageViewModel : ObservableObject
 {
     public sealed record DateFormatOption(AppDateFormat Value, string Label);
+
+    public sealed record LogLevelOption(AppLogLevel Value, string Label);
 
     public sealed record TimeFormatOption(AppTimeFormat Value, string Label);
 
@@ -220,6 +223,17 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     [ObservableProperty]
     private string _language = "zh-CN";
 
+    // ── 日志 ──────────────────────────────────────────────────────
+
+    public IReadOnlyList<LogLevelOption> LogLevelOptions { get; } =
+    [
+        new(AppLogLevel.Information, "信息"),
+        new(AppLogLevel.Debug, "调试"),
+    ];
+
+    [ObservableProperty]
+    private LogLevelOption _selectedLogLevel = null!;
+
     // ── 日期与时间 ────────────────────────────────────────────────
 
     public IReadOnlyList<DateFormatOption> DateFormatOptions { get; } =
@@ -263,6 +277,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _rdpUseMultimon;
+
+    /// <summary>RDP 连接超时（秒）。超出范围的输入会被纠正到合法范围。</summary>
+    [ObservableProperty]
+    private int _rdpConnectionTimeoutSeconds = AppSettings.RdpConnectionTimeoutDefault;
 
     // ── SSH ───────────────────────────────────────────────────────
 
@@ -418,12 +436,15 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         DefaultLandingPage = _settings.DefaultLandingPage;
         Language = string.IsNullOrWhiteSpace(_settings.Language) ? "zh-CN" : _settings.Language;
         SelectedDateFormat = DateFormatOptions.First(o => o.Value == _settings.DateFormat);
+        SelectedLogLevel = LogLevelOptions.First(o => o.Value == _settings.LogLevel);
         SelectedTimeFormat = TimeFormatOptions.First(o => o.Value == _settings.TimeFormat);
 
         RdpFitToWindow = _settings.RdpDefaultDisplayMode == RdpDisplayMode.FitToWindow;
         RdpRedirectClipboard = _settings.RdpDefaultRedirectClipboard;
         RdpRedirectAudio = _settings.RdpDefaultRedirectAudio;
         RdpUseMultimon = _settings.RdpDefaultUseMultimon;
+        RdpConnectionTimeoutSeconds = Math.Clamp(
+            _settings.RdpConnectionTimeoutSeconds, AppSettings.RdpConnectionTimeoutMin, AppSettings.RdpConnectionTimeoutMax);
 
         SshFontFamily = _settings.SshFontFamily;
         SshFontSize = _settings.SshFontSize;
@@ -496,6 +517,18 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     partial void OnLanguageChanged(string value) => Save();
 
     partial void OnSelectedDateFormatChanged(DateFormatOption value) => ApplyDateTimeSettings(value.Value);
+
+    partial void OnSelectedLogLevelChanged(LogLevelOption value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        // 立即生效（不用重启）；写入设置由 Save() 完成。
+        LoggingSetup.SetDebug(value.Value == AppLogLevel.Debug);
+        Save();
+    }
     partial void OnSelectedTimeFormatChanged(TimeFormatOption value) => ApplyDateTimeSettings(value.Value);
 
     partial void OnSelectedHomeDateLineChanged(HomeDateLineOption value)
@@ -595,6 +628,20 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     partial void OnRdpRedirectClipboardChanged(bool value) => Save();
     partial void OnRdpRedirectAudioChanged(bool value) => Save();
     partial void OnRdpUseMultimonChanged(bool value) => Save();
+
+    partial void OnRdpConnectionTimeoutSecondsChanged(int value)
+    {
+        var clamped = Math.Clamp(value, AppSettings.RdpConnectionTimeoutMin, AppSettings.RdpConnectionTimeoutMax);
+        if (clamped != value)
+        {
+            // 纠正后会再次进入本方法并保存。
+            RdpConnectionTimeoutSeconds = clamped;
+            return;
+        }
+
+        Save();
+    }
+
     partial void OnSshFontFamilyChanged(string value) => Save();
     partial void OnSshFontSizeChanged(int value) => Save();
     partial void OnSshKeepAliveSecondsChanged(int value) => Save();
@@ -643,6 +690,11 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         _settings.RdpDefaultRedirectClipboard = RdpRedirectClipboard;
         _settings.RdpDefaultRedirectAudio = RdpRedirectAudio;
         _settings.RdpDefaultUseMultimon = RdpUseMultimon;
+        _settings.RdpConnectionTimeoutSeconds = RdpConnectionTimeoutSeconds;
+        if (SelectedLogLevel is not null)
+        {
+            _settings.LogLevel = SelectedLogLevel.Value;
+        }
 
         _settings.SshFontFamily = SshFontFamily;
         _settings.SshFontSize = SshFontSize;

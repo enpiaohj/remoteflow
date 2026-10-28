@@ -18,12 +18,11 @@ public sealed partial class UiIconSystemTests
     private static readonly XNamespace Presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
     private static readonly XNamespace X = "http://schemas.microsoft.com/winfx/2006/xaml";
 
-    /// <summary>保留系统字形的图标：窗口标题栏按钮与折叠箭头（系统原生观感，且不承载语义）。</summary>
-    private static readonly HashSet<string> KeptGlyphKeys =
-    [
-        "Icon.WindowMinimize", "Icon.WindowMaximize", "Icon.WindowRestore",
-        "Icon.ChevronRight", "Icon.ChevronLeft", "Icon.ChevronDown",
-    ];
+    /// <summary>
+    /// 视图里允许继续引用的系统字体字形。现在为空：标题栏按钮与折叠箭头也已改为手绘几何（WindowIcons.xaml），
+    /// 因为 Segoe Fluent Icons / Segoe MDL2 Assets 在 Windows 10 之前和 Windows Server 2012 R2 上不存在，字形会显示成方块。
+    /// </summary>
+    private static readonly HashSet<string> KeptGlyphKeys = [];
 
     [Fact]
     public void 线性图标均为锚定20画布的非空几何()
@@ -44,9 +43,54 @@ public sealed partial class UiIconSystemTests
     }
 
     [Fact]
+    public void 窗口按钮与箭头图标是锚定20画布的非空几何()
+    {
+        var doc = XDocument.Load(ThemeFile("WindowIcons.xaml"));
+        var keys = new List<string>();
+        foreach (var element in doc.Root!.Elements())
+        {
+            var key = (string)element.Attribute(X + "Key")!;
+            keys.Add(key);
+            var geometry = Geometry.Parse(element.Value);
+            Assert.False(geometry.IsEmpty(), $"{key} 为空几何");
+            Assert.Equal(new Rect(0, 0, 20, 20), geometry.Bounds);
+        }
+
+        foreach (var required in new[]
+                 {
+                     "Ui.WindowMinimize", "Ui.WindowMaximize", "Ui.WindowRestore",
+                     "Ui.ChevronDown", "Ui.ChevronRight", "Ui.ChevronLeft",
+                 })
+        {
+            Assert.Contains(required, keys);
+        }
+    }
+
+    [Fact]
+    public void 视图与主题不再用私有区字体字形()
+    {
+        // U+E000–U+F8FF 私有区字符引用（&#xE70D; 之类）依赖 Segoe 图标字体，老系统上会显示成方块。
+        var offenders = new List<string>();
+        var files = Directory.EnumerateFiles(AppDirectory(), "*.xaml", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                        && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)
+                        && !f.EndsWith("Icons.xaml", StringComparison.OrdinalIgnoreCase));
+        foreach (var file in files)
+        {
+            if (PrivateUseGlyph().IsMatch(File.ReadAllText(file)))
+            {
+                offenders.Add(Path.GetFileName(file));
+            }
+        }
+
+        Assert.Empty(offenders);
+    }
+
+    [Fact]
     public void 代码与标记引用的图标键全部存在()
     {
         var defined = KeysOf("UiIcons.xaml")
+            .Concat(KeysOf("WindowIcons.xaml"))
             .Concat(KeysOf("IdentityIcons.xaml"))
             .ToHashSet(StringComparer.Ordinal);
 
@@ -283,6 +327,9 @@ public sealed partial class UiIconSystemTests
 
     [GeneratedRegex(@"StaticResource (?<key>Icon\.\w+)\}")]
     private static partial Regex LegacyGlyphReference();
+
+    [GeneratedRegex(@"&#x[eEfF][0-9A-Fa-f]{3};")]
+    private static partial Regex PrivateUseGlyph();
 
     private static string ThemeFile(string name) => Path.Combine(AppDirectory("Themes"), name);
 

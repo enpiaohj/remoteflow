@@ -131,7 +131,7 @@ public sealed class MainWindowChromeRegressionTests
 
         // 关闭按钮排在箭头之前：箭头恒定锚在最右，不随 × 出现而位移。
         var closeIndex = selector.IndexOf("x:Name=\"HeaderClose\"", StringComparison.Ordinal);
-        var chevronIndex = selector.IndexOf("&#xE70D;", StringComparison.Ordinal);
+        var chevronIndex = selector.IndexOf("Ui.ChevronDown", StringComparison.Ordinal);
         Assert.True(closeIndex > 0 && chevronIndex > closeIndex,
             "关闭按钮应排在下拉箭头之前，使箭头位置恒定。");
 
@@ -283,6 +283,26 @@ public sealed class MainWindowChromeRegressionTests
         var end = code.IndexOf(endMarker, start + startMarker.Length, StringComparison.Ordinal);
         Assert.True(start >= 0 && end > start, $"未找到代码段：{startMarker}");
         return code[start..end];
+    }
+
+    /// <summary>
+    /// 会话下拉列表的滚轮：Windows 8.1 / Server 2012 R2 把滚轮交给有键盘焦点的窗口（会话里是 RDP 控件），
+    /// 下拉 Popup 收不到。必须在线程消息泵里先一步截获 WM_MOUSEWHEEL 并自己滚列表。
+    /// </summary>
+    [Fact]
+    public void SessionDropdown_RoutesMouseWheelItselfForOlderWindows()
+    {
+        var markup = File.ReadAllText(FindProjectFile(
+            "src", "RemoteFlow.App", "Views", "Sessions", "SessionTabSelector.xaml"));
+        var code = File.ReadAllText(FindProjectFile(
+            "src", "RemoteFlow.App", "Views", "Sessions", "SessionTabSelector.xaml.cs"));
+
+        Assert.Contains("Opened=\"OnPopupOpened\"", markup, StringComparison.Ordinal);
+        Assert.Contains("ComponentDispatcher.ThreadPreprocessMessage += OnThreadMessage", code, StringComparison.Ordinal);
+        Assert.Contains("ComponentDispatcher.ThreadPreprocessMessage -= OnThreadMessage", code, StringComparison.Ordinal);
+        Assert.Contains("0x020A", code, StringComparison.Ordinal);
+        // 收起 / 卸载时必须摘掉消息钩子，否则全局消息泵上会一直挂着它。
+        Assert.Contains("UnhookWheel();", code, StringComparison.Ordinal);
     }
 
     private static string FindProjectFile(params string[] segments)

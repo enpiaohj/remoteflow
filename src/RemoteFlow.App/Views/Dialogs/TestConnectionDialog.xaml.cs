@@ -207,8 +207,8 @@ public sealed class TestConnectionDialogModel : ObservableObject
     private const string GlyphSuccess = "Ui.Success.Filled";
     private const string GlyphError = "Ui.Error.Filled";
     private const string GlyphPending = "Ui.Pending";
-    private const string GlyphChevronRight = "\uE76C";
-    private const string GlyphChevronDown = "\uE70D";
+    private const string GlyphChevronRight = "Ui.ChevronRight";
+    private const string GlyphChevronDown = "Ui.ChevronDown";
 
     public TestConnectionDialogModel(ConnectionProfile profile)
     {

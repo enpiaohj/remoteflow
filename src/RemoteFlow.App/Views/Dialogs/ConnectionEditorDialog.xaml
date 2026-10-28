@@ -383,10 +383,10 @@
                                 <ControlTemplate TargetType="ToggleButton">
                                     <Border Background="Transparent" Padding="0,6">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock x:Name="Chevron" Text="{StaticResource Icon.ChevronRight}"
-                                                       FontFamily="{StaticResource IconFont}" FontSize="10"
-                                                       Foreground="{DynamicResource Brand.Default}"
-                                                       VerticalAlignment="Center" />
+                                            <Path x:Name="Chevron" Data="{StaticResource Ui.ChevronRight}"
+                                                  Width="13" Height="13" Stretch="Uniform"
+                                                  Fill="{DynamicResource Brand.Default}"
+                                                  VerticalAlignment="Center" />
                                             <TextBlock Text="高级设置" FontSize="13"
                                                        Foreground="{DynamicResource Brand.Default}"
                                                        Margin="8,0,0,0" VerticalAlignment="Center" />
@@ -394,7 +394,7 @@
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsChecked" Value="True">
-                                            <Setter TargetName="Chevron" Property="Text" Value="{StaticResource Icon.ChevronDown}" />
+                                            <Setter TargetName="Chevron" Property="Data" Value="{StaticResource Ui.ChevronDown}" />
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>

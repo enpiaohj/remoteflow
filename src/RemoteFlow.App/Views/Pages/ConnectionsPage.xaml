@@ -350,9 +350,7 @@
                         <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Checklist}" Width="14" Height="14"
                               Margin="0,0,6,0" VerticalAlignment="Center" />
                         <TextBlock Text="批量操作" VerticalAlignment="Center" />
-                        <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
-                                   FontSize="9" Margin="6,0,0,0"
-                                   Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronDown}" Width="12" Height="12" Margin="6,0,0,0" VerticalAlignment="Center" Fill="{DynamicResource Text.Tertiary}" />
                     </StackPanel>
                 </Button>
                 <Button Style="{StaticResource Button.Primary}" MinHeight="30" Padding="14,0" Margin="8,0,0,0"
@@ -762,9 +760,7 @@
                                     <StackPanel Orientation="Horizontal">
                                         <Path Style="{StaticResource Batch.ButtonIcon}" Data="{StaticResource Ui.Folder}" />
                                         <TextBlock Text="移动到分组" VerticalAlignment="Center" />
-                                        <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
-                                                   FontSize="9" Margin="5,0,0,0"
-                                                   Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronDown}" Width="12" Height="12" Margin="5,0,0,0" VerticalAlignment="Center" Fill="{DynamicResource Text.Tertiary}" />
                                     </StackPanel>
                                 </Button>
                                 <Button Style="{StaticResource Button.Secondary}" MinHeight="24" Padding="8,0"
@@ -772,9 +768,7 @@
                                     <StackPanel Orientation="Horizontal">
                                         <Path Style="{StaticResource Batch.ButtonIcon}" Data="{StaticResource Ui.Tag}" />
                                         <TextBlock Text="添加标签" VerticalAlignment="Center" />
-                                        <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
-                                                   FontSize="9" Margin="5,0,0,0"
-                                                   Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronDown}" Width="12" Height="12" Margin="5,0,0,0" VerticalAlignment="Center" Fill="{DynamicResource Text.Tertiary}" />
                                     </StackPanel>
                                 </Button>
                                 <Button Style="{StaticResource Button.Secondary}" MinHeight="24" Padding="8,0"
@@ -790,9 +784,7 @@
                                     <StackPanel Orientation="Horizontal">
                                         <Path Style="{StaticResource Batch.ButtonIcon}" Data="{StaticResource Ui.More}" />
                                         <TextBlock Text="更多" VerticalAlignment="Center" />
-                                        <TextBlock Text="{StaticResource Icon.ChevronDown}" FontFamily="{StaticResource IconFont}"
-                                                   FontSize="9" Margin="5,0,0,0"
-                                                   Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronDown}" Width="12" Height="12" Margin="5,0,0,0" VerticalAlignment="Center" Fill="{DynamicResource Text.Tertiary}" />
                                     </StackPanel>
                                 </Button>
                                 <Button Style="{StaticResource Button.Secondary}" MinHeight="24" Padding="8,0"

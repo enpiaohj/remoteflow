@@ -116,6 +116,7 @@ public partial class App : System.Windows.Application
             _services = BuildServiceProvider(paths, loggerFactory);
             _logger = _services.GetRequiredService<ILogger<App>>();
 
+            LoggingSetup.SetDebug(_services.GetRequiredService<AppSettings>().LogLevel == AppLogLevel.Debug);
             _logger.LogInformation("RemoteFlow 启动，数据目录 {DataDirectory}", paths.DataDirectory);
 
             // 崩溃恢复标记：读上次退出状态 → 若异常退出写 recovery 日志 → 武装本次 cleanExit:false。

@@ -217,7 +217,7 @@
                                        TextTrimming="CharacterEllipsis"
                                        VerticalAlignment="Center"
                                        Margin="6,0,4,0" />
-                            <TextBlock Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="10" VerticalAlignment="Center" />
+                            <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronDown}" Width="10" Height="10" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
 
@@ -337,7 +337,7 @@
                             Background="{DynamicResource Stroke.Default}" />
 
                     <Button Style="{StaticResource Session.BarButton}"
-                            Content="{StaticResource Icon.WindowMinimize}"
+                            Content="{StaticResource Ui.WindowMinimize}"
                             ToolTip="最小化窗口"
                             Click="OnMinimizeWindow" />
 
@@ -351,7 +351,7 @@
 
                     <Button Command="{Binding ExitFullScreenCommand}"
                             Style="{StaticResource Session.BarButton}"
-                            Content="{StaticResource Icon.WindowRestore}"
+                            Content="{StaticResource Ui.WindowRestore}"
                             ToolTip="退出全屏（回到常规）" />
 
                     <Button Style="{StaticResource Session.BarButton}"

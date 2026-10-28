@@ -583,6 +583,24 @@
 
                             <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
 
+                            <!-- 连接 -->
+                            <TextBlock Text="连接" Style="{StaticResource Settings.SectionHeader}" />
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="连接超时（秒）" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="默认 120，与系统自带的远程桌面连接（mstsc）一致，范围 10–600。域控制器或带登录消息对话框的服务器登录较慢时可调大；改动对新开的连接生效。"
+                                               Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <TextBox Grid.Column="1" Style="{StaticResource Input.TextBox}"
+                                         Text="{Binding RdpConnectionTimeoutSeconds, UpdateSourceTrigger=LostFocus}" />
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
                             <!-- 本地资源 -->
                             <TextBlock Text="本地资源" Style="{StaticResource Settings.SectionHeader}" />
                             <CheckBox Style="{StaticResource Input.CheckBox}" IsChecked="{Binding RdpRedirectClipboard}"
@@ -1216,8 +1234,7 @@
                                         <TextBlock Text="导入连接 CSV" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
                                         <TextBlock Text="从 CSV 文件导入连接，快速批量添加服务器。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="2" Text="{StaticResource Icon.ChevronRight}" FontFamily="{StaticResource IconFont}"
-                                               FontSize="12" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronRight}" Width="15" Height="15" Grid.Column="2" Margin="8,0,4,0" VerticalAlignment="Center" Fill="{DynamicResource Text.Tertiary}" />
                                 </Grid>
                             </Button>
 
@@ -1237,8 +1254,7 @@
                                         <TextBlock Text="导出连接 CSV" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
                                         <TextBlock Text="将现有连接导出为 CSV 文件，便于备份或迁移。不含任何密码。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="2" Text="{StaticResource Icon.ChevronRight}" FontFamily="{StaticResource IconFont}"
-                                               FontSize="12" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronRight}" Width="15" Height="15" Grid.Column="2" Margin="8,0,4,0" VerticalAlignment="Center" Fill="{DynamicResource Text.Tertiary}" />
                                 </Grid>
                             </Button>
                         </StackPanel>
@@ -1266,8 +1282,7 @@
                                         <TextBlock Text="导入 .rfbackup" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
                                         <TextBlock Text="从 .rfbackup 文件导入凭据，恢复保存的登录信息。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="2" Text="{StaticResource Icon.ChevronRight}" FontFamily="{StaticResource IconFont}"
-                                               FontSize="12" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronRight}" Width="15" Height="15" Grid.Column="2" Margin="8,0,4,0" VerticalAlignment="Center" Fill="{DynamicResource Text.Tertiary}" />
                                 </Grid>
                             </Button>
 
@@ -1287,8 +1302,7 @@
                                         <TextBlock Text="导出 .rfbackup" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
                                         <TextBlock Text="将所有凭据导出为 .rfbackup 文件，口令加密，安全备份。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="2" Text="{StaticResource Icon.ChevronRight}" FontFamily="{StaticResource IconFont}"
-                                               FontSize="12" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronRight}" Width="15" Height="15" Grid.Column="2" Margin="8,0,4,0" VerticalAlignment="Center" Fill="{DynamicResource Text.Tertiary}" />
                                 </Grid>
                             </Button>
                         </StackPanel>
@@ -1317,8 +1331,7 @@
                                         <TextBlock Text="{Binding DataDirectory}" Style="{StaticResource Text.Caption}"
                                                    FontFamily="{StaticResource MonoFont}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="2" Text="{StaticResource Icon.ChevronRight}" FontFamily="{StaticResource IconFont}"
-                                               FontSize="12" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronRight}" Width="15" Height="15" Grid.Column="2" Margin="8,0,4,0" VerticalAlignment="Center" Fill="{DynamicResource Text.Tertiary}" />
                                 </Grid>
                             </Button>
 
@@ -1338,10 +1351,35 @@
                                         <TextBlock Text="打开日志目录" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
                                         <TextBlock Text="在文件资源管理器中打开运行日志目录。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="2" Text="{StaticResource Icon.ChevronRight}" FontFamily="{StaticResource IconFont}"
-                                               FontSize="12" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronRight}" Width="15" Height="15" Grid.Column="2" Margin="8,0,4,0" VerticalAlignment="Center" Fill="{DynamicResource Text.Tertiary}" />
                                 </Grid>
                             </Button>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="8,2" />
+
+                            <Grid Margin="8,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Style="{StaticResource IconTile.Background}" Background="{DynamicResource Bg.Subtle}">
+                                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Info}" Width="20" Height="20" Fill="{DynamicResource Text.Secondary}" HorizontalAlignment="Center" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
+                                    <TextBlock Text="日志级别" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                                    <TextBlock Text="默认「信息」。排查连接问题时切到「调试」，会记录连接过程等更多细节（日志文件更大），改动立即生效；日志始终不含密码与密钥。"
+                                               Style="{StaticResource Text.Caption}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="2" Style="{StaticResource Input.ComboBox}" MinWidth="240" VerticalAlignment="Center"
+                                          ItemsSource="{Binding LogLevelOptions}" SelectedItem="{Binding SelectedLogLevel}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
 
                             <Border Style="{StaticResource Surface.Divider}" Margin="8,2" />
 

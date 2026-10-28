@@ -1,0 +1,18 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        窗口按钮与折叠箭头（Ui.Window* / Ui.Chevron*）：手绘的线性几何，不依赖系统字体。
+        原先这些图标用 Segoe Fluent Icons / Segoe MDL2 Assets 字形——Windows 10 之前和 Windows Server 2012 R2
+        没有这两个字体，标题栏按钮与折叠箭头会显示成方块。其余 Ui.* 图标见 UiIcons.xaml（由脚本生成，不手改）。
+        与 UiIcons 一致：20×20 画布锚定（M0,0 M20,20），由 UiIcon 样式按文字前景色着色。
+    -->
+
+    <Geometry x:Key="Ui.WindowMinimize">F1 M0,0 M20,20 M3,9.5 H17 V10.5 H3 Z</Geometry>
+    <Geometry x:Key="Ui.WindowMaximize">F1 M0,0 M20,20 M3,3 H17 V17 H3 Z M4,4 V16 H16 V4 Z</Geometry>
+    <Geometry x:Key="Ui.WindowRestore">F1 M0,0 M20,20 M6,3 H17 V14 H14.5 V13 H16 V4 H7 V5.5 H6 Z M3,6 H14 V17 H3 Z M4,7 V16 H13 V7 Z</Geometry>
+
+    <Geometry x:Key="Ui.ChevronDown">F1 M0,0 M20,20 M3.8,7.6 L4.5,6.9 L10,12.4 L15.5,6.9 L16.2,7.6 L10,13.8 Z</Geometry>
+    <Geometry x:Key="Ui.ChevronRight">F1 M0,0 M20,20 M7.6,3.8 L6.9,4.5 L12.4,10 L6.9,15.5 L7.6,16.2 L13.8,10 Z</Geometry>
+    <Geometry x:Key="Ui.ChevronLeft">F1 M0,0 M20,20 M12.4,3.8 L13.1,4.5 L7.6,10 L13.1,15.5 L12.4,16.2 L6.2,10 Z</Geometry>
+</ResourceDictionary>

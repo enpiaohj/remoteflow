@@ -133,11 +133,10 @@
                         Margin="0,10,0,0"
                         Click="OnToggleDetailsClick">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{Binding DetailChevron}"
-                                   FontFamily="{StaticResource IconFont}"
-                                   FontSize="10"
-                                   Foreground="{DynamicResource Text.Secondary}"
-                                   VerticalAlignment="Center" />
+                        <Path Style="{StaticResource UiIcon}" Width="13" Height="13"
+                              Data="{Binding DetailChevron, Converter={StaticResource UiIconGeometry}}"
+                              Fill="{DynamicResource Text.Secondary}"
+                              VerticalAlignment="Center" />
                         <TextBlock Text="查看详细信息"
                                    Style="{StaticResource Text.Caption}"
                                    Margin="6,0,0,0" />
