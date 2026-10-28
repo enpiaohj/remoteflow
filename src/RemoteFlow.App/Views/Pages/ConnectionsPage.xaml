@@ -130,7 +130,7 @@
                 <Grid.ColumnDefinitions>
                     <!-- 首列已并入名称列（勾选框插在名称列内部，凭据页同款），此列保留为空 → 0 宽 -->
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" MinWidth="240" MaxWidth="440" SharedSizeGroup="ColName" />
+                    <ColumnDefinition Width="Auto" MinWidth="150" MaxWidth="440" SharedSizeGroup="ColName" />
                     <ColumnDefinition Width="Auto" MinWidth="100" SharedSizeGroup="ColHost" />
                     <ColumnDefinition Width="Auto" MinWidth="42" SharedSizeGroup="ColProto" />
                     <ColumnDefinition Width="Auto" MinWidth="48" SharedSizeGroup="ColTags" />
@@ -138,6 +138,8 @@
                     <ColumnDefinition Width="Auto" MinWidth="58" SharedSizeGroup="ColPresence" />
                     <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="ColRecent" />
                     <ColumnDefinition Width="*" MinWidth="0" />
+                    <ColumnDefinition Width="26" />
+                    <ColumnDefinition Width="26" />
                     <ColumnDefinition Width="26" />
                     <ColumnDefinition Width="26" />
                 </Grid.ColumnDefinitions>
@@ -255,8 +257,21 @@
                     <TextBlock Text="{Binding LastConnectedCompact}" Style="{StaticResource Text.Caption}" />
                 </StackPanel>
 
+                <!-- 行内快捷入口「编辑 / 文件传输」：常驻显示；
+                     VNC 没有文件传输通道，按钮由命令 CanExecute 置灰，提示给出原因。 -->
+                <StackPanel Grid.Column="9" Grid.ColumnSpan="2" Orientation="Horizontal">
+                    <Button Style="{StaticResource Button.Icon}" Width="26" Height="26" MinWidth="26" MinHeight="26"
+                            Content="{StaticResource Ui.Edit}" ToolTip="编辑连接"
+                            Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                            CommandParameter="{Binding}" />
+                    <Button Style="{StaticResource Button.Icon}" Width="26" Height="26" MinWidth="26" MinHeight="26"
+                            Content="{StaticResource Ui.FileTransfer}" ToolTip="{Binding FileTransferHint}"
+                            Command="{Binding DataContext.OpenFileTransferCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                            CommandParameter="{Binding}" />
+                </StackPanel>
+
                 <!-- 收藏列：星标常驻，点击切换 -->
-                <Button Grid.Column="9" Width="24" Height="24" MinWidth="24" MinHeight="24" FontSize="12" HorizontalAlignment="Center"
+                <Button Grid.Column="11" Width="24" Height="24" MinWidth="24" MinHeight="24" FontSize="12" HorizontalAlignment="Center"
                         ToolTip="收藏 / 取消收藏"
                         Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                         CommandParameter="{Binding}">
@@ -276,14 +291,14 @@
 
                 <!-- Button.Icon 自带 MinWidth/MinHeight=36，会顶掉这里的 Width/Height，
                      36 的按钮塞进 26 的列就被裁掉一截（「三个点显示不全」）；这里显式压低最小尺寸。 -->
-                <Button Grid.Column="10" Style="{StaticResource Button.Icon}" Width="26" Height="26"
+                <Button Grid.Column="12" Style="{StaticResource Button.Icon}" Width="26" Height="26"
                         MinWidth="26" MinHeight="26"
                         Content="{StaticResource Ui.More}" ToolTip="更多操作" Click="OnMoreClick" />
 
                 <!-- 行底发丝分隔线（概念稿 v0.2 的表格节奏）。
-                     必须显式跨全部 11 列：Grid 子元素不指定 ColumnSpan 时只落在第 0 列，
+                     必须显式跨全部 13 列：Grid 子元素不指定 ColumnSpan 时只落在第 0 列，
                      会渲染成勾选框列宽的残缺短线（v0.20.0 的「行左横杠印记」根因）。 -->
-                <Border Grid.ColumnSpan="11" HorizontalAlignment="Stretch" Height="1" VerticalAlignment="Bottom"
+                <Border Grid.ColumnSpan="13" HorizontalAlignment="Stretch" Height="1" VerticalAlignment="Bottom"
                         Background="{DynamicResource Stroke.Subtle}" Opacity="0.55" />
             </Grid>
         </DataTemplate>
@@ -637,7 +652,7 @@
 
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" MinWidth="240" MaxWidth="440" SharedSizeGroup="ColName" />
+                                <ColumnDefinition Width="Auto" MinWidth="150" MaxWidth="440" SharedSizeGroup="ColName" />
                                 <ColumnDefinition Width="Auto" MinWidth="100" SharedSizeGroup="ColHost" />
                                 <ColumnDefinition Width="Auto" MinWidth="42" SharedSizeGroup="ColProto" />
                                 <ColumnDefinition Width="Auto" MinWidth="48" SharedSizeGroup="ColTags" />
@@ -645,6 +660,8 @@
                                 <ColumnDefinition Width="Auto" MinWidth="58" SharedSizeGroup="ColPresence" />
                                 <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="ColRecent" />
                                 <ColumnDefinition Width="*" MinWidth="8" />
+                                <ColumnDefinition Width="26" />
+                                <ColumnDefinition Width="26" />
                                 <ColumnDefinition Width="26" />
                                 <ColumnDefinition Width="26" />
                             </Grid.ColumnDefinitions>
@@ -691,7 +708,7 @@
                             <TextBlock Grid.Column="7" Text="{Binding RecentHeaderText}" Style="{StaticResource Text.Label}" Margin="0,0,10,0"
                                        Background="Transparent" Cursor="Hand" ToolTip="按最近连接排序" Tag="LastConnected"
                                        MouseLeftButtonUp="OnSortHeaderClick" />
-                            <TextBlock Grid.Column="9" Text="收藏" Style="{StaticResource Text.Label}" />
+                            <TextBlock Grid.Column="11" Text="收藏" Style="{StaticResource Text.Label}" />
                         </Grid>
 
                         <!-- 批量操作栏（勾选 ≥1 项时替换列头） -->
