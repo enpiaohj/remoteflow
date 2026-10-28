@@ -822,12 +822,7 @@
                     </Border>
 
                     <!-- ── 连接列表（恒扁平；分组维度在左树）──────────────── -->
-                    <Grid Grid.Row="2" Background="Transparent">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <Grid Grid.Row="0" Background="Transparent" ContextMenu="{StaticResource ConnectionsBlankMenu}">
+                    <Grid Grid.Row="2" Background="Transparent" ContextMenu="{StaticResource ConnectionsBlankMenu}">
                         <ListBox x:Name="ConnectionList"
                                  ItemContainerStyle="{StaticResource ConnectionRow}"
                                  ItemTemplate="{StaticResource ConnRowTemplate}"
@@ -885,68 +880,6 @@
                             <Button Style="{StaticResource Button.Primary}" Content="新建连接" HorizontalAlignment="Center"
                                     Margin="0,20,0,0" Command="{Binding CreateCommand}" />
                         </StackPanel>
-                        </Grid>
-
-                        <!-- ── 分页条：总计 N 项 · ‹ 1 2 3 › · 每页条数。仅在开启分页且有数据时显示。 ── -->
-                        <Border Grid.Row="1" BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,1,0,0" Padding="4,6,4,6"
-                                Visibility="{Binding IsPagerVisible, Converter={StaticResource BoolToVisibility}}">
-                            <Border.Resources>
-                                <Style x:Key="Pager.Button" TargetType="Button" BasedOn="{StaticResource Button.Subtle}">
-                                    <Setter Property="MinWidth" Value="28" />
-                                    <Setter Property="Height" Value="28" />
-                                    <Setter Property="Padding" Value="6,0" />
-                                    <Setter Property="Margin" Value="2,0" />
-                                    <Setter Property="FontSize" Value="12" />
-                                </Style>
-                            </Border.Resources>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <TextBlock Style="{StaticResource Text.Caption}" VerticalAlignment="Center" Margin="0,0,10,0">
-                                    <Run Text="总计" />
-                                    <Run Text="{Binding TotalCount, Mode=OneWay}" />
-                                    <Run Text="项" />
-                                </TextBlock>
-                                <Button Style="{StaticResource Pager.Button}" Content="‹" FontSize="15" ToolTip="上一页"
-                                        IsEnabled="{Binding CanGoPrevious}" Command="{Binding PreviousPageCommand}" />
-                                <ItemsControl ItemsSource="{Binding PageButtons}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Button Content="{Binding Label}"
-                                                    Command="{Binding DataContext.GoToPageCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                    CommandParameter="{Binding Number}">
-                                                <Button.Style>
-                                                    <Style TargetType="Button" BasedOn="{StaticResource Pager.Button}">
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsEllipsis}" Value="True">
-                                                                <Setter Property="IsEnabled" Value="False" />
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
-                                                                <Setter Property="Background" Value="{DynamicResource Brand.Default}" />
-                                                                <Setter Property="Foreground" Value="White" />
-                                                                <Setter Property="FontWeight" Value="SemiBold" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Button.Style>
-                                            </Button>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <Button Style="{StaticResource Pager.Button}" Content="›" FontSize="15" ToolTip="下一页"
-                                        IsEnabled="{Binding CanGoNext}" Command="{Binding NextPageCommand}" />
-                                <ComboBox Style="{StaticResource Filter.Pill.ComboBox.Neutral}" MinWidth="104" Height="28" Margin="10,0,0,0"
-                                          ToolTip="每页显示条数" SelectedValuePath="Value"
-                                          ItemsSource="{Binding PageSizeOptions}" SelectedValue="{Binding PageSize}">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding Text}" />
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                            </StackPanel>
-                        </Border>
                     </Grid>
                 </Grid>
             </Grid>

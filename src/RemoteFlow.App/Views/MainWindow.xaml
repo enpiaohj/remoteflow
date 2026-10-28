@@ -683,6 +683,73 @@
                                 Visibility="{Binding Update.HasUpdate, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed, TargetNullValue=Collapsed}" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <!-- 连接工作台分页：放在状态栏右侧，不占列表区域。仅在工作台页且开启分页、有数据时显示。 -->
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
+                            <StackPanel.Resources>
+                                <Style x:Key="Pager.Button" TargetType="Button" BasedOn="{StaticResource Button.Subtle}">
+                                    <Setter Property="MinWidth" Value="20" />
+                                    <Setter Property="MinHeight" Value="20" />
+                                    <Setter Property="Height" Value="20" />
+                                    <Setter Property="Padding" Value="5,0" />
+                                    <Setter Property="Margin" Value="1,0" />
+                                    <Setter Property="FontSize" Value="11.5" />
+                                </Style>
+                            </StackPanel.Resources>
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding CurrentPage}" Value="{x:Static vm:NavigationPage.Connections}" />
+                                                <Condition Binding="{Binding ConnectionsPage.IsPagerVisible}" Value="True" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <Button Style="{StaticResource Pager.Button}" Content="‹" FontSize="14" ToolTip="上一页"
+                                    IsEnabled="{Binding ConnectionsPage.CanGoPrevious}" Command="{Binding ConnectionsPage.PreviousPageCommand}" />
+                            <ItemsControl ItemsSource="{Binding ConnectionsPage.PageButtons}" VerticalAlignment="Center">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding Label}"
+                                                Command="{Binding DataContext.ConnectionsPage.GoToPageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding Number}">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource Pager.Button}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsEllipsis}" Value="True">
+                                                            <Setter Property="IsEnabled" Value="False" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource Brand.Default}" />
+                                                            <Setter Property="Foreground" Value="White" />
+                                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button Style="{StaticResource Pager.Button}" Content="›" FontSize="14" ToolTip="下一页"
+                                    IsEnabled="{Binding ConnectionsPage.CanGoNext}" Command="{Binding ConnectionsPage.NextPageCommand}" />
+                            <ComboBox Style="{StaticResource Filter.Pill.ComboBox.Neutral}" MinWidth="92" MinHeight="20" Height="20" Margin="6,0,0,0"
+                                      FontSize="11.5" ToolTip="每页显示条数" SelectedValuePath="Value"
+                                      ItemsSource="{Binding ConnectionsPage.PageSizeOptions}" SelectedValue="{Binding ConnectionsPage.PageSize}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Text}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </StackPanel>
                         <TextBlock Text="{Binding ConnectionsPage.TotalConnectionsDisplay}" Style="{StaticResource Text.Caption}"
                                    Margin="0,0,14,0" />
                         <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Shield}" Width="12.5" Height="12.5" Fill="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
