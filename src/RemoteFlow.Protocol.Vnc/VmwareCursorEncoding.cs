@@ -1,6 +1,7 @@
 using MarcusW.VncClient;
 using MarcusW.VncClient.Protocol;
 using MarcusW.VncClient.Protocol.Implementation.EncodingTypes.Pseudo;
+using Microsoft.Extensions.Logging;
 
 namespace RemoteFlow.Protocol.Vnc;
 
@@ -21,6 +22,8 @@ public sealed class VmwareCursorEncodingType(RfbConnectionContext context) : Pse
     public override string Name => "VMware Cursor";
 
     public override bool GetsConfirmed => true;
+
+    private bool _logged;
 
     public override void ReadPseudoEncoding(Stream transportStream, Rectangle rectangle)
     {
@@ -47,6 +50,14 @@ public sealed class VmwareCursorEncodingType(RfbConnectionContext context) : Pse
         {
             handler.HideCursor();
             return;
+        }
+
+        if (!_logged)
+        {
+            // 诊断：服务器是否真的在下发 VMware 光标（只记类型与尺寸，不含任何敏感信息）。
+            _logged = true;
+            context.Connection.LoggerFactory.CreateLogger<VmwareCursorEncodingType>().LogInformation(
+                "已收到 VMware 光标形状：类型 {Type}，{Width}x{Height}", cursorType, width, height);
         }
 
         var rgba = VmwareCursorDecoder.Decode(cursorType, payload, width, height);
