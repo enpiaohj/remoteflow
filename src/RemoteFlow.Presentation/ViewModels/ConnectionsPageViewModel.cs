@@ -536,6 +536,136 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<ConnectionItemViewModel> Items { get; }
 
+    // ── 分页 ─────────────────────────────────────────────────────
+    // Items 只放「当前页」；_filtered 是筛选后的全部。PageSize 默认 0 = 不分页（macOS 端未提供分页条，行为不变），
+    // Windows 列表页打开时设为 20。
+
+    private List<ConnectionItemViewModel> _filtered = [];
+    private string _filterSignature = string.Empty;
+    private int _currentPage = 1;
+
+    /// <summary>每页条数：正数 = 固定；0 = 不分页。</summary>
+    [ObservableProperty]
+    private int _pageSize;
+
+    public IReadOnlyList<PageSizeOption> PageSizeOptions { get; } = PageSizeOption.Defaults;
+
+    /// <summary>页码按钮（带省略号）。</summary>
+    public ObservableCollection<PageButtonItem> PageButtons { get; } = [];
+
+    /// <summary>筛选后的连接总数（跨页）。</summary>
+    public int TotalCount => _filtered.Count;
+
+    private int EffectivePageSize => PageSize;
+
+    public int TotalPages
+    {
+        get
+        {
+            var size = EffectivePageSize;
+            return size <= 0 || _filtered.Count == 0 ? 1 : (_filtered.Count + size - 1) / size;
+        }
+    }
+
+    public int CurrentPage
+    {
+        get => _currentPage;
+        set
+        {
+            var clamped = Math.Clamp(value, 1, TotalPages);
+            if (clamped == _currentPage)
+            {
+                return;
+            }
+
+            _currentPage = clamped;
+            OnPropertyChanged();
+            RebuildPage();
+        }
+    }
+
+    /// <summary>分页条显示：开启了分页且有数据。</summary>
+    public bool IsPagerVisible => PageSize != 0 && _filtered.Count > 0;
+
+    public bool CanGoPrevious => _currentPage > 1;
+
+    public bool CanGoNext => _currentPage < TotalPages;
+
+    partial void OnPageSizeChanged(int value)
+    {
+        _currentPage = 1;
+        OnPropertyChanged(nameof(CurrentPage));
+        RebuildPage();
+    }
+
+    [RelayCommand]
+    private void GoToPage(int page) => CurrentPage = page;
+
+    [RelayCommand]
+    private void PreviousPage() => CurrentPage--;
+
+    [RelayCommand]
+    private void NextPage() => CurrentPage++;
+
+    private void RefreshPager()
+    {
+        PageButtons.Clear();
+        var total = TotalPages;
+        var current = _currentPage;
+        if (PageSize != 0)
+        {
+            var numbers = new List<int>();
+            if (total <= 7)
+            {
+                numbers.AddRange(Enumerable.Range(1, total));
+            }
+            else
+            {
+                numbers.Add(1);
+                if (current > 3)
+                {
+                    numbers.Add(0);
+                }
+
+                for (var n = Math.Max(2, current - 1); n <= Math.Min(total - 1, current + 1); n++)
+                {
+                    numbers.Add(n);
+                }
+
+                if (current < total - 2)
+                {
+                    numbers.Add(0);
+                }
+
+                numbers.Add(total);
+            }
+
+            foreach (var n in numbers)
+            {
+                PageButtons.Add(new PageButtonItem(n, n == current));
+            }
+        }
+
+        OnPropertyChanged(nameof(TotalCount));
+        OnPropertyChanged(nameof(TotalPages));
+        OnPropertyChanged(nameof(IsPagerVisible));
+        OnPropertyChanged(nameof(CanGoPrevious));
+        OnPropertyChanged(nameof(CanGoNext));
+    }
+
+    /// <summary>按 Id 找到连接；它在筛选结果里但不在当前页时先翻到它所在的页，让选中项一定可见。</summary>
+    private ConnectionItemViewModel? FindAndShow(Guid id)
+    {
+        var index = _filtered.FindIndex(i => i.Id == id);
+        var size = EffectivePageSize;
+        if (index >= 0 && size > 0 && !Items.Any(i => i.Id == id))
+        {
+            CurrentPage = index / size + 1;
+        }
+
+        return Items.FirstOrDefault(i => i.Id == id);
+    }
+
     /// <summary>请求打开一个连接（双击 / Enter / 右键连接）。由 MainViewModel 统一开会话。</summary>
     public event EventHandler<ConnectionProfile>? OpenConnectionRequested;
 
@@ -999,11 +1129,44 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                 };
         }
 
+        _filtered = source.ToList();
+
+        // 用户改了搜索 / 筛选 / 分组 / 排序 → 回到第 1 页；数据刷新（收藏、编辑、探测）则停留在当前页。
+        var signature = string.Join(
+            '|',
+            Filter, RecentRange, ProtocolFilter, PresenceFilter, SortMode, TagFilter.Id, PageFilterText, SearchText,
+            SelectedGroupNode is null ? "-" : SelectedGroupNode.GroupId?.ToString() ?? "ungrouped");
+        if (signature != _filterSignature)
+        {
+            _filterSignature = signature;
+            _currentPage = 1;
+            OnPropertyChanged(nameof(CurrentPage));
+        }
+
+        RebuildPage();
+    }
+
+    /// <summary>
+    /// 按当前页把 <see cref="_filtered"/> 的一段填进 <see cref="Items"/>，并维护选中项与勾选集合。
+    /// 翻页、改每页条数、可视高度变化时只走这里，不重跑筛选。
+    /// </summary>
+    private void RebuildPage()
+    {
         var previousSelection = SelectedItem?.Id;
-        var filtered = source.ToList();
+        var size = EffectivePageSize;
+        var pages = TotalPages;
+        if (_currentPage > pages)
+        {
+            _currentPage = pages;
+            OnPropertyChanged(nameof(CurrentPage));
+        }
+
+        IEnumerable<ConnectionItemViewModel> pageItems = size > 0
+            ? _filtered.Skip((_currentPage - 1) * size).Take(size)
+            : _filtered;
 
         Items.Clear();
-        foreach (var item in filtered)
+        foreach (var item in pageItems)
         {
             item.RefreshComputed();
             if (Filter == ConnectionFilter.Recent)
@@ -1050,6 +1213,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         SelectedItem = selected;
 
         OnPropertyChanged(nameof(IsEmpty));
+        RefreshPager();
 
         // 筛选变化后，被滤掉的已勾选项同步移出选择集合，避免批量作用到不可见项。
         var visibleIds = Items.Select(i => i.Id).ToHashSet();
@@ -1434,7 +1598,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         await _connections.CreateAsync(result.Profile);
         await LoadAsync();
 
-        SelectedItem = Items.FirstOrDefault(i => i.Id == result.Profile.Id);
+        SelectedItem = FindAndShow(result.Profile.Id);
 
         if (result.ConnectImmediately)
         {
@@ -1501,7 +1665,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         await _connections.UpdateAsync(result.Profile);
         await LoadAsync();
 
-        SelectedItem = Items.FirstOrDefault(i => i.Id == result.Profile.Id);
+        SelectedItem = FindAndShow(result.Profile.Id);
 
         if (result.ConnectImmediately)
         {
@@ -1653,7 +1817,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             return;
         }
 
-        var snapshot = Items.ToList();
+        var snapshot = _filtered.ToList();
         if (snapshot.Count == 0)
         {
             return;
@@ -2215,7 +2379,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         {
             await _groupService.MoveConnectionAsync(item.Id, targetGroupId);
             await LoadAsync();
-            SelectedItem = Items.FirstOrDefault(i => i.Id == item.Id);
+            SelectedItem = FindAndShow(item.Id);
         }
         catch (InvalidOperationException ex)
         {
@@ -2273,6 +2437,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             }
         }
 
+        FindAndShow(target.Id);
         SelectedItem = target;
     }
 

@@ -48,8 +48,16 @@ public partial class ConnectionsPage : UserControl
             ApplyGrouping();
             ConnectionList.ItemsSource = _connectionView;
             vm.PropertyChanged += OnVmPropertyChanged;
+
+            // 工作台列表默认每页 20 条（不分页是 VM 的默认值，供没有分页条的 macOS 端使用）。
+            if (vm.PageSize == 0)
+            {
+                vm.PageSize = DefaultPageSize;
+            }
         }
     }
+
+    private const int DefaultPageSize = 20;
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
