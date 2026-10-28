@@ -70,3 +70,86 @@ public sealed class VmwareResolutionTests
         Assert.False(VmwareResolution.IsConstrained(1920, 1080, 1912, 1080)); // 仅取整，不算受限
     }
 }
+
+/// <summary>分辨率档位：循环顺序、预设尺寸与工具条行为。</summary>
+public sealed class VmwareResolutionModeTests
+{
+    [Fact]
+    public void 档位按固定顺序循环并回到自适应()
+    {
+        var mode = VmwareResolutionMode.Auto;
+        var seen = new List<VmwareResolutionMode>();
+        for (var i = 0; i < 5; i++)
+        {
+            mode = VmwareResolution.Next(mode);
+            seen.Add(mode);
+        }
+
+        Assert.Equal(
+            [VmwareResolutionMode.Hd720, VmwareResolutionMode.Xga, VmwareResolutionMode.Svga,
+             VmwareResolutionMode.Keep, VmwareResolutionMode.Auto], seen);
+    }
+
+    [Theory]
+    [InlineData(VmwareResolutionMode.Hd720, 1280, 720)]
+    [InlineData(VmwareResolutionMode.Xga, 1024, 768)]
+    [InlineData(VmwareResolutionMode.Svga, 800, 600)]
+    public void 固定档有明确尺寸(VmwareResolutionMode mode, int width, int height)
+        => Assert.Equal((width, height), VmwareResolution.PresetSize(mode));
+
+    [Theory]
+    [InlineData(VmwareResolutionMode.Auto)]
+    [InlineData(VmwareResolutionMode.Keep)]
+    public void 自适应与保持不变没有固定尺寸(VmwareResolutionMode mode)
+        => Assert.Null(VmwareResolution.PresetSize(mode));
+
+    [Fact]
+    public void 所有固定档都在默认显存范围内_无需被收敛()
+    {
+        foreach (var mode in new[] { VmwareResolutionMode.Hd720, VmwareResolutionMode.Xga, VmwareResolutionMode.Svga })
+        {
+            var (w, h) = VmwareResolution.PresetSize(mode)!.Value;
+            Assert.Equal((w, h), VmwareResolution.Fit(w, h, VmwareResolution.DefaultVideoRamKb));
+        }
+    }
+
+    [Fact]
+    public void 每个档位都有提示文案且互不相同()
+    {
+        var labels = Enum.GetValues<VmwareResolutionMode>().Select(VmwareResolution.Label).ToArray();
+
+        Assert.All(labels, l => Assert.False(string.IsNullOrWhiteSpace(l)));
+        Assert.Equal(labels.Length, labels.Distinct().Count());
+    }
+
+    [Fact]
+    public void 会话标签切换档位会更新提示并通知视图()
+    {
+        var fake = new FakeSession();
+        fake.Profile.Vmware.Enabled = true;
+        using var vm = new RemoteFlow.Presentation.ViewModels.SessionTabViewModel(
+            fake, _ => Task.CompletedTask, _ => Task.CompletedTask,
+            RemoteFlow.Presentation.Host.SynchronousUiDispatcher.Instance, new ManualTimerFactory());
+        var actions = new List<RemoteFlow.Presentation.ViewModels.SessionAction>();
+        vm.ActionRequested += (_, a) => actions.Add(a);
+
+        Assert.True(vm.IsVmwareConsole);
+        Assert.Contains("自适应", vm.VmwareResolutionLabel);
+
+        vm.CycleVmwareResolutionCommand.Execute(null);
+
+        Assert.Equal(VmwareResolutionMode.Hd720, vm.VmwareResolution);
+        Assert.Contains("1280×720", vm.VmwareResolutionLabel);
+        Assert.Equal([RemoteFlow.Presentation.ViewModels.SessionAction.CycleVmwareResolution], actions);
+    }
+
+    [Fact]
+    public void 普通连接不显示分辨率按钮()
+    {
+        using var vm = new RemoteFlow.Presentation.ViewModels.SessionTabViewModel(
+            new FakeSession(), _ => Task.CompletedTask, _ => Task.CompletedTask,
+            RemoteFlow.Presentation.Host.SynchronousUiDispatcher.Instance, new ManualTimerFactory());
+
+        Assert.False(vm.IsVmwareConsole);
+    }
+}

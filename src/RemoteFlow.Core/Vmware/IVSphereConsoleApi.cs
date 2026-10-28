@@ -80,6 +80,19 @@ public enum VmPowerResult
 /// <summary>快照树节点（已按层级展开为带深度的扁平列表）。</summary>
 public sealed record VmSnapshot(string Reference, string Name, string Description, DateTimeOffset? CreatedAt, bool IsCurrent, int Depth);
 
+/// <summary>虚拟机控制台分辨率的档位。自适应是默认；固定档用于纯文本控制台等不适合放大的场景。</summary>
+public enum VmwareResolutionMode
+{
+    /// <summary>跟随窗口大小（受显存上限约束）。</summary>
+    Auto = 0,
+    Hd720 = 1,
+    Xga = 2,
+    Svga = 3,
+
+    /// <summary>不再请求，保持虚拟机当前分辨率。</summary>
+    Keep = 4
+}
+
 /// <summary>
 /// 把期望的分辨率收敛到虚拟机显存能支撑的范围内。客户机的显卡驱动要求 宽×高×4 字节不超过显存，
 /// 超过时它会整个忽略请求，结果是控制台变大了、客户机画面却原地不动并留出大片黑边。
@@ -88,6 +101,34 @@ public static class VmwareResolution
 {
     /// <summary>ESXi 里常见的默认显存（KB）。读不到真实值时按它保守估计。</summary>
     public const int DefaultVideoRamKb = 8192;
+
+    /// <summary>固定档对应的分辨率；自适应与保持不变没有固定值，返回 null。</summary>
+    public static (int Width, int Height)? PresetSize(VmwareResolutionMode mode) => mode switch
+    {
+        VmwareResolutionMode.Hd720 => (1280, 720),
+        VmwareResolutionMode.Xga => (1024, 768),
+        VmwareResolutionMode.Svga => (800, 600),
+        _ => null
+    };
+
+    /// <summary>档位循环顺序：自适应 → 1280×720 → 1024×768 → 800×600 → 保持不变 → 自适应。</summary>
+    public static VmwareResolutionMode Next(VmwareResolutionMode mode) => mode switch
+    {
+        VmwareResolutionMode.Auto => VmwareResolutionMode.Hd720,
+        VmwareResolutionMode.Hd720 => VmwareResolutionMode.Xga,
+        VmwareResolutionMode.Xga => VmwareResolutionMode.Svga,
+        VmwareResolutionMode.Svga => VmwareResolutionMode.Keep,
+        _ => VmwareResolutionMode.Auto
+    };
+
+    public static string Label(VmwareResolutionMode mode) => mode switch
+    {
+        VmwareResolutionMode.Hd720 => "分辨率：1280×720（点击切换）",
+        VmwareResolutionMode.Xga => "分辨率：1024×768（点击切换）",
+        VmwareResolutionMode.Svga => "分辨率：800×600（点击切换）",
+        VmwareResolutionMode.Keep => "分辨率：保持不变（点击切换）",
+        _ => "分辨率：自适应窗口（点击切换）"
+    };
 
     public const int MinWidth = 640;
     public const int MinHeight = 480;

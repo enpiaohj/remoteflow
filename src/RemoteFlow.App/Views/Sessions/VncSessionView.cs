@@ -119,10 +119,11 @@ public sealed class VncSessionView : ContentControl, IDisposable
         _session.CursorChanged += OnCursorChanged;
         _session.NoticeRaised += OnSessionNotice;
 
-        // VMware 虚拟机隐藏本地指针，只显示虚拟机画进画面里的那一个（与官方控制台一致，位置以客户机为准）。
+        // VMware 虚拟机：服务器把客户机的指针合成进画面（有延迟、可能有残影），不会下发光标形状。
+        // 本地用一个小圆点指示真实鼠标位置（不滞后），画面里的箭头则是客户机里指针的位置，两者对照一目了然。
         if (_session.Profile.Vmware.Enabled)
         {
-            _image.Cursor = Cursors.None;
+            _image.Cursor = CreateDotCursor();
         }
         _viewModel.ActionRequested += OnActionRequested;
 
@@ -206,7 +207,8 @@ public sealed class VncSessionView : ContentControl, IDisposable
     private void OnResizeTimerTick(object? sender, EventArgs e)
     {
         _resizeTimer?.Stop();
-        if (_disposed || !_session.CanRequestVmwareResolution || _viewModel.VncScale == VncScaleMode.Original)
+        if (_disposed || !_session.CanRequestVmwareResolution || _viewModel.VncScale == VncScaleMode.Original
+            || _viewModel.VmwareResolution != RemoteFlow.Core.Vmware.VmwareResolutionMode.Auto)
         {
             return;
         }
@@ -229,6 +231,21 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         _lastRequestedSize = (width, height);
         _ = _session.RequestVmwareResolutionAsync(width, height);
+    }
+
+    /// <summary>按用户选的分辨率档位执行：固定档立即请求，自适应交给窗口尺寸去抖，保持不变则什么都不做。</summary>
+    private void ApplyVmwareResolutionMode()
+    {
+        _lastRequestedSize = null;
+        var mode = _viewModel.VmwareResolution;
+        if (RemoteFlow.Core.Vmware.VmwareResolution.PresetSize(mode) is { } preset)
+        {
+            _ = _session.RequestVmwareResolutionAsync(preset.Width, preset.Height);
+        }
+        else if (mode == RemoteFlow.Core.Vmware.VmwareResolutionMode.Auto)
+        {
+            ScheduleDesktopResize();
+        }
     }
 
     private void OnSessionNotice(string text)
@@ -342,6 +359,31 @@ public sealed class VncSessionView : ContentControl, IDisposable
     /// 改由这里按热点把它套成画面的鼠标指针（同 macOS 侧 NSCursor 思路）。
     /// 事件来自协议线程，封送到 UI 线程再改控件。
     /// </summary>
+    /// <summary>9×9 的白点黑边小圆点，热点在中心。创建失败时退回系统箭头，保证始终看得到指针。</summary>
+    private static Cursor CreateDotCursor()
+    {
+        const int size = 9;
+        var rgba = new byte[size * size * 4];
+        for (var y = 0; y < size; y++)
+        {
+            for (var x = 0; x < size; x++)
+            {
+                var distance = Math.Sqrt((x - 4) * (x - 4) + (y - 4) * (y - 4));
+                var offset = (y * size + x) * 4;
+                if (distance <= 2.2)
+                {
+                    rgba[offset] = rgba[offset + 1] = rgba[offset + 2] = rgba[offset + 3] = 255;
+                }
+                else if (distance <= 3.8)
+                {
+                    rgba[offset + 3] = 255; // 黑边（RGB 为 0）
+                }
+            }
+        }
+
+        return VncCursorImage.FromRgba(rgba, size, size, 4, 4) ?? Cursors.Arrow;
+    }
+
     private void OnCursorChanged(VncCursorShape? shape)
     {
         // VMware 虚拟机：服务器已把客户机的指针画进画面，本地再叠一个会出现两个指针。
@@ -603,6 +645,11 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
             case SessionAction.SendCtrlAltDelete:
                 _session.SendCtrlAltDelete();
+                _image.Focus();
+                break;
+
+            case SessionAction.CycleVmwareResolution:
+                ApplyVmwareResolutionMode();
                 _image.Focus();
                 break;
 

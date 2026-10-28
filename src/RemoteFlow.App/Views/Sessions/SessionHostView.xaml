@@ -335,6 +335,11 @@
                                 Content="{StaticResource Ui.Keyboard}"
                                 ToolTip="发送 Ctrl+Alt+Del"
                                 Command="{Binding SendCtrlAltDeleteCommand}" />
+                        <Button Style="{StaticResource Session.BarButton}"
+                                Content="{StaticResource Ui.Resolution}"
+                                ToolTip="{Binding VmwareResolutionLabel}"
+                                Command="{Binding CycleVmwareResolutionCommand}"
+                                Visibility="{Binding IsVmwareConsole, Converter={StaticResource BoolToVisibility}}" />
                     </StackPanel>
 
                     <Border Width="1" Height="16" Margin="4,0"

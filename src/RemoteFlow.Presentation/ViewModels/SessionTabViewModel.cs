@@ -269,6 +269,16 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         _ => "等比适应"
     };
 
+    /// <summary>是否为 VMware 虚拟机控制台（工具条据此显示「分辨率」按钮）。</summary>
+    public bool IsVmwareConsole => Session.Profile.Vmware.Enabled;
+
+    /// <summary>VMware 控制台分辨率档位。纯文本控制台等场景下自适应并不合适，由用户切换。</summary>
+    [ObservableProperty]
+    private RemoteFlow.Core.Vmware.VmwareResolutionMode _vmwareResolution = RemoteFlow.Core.Vmware.VmwareResolutionMode.Auto;
+
+    /// <summary>分辨率按钮的 ToolTip，随档位变化。</summary>
+    public string VmwareResolutionLabel => RemoteFlow.Core.Vmware.VmwareResolution.Label(VmwareResolution);
+
     /// <summary>请求宿主视图执行某个操作（全屏、发送 Ctrl+Alt+Del 等）。</summary>
     public event EventHandler<SessionAction>? ActionRequested;
 
@@ -331,6 +341,15 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         };
         OnPropertyChanged(nameof(VncScalingLabel));
         ActionRequested?.Invoke(this, SessionAction.ToggleScaling);
+    }
+
+    /// <summary>VMware 控制台分辨率档位循环：自适应 → 1280×720 → 1024×768 → 800×600 → 保持不变。</summary>
+    [RelayCommand]
+    private void CycleVmwareResolution()
+    {
+        VmwareResolution = RemoteFlow.Core.Vmware.VmwareResolution.Next(VmwareResolution);
+        OnPropertyChanged(nameof(VmwareResolutionLabel));
+        ActionRequested?.Invoke(this, SessionAction.CycleVmwareResolution);
     }
 
     [RelayCommand]
@@ -570,6 +589,10 @@ public enum SessionAction
     EnterScreenFull,
 
     ToggleScaling,
+
+    /// <summary>VMware 控制台切换分辨率档位（仅 VNC 视图响应）。</summary>
+    CycleVmwareResolution,
+
     SendCtrlAltDelete,
     LaunchTaskManager,
     Copy,
