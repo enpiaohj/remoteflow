@@ -39,6 +39,82 @@ public sealed class UpdateFileHousekeepingTests : IDisposable
     }
 
     [Fact]
+    public void 快捷方式文件名带旧版本号时_改指向后一并改成新文件名()
+    {
+        var oldExe = Touch("RemoteFlow-v0.27.3-win-x64.exe");
+        var newExe = Touch("RemoteFlow-v0.27.4-win-x64.exe");
+        var byVersionName = CreateShortcut("RemoteFlow-v0.27.3-win-x64.lnk", oldExe);
+        var customName = CreateShortcut("my-remote-tool.lnk", oldExe);
+
+        var updated = RunSta(() => ShortcutRetargeter.Retarget(oldExe, newExe, [byVersionName, customName]));
+
+        Assert.Equal(2, updated);
+        var renamed = Path.Combine(_dir, "RemoteFlow-v0.27.4-win-x64.lnk");
+        Assert.False(File.Exists(byVersionName));
+        Assert.Equal(newExe, ReadTarget(renamed), ignoreCase: true);
+        // 用户自己起的名字不动。
+        Assert.True(File.Exists(customName));
+        Assert.Equal(newExe, ReadTarget(customName), ignoreCase: true);
+    }
+
+    [Fact]
+    public void 新名字已被占用时快捷方式保持原名()
+    {
+        var oldExe = Touch("RemoteFlow-v0.27.3-win-x64.exe");
+        var newExe = Touch("RemoteFlow-v0.27.4-win-x64.exe");
+        var oldLink = CreateShortcut("RemoteFlow-v0.27.3-win-x64.lnk", oldExe);
+        var occupied = CreateShortcut("RemoteFlow-v0.27.4-win-x64.lnk", Touch("other.exe"));
+
+        RunSta(() => ShortcutRetargeter.Retarget(oldExe, newExe, [oldLink]));
+
+        Assert.True(File.Exists(oldLink));
+        Assert.Equal(newExe, ReadTarget(oldLink), ignoreCase: true);
+        Assert.Equal(Path.Combine(_dir, "other.exe"), ReadTarget(occupied), ignoreCase: true);
+    }
+
+    [Fact]
+    public void 以前漏改的快捷方式_指向已删除的旧版本产物时也改指向当前文件()
+    {
+        var newExe = Touch("RemoteFlow-v0.27.5-win-x64.exe");
+        var dangling = CreateShortcut("a.lnk", Path.Combine(_dir, "RemoteFlow-v0.27.2-win-x64.exe"));
+        var elsewhere = CreateShortcut("b.lnk", Path.Combine(_dir, "sub", "RemoteFlow-v0.27.2-win-x64.exe"));
+        var stillExists = CreateShortcut("c.lnk", Touch("RemoteFlow-v0.27.1-win-x64.exe"));
+
+        var updated = RunSta(() => ShortcutRetargeter.Retarget(string.Empty, newExe, [dangling, elsewhere, stillExists]));
+
+        Assert.Equal(1, updated);
+        Assert.Equal(newExe, ReadTarget(dangling), ignoreCase: true);
+        Assert.Equal(Path.Combine(_dir, "sub", "RemoteFlow-v0.27.2-win-x64.exe"), ReadTarget(elsewhere), ignoreCase: true);
+        Assert.Equal(Path.Combine(_dir, "RemoteFlow-v0.27.1-win-x64.exe"), ReadTarget(stillExists), ignoreCase: true);
+    }
+
+    [Fact]
+    public void 目标已是新文件但名字还带旧版本号的快捷方式_补改名()
+    {
+        var newExe = Touch("RemoteFlow-v0.27.5-win-x64.exe");
+        var laggingName = CreateShortcut("RemoteFlow-v0.27.3-win-x64.lnk", newExe);
+
+        RunSta(() => ShortcutRetargeter.Retarget(string.Empty, newExe, [laggingName]));
+
+        Assert.False(File.Exists(laggingName));
+        Assert.Equal(newExe, ReadTarget(Path.Combine(_dir, "RemoteFlow-v0.27.5-win-x64.lnk")), ignoreCase: true);
+    }
+
+    [Fact]
+    public void 同目录且已不存在的旧版本产物才算失效目标()
+    {
+        var current = Touch("RemoteFlow-v0.27.5-win-x64.exe");
+        var existing = Touch("RemoteFlow-v0.27.4-win-x64.exe");
+
+        Assert.True(WpfUpdateInstaller.IsStaleSibling(Path.Combine(_dir, "RemoteFlow-v0.27.3-win-x64.exe"), current));
+        Assert.False(WpfUpdateInstaller.IsStaleSibling(existing, current));
+        Assert.False(WpfUpdateInstaller.IsStaleSibling(current, current));
+        Assert.False(WpfUpdateInstaller.IsStaleSibling(Path.Combine(_dir, "notes.exe"), current));
+        Assert.False(WpfUpdateInstaller.IsStaleSibling(Path.Combine(_dir, "x", "RemoteFlow-v0.27.3-win-x64.exe"), current));
+        Assert.False(WpfUpdateInstaller.IsStaleSibling(string.Empty, current));
+    }
+
+    [Fact]
     public void 启动时按标记删除旧版本文件并清掉标记()
     {
         var oldExe = Touch("RemoteFlow-v0.25.1-win-x64.exe");

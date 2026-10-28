@@ -75,9 +75,22 @@ public sealed class WpfLaunchOnStartupService : ILaunchOnStartupService
     public static void RetargetRegistration(string oldExecutablePath, string newExecutablePath)
     {
         using var key = Registry.CurrentUser.OpenSubKey(StartupRegistryKey, writable: true);
-        if (key?.GetValue(StartupValueName) is string current && PointsTo(current, oldExecutablePath))
+        if (key?.GetValue(StartupValueName) is string current
+            && (PointsTo(current, oldExecutablePath)
+                || WpfUpdateInstaller.IsStaleSibling(ExtractPath(current), newExecutablePath)))
         {
             key.SetValue(StartupValueName, BuildCommand(newExecutablePath));
+        }
+    }
+
+    /// <summary>启动项指向「已不存在的旧版本产物」时改指向当前文件（以前的更新漏改了的情况）。</summary>
+    public static void RepairStaleRegistration(string currentExecutablePath)
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(StartupRegistryKey, writable: true);
+        if (key?.GetValue(StartupValueName) is string registered
+            && WpfUpdateInstaller.IsStaleSibling(ExtractPath(registered), currentExecutablePath))
+        {
+            key.SetValue(StartupValueName, BuildCommand(currentExecutablePath));
         }
     }
 
@@ -90,12 +103,13 @@ public sealed class WpfLaunchOnStartupService : ILaunchOnStartupService
 
     /// <summary>启动项命令行里的可执行文件路径是否就是给定路径（不区分大小写，带不带引号都认）。</summary>
     internal static bool PointsTo(string registered, string executablePath)
+        => string.Equals(ExtractPath(registered), executablePath, StringComparison.OrdinalIgnoreCase);
+
+    internal static string ExtractPath(string registered)
     {
         var trimmed = registered.Trim();
-        var path = trimmed.StartsWith('"')
+        return trimmed.StartsWith('"')
             ? trimmed[1..].Split('"')[0]
             : trimmed.Split(' ')[0];
-
-        return string.Equals(path, executablePath, StringComparison.OrdinalIgnoreCase);
     }
 }

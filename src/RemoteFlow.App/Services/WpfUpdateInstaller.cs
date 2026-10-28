@@ -344,6 +344,43 @@ public sealed partial class WpfUpdateInstaller(ILogger<WpfUpdateInstaller> logge
         }
     }
 
+    /// <summary>文件名是不是发布产物的命名形式（<c>RemoteFlow-vX.Y.Z-win-x64.exe</c>）。</summary>
+    internal static bool IsReleaseArtifactName(string fileName) => ReleaseArtifactName().IsMatch(fileName);
+
+    /// <summary>
+    /// <paramref name="target"/> 是不是「以前某次更新漏改的、已经不存在的旧版本产物」：与 <paramref name="currentPath"/> 同目录、
+    /// 同为发布产物命名、不是它自己、且文件已不存在。启动项 / 快捷方式指向这样的目标一定是失效的，可以安全改指向当前文件。
+    /// </summary>
+    internal static bool IsStaleSibling(string target, string currentPath)
+    {
+        if (string.IsNullOrWhiteSpace(target)
+            || string.Equals(target, currentPath, StringComparison.OrdinalIgnoreCase)
+            || !IsReleaseArtifactName(Path.GetFileName(currentPath))
+            || !IsReleaseArtifactName(Path.GetFileName(target)))
+        {
+            return false;
+        }
+
+        var sameDirectory = string.Equals(
+            Path.GetDirectoryName(target), Path.GetDirectoryName(currentPath), StringComparison.OrdinalIgnoreCase);
+        return sameDirectory && !File.Exists(target);
+    }
+
+    /// <summary>
+    /// 启动时的兜底：以前的更新没来得及改的启动项 / 快捷方式（指向已被删除的旧版本文件）改指向当前文件。
+    /// 不依赖 <c>.replaces</c> 标记，所以更新后的首次启动之后任何时候都能自愈。
+    /// </summary>
+    public static void RepairStaleEntries()
+    {
+        if (Environment.ProcessPath is not { Length: > 0 } current || !IsReleaseArtifactName(Path.GetFileName(current)))
+        {
+            return;
+        }
+
+        TryRun(() => WpfLaunchOnStartupService.RepairStaleRegistration(current));
+        TryRun(() => ShortcutRetargeter.RepairStale(current));
+    }
+
     private static void TryRun(Action action)
     {
         try

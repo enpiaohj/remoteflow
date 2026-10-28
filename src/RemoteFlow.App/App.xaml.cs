@@ -446,6 +446,12 @@ public partial class App : System.Windows.Application
             for (var attempt = 0; attempt < 10; attempt++)
             {
                 WpfUpdateInstaller.CleanupPreviousVersion();
+                if (attempt == 0)
+                {
+                    // 兜底自愈：以前的更新漏改的启动项 / 快捷方式（指向已被删除的旧版本文件）改指向当前文件。
+                    WpfUpdateInstaller.RepairStaleEntries();
+                }
+
                 await Task.Delay(TimeSpan.FromSeconds(1.5));
             }
         });
