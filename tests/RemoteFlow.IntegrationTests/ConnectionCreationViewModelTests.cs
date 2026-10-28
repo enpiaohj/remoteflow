@@ -23,6 +23,21 @@ public sealed class ConnectionCreationViewModelTests
         Assert.Equal(groupId, dialogs.DefaultGroupId);
     }
 
+    [Fact]
+    public async Task EmptyGroupAction_PreselectsCurrentGroup()
+    {
+        var dialogs = new CapturingDialogService();
+        var viewModel = new ConnectionsPageViewModel(
+            null!, null!, null!, null!, null!, dialogs, null!, null!, null!,
+            SynchronousUiDispatcher.Instance, null!);
+        var groupId = Guid.NewGuid();
+        viewModel.SelectedGroupNode = new ConnectionGroupNodeViewModel { GroupId = groupId, Name = "测试分组" };
+
+        await viewModel.EmptyActionCommand.ExecuteAsync(null);
+
+        Assert.Equal(groupId, dialogs.DefaultGroupId);
+    }
+
     /// <summary>
     /// 「保存并连接」时，新保存的连接不一定在当前列表里（如处于「最近连接」「收藏」筛选视图，
     /// 它还没连过 / 没收藏），此时选中项为空。原先「选中项为空就不连」会让保存并连接静默什么都不做。

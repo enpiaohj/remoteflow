@@ -776,6 +776,114 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
     public bool IsEmpty => Items.Count == 0;
 
+    public bool ShowEmptyState => IsEmpty && !IsLoading;
+    public bool ShowLoadingState => IsEmpty && IsLoading;
+    public bool HasConnections => _allItems.Count > 0;
+
+    // 先判断资源域是否为空，再判断搜索条件，避免把「收藏里搜不到」误报成「还没收藏」。
+    public string EmptyStateKind => !HasConnections ? "Library"
+        : SelectedGroupNode is { TotalCount: 0 } ? "Group"
+        : Filter == ConnectionFilter.Favorites && FavoritesCount == 0 ? "Favorites"
+        : Filter == ConnectionFilter.Recent && RecentCount == 0 ? "Recent"
+        : "NoMatches";
+
+    public string EmptyTitle => EmptyStateKind switch
+    {
+        "Library" => "从第一个连接开始",
+        "Group" => "这个分组还没有连接",
+        "Favorites" => "把常用连接放在手边",
+        "Recent" => "连接后，从这里快速回来",
+        _ => "没有找到匹配的连接"
+    };
+
+    public string EmptyDescription => EmptyStateKind switch
+    {
+        "Library" => "添加远程设备，在一个工作台管理 RDP、SSH 与 VNC 连接。已有连接列表？也可以从 CSV 导入。",
+        "Group" => $"在「{ViewTitle}」中新建连接，或从其他分组将已有连接移动到这里。",
+        "Favorites" => "在设备列表中点击星标收藏，下次就能在这里快速找到。",
+        "Recent" => "成功连接过的设备会出现在这里，方便继续上次的工作。",
+        _ => $"当前「{ViewTitle}」中没有符合条件的连接。试试其他关键词，或重置搜索与筛选。"
+    };
+
+    public string EmptyIconKey => EmptyStateKind switch
+    {
+        "Group" => "Ui.Folder",
+        "Favorites" => "Ui.Favorite",
+        "Recent" => "Ui.Recent",
+        "NoMatches" => "Ui.Search",
+        _ => "Ui.Connections"
+    };
+
+    public string EmptyActionText => EmptyStateKind switch
+    {
+        "Library" => "新建连接",
+        "Group" => "在此分组新建连接",
+        "NoMatches" => "重置搜索与筛选",
+        _ => "浏览所有设备"
+    };
+
+    public bool ShowImportHint => EmptyStateKind == "Library";
+    public string EmptyActionHint => EmptyStateKind == "NoMatches"
+        ? "保留当前分组或视图；最近连接恢复为全部时间"
+        : EmptyStateKind == "Library" ? "支持 RDP · SSH · VNC" : string.Empty;
+
+    partial void OnIsLoadingChanged(bool value) => RaiseEmptyState();
+
+    private void RaiseEmptyState()
+    {
+        OnPropertyChanged(nameof(ShowEmptyState));
+        OnPropertyChanged(nameof(ShowLoadingState));
+        OnPropertyChanged(nameof(HasConnections));
+        OnPropertyChanged(nameof(EmptyStateKind));
+        OnPropertyChanged(nameof(EmptyTitle));
+        OnPropertyChanged(nameof(EmptyDescription));
+        OnPropertyChanged(nameof(EmptyIconKey));
+        OnPropertyChanged(nameof(EmptyActionText));
+        OnPropertyChanged(nameof(EmptyActionHint));
+        OnPropertyChanged(nameof(ShowImportHint));
+    }
+
+    /// <summary>重置搜索与附加筛选，保留当前资源域和排序。</summary>
+    [RelayCommand]
+    private void ResetEmptyFilters()
+    {
+        SearchText = string.Empty;
+        PageFilterText = string.Empty;
+        ClearFilters();
+        if (IsRecentView)
+        {
+            RecentRange = RecentRange.All;
+        }
+    }
+
+    [RelayCommand]
+    private void BrowseAllConnections()
+    {
+        ResetEmptyFilters();
+        ClearGroupFilter();
+    }
+
+    [RelayCommand]
+    private async Task EmptyActionAsync()
+    {
+        switch (EmptyStateKind)
+        {
+            case "Library":
+            case "Group":
+                await CreateConnectionAsync(defaultGroupId: SelectedGroupNode?.GroupId);
+                break;
+            case "NoMatches":
+                ResetEmptyFilters();
+                break;
+            default:
+                BrowseAllConnections();
+                break;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenImportSettings() => NavigationRequested?.Invoke(this, NavigationPage.Settings);
+
     /// <summary>「最近连接」视图专属：日期分组 + 时间范围筛选。</summary>
     public bool IsRecentView => Filter == ConnectionFilter.Recent;
 
@@ -1070,7 +1178,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             source = source.Where(i => subtree.Contains(EffectiveGroupId(i)));
         }
 
-        // 「最近连接」不用页内筛选（协议 / 标签 / 关键词）。
+        // 「最近连接」不应用隐藏的协议 / 标签筛选，搜索框在各视图均生效。
         if (Filter != ConnectionFilter.Recent)
         {
             if (ProtocolFilter != ProtocolFilterOption.All)
@@ -1084,19 +1192,21 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                 source = source.Where(i => i.Profile.Protocol == protocol);
             }
 
-            if (!string.IsNullOrWhiteSpace(PageFilterText))
-            {
-                var q = PageFilterText.Trim();
-                source = source.Where(i =>
-                    i.Name.Contains(q, StringComparison.CurrentCultureIgnoreCase)
-                    || i.Host.Contains(q, StringComparison.CurrentCultureIgnoreCase)
-                    || i.Tags.Any(t => t.Name.Contains(q, StringComparison.CurrentCultureIgnoreCase)));
-            }
-
             if (TagFilter.Id is { } tagId)
             {
                 source = source.Where(i => i.Profile.TagIds.Contains(tagId));
             }
+        }
+
+        if (!string.IsNullOrWhiteSpace(PageFilterText))
+        {
+            var q = PageFilterText.Trim();
+            source = source.Where(i =>
+                i.Name.Contains(q, StringComparison.CurrentCultureIgnoreCase)
+                || i.Host.Contains(q, StringComparison.CurrentCultureIgnoreCase)
+                || (i.Profile.Notes?.Contains(q, StringComparison.CurrentCultureIgnoreCase) ?? false)
+                || i.Profile.TagIds.Any(id => _tagNames.TryGetValue(id, out var name)
+                    && name.Contains(q, StringComparison.CurrentCultureIgnoreCase)));
         }
 
         // 在线状态筛选：探测关闭时下拉已隐藏，这里对 All 短路即可。
@@ -1179,17 +1289,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             Items.Add(item);
         }
 
-        EmptyMessage = SelectedGroupNode is { } node && node.IsEmptyGroup
-            ? "该分组还没有连接。右键分组可新建连接。"
-            : _allItems.Count == 0
-                ? "还没有任何连接。点击「新建连接」开始。"
-                : Filter switch
-                {
-                    ConnectionFilter.Favorites when string.IsNullOrWhiteSpace(SearchText) => "还没有收藏的连接。在列表中点击星标即可收藏。",
-                    ConnectionFilter.Recent when string.IsNullOrWhiteSpace(SearchText) =>
-                        RecentRange == RecentRange.Today ? "今天还没有连接记录。" : "这段时间还没有连接记录。",
-                    _ => $"没有找到匹配的连接。"
-                };
+        EmptyMessage = EmptyDescription;
+        RaiseEmptyState();
 
         // 选中规则（产品约定）：
         // 1) 本次运行内曾选中 → 保留/恢复；2) 首次进入默认选“最近连接”最新；

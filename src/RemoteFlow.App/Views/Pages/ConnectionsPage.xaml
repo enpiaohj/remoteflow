@@ -9,6 +9,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             TextElement.Foreground="{DynamicResource Text.Primary}"
              Background="Transparent"
              KeyDown="OnPageKeyDown">
 
@@ -345,6 +346,7 @@
                         ToolTip="刷新列表"
                         Command="{Binding RefreshCommand}" />
                 <Button Style="{StaticResource Button.Secondary}" MinHeight="30" Padding="12,0" Margin="10,0,0,0"
+                        Visibility="{Binding HasConnections, Converter={StaticResource BoolToVisibility}}"
                         Click="OnBatchOperationsClick">
                     <StackPanel Orientation="Horizontal">
                         <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Checklist}" Width="14" Height="14"
@@ -589,6 +591,10 @@
                 </Border>
 
                 <Grid Grid.Column="1" Margin="12,0,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
             <!-- ── 搜索结果提示 ──────────────────────────────── -->
             <Border
                     Background="{DynamicResource Brand.Subtle}"
@@ -618,7 +624,7 @@
             <!-- 列表卡片：机身与内容同一基色（Windows 11 默认配色思路）之后，
                  列表需要一个显式的白卡片边界才不会跟机身糊在一起。列头 / 分隔线 /
                  列表都装进这一张卡片。 -->
-            <Grid Margin="6,8,4,0">
+            <Grid Grid.Row="1" Margin="6,8,4,0">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -629,7 +635,8 @@
                     <!-- ── 列头 / 多选批量栏：同一行原位切换，消除勾选时列表下沉跳动 ──
                          常态 = 列头（名称 / IP / 协议…）；勾选 ≥1 项 = 批量操作栏（此时列头
                          本就无需查看）。两态同一高度，列表零位移。 -->
-                    <Grid Grid.Row="0" Height="30" Margin="4,0,4,0">
+                    <Grid Grid.Row="0" Height="30" Margin="4,0,4,0"
+                          Visibility="{Binding IsEmpty, Converter={StaticResource InverseBoolToVisibility}}">
 
                         <!-- 列头（常态；批量时让位） -->
                         <Grid>
@@ -861,16 +868,40 @@
                             </ListBox.GroupStyle>
                         </ListBox>
 
-                        <!-- ── 空状态：无数据、无搜索结果或分组下无连接 ── -->
-                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="380"
-                                    Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
-                            <Border Width="56" Height="56" CornerRadius="16" Background="{DynamicResource Bg.Subtle}" HorizontalAlignment="Center">
-                                <Image Width="36" Height="36" HorizontalAlignment="Center" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality" Source="{StaticResource ResourceIcon.AllDevices}" />
-                            </Border>
-                            <TextBlock Text="{Binding EmptyMessage}" Style="{StaticResource Text.BodySecondary}"
-                                       TextWrapping="Wrap" TextAlignment="Center" Margin="0,16,0,0" />
-                            <Button Style="{StaticResource Button.Primary}" Content="新建连接" HorizontalAlignment="Center"
-                                    Margin="0,20,0,0" Command="{Binding CreateCommand}" />
+                        <!-- 就地引导：状态与动作来自 VM，正文可滚动以适应矮窗口和放大字体。 -->
+                        <ScrollViewer x:Name="EmptyStateScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Visibility="{Binding ShowEmptyState, Converter={StaticResource BoolToVisibility}}">
+                            <Grid Margin="20,28">
+                                <StackPanel MaxWidth="420" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <Grid Width="72" Height="72" HorizontalAlignment="Center">
+                                        <Border CornerRadius="22" Background="{DynamicResource Brand.Default}" Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                                        <Path Width="30" Height="30" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Fill="{DynamicResource Brand.Default}"
+                                              Data="{Binding EmptyIconKey, Converter={StaticResource KeyToGeometry}}" />
+                                    </Grid>
+                                    <TextBlock x:Name="EmptyStateTitle" Text="{Binding EmptyTitle}" Style="{StaticResource Text.SectionTitle}" FontSize="22"
+                                               TextWrapping="Wrap" TextAlignment="Center" Margin="0,22,0,0" />
+                                    <TextBlock Text="{Binding EmptyDescription}" Style="{StaticResource Text.BodySecondary}"
+                                               TextWrapping="Wrap" TextAlignment="Center" LineHeight="22" Margin="0,10,0,0" />
+                                    <WrapPanel HorizontalAlignment="Center" Margin="0,20,0,0">
+                                        <Button x:Name="EmptyStateAction" Style="{StaticResource Button.Primary}" Content="{Binding EmptyActionText}"
+                                                Padding="18,0" Margin="4" Command="{Binding EmptyActionCommand}" />
+                                        <Button Style="{StaticResource Button.Secondary}" Content="前往设置导入 CSV"
+                                                Padding="14,0" Margin="4" Command="{Binding OpenImportSettingsCommand}"
+                                                ToolTip="设置 → 数据与备份 → 导入连接列表"
+                                                Visibility="{Binding ShowImportHint, Converter={StaticResource BoolToVisibility}}" />
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding EmptyActionHint}" Style="{StaticResource Text.Caption}"
+                                               TextWrapping="Wrap" TextAlignment="Center" Margin="0,12,0,0" />
+                                </StackPanel>
+                            </Grid>
+                        </ScrollViewer>
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="20"
+                                    Visibility="{Binding ShowLoadingState, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="正在读取连接" Style="{StaticResource Text.SectionTitle}" TextAlignment="Center" />
+                            <TextBlock Text="正在加载设备与分组，请稍候。" Style="{StaticResource Text.BodySecondary}" Margin="0,10,0,0" />
+                            <ProgressBar IsIndeterminate="True" Height="3" Width="120" Margin="0,20,0,0"
+                                         AutomationProperties.Name="正在读取连接" Foreground="{DynamicResource Brand.Default}" Background="{DynamicResource Bg.Subtle}" />
                         </StackPanel>
                     </Grid>
                 </Grid>
