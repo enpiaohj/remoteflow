@@ -25,7 +25,7 @@
         <ToggleButton x:Name="SelectorToggle"
                       Height="36"
                       MinWidth="150"
-                      MaxWidth="240"
+                      MaxWidth="380"
                       Margin="2,0"
                       Cursor="Hand"
                       Focusable="False"
@@ -45,9 +45,10 @@
                 <!-- 角标 + 标题共用一个有上限的 Grid：角标列 Auto、标题列星号。
                      角标出现时星号列自动收缩、标题随之省略，不必在代码里按位数
                      换算标题上限（也就不会出现「99+」时算少了把箭头挤出去）。
-                     上限 132 是实测反推：头部其余固定件约 101px，132 + 101 = 233 < 240，
-                     留 7px 余量；角标隐藏时标题得 132 − 8（间距）= 124，与旧版持平。 -->
-                <Grid MaxWidth="132" VerticalAlignment="Center">
+                     上限 272 是实测反推：头部其余固定件约 101px，272 + 101 = 373 < 380，
+                     留 7px 余量（旧版 240 / 132，只放得下约 124px 的标题，较长的会话名被省略；
+                     现在放宽到 380 / 272，标题随内容撑宽，常见的会话名可以完整显示，更长的才省略）。 -->
+                <Grid MaxWidth="272" VerticalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />

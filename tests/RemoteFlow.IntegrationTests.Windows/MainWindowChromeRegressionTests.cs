@@ -124,7 +124,7 @@ public sealed class MainWindowChromeRegressionTests
         Assert.DoesNotContain("Canvas.Right", selector, StringComparison.Ordinal);
 
         // 角标参与布局宽度，必须与标题同处一个有上限的 Grid：
-        // 角标出现时标题所在星号列自动收缩，否则头部会顶到 240 上限、把箭头挤出可视区。
+        // 角标出现时标题所在星号列自动收缩，否则头部会顶到 380 上限、把箭头挤出可视区。
         Assert.Contains("<Grid MaxWidth=", selector, StringComparison.Ordinal);
         Assert.Contains("<ColumnDefinition Width=\"Auto\" />", selector, StringComparison.Ordinal);
         Assert.Contains("<ColumnDefinition Width=\"*\" />", selector, StringComparison.Ordinal);

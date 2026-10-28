@@ -9,7 +9,7 @@ namespace RemoteFlow.IntegrationTests;
 /// <summary>
 /// 收起态头部的真实布局测量。
 /// <para>
-/// 头部宽度上限 240（ToggleButton MaxWidth），加入会话数角标与关闭按钮后余量很小；
+/// 头部宽度上限 380（ToggleButton MaxWidth），加入会话数角标与关闭按钮后余量很小；
 /// 而 <c>Button.Icon</c> 样式自带 <c>MinWidth=36</c> —— 只写 Width=24 会被样式最小值覆盖。
 /// 这类「样式最小值盖过局部设定」的问题静态断言看不出来，必须真实测量。
 /// </para>
@@ -17,12 +17,12 @@ namespace RemoteFlow.IntegrationTests;
 [Collection(WpfApplicationCollection.Name)]
 public sealed class SessionTabSelectorHeaderLayoutTests
 {
-    /// <summary>头部内容区宽度：MaxWidth 240 − 模板 Padding 左右各 10 − 边框 1×2。</summary>
-    private const double ContentWidth = 218;
+    /// <summary>头部内容区宽度：MaxWidth 380 − 模板 Padding 左右各 10 − 边框 1×2。</summary>
+    private const double ContentWidth = 358;
 
     /// <summary>
     /// 最坏排布下的宽度上限：长标题 + 两位数角标 + × 同时出现。
-    /// 头部超 240 会把最右的下拉箭头挤出可视区，因此必须真实测量。
+    /// 头部超 380 会把最右的下拉箭头挤出可视区，因此必须真实测量。
     /// </summary>
     [Theory]
     [InlineData(null)]
@@ -48,7 +48,7 @@ public sealed class SessionTabSelectorHeaderLayoutTests
                 }
 
                 // 长标题逼出宽度上限，才是真正的溢出场景。
-                ((TextBlock)selector.FindName("HeaderTitle")).Text = "上海-生产-数据库-主节点-01";
+                ((TextBlock)selector.FindName("HeaderTitle")).Text = "上海-生产-数据库-主节点-01-灾备-华东区域-一号机房-归档历史库-只读副本";
                 Relayout(selector);
 
                 // 关闭按钮必须是 24，而不是 Button.Icon 的 MinWidth=36。
@@ -59,8 +59,8 @@ public sealed class SessionTabSelectorHeaderLayoutTests
                 selector.Measure(new Size(double.PositiveInfinity, 36));
                 var desired = selector.DesiredSize.Width;
                 Assert.True(
-                    desired <= 240 + 0.5,
-                    $"角标为「{count ?? "无"}」时头部需求宽度 {desired} 超出 240 上限");
+                    desired <= 380 + 0.5,
+                    $"角标为「{count ?? "无"}」时头部需求宽度 {desired} 超出 380 上限");
             }
             finally
             {
@@ -103,6 +103,38 @@ public sealed class SessionTabSelectorHeaderLayoutTests
 
                 // 高度 16 是 10px 字号的排版下限，再矮会在非整数 DPI 缩放下裁切文字。
                 Assert.Equal(16d, badge.ActualHeight);
+            }
+            finally
+            {
+                UiTestHost.RestoreAppResources();
+            }
+        });
+    }
+
+    /// <summary>只有一个标签（折叠态）时，常见长度的会话名要能完整显示、不被省略号截断。</summary>
+    [Theory]
+    [InlineData("20-11-TAO-DC-01-2016")]
+    [InlineData("上海-生产-数据库-主节点-01")]
+    [InlineData("CA服务器")]
+    public void 常见会话名完整显示不被省略(string title)
+    {
+        UiTestHost.RunOnSta(() =>
+        {
+            UiTestHost.LoadAppResources();
+            try
+            {
+                var (selector, _, close, _) = BuildSelector();
+                close.Visibility = Visibility.Visible;
+                var header = (TextBlock)selector.FindName("HeaderTitle");
+                header.Text = title;
+                Relayout(selector);
+
+                // 不受宽度限制时文字本身需要多宽；实际布局宽度必须不小于它，否则就被截断了。
+                header.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                var natural = header.DesiredSize.Width - header.Margin.Left - header.Margin.Right; // DesiredSize 含外边距，ActualWidth 不含
+                Assert.True(
+                    header.ActualWidth + 0.5 >= natural,
+                    $"会话名「{title}」被截断：实际宽度 {header.ActualWidth}，完整需要 {natural}");
             }
             finally
             {
