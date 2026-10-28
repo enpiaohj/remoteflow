@@ -5,6 +5,7 @@ using MarcusW.VncClient.Protocol;
 using MarcusW.VncClient.Protocol.Implementation;
 using MarcusW.VncClient.Protocol.Services;
 using MarcusW.VncClient.Utils;
+using Microsoft.Extensions.Logging;
 
 namespace RemoteFlow.Protocol.Vnc;
 
@@ -45,23 +46,33 @@ public sealed class WebSocketTransportParameters : TransportParameters
 
 /// <summary>
 /// 只替换传输层：其余 RFB 解码、编码、消息处理沿用库的默认实现。
-/// 不声明任何光标扩展：实测 ESXi 对本客户端既不下发标准光标形状，也不下发 VMware 光标扩展
-/// （声明了与官方控制台相同的 DefineCursor / CursorState / CursorPosition 也一样），
-/// 因此按 VNC 最基础的语义由服务器负责在画面里绘制指针。
+/// 库的消息发送器无视 <see cref="CreateEncodingTypesCollection"/>，初始 SetEncodings 固定为
+/// 一组最小编码，不含任何光标扩展；ESXi 因此认为客户端不会画指针，转而把指针直接画进帧缓冲，
+/// 客户机刷新时就会在画面里留下残影。所以连接建立后必须再发一条完整的 SetEncodings
+/// （RFB 规定后发的替换先发的），见 <see cref="ClientEncodings"/>。
 /// </summary>
 public sealed class WebSocketVncImplementation : DefaultImplementation
 {
+    private System.Collections.Immutable.IImmutableSet<MarcusW.VncClient.Protocol.EncodingTypes.IEncodingType>? _supported;
+
+    /// <summary>
+    /// 需要告知服务器的编码：库的最小帧编码集 + 质量控制 + VMware 光标扩展（形状 / 状态）。
+    /// 连接建立前为空集。
+    /// </summary>
+    public System.Collections.Immutable.IImmutableSet<MarcusW.VncClient.Protocol.EncodingTypes.IEncodingType> ClientEncodings
+        => _supported is null
+            ? System.Collections.Immutable.ImmutableHashSet<MarcusW.VncClient.Protocol.EncodingTypes.IEncodingType>.Empty
+            : System.Collections.Immutable.ImmutableHashSet.CreateRange(_supported.Where(e => e.Id is 0 or 1 or 6 or 7 or 16 or -223 or -224
+                    or (>= -32 and <= -23) or (>= -512 and <= -412) or (>= -768 and <= -763)
+                    or VmwareCursorShapeEncoding.EncodingId or VmwareCursorStateEncoding.EncodingId));
+
     public override System.Collections.Immutable.IImmutableSet<MarcusW.VncClient.Protocol.EncodingTypes.IEncodingType>
         CreateEncodingTypesCollection(RfbConnectionContext context)
     {
-        // 剔除标准 Cursor(-239) / XCursor(-240) / CursorWithAlpha(-314)：服务器必须自己绘制并擦除指针。
-        var set = base.CreateEncodingTypesCollection(context);
-        foreach (var cursor in set.Where(e => e.Id is -239 or -240 or -314).ToArray())
-        {
-            set = set.Remove(cursor);
-        }
-
-        return set;
+        _supported = base.CreateEncodingTypesCollection(context)
+            .Add(new VmwareCursorShapeEncoding())
+            .Add(new VmwareCursorStateEncoding());
+        return _supported;
     }
 
     public override ITransportConnector CreateTransportConnector(RfbConnectionContext context)

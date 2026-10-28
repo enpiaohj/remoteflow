@@ -144,8 +144,9 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationToken, _lifecycleCts.Token);
 
-            var client = Profile.Vmware.Enabled
-                ? new VncLibClient(_loggerFactory, new WebSocketVncImplementation())
+            var vmwareImplementation = Profile.Vmware.Enabled ? new WebSocketVncImplementation() : null;
+            var client = vmwareImplementation is not null
+                ? new VncLibClient(_loggerFactory, vmwareImplementation)
                 : new VncLibClient(_loggerFactory);
 
             var transport = Profile.Vmware.Enabled
@@ -185,6 +186,13 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
             };
 
             var connection = await client.ConnectAsync(parameters, linkedCts.Token);
+
+            // 库的初始 SetEncodings 是固定的最小集：补发完整的一条，ESXi 才会下发光标形状而不是把指针画进画面。
+            if (vmwareImplementation is not null)
+            {
+                connection.EnqueueMessage(new MarcusW.VncClient.Protocol.Implementation.MessageTypes.Outgoing.SetEncodingsMessage(
+                    vmwareImplementation.ClientEncodings));
+            }
 
             // 连接在关闭 / 释放流程启动后才返回：禁止把迟到连接回填给已释放 / 已 closing 的会话，
             // 否则会让已 Disconnected / 已释放的会话复活。这里立即释放迟到连接。
