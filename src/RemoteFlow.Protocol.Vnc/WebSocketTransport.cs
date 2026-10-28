@@ -43,9 +43,16 @@ public sealed class WebSocketTransportParameters : TransportParameters
         => new((value ?? string.Empty).Where(Uri.IsHexDigit).Select(char.ToUpperInvariant).ToArray());
 }
 
-/// <summary>只替换传输层：其余 RFB 解码、编码、消息处理沿用库的默认实现。</summary>
+/// <summary>
+/// 只替换传输层：其余 RFB 解码、编码、消息处理沿用库的默认实现。
+/// 额外声明 VMware 光标伪编码，让 ESXi 下发指针形状而不是把指针合成进画面（否则会留下残影）。
+/// </summary>
 public sealed class WebSocketVncImplementation : DefaultImplementation
 {
+    public override System.Collections.Immutable.IImmutableSet<MarcusW.VncClient.Protocol.EncodingTypes.IEncodingType>
+        CreateEncodingTypesCollection(RfbConnectionContext context)
+        => base.CreateEncodingTypesCollection(context).Add(new VmwareCursorEncodingType(context));
+
     public override ITransportConnector CreateTransportConnector(RfbConnectionContext context)
         => context.Connection.Parameters.TransportParameters is WebSocketTransportParameters parameters
             ? new WebSocketTransportConnector(parameters)

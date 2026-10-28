@@ -230,6 +230,12 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
                 NoticeRaised?.Invoke(ToolsNotice);
             }
 
+            if (Profile.Vmware.Enabled)
+            {
+                _logger.LogInformation("VNC 会话 {SessionId} 编码：{Encodings}", SessionId,
+                    string.Join("、", connection.UsedEncodingTypes.Select(e => e.Name)));
+            }
+
             _logger.LogInformation(
                 "VNC 会话 {SessionId} 已连接 {Host}:{Port}，远端桌面 {Width}x{Height}",
                 SessionId, Profile.Host, Profile.Port,

@@ -43,6 +43,9 @@ public sealed class VncSessionView : ContentControl, IDisposable
     /// <summary>当前远端光标（由服务端光标伪编码下发）。协议线程收形状 → 封送 UI 线程套到画面。</summary>
     private Cursor? _remoteCursor;
 
+    /// <summary>VMware 会话的小圆点指针（收到真实指针形状前、或服务器隐藏指针时使用）。</summary>
+    private Cursor? _dotCursor;
+
     public VncSessionView(VncSession session, SessionTabViewModel viewModel, ILogger<VncSessionView> logger)
     {
         _session = session;
@@ -119,11 +122,11 @@ public sealed class VncSessionView : ContentControl, IDisposable
         _session.CursorChanged += OnCursorChanged;
         _session.NoticeRaised += OnSessionNotice;
 
-        // VMware 虚拟机：服务器把客户机的指针合成进画面（有延迟、可能有残影），不会下发光标形状。
-        // 本地用一个小圆点指示真实鼠标位置（不滞后），画面里的箭头则是客户机里指针的位置，两者对照一目了然。
+        // VMware 虚拟机：先用小圆点指示真实鼠标位置；服务器接受 VMware 光标伪编码后会下发指针形状，
+        // 届时换成真实指针，服务器也不再把指针合成进画面（不再有残影和双指针）。
         if (_session.Profile.Vmware.Enabled)
         {
-            _image.Cursor = CreateDotCursor();
+            _image.Cursor = _dotCursor = CreateDotCursor();
         }
         _viewModel.ActionRequested += OnActionRequested;
 
@@ -386,11 +389,6 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
     private void OnCursorChanged(VncCursorShape? shape)
     {
-        // VMware 虚拟机：服务器已把客户机的指针画进画面，本地再叠一个会出现两个指针。
-        if (_session.Profile.Vmware.Enabled)
-        {
-            return;
-        }
 
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
         if (dispatcher is null || dispatcher.HasShutdownStarted)
@@ -410,7 +408,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
                 : VncCursorImage.FromRgba(shape.Rgba, shape.Width, shape.Height, shape.HotX, shape.HotY);
 
             // 构造失败（罕见）就回退系统箭头，不要让画面卡在旧光标。
-            _image.Cursor = next ?? Cursors.Arrow;
+            _image.Cursor = next ?? (_session.Profile.Vmware.Enabled ? _dotCursor ??= CreateDotCursor() : Cursors.Arrow);
 
             if (!ReferenceEquals(_remoteCursor, next)
                 && !ReferenceEquals(_remoteCursor, VncCursorImage.Hidden)
