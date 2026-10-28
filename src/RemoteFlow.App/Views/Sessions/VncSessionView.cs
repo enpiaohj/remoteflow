@@ -122,8 +122,8 @@ public sealed class VncSessionView : ContentControl, IDisposable
         _session.CursorChanged += OnCursorChanged;
         _session.NoticeRaised += OnSessionNotice;
 
-        // VMware 虚拟机：先用小圆点指示真实鼠标位置；服务器接受 VMware 光标伪编码后会下发指针形状，
-        // 届时换成真实指针，服务器也不再把指针合成进画面（不再有残影和双指针）。
+        // VMware 虚拟机：ESXi 不向本客户端下发指针形状，而是把客户机指针画进画面（有延迟）。
+        // 本地用小圆点指示真实鼠标位置（不滞后），画面里的箭头是客户机里指针的位置。
         if (_session.Profile.Vmware.Enabled)
         {
             _image.Cursor = _dotCursor = CreateDotCursor();

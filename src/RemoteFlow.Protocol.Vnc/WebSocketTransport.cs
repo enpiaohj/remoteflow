@@ -45,13 +45,24 @@ public sealed class WebSocketTransportParameters : TransportParameters
 
 /// <summary>
 /// 只替换传输层：其余 RFB 解码、编码、消息处理沿用库的默认实现。
-/// 额外声明 VMware 光标伪编码，让 ESXi 下发指针形状而不是把指针合成进画面（否则会留下残影）。
+/// 不声明任何光标扩展：实测 ESXi 对本客户端既不下发标准光标形状，也不下发 VMware 光标扩展
+/// （声明了与官方控制台相同的 DefineCursor / CursorState / CursorPosition 也一样），
+/// 因此按 VNC 最基础的语义由服务器负责在画面里绘制指针。
 /// </summary>
 public sealed class WebSocketVncImplementation : DefaultImplementation
 {
     public override System.Collections.Immutable.IImmutableSet<MarcusW.VncClient.Protocol.EncodingTypes.IEncodingType>
         CreateEncodingTypesCollection(RfbConnectionContext context)
-        => base.CreateEncodingTypesCollection(context).Add(new VmwareCursorEncodingType(context));
+    {
+        // 剔除标准 Cursor(-239) / XCursor(-240) / CursorWithAlpha(-314)：服务器必须自己绘制并擦除指针。
+        var set = base.CreateEncodingTypesCollection(context);
+        foreach (var cursor in set.Where(e => e.Id is -239 or -240 or -314).ToArray())
+        {
+            set = set.Remove(cursor);
+        }
+
+        return set;
+    }
 
     public override ITransportConnector CreateTransportConnector(RfbConnectionContext context)
         => context.Connection.Parameters.TransportParameters is WebSocketTransportParameters parameters
