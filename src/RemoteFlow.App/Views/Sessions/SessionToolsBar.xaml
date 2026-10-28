@@ -113,6 +113,10 @@
                         Content="{StaticResource Ui.Scale}"
                         ToolTip="{Binding VncScalingLabel}"
                         Command="{Binding CycleVncScalingCommand}" />
+                <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                        Content="{StaticResource Ui.Keyboard}"
+                        ToolTip="发送 Ctrl+Alt+Del"
+                        Command="{Binding SendCtrlAltDeleteCommand}" />
             </StackPanel>
 
             <Border Width="1" Height="16" Margin="6,0"

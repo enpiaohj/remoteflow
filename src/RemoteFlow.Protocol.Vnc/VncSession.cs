@@ -213,9 +213,10 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
             SetState(ConnectionState.Connected);
 
             _logger.LogInformation(
-                "VNC 会话 {SessionId} 已连接 {Host}:{Port}，远端桌面 {Width}x{Height}",
+                "VNC 会话 {SessionId} 已连接 {Host}:{Port}，远端桌面 {Width}x{Height}（服务器{Resizable}调整尺寸）",
                 SessionId, Profile.Host, Profile.Port,
-                _connection.RemoteFramebufferSize.Width, _connection.RemoteFramebufferSize.Height);
+                _connection.RemoteFramebufferSize.Width, _connection.RemoteFramebufferSize.Height,
+                _connection.DesktopIsResizable ? "支持" : "不支持");
         }
         catch (OperationCanceledException)
         {
@@ -533,6 +534,58 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
             isDown ? "Down" : "Up", keySymbol, ok ? "SEND OK" : "SEND FAILED");
     }
 
+    /// <summary>
+    /// 发送 Ctrl+Alt+Del。本机按下的 Ctrl+Alt+Del 会被本地 Windows 拦截，到不了远端；
+    /// 因此用三个键依次按下、再反向抬起，由远端把这个组合识别为安全注意序列（锁屏界面常需要）。
+    /// </summary>
+    public void SendCtrlAltDelete()
+    {
+        KeySymbol[] keys = [KeySymbol.Control_L, KeySymbol.Alt_L, KeySymbol.Delete];
+        foreach (var key in keys)
+        {
+            SendKeyEvent(key, isDown: true);
+        }
+
+        foreach (var key in keys.Reverse())
+        {
+            SendKeyEvent(key, isDown: false);
+        }
+    }
+
+    /// <summary>服务器是否支持由客户端调整桌面尺寸（RFB ExtendedDesktopSize）。</summary>
+    public bool CanResizeDesktop => _connection is { DesktopIsResizable: true } && State == ConnectionState.Connected;
+
+    /// <summary>
+    /// 请求把远端桌面调整为指定尺寸。是否生效取决于服务器与客户机：例如 ESXi 虚拟机里装了
+    /// VMware Tools 的客户机会按请求改分辨率，没装的会忽略，对会话没有副作用。
+    /// 返回 false 表示没有发出请求（未连接、服务器不支持，或尺寸已一致）。
+    /// </summary>
+    public bool RequestDesktopSize(int width, int height)
+    {
+        var connection = _connection;
+        if (connection is null || State != ConnectionState.Connected || !connection.DesktopIsResizable)
+        {
+            return false;
+        }
+
+        var size = new MarcusW.VncClient.Size(width, height);
+        if (connection.RemoteFramebufferSize == size)
+        {
+            return false;
+        }
+
+        var ok = TryEnqueue(new SetDesktopSizeMessage((_, layout) =>
+        {
+            // 沿用服务器已有屏幕的 Id，只改它的矩形；没有就用 0。
+            var id = layout.Count > 0 ? layout.First().Id : 0u;
+            var screen = new MarcusW.VncClient.Screen(id, new MarcusW.VncClient.Rectangle(0, 0, width, height), 0u);
+            return (size, System.Collections.Immutable.ImmutableHashSet.Create(screen));
+        }));
+        _logger.LogInformation("VNC 会话 {SessionId} 请求桌面尺寸 {Width}x{Height} -> {Result}",
+            SessionId, width, height, ok ? "已发出" : "未发出");
+        return ok;
+    }
+
     /// <summary>发送一次完整的按键（按下并抬起），用于文本输入。</summary>
     public void SendKeyStroke(KeySymbol keySymbol)
     {
@@ -609,6 +662,14 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
 
     private void OnConnectionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(RfbConnection.RemoteFramebufferSize) && _connection is { } sized)
+        {
+            _logger.LogInformation("VNC 会话 {SessionId} 远端桌面尺寸变为 {Width}x{Height}（服务器{Resizable}调整尺寸）",
+                SessionId, sized.RemoteFramebufferSize.Width, sized.RemoteFramebufferSize.Height,
+                sized.DesktopIsResizable ? "支持" : "不支持");
+            return;
+        }
+
         if (e.PropertyName != nameof(RfbConnection.ConnectionState))
         {
             return;

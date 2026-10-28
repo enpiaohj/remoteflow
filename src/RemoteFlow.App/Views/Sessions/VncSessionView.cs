@@ -48,15 +48,13 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         _image = new Image
         {
-            // 远程画面是像素资产，用最近邻缩放保持文字锐利，避免插值糊化。
+            // 缩放质量由 ApplyScaleMode 按档位设置：1:1 用最近邻保持锐利，缩放时用高质量插值避免马赛克。
             Stretch = Stretch.Uniform,
             StretchDirection = StretchDirection.Both,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             Focusable = true
         };
-
-        RenderOptions.SetBitmapScalingMode(_image, BitmapScalingMode.NearestNeighbor);
 
         // 1:1 模式下远端桌面可能大于可视区，用 ScrollViewer 提供滚动；
         // 适应窗口模式下画面已缩放贴合，滚动条自动隐藏。
@@ -88,6 +86,15 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+
+        // VMware 虚拟机：窗口大小稳定后请求服务器把桌面调到窗口大小，装了 VMware Tools 的客户机会因此变清晰。
+        // 普通 VNC 服务器不受影响（改它的分辨率会很突兀）。
+        if (_session.Profile.Vmware.Enabled)
+        {
+            _resizeTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(700) };
+            _resizeTimer.Tick += OnResizeTimerTick;
+            SizeChanged += (_, _) => ScheduleDesktopResize();
+        }
 
         // 按连接记住的档位初始化画面缩放（构造后 VM 已从 Profile 恢复 VncScale）。
         ApplyScaleMode();
@@ -130,6 +137,56 @@ public sealed class VncSessionView : ContentControl, IDisposable
     {
         // 该事件来自协议线程，这里只登记尺寸，实际重建位图放到 UI 线程。
         _pendingSize = new VncSize(size.Width, size.Height);
+
+        // 首帧到达（已连接）后尝试一次尺寸请求。
+        if (_resizeTimer is not null)
+        {
+            Dispatcher.BeginInvoke(ScheduleDesktopResize);
+        }
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _resizeTimer;
+
+    /// <summary>上一次已请求的尺寸：同一尺寸只请求一次，避免服务器取整后与窗口尺寸来回拉扯。</summary>
+    private (int Width, int Height)? _lastRequestedSize;
+
+    private void ScheduleDesktopResize()
+    {
+        if (_disposed || _resizeTimer is null)
+        {
+            return;
+        }
+
+        _resizeTimer.Stop();
+        _resizeTimer.Start();
+    }
+
+    private void OnResizeTimerTick(object? sender, EventArgs e)
+    {
+        _resizeTimer?.Stop();
+        if (_disposed || !_session.CanResizeDesktop || _viewModel.VncScale == VncScaleMode.Original)
+        {
+            return;
+        }
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var width = (int)(ActualWidth * dpi.DpiScaleX);
+        var height = (int)(ActualHeight * dpi.DpiScaleY);
+        if (width < 640 || height < 480)
+        {
+            return;
+        }
+
+        // 取整到 8 的倍数：显卡驱动对宽度对齐更友好，也避免窗口拖动时产生大量零碎尺寸。
+        width -= width % 8;
+        height -= height % 2;
+        if (_lastRequestedSize == (width, height))
+        {
+            return;
+        }
+
+        _lastRequestedSize = (width, height);
+        _session.RequestDesktopSize(width, height);
     }
 
     private void OnRendering(object? sender, EventArgs e)
@@ -447,16 +504,19 @@ public sealed class VncSessionView : ContentControl, IDisposable
         switch (_viewModel.VncScale)
         {
             case VncScaleMode.Fill:
+                RenderOptions.SetBitmapScalingMode(_image, BitmapScalingMode.HighQuality);
                 _image.Stretch = Stretch.Fill;
                 _scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
                 _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
                 break;
             case VncScaleMode.Original:
+                RenderOptions.SetBitmapScalingMode(_image, BitmapScalingMode.NearestNeighbor);
                 _image.Stretch = Stretch.None;
                 _scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Auto;
                 _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
                 break;
             default: // FitToWindow
+                RenderOptions.SetBitmapScalingMode(_image, BitmapScalingMode.HighQuality);
                 _image.Stretch = Stretch.Uniform;
                 _scroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
                 _scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
@@ -471,6 +531,11 @@ public sealed class VncSessionView : ContentControl, IDisposable
             case SessionAction.ToggleScaling:
                 ApplyScaleMode();
                 _session.Profile.Vnc.ScaleMode = _viewModel.VncScale;
+                break;
+
+            case SessionAction.SendCtrlAltDelete:
+                _session.SendCtrlAltDelete();
+                _image.Focus();
                 break;
 
             case SessionAction.ReturnFocusToSession:
@@ -497,6 +562,12 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         // 先退订输入事件：视图释放后 _image 不再被输入事件链持有，鼠标/键盘回调不会发给已关闭会话。
         UnhookInput();
+
+        if (_resizeTimer is not null)
+        {
+            _resizeTimer.Stop();
+            _resizeTimer.Tick -= OnResizeTimerTick;
+        }
 
         if (_renderingHooked)
         {
