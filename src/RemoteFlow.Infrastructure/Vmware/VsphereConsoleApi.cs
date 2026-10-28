@@ -202,6 +202,30 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
         finally { _gate.Release(); }
     }
 
+    public async Task<int?> GetVideoMemoryKbAsync(string vmReference, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(vmReference);
+        await _gate.WaitAsync(ct);
+        try
+        {
+            EnsureLoggedIn();
+            var props = await GetPropsAsync("VirtualMachine", vmReference, ["config.hardware.device"], ct);
+            if (!props.TryGetValue("config.hardware.device", out var devices)) return null;
+
+            // 设备数组里找显卡：xsi:type 以 VirtualMachineVideoCard 结尾，显存在 videoRamSizeInKB。
+            foreach (var device in devices.Elements(Vim + "VirtualDevice"))
+            {
+                var type = device.Attributes().FirstOrDefault(a => a.Name.LocalName == "type")?.Value;
+                if (type is null || !type.EndsWith("VirtualMachineVideoCard", StringComparison.Ordinal)) continue;
+                if (int.TryParse(device.Element(Vim + "videoRamSizeInKB")?.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var kb) && kb > 0)
+                    return kb;
+            }
+
+            return null;
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task<IReadOnlyList<VmSnapshot>> ListSnapshotsAsync(string vmReference, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(vmReference);

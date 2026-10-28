@@ -118,6 +118,12 @@ public sealed class VncSessionView : ContentControl, IDisposable
         _session.ClipboardTextReceived += OnClipboardTextReceived;
         _session.CursorChanged += OnCursorChanged;
         _session.NoticeRaised += OnSessionNotice;
+
+        // VMware 虚拟机隐藏本地指针，只显示虚拟机画进画面里的那一个（与官方控制台一致，位置以客户机为准）。
+        if (_session.Profile.Vmware.Enabled)
+        {
+            _image.Cursor = Cursors.None;
+        }
         _viewModel.ActionRequested += OnActionRequested;
 
         Loaded += OnLoaded;
@@ -338,6 +344,12 @@ public sealed class VncSessionView : ContentControl, IDisposable
     /// </summary>
     private void OnCursorChanged(VncCursorShape? shape)
     {
+        // VMware 虚拟机：服务器已把客户机的指针画进画面，本地再叠一个会出现两个指针。
+        if (_session.Profile.Vmware.Enabled)
+        {
+            return;
+        }
+
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
         if (dispatcher is null || dispatcher.HasShutdownStarted)
         {

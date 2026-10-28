@@ -61,6 +61,10 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
 
     private string? _vmwareVmReference;
     private bool _vmwareResolutionUnavailable;
+    private int? _videoRamKb;
+    private bool _videoRamKnown;
+    private bool _videoRamNoticeShown;
+    private (int Width, int Height)? _lastFittedSize;
     private readonly SemaphoreSlim _resolutionGate = new(1, 1);
 
     private const string ToolsNotice = "未检测到 VMware Tools 在运行：鼠标指针可能与虚拟机内的位置对不上，分辨率也无法随窗口自动调整。请在虚拟机里安装并启动 VMware Tools，然后重新连接。";
@@ -597,8 +601,43 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
             var ct = _lifecycleCts.Token;
             await using var api = await _vmware.ConnectAsync(
                 Profile.Host, Profile.Port, Profile.Vmware.CertPinSha256, _userName, _password, ct);
-            await api.SetScreenResolutionAsync(_vmwareVmReference!, width, height, ct);
-            _logger.LogInformation("VNC 会话 {SessionId} 已请求 VMware 控制台分辨率 {Width}x{Height}", SessionId, width, height);
+
+            // 先按显存上限收敛：超过上限时客户机会整个忽略请求，控制台变大而画面不动、留出黑边。
+            if (!_videoRamKnown)
+            {
+                try
+                {
+                    _videoRamKb = await api.GetVideoMemoryKbAsync(_vmwareVmReference!, ct);
+                }
+                catch (VsphereApiException)
+                {
+                    _videoRamKb = null;
+                }
+
+                _videoRamKnown = true;
+            }
+
+            var (fitWidth, fitHeight) = VmwareResolution.Fit(width, height, _videoRamKb);
+            if (_lastFittedSize == (fitWidth, fitHeight))
+            {
+                return false; // 收敛后与上次相同：不重复请求。
+            }
+
+            await api.SetScreenResolutionAsync(_vmwareVmReference!, fitWidth, fitHeight, ct);
+            _lastFittedSize = (fitWidth, fitHeight);
+            _logger.LogInformation(
+                "VNC 会话 {SessionId} 已请求 VMware 控制台分辨率 {Width}x{Height}（期望 {WantedWidth}x{WantedHeight}，显存 {VideoRamKb} KB）",
+                SessionId, fitWidth, fitHeight, width, height, _videoRamKb);
+
+            if (VmwareResolution.IsConstrained(width, height, fitWidth, fitHeight) && !_videoRamNoticeShown)
+            {
+                _videoRamNoticeShown = true;
+                var mb = (_videoRamKb ?? VmwareResolution.DefaultVideoRamKb) / 1024;
+                NoticeRaised?.Invoke(
+                    $"这台虚拟机的显存只有 {mb} MB，最大只能支持约 {fitWidth}×{fitHeight} 的清晰画面，所以画面没有铺满窗口。" +
+                    "要获得更大的清晰画面，请关机后在 ESXi 里调大该虚拟机的显存（视频卡内存）。");
+            }
+
             return true;
         }
         catch (VsphereApiException ex) when (ex.FaultCode == "ToolsUnavailable")

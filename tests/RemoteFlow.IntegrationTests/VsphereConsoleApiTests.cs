@@ -106,6 +106,26 @@ public sealed class VsphereConsoleApiTests
     }
 
     [Fact]
+    public async Task 读取虚拟机显存()
+    {
+        var handler = new SoapHandler();
+        await using var api = new VsphereConsoleApi(new Uri("https://esxi.example.test"), handler);
+        await api.LoginAsync("demo", "sample");
+
+        Assert.Equal(16384, await api.GetVideoMemoryKbAsync("vm-1"));
+    }
+
+    [Fact]
+    public async Task 设备列表里没有显卡时返回空而不是猜测()
+    {
+        var handler = new SoapHandler { NoVideoCard = true };
+        await using var api = new VsphereConsoleApi(new Uri("https://esxi.example.test"), handler);
+        await api.LoginAsync("demo", "sample");
+
+        Assert.Null(await api.GetVideoMemoryKbAsync("vm-1"));
+    }
+
+    [Fact]
     public async Task 读取分页且释放视图()
     {
         var handler = new SoapHandler();
@@ -143,6 +163,7 @@ public sealed class VsphereConsoleApiTests
         public List<string> Requests { get; } = [];
         public bool FailTicket { get; init; }
         public bool FailResolution { get; init; }
+        public bool NoVideoCard { get; init; }
         public bool TicketWithoutEndpoint { get; init; }
         public bool TicketWithoutTicket { get; init; }
 
@@ -156,6 +177,12 @@ public sealed class VsphereConsoleApiTests
             {
                 "RetrieveServiceContent" => "<returnval><sessionManager>SessionManager</sessionManager><propertyCollector>propertyCollector</propertyCollector><viewManager>ViewManager</viewManager><rootFolder>rootFolder</rootFolder></returnval>",
                 "CreateContainerView" => "<returnval>view-1</returnval>",
+                "RetrievePropertiesEx" when body.Contains("config.hardware.device") =>
+                    "<returnval><objects><obj type=\"VirtualMachine\">vm-1</obj><propSet><name>config.hardware.device</name>"
+                    + "<val xsi:type=\"ArrayOfVirtualDevice\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">"
+                    + "<VirtualDevice xsi:type=\"VirtualE1000\"><key>4000</key></VirtualDevice>"
+                    + (NoVideoCard ? "" : "<VirtualDevice xsi:type=\"VirtualMachineVideoCard\"><key>500</key><videoRamSizeInKB>16384</videoRamSizeInKB></VirtualDevice>")
+                    + "</val></propSet></objects></returnval>",
                 "RetrievePropertiesEx" => "<returnval><token>page-2</token>" + Vm("vm-2", "VM B") + "</returnval>",
                 "ContinueRetrievePropertiesEx" => "<returnval>" + Vm("vm-1", "VM A") + "</returnval>",
                 "AcquireTicket" => TicketWithoutTicket ? "<returnval><host>esxi.example.test</host></returnval>"

@@ -19,6 +19,9 @@ public interface IVSphereConsoleApi : IAsyncDisposable
     /// </summary>
     Task SetScreenResolutionAsync(string vmReference, int width, int height, CancellationToken ct = default);
 
+    /// <summary>读取虚拟机显卡的显存（KB）。取不到返回 null。显存决定客户机最大能用多大的分辨率。</summary>
+    Task<int?> GetVideoMemoryKbAsync(string vmReference, CancellationToken ct = default);
+
     Task<IReadOnlyList<VmSnapshot>> ListSnapshotsAsync(string vmReference, CancellationToken ct = default);
     Task CreateSnapshotAsync(string vmReference, string name, string description, CancellationToken ct = default);
     Task RevertSnapshotAsync(string snapshotReference, CancellationToken ct = default);
@@ -76,6 +79,41 @@ public enum VmPowerResult
 
 /// <summary>快照树节点（已按层级展开为带深度的扁平列表）。</summary>
 public sealed record VmSnapshot(string Reference, string Name, string Description, DateTimeOffset? CreatedAt, bool IsCurrent, int Depth);
+
+/// <summary>
+/// 把期望的分辨率收敛到虚拟机显存能支撑的范围内。客户机的显卡驱动要求 宽×高×4 字节不超过显存，
+/// 超过时它会整个忽略请求，结果是控制台变大了、客户机画面却原地不动并留出大片黑边。
+/// </summary>
+public static class VmwareResolution
+{
+    /// <summary>ESXi 里常见的默认显存（KB）。读不到真实值时按它保守估计。</summary>
+    public const int DefaultVideoRamKb = 8192;
+
+    public const int MinWidth = 640;
+    public const int MinHeight = 480;
+
+    /// <summary>返回不超过显存上限、保持宽高比、宽取 8 的倍数、高取偶数的分辨率。</summary>
+    public static (int Width, int Height) Fit(int width, int height, int? videoRamKb)
+    {
+        var maxPixels = (long)(videoRamKb is > 0 ? videoRamKb.Value : DefaultVideoRamKb) * 1024 / 4;
+        double scale = (long)width * height > maxPixels ? Math.Sqrt((double)maxPixels / ((long)width * height)) : 1.0;
+
+        var w = (int)(width * scale) / 8 * 8;
+        var h = (int)(height * scale) / 2 * 2;
+
+        // 取整后仍可能略超上限（极端宽高比），逐步收缩到合规为止。
+        while ((long)w * h > maxPixels && w > MinWidth)
+        {
+            w -= 8;
+        }
+
+        return (Math.Max(w, MinWidth), Math.Max(h, MinHeight));
+    }
+
+    /// <summary>期望尺寸被显存明显压缩（面积不足 90%）。</summary>
+    public static bool IsConstrained(int requestedWidth, int requestedHeight, int fittedWidth, int fittedHeight)
+        => (long)fittedWidth * fittedHeight < (long)requestedWidth * requestedHeight * 9 / 10;
+}
 
 /// <summary>短期敏感数据：禁止序列化、持久化或记录完整对象。</summary>
 public sealed class WebMksTicket(string host, int port, string ticket, string? sslThumbprint = null)

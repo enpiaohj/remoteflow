@@ -23,6 +23,7 @@ internal sealed class FakeVmwareConnector : IVmwareConnector
     public List<string> CreatedSnapshots { get; } = [];
     public List<(string Vm, int Width, int Height)> Resolutions { get; } = [];
     public bool ToolsUnavailable { get; set; }
+    public int? VideoRamKb { get; set; } = 8192;
 
     public Task<string> FetchCertificatePinAsync(string host, int port, CancellationToken ct = default) => Task.FromResult(Pin);
 
@@ -55,6 +56,8 @@ internal sealed class FakeVmwareApi(FakeVmwareConnector owner) : IVSphereConsole
             ? VmPowerResult.RequestSent
             : VmPowerResult.Completed);
     }
+
+    public Task<int?> GetVideoMemoryKbAsync(string vmReference, CancellationToken ct = default) => Task.FromResult(owner.VideoRamKb);
 
     public Task SetScreenResolutionAsync(string vmReference, int width, int height, CancellationToken ct = default)
     {
