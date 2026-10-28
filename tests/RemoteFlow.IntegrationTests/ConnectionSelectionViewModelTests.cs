@@ -42,12 +42,13 @@ public sealed class ConnectionSelectionViewModelTests
     public void SelectAllVisible_MarksEveryVisibleItem()
     {
         var vm = CreateVm();
-        var a = Item("A");
-        var b = Item("B");
-        var c = Item("C");
-        vm.Items.Add(a);
-        vm.Items.Add(b);
-        vm.Items.Add(c);
+
+        // 「全选当前列表」针对筛选结果（含其它页），所以要走真实的筛选管线来铺数据，而不是直接塞 Items。
+        var all = (List<ConnectionItemViewModel>)typeof(ConnectionsPageViewModel)
+            .GetField("_allItems", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(vm)!;
+        all.AddRange([Item("A"), Item("B"), Item("C")]);
+        typeof(ConnectionsPageViewModel)
+            .GetMethod("ApplyFilter", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(vm, null);
 
         vm.SelectAllVisibleCommand.Execute(null);
 

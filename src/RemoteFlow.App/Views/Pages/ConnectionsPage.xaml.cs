@@ -99,6 +99,11 @@ public partial class ConnectionsPage : UserControl
 
     private async void OnListKeyDown(object sender, KeyEventArgs e)
     {
+        if (TryHandleSelectionKey(e))
+        {
+            return;
+        }
+
         if (ViewModel is { IsMultiSelect: true } vm)
         {
             // Esc 退出多选。
@@ -137,32 +142,87 @@ public partial class ConnectionsPage : UserControl
         }
     }
 
-    /// <summary>多选模式下行单击切换勾选；点 CheckBox 本身不拦截。</summary>
+    /// <summary>
+    /// 行单击：Ctrl = 切换该行勾选，Shift = 从起点连选到该行（Ctrl+Shift 追加），资源管理器习惯；
+    /// 多选模式下无修饰键的单击也是切换勾选；普通单击只记下连选起点。点 CheckBox / 行内按钮本身不拦截。
+    /// </summary>
     private void OnListMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (ViewModel is not { IsMultiSelect: true } vm
-            || e.OriginalSource is not DependencyObject source)
+        if (ViewModel is not { } vm || e.OriginalSource is not DependencyObject source)
         {
             return;
         }
 
-        // 多选态不做双击动作；第二击直接忽略，避免“选中又被取消”。
+        // 不做双击动作时第二击直接忽略，避免“选中又被取消”。
         if (e.ClickCount > 1)
         {
             return;
         }
 
-        // 点 CheckBox 让 IsChecked 绑定自己翻转，避免这里再补一次成“取消”。
-        if (FindAncestor<CheckBox>(source) is not null)
+        // 点 CheckBox 让 IsChecked 绑定自己翻转，避免这里再补一次成“取消”；行内按钮（收藏 / 编辑 / 更多…）自己处理。
+        if (FindAncestor<CheckBox>(source) is not null || FindAncestor<Button>(source) is not null)
         {
             return;
         }
 
-        if (FindAncestor<ListBoxItem>(source)?.DataContext is ConnectionItemViewModel item)
+        if (FindAncestor<ListBoxItem>(source)?.DataContext is not ConnectionItemViewModel item)
         {
-            vm.ToggleSelect(item);
+            return;
+        }
+
+        var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        if (ctrl || shift)
+        {
+            vm.SelectWithModifiers(item, ctrl, shift);
             e.Handled = true;
         }
+        else if (vm.IsMultiSelect)
+        {
+            vm.ToggleSelect(item);
+            vm.NoteSelectionAnchor(item);
+            e.Handled = true;
+        }
+        else
+        {
+            vm.NoteSelectionAnchor(item);
+        }
+    }
+
+    /// <summary>Ctrl+A 全选当前列表；Shift+↑/↓（可加 Ctrl 追加）连选。已处理返回 true。</summary>
+    private bool TryHandleSelectionKey(KeyEventArgs e)
+    {
+        if (ViewModel is not { } vm)
+        {
+            return false;
+        }
+
+        var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+
+        if (e.Key == Key.A && ctrl && !shift)
+        {
+            vm.SelectAllVisibleCommand.Execute(null);
+            e.Handled = true;
+            return true;
+        }
+
+        if (shift && e.Key is Key.Up or Key.Down && vm.SelectedItem is { } current)
+        {
+            var index = vm.Items.IndexOf(current) + (e.Key == Key.Down ? 1 : -1);
+            if (index >= 0 && index < vm.Items.Count)
+            {
+                var target = vm.Items[index];
+                vm.SelectRange(target, additive: ctrl);
+                vm.SelectedItem = target;
+                ConnectionList.ScrollIntoView(target);
+            }
+
+            e.Handled = true;
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>勾选框点击 = 切换该行选中（与点行同一入口，保证“已选”集合同步）。</summary>

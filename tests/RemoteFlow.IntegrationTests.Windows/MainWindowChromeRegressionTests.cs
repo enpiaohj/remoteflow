@@ -305,6 +305,20 @@ public sealed class MainWindowChromeRegressionTests
         Assert.Contains("UnhookWheel();", code, StringComparison.Ordinal);
     }
 
+    /// <summary>分页条在状态栏里，只属于连接工作台：会话模式（选中的是会话 Tab）下必须隐藏。</summary>
+    [Fact]
+    public void StatusBarPager_IsHiddenInSessionMode()
+    {
+        var markup = File.ReadAllText(FindProjectFile("src", "RemoteFlow.App", "Views", "MainWindow.xaml"));
+        var pager = markup.IndexOf("ConnectionsPage.IsPagerVisible", StringComparison.Ordinal);
+        Assert.True(pager > 0, "状态栏里没找到分页条的显示条件");
+
+        // 显示条件（同一个 MultiDataTrigger）里必须同时要求「不是会话模式」。
+        var window = markup.Substring(Math.Max(0, pager - 400), 900);
+        Assert.Contains("Binding=\"{Binding CurrentPage}\"", window, StringComparison.Ordinal);
+        Assert.Contains("Binding=\"{Binding IsSessionSelected}\" Value=\"False\"", window, StringComparison.Ordinal);
+    }
+
     private static string FindProjectFile(params string[] segments)
     {
         foreach (var root in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory }.Distinct())

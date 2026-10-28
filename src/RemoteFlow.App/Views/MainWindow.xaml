@@ -687,7 +687,7 @@
                                 Visibility="{Binding Update.HasUpdate, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed, TargetNullValue=Collapsed}" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <!-- 连接工作台分页：放在状态栏右侧，不占列表区域。仅在工作台页且开启分页、有数据时显示。 -->
+                        <!-- 连接工作台分页：放在状态栏右侧，不占列表区域。仅在连接工作台（非会话模式）且开启分页、有数据时显示。 -->
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
                             <StackPanel.Resources>
                                 <Style x:Key="Pager.Button" TargetType="Button" BasedOn="{StaticResource Button.Subtle}">
@@ -707,6 +707,8 @@
                                             <MultiDataTrigger.Conditions>
                                                 <Condition Binding="{Binding CurrentPage}" Value="{x:Static vm:NavigationPage.Connections}" />
                                                 <Condition Binding="{Binding ConnectionsPage.IsPagerVisible}" Value="True" />
+                                                <!-- 会话模式（选中的是会话 Tab）不显示：分页只属于连接工作台。 -->
+                                                <Condition Binding="{Binding IsSessionSelected}" Value="False" />
                                             </MultiDataTrigger.Conditions>
                                             <Setter Property="Visibility" Value="Visible" />
                                         </MultiDataTrigger>

@@ -752,13 +752,16 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// <summary>收藏动作的文案随选择变化：所选都已是收藏 → 显示「取消收藏」，否则「收藏」。</summary>
     public string FavoriteActionText => SelectedConnections.Any(i => !i.IsFavorite) ? "收藏" : "取消收藏";
 
+    /// <summary>筛选结果（含其它页）是否已全部勾选。</summary>
     public bool IsAllSelected => SelectedConnections.Count > 0
-        && SelectedConnections.Count == Items.Count;
+        && _filtered.Count > 0
+        && SelectedConnections.Count >= _filtered.Count
+        && _filtered.All(SelectedConnections.Contains);
 
     partial void OnIsMultiSelectChanged(bool value)
     {
-        // 进入多选清空旧选择；退出多选同样清空。
-        foreach (var item in Items)
+        // 进入多选清空旧选择；退出多选同样清空。已选项可能在其它页，必须逐个复位。
+        foreach (var item in SelectedConnections.ToList())
         {
             item.IsSelected = false;
         }
@@ -1216,7 +1219,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         RefreshPager();
 
         // 筛选变化后，被滤掉的已勾选项同步移出选择集合，避免批量作用到不可见项。
-        var visibleIds = Items.Select(i => i.Id).ToHashSet();
+        // 判断依据是「筛选结果」而不是「当前页」：翻页只是换一屏看，其它页上已勾选的项必须保留，翻回来还在。
+        var visibleIds = _filtered.Select(i => i.Id).ToHashSet();
         for (var i = SelectedConnections.Count - 1; i >= 0; i--)
         {
             if (!visibleIds.Contains(SelectedConnections[i].Id))
@@ -1998,11 +2002,11 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         RefreshSelectionSummary();
     }
 
-    /// <summary>勾选当前可见全部。</summary>
+    /// <summary>勾选当前列表（筛选结果）的全部，含其它页。</summary>
     [RelayCommand]
     private void SelectAllVisible()
     {
-        foreach (var item in Items)
+        foreach (var item in _filtered)
         {
             if (!SelectedConnections.Contains(item))
             {
@@ -2018,10 +2022,87 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     [RelayCommand]
     private void ClearSelection()
     {
-        SelectedConnections.Clear();
-        foreach (var item in Items)
+        foreach (var item in SelectedConnections.ToList())
         {
             item.IsSelected = false;
+        }
+
+        SelectedConnections.Clear();
+        RefreshSelectionSummary();
+    }
+
+    // ── Ctrl / Shift 多选（资源管理器习惯）─────────────────────────
+
+    /// <summary>Shift 连选的起点：最近一次普通单击或 Ctrl 单击的行。</summary>
+    private ConnectionItemViewModel? _selectionAnchor;
+
+    /// <summary>普通单击（无修饰键）：只记下连选起点，不改变勾选集合。</summary>
+    public void NoteSelectionAnchor(ConnectionItemViewModel? item) => _selectionAnchor = item;
+
+    /// <summary>
+    /// 带修饰键的行选择：Ctrl = 切换该行勾选；Shift = 从起点连选到该行（替换现有勾选）；
+    /// Ctrl+Shift = 连选并追加到现有勾选。连选范围按筛选结果的顺序，可跨页。
+    /// </summary>
+    public void SelectWithModifiers(ConnectionItemViewModel? item, bool ctrl, bool shift)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        if (shift)
+        {
+            SelectRange(item, additive: ctrl);
+        }
+        else if (ctrl)
+        {
+            ToggleSelect(item);
+            _selectionAnchor = item;
+        }
+        else
+        {
+            _selectionAnchor = item;
+        }
+
+        SelectedItem = item;
+    }
+
+    /// <summary>从起点到目标行（含两端）连选。起点缺失时以当前选中行、再不行以目标行本身为起点。</summary>
+    public void SelectRange(ConnectionItemViewModel target, bool additive)
+    {
+        var anchor = _selectionAnchor ?? SelectedItem ?? target;
+        var from = _filtered.IndexOf(anchor);
+        var to = _filtered.IndexOf(target);
+        if (to < 0)
+        {
+            return;
+        }
+
+        if (from < 0)
+        {
+            from = to;
+        }
+
+        _selectionAnchor ??= anchor;
+
+        if (!additive)
+        {
+            foreach (var existing in SelectedConnections.ToList())
+            {
+                existing.IsSelected = false;
+            }
+
+            SelectedConnections.Clear();
+        }
+
+        for (var index = Math.Min(from, to); index <= Math.Max(from, to); index++)
+        {
+            var item = _filtered[index];
+            if (!SelectedConnections.Contains(item))
+            {
+                SelectedConnections.Add(item);
+                item.IsSelected = true;
+            }
         }
 
         RefreshSelectionSummary();
