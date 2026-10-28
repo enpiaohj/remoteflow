@@ -124,10 +124,13 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
         {
             EnsureLoggedIn();
             var result = await CallAsync("AcquireTicket", [Ref("VirtualMachine", vmReference), new XElement(Vim + "ticketType", "webmks")], ct);
-            var host = Required(result, "host");
-            if (Uri.CheckHostName(host) == UriHostNameType.Unknown
-                || !int.TryParse(Required(result, "port"), NumberStyles.None, CultureInfo.InvariantCulture, out var port)
-                || port is < 1 or > 65535)
+            // 独立 ESXi 的票据可不带 host/port，此时目标就是 API 所在的主机。
+            var host = result.Element(Vim + "host")?.Value is { Length: > 0 } h ? h : _http.BaseAddress!.Host;
+            var port = _http.BaseAddress!.Port;
+            if (result.Element(Vim + "port")?.Value is { Length: > 0 } p
+                && !int.TryParse(p, NumberStyles.None, CultureInfo.InvariantCulture, out port))
+                throw new VsphereApiException("InvalidTicketEndpoint");
+            if (Uri.CheckHostName(host) == UriHostNameType.Unknown || port is < 1 or > 65535)
                 throw new VsphereApiException("InvalidTicketEndpoint");
             return new WebMksTicket(host, port, Required(result, "ticket"));
         }
@@ -202,7 +205,7 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
 
     private static XElement Ref(string type, string value) => new(Vim + "_this", new XAttribute("type", type), value);
     private static string Required(XElement value, string name) => value.Element(Vim + name)?.Value is { Length: > 0 } text
-        ? text : throw new VsphereApiException("MissingResponseField");
+        ? text : throw new VsphereApiException("MissingResponseField:" + name);
     private void EnsureLoggedIn()
     {
         if (!_loggedIn) throw new InvalidOperationException("请先连接 ESXi 来源。");

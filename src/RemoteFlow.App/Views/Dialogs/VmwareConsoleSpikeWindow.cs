@@ -1,74 +1,85 @@
-using System.IO;
 using System.Net.Http;
-using System.Windows.Documents;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
-using Microsoft.Web.WebView2.Core;
-using Microsoft.Web.WebView2.Wpf;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using MarcusW.VncClient;
+using MarcusW.VncClient.Protocol.Implementation.MessageTypes.Outgoing;
+using MarcusW.VncClient.Protocol.SecurityTypes;
+using MarcusW.VncClient.Security;
+using Microsoft.Extensions.Logging.Abstractions;
 using RemoteFlow.Core.Vmware;
 using RemoteFlow.Infrastructure.Vmware;
+using RemoteFlow.Protocol.Vnc;
+using ConnectParameters = MarcusW.VncClient.ConnectParameters;
+using RfbConnection = MarcusW.VncClient.RfbConnection;
+using VncLibClient = MarcusW.VncClient.VncClient;
 
 namespace RemoteFlow.App.Views.Dialogs;
 
-/// <summary>独立验证入口，不保存地址、凭据或票据；生产来源集成前用于验证目标 SDK 与 Runtime。</summary>
+/// <summary>
+/// ESXi 控制台验证窗口（--vmware-console-spike 启动）：SOAP 登录 → 选 VM → 取 webmks 票据 →
+/// 经已核对指纹的 WSS 交给现有 VNC 库，由 WPF 直接显示。不保存地址、凭据或票据，也不改变虚拟机状态。
+/// </summary>
 public sealed class VmwareConsoleSpikeWindow : Window
 {
-    private readonly TextBox _endpoint = new() { Text = "https://", MinWidth = 180 };
-    private readonly TextBox _userName = new() { MinWidth = 100 };
-    private readonly PasswordBox _password = new() { MinWidth = 100 };
-    private readonly TextBox _sdkFolder = new() { MinWidth = 180 };
-    private readonly TextBox _pin = new() { MinWidth = 360, FontFamily = new FontFamily("Consolas") };
-    private string _trustedPin = string.Empty;
-    private static readonly string[] SdkFiles = ["wmks.min.js", "jquery.min.js", "jquery-ui.min.js", "css/wmks-all.css"];
-    private readonly ComboBox _vms = new() { DisplayMemberPath = "Name", MinWidth = 180 };
-    private readonly TextBlock _status = new() { Text = "先登录 ESXi，再选择 VM。SDK 目录需包含 wmks.min.js 及其依赖资源。", TextWrapping = TextWrapping.Wrap };
-    private readonly WebView2 _web = new();
+    private readonly TextBox _endpoint = new() { Text = "https://", MinWidth = 200 };
+    private readonly TextBox _userName = new() { MinWidth = 110 };
+    private readonly PasswordBox _password = new() { MinWidth = 110 };
+    private readonly TextBox _pin = new() { MinWidth = 380, FontFamily = new FontFamily("Consolas") };
+    private readonly ComboBox _vms = new() { DisplayMemberPath = "Name", MinWidth = 200 };
+    private readonly TextBlock _status = new() { Text = "先获取并核对证书指纹，再登录。", TextWrapping = TextWrapping.Wrap };
+    private readonly TextBox _diag = new() { IsReadOnly = true, Height = 90, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontFamily = new FontFamily("Consolas"), FontSize = 12 };
+    private readonly Queue<string> _diagLines = new();
+    private readonly Image _view = new() { Stretch = Stretch.Uniform };
     private readonly CancellationTokenSource _lifetime = new();
     private VsphereConsoleApi? _api;
     private Uri? _connectedEndpoint;
+    private string _trustedPin = string.Empty;
     private bool _busy;
-    private bool _pageReady;
     private bool _closed;
-    private string? _assetDirectory;
+    private RfbConnection? _rfb;
+    private VncRenderTarget? _target;
+    private DispatcherTimer? _frameTimer;
+    private WriteableBitmap? _bitmap;
 
     public VmwareConsoleSpikeWindow()
     {
+        // 可选预填：避免把测试环境地址写进源码或每次手输。
+        if (Environment.GetEnvironmentVariable("REMOTEFLOW_VMWARE_SPIKE_ENDPOINT") is { Length: > 0 } endpoint) _endpoint.Text = endpoint;
         Title = "VMware 控制台验证 · RemoteFlow";
         Width = 1100;
-        Height = 760;
+        Height = 780;
         MinWidth = 720;
         MinHeight = 500;
         SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
         SetResourceReference(BackgroundProperty, "Bg.Base");
+
         var root = new DockPanel { Margin = new Thickness(16) };
         var header = new StackPanel();
         DockPanel.SetDock(header, Dock.Top);
-        header.Children.Add(new TextBlock { Text = "ESXi 8 内嵌控制台验证", FontSize = 20, Margin = new Thickness(0, 0, 0, 12) });
+        header.Children.Add(new TextBlock { Text = "ESXi 8 控制台验证", FontSize = 20, Margin = new Thickness(0, 0, 0, 12) });
         var form = new WrapPanel();
         AddField(form, "HTTPS 主机地址", _endpoint);
         AddField(form, "用户名", _userName);
         AddField(form, "密码（不保存）", _password);
-        AddField(form, "本机 SDK 目录", _sdkFolder);
         AddField(form, "证书 SHA-256 指纹（核对后才登录）", _pin);
         header.Children.Add(form);
         var actions = new WrapPanel { Margin = new Thickness(0, 10, 0, 10) };
         AddButton(actions, "获取证书指纹", FetchPinAsync);
         AddButton(actions, "登录并列出 VM", LoginAsync);
         actions.Children.Add(_vms);
-        AddButton(actions, "打开 / 重连控制台", OpenConsoleAsync);
-        AddButton(actions, "Ctrl+Alt+Del", SendSecureAttentionAsync);
+        AddButton(actions, "连接控制台", ConnectAsync);
+        AddButton(actions, "发送唤醒输入", () => { SendWakeInput(); return Task.CompletedTask; });
+        AddButton(actions, "Ctrl+Alt+Del", () => { SendCad(); return Task.CompletedTask; });
         header.Children.Add(actions);
         header.Children.Add(_status);
-        header.Children.Add(new TextBlock
-        {
-            Text = "验证入口：不更改虚拟机电源和快照。SDK 使用须符合随附许可。当前仅使用系统 TLS 信任，不绕过自签名证书。",
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 6, 0, 12)
-        });
+        _diag.Margin = new Thickness(0, 8, 8, 8);
+        header.Children.Add(_diag);
         root.Children.Add(header);
-        root.Children.Add(new Border { Background = Brushes.Black, Child = _web });
+        root.Children.Add(new Border { Background = Brushes.Black, Child = _view });
         Content = root;
         Closed += OnClosed;
     }
@@ -92,17 +103,25 @@ public sealed class VmwareConsoleSpikeWindow : Window
             catch (OperationCanceledException) { if (!_closed) _status.Text = "已取消。"; }
             catch (Exception ex)
             {
+                // 不记录原始异常，防止异常消息携带票据或认证数据。
                 if (!_closed) _status.Text = ex switch
                 {
                     VsphereApiException api => api.Message,
-                    HttpRequestException => "无法建立安全 API 连接。请检查网络及系统证书信任；当前不绕过 TLS 验证。",
-                    _ => "验证操作失败。请检查地址、SDK 资源与 WebView2 Runtime。"
+                    HttpRequestException => "无法建立安全 API 连接：证书指纹不匹配或网络不通。",
+                    _ => "操作失败：" + ex.GetType().Name
                 };
-                // 不记录原始异常，防止浏览器或 HTTP 异常携带票据/认证数据。
             }
             finally { _busy = false; }
         };
         panel.Children.Add(button);
+    }
+
+    private void AddDiag(string line)
+    {
+        _diagLines.Enqueue(line.Length > 300 ? line[..300] + "…" : line);
+        while (_diagLines.Count > 14) _diagLines.Dequeue();
+        _diag.Text = string.Join(Environment.NewLine, _diagLines);
+        _diag.ScrollToEnd();
     }
 
     private bool TryEndpoint(out Uri endpoint)
@@ -121,29 +140,17 @@ public sealed class VmwareConsoleSpikeWindow : Window
     {
         if (!TryEndpoint(out var endpoint)) { _status.Text = "请输入 HTTPS 主机地址。"; return; }
         _status.Text = "正在读取证书指纹…";
-        var pin = await VmwareTls.FetchPinAsync(endpoint.Host, endpoint.Port, _lifetime.Token);
-        _pin.Text = pin;
-        _status.Text = "已读取证书指纹。请先与 ESXi 证书信息核对，确认无误再登录；登录将只接受该指纹。";
+        _pin.Text = await VmwareTls.FetchPinAsync(endpoint.Host, endpoint.Port, _lifetime.Token);
+        _status.Text = "已读取证书指纹。请先与 ESXi 证书信息核对，确认无误再登录；之后只接受该指纹。";
     }
 
     private async Task LoginAsync()
     {
-        if (!TryEndpoint(out var endpoint))
-        {
-            _status.Text = "请输入 HTTPS 主机地址，不带 /ui/ 或登录页面片段。";
-            return;
-        }
+        if (!TryEndpoint(out var endpoint)) { _status.Text = "请输入 HTTPS 主机地址。"; return; }
         _trustedPin = VmwareTls.NormalizePin(_pin.Text);
-        if (_trustedPin.Length == 0)
-        {
-            _status.Text = "请先点击“获取证书指纹”，核对后再登录。";
-            return;
-        }
-        if (_api is not null)
-        {
-            await _api.DisposeAsync();
-            _api = null;
-        }
+        if (_trustedPin.Length == 0) { _status.Text = "请先点击“获取证书指纹”，核对后再登录。"; return; }
+        await StopNativeAsync();
+        if (_api is not null) { await _api.DisposeAsync(); _api = null; }
         _vms.ItemsSource = null;
         _connectedEndpoint = null;
         _status.Text = "正在登录并读取虚拟机…";
@@ -159,138 +166,127 @@ public sealed class VmwareConsoleSpikeWindow : Window
             _connectedEndpoint = endpoint;
             _vms.ItemsSource = vms;
             _vms.SelectedIndex = vms.Count > 0 ? 0 : -1;
-            _status.Text = $"登录成功，读取到 {vms.Count} 台 VM。选择运行中的 VM 打开控制台。";
+            _status.Text = $"登录成功，读取到 {vms.Count} 台 VM。选择运行中的 VM 连接控制台。";
         }
         catch { await api.DisposeAsync(); throw; }
     }
 
-    private async Task OpenConsoleAsync()
+    private async Task ConnectAsync()
     {
-        if (_api is null || _vms.SelectedItem is not VsphereVm vm)
+        if (_api is null || _vms.SelectedItem is not VsphereVm vm || _connectedEndpoint is null)
         {
             _status.Text = "请先登录并选择虚拟机。";
             return;
         }
-        if (vm.PowerState != "poweredOn")
-        {
-            _status.Text = "该 VM 未运行。验证入口不执行开机，请在 ESXi 中选择一台运行中的测试 VM。";
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(_sdkFolder.Text)) { _status.Text = "请填写本机 SDK 目录。"; return; }
-        var folder = Path.GetFullPath(_sdkFolder.Text.Trim());
-        var missing = SdkFiles.Where(f => !File.Exists(Path.Combine(folder, f))).ToArray();
-        if (missing.Length > 0)
-        {
-            _status.Text = "SDK 目录缺少：" + string.Join("、", missing) + "。请使用合法取得的 SDK 及其依赖。";
-            return;
-        }
-        if (_assetDirectory is null || !string.Equals(_assetDirectory, folder, StringComparison.OrdinalIgnoreCase))
-        {
-            _status.Text = "SDK 路径确定后需重新打开此验证窗口，避免混用前端资源。";
-            if (_assetDirectory is not null) return;
-            await InitializeRendererAsync(folder);
-        }
-        if (!_pageReady)
-        {
-            _status.Text = "控制台页面正在加载；出现“页面已就绪”后再次点击打开。";
-            return;
-        }
+        if (vm.PowerState != "poweredOn") { _status.Text = "该 VM 未运行。验证入口不执行开机。"; return; }
+        await StopNativeAsync();
         var ticket = await _api.AcquireWebMksTicketAsync(vm.Reference, _lifetime.Token);
-        // 首版验证限定与用户登录端点同主机。跨主机票据须先有独立信任与授权记录。
-        if (!string.Equals(ticket.Host, _connectedEndpoint!.Host, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(ticket.Host, _connectedEndpoint.Host, StringComparison.OrdinalIgnoreCase))
         {
-            _status.Text = "票据目标与登录主机不同，已阻止连接；需先实现独立端点验证。";
+            _status.Text = $"票据目标主机“{ticket.Host}”与登录主机不同，已阻止连接。";
             return;
         }
-        var target = new UriBuilder("wss", ticket.Host, ticket.Port) { Path = "/ticket/" + Uri.EscapeDataString(ticket.Ticket) }.Uri.AbsoluteUri;
-        _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "connect", url = target }));
-        _status.Text = "正在连接控制台；以实际画面与输入验证结果为准。";
+        var target = new VncRenderTarget();
+        target.FrameSizeChanged += (_, size) => Dispatcher.BeginInvoke(() =>
+        {
+            if (_closed) return;
+            _bitmap = new WriteableBitmap(size.Width, size.Height, 96, 96, PixelFormats.Bgra32, null);
+            _view.Source = _bitmap;
+        });
+        var parameters = new ConnectParameters
+        {
+            TransportParameters = new WebSocketTransportParameters
+            {
+                Url = new UriBuilder("wss", ticket.Host, ticket.Port) { Path = "/ticket/" + Uri.EscapeDataString(ticket.Ticket) }.Uri,
+                PinSha256 = _trustedPin
+            },
+            AuthenticationHandler = new RejectAuthentication(),
+            InitialRenderTarget = target,
+            ConnectTimeout = TimeSpan.FromSeconds(20),
+            AllowSharedConnection = true,
+            MaxReconnectAttempts = 0
+        };
+        _status.Text = "正在连接控制台…";
+        var client = new VncLibClient(NullLoggerFactory.Instance, new WebSocketVncImplementation());
+        try { _rfb = await client.ConnectAsync(parameters, _lifetime.Token); }
+        catch { target.Dispose(); throw; }
+        _target = target;
+        _frameTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
+        _frameTimer.Tick += (_, _) => PaintFrame();
+        _frameTimer.Start();
+        var size = _rfb.RemoteFramebufferSize;
+        AddDiag($"已连接：{_rfb.ProtocolVersion}，安全类型 {_rfb.UsedSecurityType?.Name}，桌面 {size.Width}x{size.Height}");
+        _status.Text = "已连接。若画面全黑，点“发送唤醒输入”（虚拟显示器可能在休眠）。";
     }
 
-    private async Task InitializeRendererAsync(string folder)
+    private void PaintFrame()
     {
-        var environment = await CoreWebView2Environment.CreateAsync(null,
-            Path.Combine(Path.GetTempPath(), "RemoteFlow", "VmwareSpike", Guid.NewGuid().ToString("N")));
-        _lifetime.Token.ThrowIfCancellationRequested();
-        await _web.EnsureCoreWebView2Async(environment);
-        _lifetime.Token.ThrowIfCancellationRequested();
-        var core = _web.CoreWebView2;
-        core.Settings.AreDevToolsEnabled = false;
-        core.Settings.AreDefaultContextMenusEnabled = false;
-        core.Settings.IsStatusBarEnabled = false;
-        core.Settings.AreBrowserAcceleratorKeysEnabled = false;
-        core.SetVirtualHostNameToFolderMapping("vmware-sdk.example", folder, CoreWebView2HostResourceAccessKind.DenyCors);
-        core.NavigationStarting += (_, e) => { if (e.Uri != "about:blank") e.Cancel = true; };
-        core.NewWindowRequested += (_, e) => e.Handled = true;
-        core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
-        core.DownloadStarting += (_, e) => e.Cancel = true;
-        // WSS 走浏览器自己的 TLS：仅当目标主机与登录主机一致且证书指纹与已核对指纹一致才放行。
-        core.ServerCertificateErrorDetected += (_, e) =>
+        if (_bitmap is null || _target is null) return;
+        _bitmap.Lock();
+        try
         {
-            var uri = new Uri(e.RequestUri);
-            using var cert = e.ServerCertificate.ToX509Certificate2();
-            e.Action = uri.Scheme == "wss" && _connectedEndpoint is not null
-                && string.Equals(uri.Host, _connectedEndpoint.Host, StringComparison.OrdinalIgnoreCase)
-                && VmwareTls.PinMatches(cert, _trustedPin)
-                ? CoreWebView2ServerCertificateErrorAction.AlwaysAllow
-                : CoreWebView2ServerCertificateErrorAction.Cancel;
-        };
-        core.WebMessageReceived += (_, e) =>
-        {
-            if (_closed || e.Source != "about:blank") return;
-            var message = e.TryGetWebMessageAsString();
-            if (message == "ready") { _pageReady = true; _status.Text = "控制台页面已就绪，请再次点击打开控制台。"; }
-            else if (message == "connected") _status.Text = "渲染器报告已连接，请检查画面和键鼠。";
-            else if (message == "disconnected") _status.Text = "控制台已断开，可重新获取票据连接。";
-            else if (message == "error") _status.Text = "渲染器连接失败，请检查 SDK 依赖、WSS 网络和证书。";
-        };
-        _assetDirectory = folder;
-        core.NavigateToString(RendererHtml);
+            var capacity = (long)_bitmap.BackBufferStride * _bitmap.PixelHeight;
+            if (_target.TryCopyLatestFrame(_bitmap.BackBuffer, capacity, _bitmap.BackBufferStride, _bitmap.PixelWidth, _bitmap.PixelHeight))
+                _bitmap.AddDirtyRect(new Int32Rect(0, 0, _bitmap.PixelWidth, _bitmap.PixelHeight));
+        }
+        finally { _bitmap.Unlock(); }
     }
 
-    private async Task SendSecureAttentionAsync()
+    private void SendWakeInput()
     {
-        if (_pageReady) await _web.ExecuteScriptAsync("window.remoteFlowSendCad?.()");
+        if (_rfb is null) { _status.Text = "尚未连接控制台。"; return; }
+        // 先动一下鼠标，再点一下 Shift：不会触发任何客户机操作，只用于唤醒休眠的虚拟显示器。
+        _rfb.EnqueueMessage(new PointerEventMessage(new Position(10, 10), MouseButtons.None));
+        _rfb.EnqueueMessage(new PointerEventMessage(new Position(30, 30), MouseButtons.None));
+        _rfb.EnqueueMessage(new KeyEventMessage(true, KeySymbol.Shift_L));
+        _rfb.EnqueueMessage(new KeyEventMessage(false, KeySymbol.Shift_L));
+        AddDiag("已发送唤醒输入。");
+    }
+
+    private void SendCad()
+    {
+        if (_rfb is null) { _status.Text = "尚未连接控制台。"; return; }
+        KeySymbol[] keys = [KeySymbol.Control_L, KeySymbol.Alt_L, KeySymbol.Delete];
+        foreach (var key in keys) _rfb.EnqueueMessage(new KeyEventMessage(true, key));
+        foreach (var key in keys.Reverse()) _rfb.EnqueueMessage(new KeyEventMessage(false, key));
+        AddDiag("已发送 Ctrl+Alt+Del。");
+    }
+
+    private async Task StopNativeAsync()
+    {
+        _frameTimer?.Stop();
+        _frameTimer = null;
+        var rfb = _rfb;
+        _rfb = null;
+        if (rfb is not null)
+        {
+            try { await rfb.CloseAsync(); } catch { }
+            try { rfb.Dispose(); } catch { }
+        }
+        _target?.Dispose();
+        _target = null;
+        _bitmap = null;
+        _view.Source = null;
     }
 
     private async void OnClosed(object? sender, EventArgs e)
     {
         _closed = true;
         _lifetime.Cancel();
-        _web.Dispose();
+        await StopNativeAsync();
         if (_api is not null)
         {
             try { await _api.DisposeAsync(); }
-            catch { /* 窗口已关闭，不将含敏感数据的清理异常输出到日志。 */ }
+            catch { /* 窗口已关闭，不输出可能含敏感数据的清理异常。 */ }
         }
     }
 
-    private const string RendererHtml = """
-        <!doctype html><html><head><meta charset="utf-8">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src https://vmware-sdk.example 'unsafe-inline'; style-src https://vmware-sdk.example 'unsafe-inline'; img-src https://vmware-sdk.example data:; connect-src wss:;">
-        <link rel="stylesheet" href="https://vmware-sdk.example/css/wmks-all.css">
-        <style>html,body,#console{margin:0;width:100%;height:100%;overflow:hidden;background:#12131a;color:white}</style>
-        <script src="https://vmware-sdk.example/jquery.min.js"></script>
-        <script src="https://vmware-sdk.example/jquery-ui.min.js"></script>
-        <script src="https://vmware-sdk.example/wmks.min.js"></script></head><body><div id="console"></div><script>
-        let renderer=null;
-        try {
-          if(!window.WMKS)throw new Error();
-          renderer=WMKS.createWMKS('console',{});
-          renderer.register(WMKS.CONST.Events.CONNECTION_STATE_CHANGE,function(sender,data){
-            const state=data.state;
-            if(state===WMKS.CONST.ConnectionState.CONNECTED)chrome.webview.postMessage('connected');
-            else if(state===WMKS.CONST.ConnectionState.DISCONNECTED)chrome.webview.postMessage('disconnected');
-          });
-          window.addEventListener('resize',()=>renderer.updateScreen());
-          window.remoteFlowSendCad=()=>renderer.sendCAD();
-          chrome.webview.addEventListener('message',e=>{
-            if(e.data.type==='connect'){
-              try{renderer.disconnect();renderer.connect(e.data.url)}catch{chrome.webview.postMessage('error')}
-            }
-          });
-          chrome.webview.postMessage('ready');
-        }catch{chrome.webview.postMessage('error')}
-        </script></body></html>
-        """;
+    /// <summary>票据流不应再要求口令；若要求，立即失败而不是猜测。</summary>
+    private sealed class RejectAuthentication : IAuthenticationHandler
+    {
+        public Task<TInput> ProvideAuthenticationInputAsync<TInput>(
+            RfbConnection connection, ISecurityType securityType, IAuthenticationInputRequest<TInput> request)
+            where TInput : class, IAuthenticationInput
+            => throw new InvalidOperationException("服务器要求认证输入，票据流不应出现这种情况。");
+    }
 }

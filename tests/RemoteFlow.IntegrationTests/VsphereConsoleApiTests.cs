@@ -22,6 +22,27 @@ public sealed class VsphereConsoleApiTests
     }
 
     [Fact]
+    public async Task 独立主机票据缺少主机和端口时使用登录端点()
+    {
+        var handler = new SoapHandler { TicketWithoutEndpoint = true };
+        await using var api = new VsphereConsoleApi(new Uri("https://esxi.example.test:8443"), handler);
+        await api.LoginAsync("demo", "sample");
+        var ticket = await api.AcquireWebMksTicketAsync("vm-1");
+        Assert.Equal("esxi.example.test", ticket.Host);
+        Assert.Equal(8443, ticket.Port);
+    }
+
+    [Fact]
+    public async Task 缺少票据字段时只报告字段名()
+    {
+        var handler = new SoapHandler { TicketWithoutTicket = true };
+        await using var api = new VsphereConsoleApi(new Uri("https://esxi.example.test"), handler);
+        await api.LoginAsync("demo", "sample");
+        var error = await Assert.ThrowsAsync<VsphereApiException>(() => api.AcquireWebMksTicketAsync("vm-1"));
+        Assert.Equal("MissingResponseField:ticket", error.FaultCode);
+    }
+
+    [Fact]
     public async Task 读取分页且释放视图()
     {
         var handler = new SoapHandler();
@@ -58,6 +79,8 @@ public sealed class VsphereConsoleApiTests
     {
         public List<string> Requests { get; } = [];
         public bool FailTicket { get; init; }
+        public bool TicketWithoutEndpoint { get; init; }
+        public bool TicketWithoutTicket { get; init; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
@@ -71,7 +94,9 @@ public sealed class VsphereConsoleApiTests
                 "CreateContainerView" => "<returnval>view-1</returnval>",
                 "RetrievePropertiesEx" => "<returnval><token>page-2</token>" + Vm("vm-2", "VM B") + "</returnval>",
                 "ContinueRetrievePropertiesEx" => "<returnval>" + Vm("vm-1", "VM A") + "</returnval>",
-                "AcquireTicket" => "<returnval><host>esxi.example.test</host><port>443</port><ticket>sample-ticket</ticket></returnval>",
+                "AcquireTicket" => TicketWithoutTicket ? "<returnval><host>esxi.example.test</host></returnval>"
+                    : TicketWithoutEndpoint ? "<returnval><ticket>sample-ticket</ticket></returnval>"
+                    : "<returnval><host>esxi.example.test</host><port>443</port><ticket>sample-ticket</ticket></returnval>",
                 _ => ""
             };
             var fault = FailTicket && method == "AcquireTicket";
