@@ -43,6 +43,15 @@ public sealed partial class VmwareVmItemViewModel(VsphereVm vm) : ObservableObje
 
     public string PowerGlyph => IsPoweredOn ? "●" : IsSuspended ? "◐" : "○";
 
+    /// <summary>
+    /// VMware Tools 状态（只对运行中的虚拟机有意义）。没运行 Tools 时鼠标无法精确定位、分辨率不能随窗口调整，
+    /// 所以在列表里直接说清楚，而不是让用户在控制台里碰壁。
+    /// </summary>
+    public string ToolsText => !IsPoweredOn ? string.Empty
+        : Vm.ToolsRunning ? "VMware Tools 运行中" : "未运行 VMware Tools";
+
+    public bool ToolsMissing => IsPoweredOn && !Vm.ToolsRunning;
+
     public bool CanOpenConsole => IsPoweredOn;
     public bool CanPowerOn => IsPoweredOff || IsSuspended;
     public bool CanShutdown => IsPoweredOn;

@@ -21,6 +21,8 @@ internal sealed class FakeVmwareConnector : IVmwareConnector
     public string? Reverted { get; set; }
     public List<(string Vm, VmPowerAction Action)> PowerCalls { get; } = [];
     public List<string> CreatedSnapshots { get; } = [];
+    public List<(string Vm, int Width, int Height)> Resolutions { get; } = [];
+    public bool ToolsUnavailable { get; set; }
 
     public Task<string> FetchCertificatePinAsync(string host, int port, CancellationToken ct = default) => Task.FromResult(Pin);
 
@@ -52,6 +54,13 @@ internal sealed class FakeVmwareApi(FakeVmwareConnector owner) : IVSphereConsole
         return Task.FromResult(action is VmPowerAction.ShutdownGuest or VmPowerAction.RebootGuest
             ? VmPowerResult.RequestSent
             : VmPowerResult.Completed);
+    }
+
+    public Task SetScreenResolutionAsync(string vmReference, int width, int height, CancellationToken ct = default)
+    {
+        if (owner.ToolsUnavailable) throw new VsphereApiException("ToolsUnavailable");
+        owner.Resolutions.Add((vmReference, width, height));
+        return Task.CompletedTask;
     }
 
     public Task<IReadOnlyList<VmSnapshot>> ListSnapshotsAsync(string vmReference, CancellationToken ct = default) => Task.FromResult(owner.Snapshots);

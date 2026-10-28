@@ -82,6 +82,23 @@ public sealed class VmwarePageViewModelTests : IDisposable
     }
 
     [Fact]
+    public void 列表直接说明VMwareTools状态且只对运行中的虚拟机提示()
+    {
+        var running = new VmwareVmItemViewModel(new VsphereVm("1", "a", "poweredOn", "u", "guestToolsRunning"));
+        var missing = new VmwareVmItemViewModel(new VsphereVm("2", "b", "poweredOn", "u", "guestToolsNotRunning"));
+        var unknown = new VmwareVmItemViewModel(new VsphereVm("3", "c", "poweredOn", "u"));
+        var off = new VmwareVmItemViewModel(new VsphereVm("4", "d", "poweredOff", "u", "guestToolsNotRunning"));
+
+        Assert.Equal("VMware Tools 运行中", running.ToolsText);
+        Assert.False(running.ToolsMissing);
+        Assert.Equal("未运行 VMware Tools", missing.ToolsText);
+        Assert.True(missing.ToolsMissing);
+        Assert.True(unknown.ToolsMissing);
+        Assert.Equal(string.Empty, off.ToolsText);
+        Assert.False(off.ToolsMissing);
+    }
+
+    [Fact]
     public async Task 搜索按名称过滤且不区分大小写()
     {
         await LoadWithSourceAsync();

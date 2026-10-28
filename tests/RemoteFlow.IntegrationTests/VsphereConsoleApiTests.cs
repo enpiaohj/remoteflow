@@ -43,6 +43,69 @@ public sealed class VsphereConsoleApiTests
     }
 
     [Fact]
+    public async Task 列表包含VMwareTools运行状态()
+    {
+        var handler = new SoapHandler();
+        await using var api = new VsphereConsoleApi(new Uri("https://esxi.example.test"), handler);
+        await api.LoginAsync("demo", "sample");
+
+        var vms = await api.ListVirtualMachinesAsync();
+
+        Assert.All(vms, vm => Assert.Equal("guestToolsNotRunning", vm.ToolsStatus));
+        Assert.All(vms, vm => Assert.False(vm.ToolsRunning));
+    }
+
+    [Theory]
+    [InlineData("guestToolsRunning", true)]
+    [InlineData("guestToolsExecutingScripts", true)]
+    [InlineData("guestToolsNotRunning", false)]
+    [InlineData(null, false)]
+    public void Tools状态未知时按未运行处理(string? status, bool running)
+        => Assert.Equal(running, new VsphereVm("1", "vm", "poweredOn", "u", status).ToolsRunning);
+
+    [Fact]
+    public async Task 设置分辨率发送宽高并作为独立调用()
+    {
+        var handler = new SoapHandler();
+        await using var api = new VsphereConsoleApi(new Uri("https://esxi.example.test"), handler);
+        await api.LoginAsync("demo", "sample");
+
+        await api.SetScreenResolutionAsync("vm-1", 1920, 1080);
+
+        var request = Assert.Single(handler.Requests, r => r.Contains("SetScreenResolution"));
+        Assert.Contains("<width>1920</width>", request);
+        Assert.Contains("<height>1080</height>", request);
+        Assert.Contains("type=\"VirtualMachine\"", request);
+    }
+
+    [Fact]
+    public async Task 未运行Tools时设置分辨率报ToolsUnavailable且不泄漏服务器文本()
+    {
+        var handler = new SoapHandler { FailResolution = true };
+        await using var api = new VsphereConsoleApi(new Uri("https://esxi.example.test"), handler);
+        await api.LoginAsync("demo", "sample");
+
+        var error = await Assert.ThrowsAsync<VsphereApiException>(() => api.SetScreenResolutionAsync("vm-1", 1920, 1080));
+
+        Assert.Equal("ToolsUnavailable", error.FaultCode);
+        Assert.DoesNotContain("sensitive", error.Message);
+        Assert.Contains("VMware Tools", error.Message);
+    }
+
+    [Theory]
+    [InlineData(100, 100)]
+    [InlineData(1920, 100000)]
+    public async Task 不合理的分辨率在发送前被拒绝(int width, int height)
+    {
+        var handler = new SoapHandler();
+        await using var api = new VsphereConsoleApi(new Uri("https://esxi.example.test"), handler);
+        await api.LoginAsync("demo", "sample");
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => api.SetScreenResolutionAsync("vm-1", width, height));
+        Assert.DoesNotContain(handler.Requests, r => r.Contains("SetScreenResolution"));
+    }
+
+    [Fact]
     public async Task 读取分页且释放视图()
     {
         var handler = new SoapHandler();
@@ -79,6 +142,7 @@ public sealed class VsphereConsoleApiTests
     {
         public List<string> Requests { get; } = [];
         public bool FailTicket { get; init; }
+        public bool FailResolution { get; init; }
         public bool TicketWithoutEndpoint { get; init; }
         public bool TicketWithoutTicket { get; init; }
 
@@ -99,9 +163,10 @@ public sealed class VsphereConsoleApiTests
                     : "<returnval><host>esxi.example.test</host><port>443</port><ticket>sample-ticket</ticket></returnval>",
                 _ => ""
             };
-            var fault = FailTicket && method == "AcquireTicket";
+            var fault = (FailTicket && method == "AcquireTicket") || (FailResolution && method == "SetScreenResolution");
+            var faultName = method == "SetScreenResolution" ? "ToolsUnavailableFault" : "NoPermissionFault";
             var response = fault
-                ? "<s:Fault><faultstring>sensitive</faultstring><detail><NoPermissionFault/></detail></s:Fault>"
+                ? $"<s:Fault><faultstring>sensitive</faultstring><detail><{faultName}/></detail></s:Fault>"
                 : $"<{method}Response>{payload}</{method}Response>";
             return new HttpResponseMessage(fault ? HttpStatusCode.InternalServerError : HttpStatusCode.OK)
             {
@@ -109,6 +174,6 @@ public sealed class VsphereConsoleApiTests
             };
         }
 
-        private static string Vm(string reference, string name) => $"<objects><obj type=\"VirtualMachine\">{reference}</obj><propSet><name>name</name><val>{name}</val></propSet><propSet><name>runtime.powerState</name><val>poweredOn</val></propSet></objects>";
+        private static string Vm(string reference, string name) => $"<objects><obj type=\"VirtualMachine\">{reference}</obj><propSet><name>name</name><val>{name}</val></propSet><propSet><name>runtime.powerState</name><val>poweredOn</val></propSet><propSet><name>guest.toolsRunningStatus</name><val>guestToolsNotRunning</val></propSet></objects>";
     }
 }

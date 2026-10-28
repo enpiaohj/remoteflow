@@ -59,6 +59,15 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
     private readonly IVmwareConnector? _vmware;
     private string? _userName;
 
+    private string? _vmwareVmReference;
+    private bool _vmwareResolutionUnavailable;
+    private readonly SemaphoreSlim _resolutionGate = new(1, 1);
+
+    private const string ToolsNotice = "未检测到 VMware Tools 在运行：鼠标指针可能与虚拟机内的位置对不上，分辨率也无法随窗口自动调整。请在虚拟机里安装并启动 VMware Tools，然后重新连接。";
+
+    /// <summary>需要告知用户的非致命提示（如客户机未运行 VMware Tools）。可能在后台线程触发。</summary>
+    public event Action<string>? NoticeRaised;
+
     public VncSession(SessionRequest request, ILoggerFactory loggerFactory, IVmwareConnector? vmware = null)
     {
         _vmware = vmware;
@@ -212,11 +221,15 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
 
             SetState(ConnectionState.Connected);
 
+            if (Profile.Vmware.Enabled && _vmwareResolutionUnavailable)
+            {
+                NoticeRaised?.Invoke(ToolsNotice);
+            }
+
             _logger.LogInformation(
-                "VNC 会话 {SessionId} 已连接 {Host}:{Port}，远端桌面 {Width}x{Height}（服务器{Resizable}调整尺寸）",
+                "VNC 会话 {SessionId} 已连接 {Host}:{Port}，远端桌面 {Width}x{Height}",
                 SessionId, Profile.Host, Profile.Port,
-                _connection.RemoteFramebufferSize.Width, _connection.RemoteFramebufferSize.Height,
-                _connection.DesktopIsResizable ? "支持" : "不支持");
+                _connection.RemoteFramebufferSize.Width, _connection.RemoteFramebufferSize.Height);
         }
         catch (OperationCanceledException)
         {
@@ -515,7 +528,7 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
         }
 
         var ok = TryEnqueue(new PointerEventMessage(position, buttons));
-        _logger.LogInformation(
+        _logger.LogTrace(
             "[VNC INPUT] PointerEvent mask=0x{mask:x2} pos={position} -> {result}",
             (int)buttons, position, ok ? "SEND OK" : "SEND FAILED");
     }
@@ -529,9 +542,11 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
         }
 
         var ok = TryEnqueue(new KeyEventMessage(isDown, keySymbol));
-        _logger.LogInformation(
-            "[VNC INPUT] Key{action} keysym={keySymbol} -> {result}",
-            isDown ? "Down" : "Up", keySymbol, ok ? "SEND OK" : "SEND FAILED");
+        // 安全约束：不记录按键内容（keysym 即用户输入，可能是密码）；只在发送失败时记一条不含内容的警告。
+        if (!ok)
+        {
+            _logger.LogDebug("VNC 会话 {SessionId} 按键事件未能入队", SessionId);
+        }
     }
 
     /// <summary>
@@ -552,38 +567,56 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
         }
     }
 
-    /// <summary>服务器是否支持由客户端调整桌面尺寸（RFB ExtendedDesktopSize）。</summary>
-    public bool CanResizeDesktop => _connection is { DesktopIsResizable: true } && State == ConnectionState.Connected;
+    /// <summary>
+    /// 可以请求 VMware 控制台分辨率：VMware 虚拟机、已连接，且客户机运行着 VMware Tools。
+    /// ESXi 的 RFB 服务不支持由客户端改分辨率，必须经管理 API（SetScreenResolution），而它依赖 Tools。
+    /// </summary>
+    public bool CanRequestVmwareResolution
+        => Profile.Vmware.Enabled && State == ConnectionState.Connected && !_vmwareResolutionUnavailable
+           && _vmwareVmReference is not null;
 
     /// <summary>
-    /// 请求把远端桌面调整为指定尺寸。是否生效取决于服务器与客户机：例如 ESXi 虚拟机里装了
-    /// VMware Tools 的客户机会按请求改分辨率，没装的会忽略，对会话没有副作用。
-    /// 返回 false 表示没有发出请求（未连接、服务器不支持，或尺寸已一致）。
+    /// 请求把虚拟机控制台分辨率调成指定值。每次用独立的 API 会话完成后立即注销；
+    /// 同一时刻只允许一个请求在途。客户机未运行 VMware Tools 时记住这一点，不再重复尝试。
+    /// 返回 true 表示请求已被服务器接受（实际分辨率变化会经 RFB 的桌面尺寸通知到达）。
     /// </summary>
-    public bool RequestDesktopSize(int width, int height)
+    public async Task<bool> RequestVmwareResolutionAsync(int width, int height)
     {
-        var connection = _connection;
-        if (connection is null || State != ConnectionState.Connected || !connection.DesktopIsResizable)
+        if (!CanRequestVmwareResolution || _vmware is null || string.IsNullOrEmpty(_userName) || string.IsNullOrEmpty(_password))
         {
             return false;
         }
 
-        var size = new MarcusW.VncClient.Size(width, height);
-        if (connection.RemoteFramebufferSize == size)
+        if (!await _resolutionGate.WaitAsync(0))
         {
             return false;
         }
 
-        var ok = TryEnqueue(new SetDesktopSizeMessage((_, layout) =>
+        try
         {
-            // 沿用服务器已有屏幕的 Id，只改它的矩形；没有就用 0。
-            var id = layout.Count > 0 ? layout.First().Id : 0u;
-            var screen = new MarcusW.VncClient.Screen(id, new MarcusW.VncClient.Rectangle(0, 0, width, height), 0u);
-            return (size, System.Collections.Immutable.ImmutableHashSet.Create(screen));
-        }));
-        _logger.LogInformation("VNC 会话 {SessionId} 请求桌面尺寸 {Width}x{Height} -> {Result}",
-            SessionId, width, height, ok ? "已发出" : "未发出");
-        return ok;
+            var ct = _lifecycleCts.Token;
+            await using var api = await _vmware.ConnectAsync(
+                Profile.Host, Profile.Port, Profile.Vmware.CertPinSha256, _userName, _password, ct);
+            await api.SetScreenResolutionAsync(_vmwareVmReference!, width, height, ct);
+            _logger.LogInformation("VNC 会话 {SessionId} 已请求 VMware 控制台分辨率 {Width}x{Height}", SessionId, width, height);
+            return true;
+        }
+        catch (VsphereApiException ex) when (ex.FaultCode == "ToolsUnavailable")
+        {
+            _vmwareResolutionUnavailable = true;
+            NoticeRaised?.Invoke(ToolsNotice);
+            return false;
+        }
+        catch (Exception ex) when (ex is VsphereApiException or HttpRequestException or OperationCanceledException)
+        {
+            // 调整分辨率只是锦上添花：失败不影响会话，也不弹窗；只记一条不含敏感信息的调试日志。
+            _logger.LogDebug("VNC 会话 {SessionId} 请求分辨率未成功：{Type}", SessionId, ex.GetType().Name);
+            return false;
+        }
+        finally
+        {
+            _resolutionGate.Release();
+        }
     }
 
     /// <summary>发送一次完整的按键（按下并抬起），用于文本输入。</summary>
@@ -664,9 +697,8 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
     {
         if (e.PropertyName == nameof(RfbConnection.RemoteFramebufferSize) && _connection is { } sized)
         {
-            _logger.LogInformation("VNC 会话 {SessionId} 远端桌面尺寸变为 {Width}x{Height}（服务器{Resizable}调整尺寸）",
-                SessionId, sized.RemoteFramebufferSize.Width, sized.RemoteFramebufferSize.Height,
-                sized.DesktopIsResizable ? "支持" : "不支持");
+            _logger.LogInformation("VNC 会话 {SessionId} 远端桌面尺寸变为 {Width}x{Height}",
+                SessionId, sized.RemoteFramebufferSize.Width, sized.RemoteFramebufferSize.Height);
             return;
         }
 
@@ -761,6 +793,10 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
                     throw new ConnectionException(ConnectionErrorCode.RemoteClosed,
                         $"虚拟机“{vm.Name}”当前未运行（{DescribePowerState(vm.PowerState)}），请先开机。");
                 }
+
+                // 记下虚拟机引用与 Tools 状态：连接成功后用于提示，以及运行中请求分辨率。
+                _vmwareVmReference = vm.Reference;
+                _vmwareResolutionUnavailable = !vm.ToolsRunning;
 
                 var ticket = await api.AcquireWebMksTicketAsync(vm.Reference, ct);
                 var url = new UriBuilder("wss", ticket.Host, ticket.Port)

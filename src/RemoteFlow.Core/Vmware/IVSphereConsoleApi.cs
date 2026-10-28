@@ -13,6 +13,12 @@ public interface IVSphereConsoleApi : IAsyncDisposable
     /// <summary>执行电源操作。Task 型操作等到服务端任务终态；正常关机/重启只发出请求（见 <see cref="VmPowerResult"/>）。</summary>
     Task<VmPowerResult> PowerAsync(string vmReference, VmPowerAction action, CancellationToken ct = default);
 
+    /// <summary>
+    /// 设置虚拟机控制台分辨率（vSphere 公开方法 SetScreenResolution）。需要客户机运行 VMware Tools，
+    /// 否则服务器返回 ToolsUnavailable。ESXi 的 RFB 服务不支持由客户端改分辨率，只能走这条路。
+    /// </summary>
+    Task SetScreenResolutionAsync(string vmReference, int width, int height, CancellationToken ct = default);
+
     Task<IReadOnlyList<VmSnapshot>> ListSnapshotsAsync(string vmReference, CancellationToken ct = default);
     Task CreateSnapshotAsync(string vmReference, string name, string description, CancellationToken ct = default);
     Task RevertSnapshotAsync(string snapshotReference, CancellationToken ct = default);
@@ -32,7 +38,15 @@ public interface IVmwareConnector
         string userName, string password, CancellationToken ct = default);
 }
 
-public sealed record VsphereVm(string Reference, string Name, string PowerState, string? InstanceUuid);
+/// <param name="ToolsStatus">
+/// VMware Tools 运行状态（guest.toolsRunningStatus 原值，如 guestToolsRunning / guestToolsNotRunning）；
+/// 未取到时为 null。它决定鼠标能否精确定位、分辨率能否随窗口调整。
+/// </param>
+public sealed record VsphereVm(string Reference, string Name, string PowerState, string? InstanceUuid, string? ToolsStatus = null)
+{
+    /// <summary>VMware Tools 是否在运行。状态未知时按未运行处理（宁可提示，也不假装可用）。</summary>
+    public bool ToolsRunning => ToolsStatus is "guestToolsRunning" or "guestToolsExecutingScripts";
+}
 
 /// <summary>服务器自报信息：用于识别来源类型并在界面显示版本。</summary>
 public sealed record VmwareServerInfo(VmwareSourceKind Kind, string FullName, string Version, string Build);

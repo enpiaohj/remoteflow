@@ -27,6 +27,9 @@ public sealed class VncSessionView : ContentControl, IDisposable
     private readonly ILogger<VncSessionView> _logger;
     private readonly Image _image;
     private readonly ScrollViewer _scroll;
+    private readonly Border _notice;
+    private readonly TextBlock _noticeText;
+    private readonly System.Windows.Threading.DispatcherTimer _noticeTimer;
 
     private WriteableBitmap? _bitmap;
 
@@ -69,7 +72,39 @@ public sealed class VncSessionView : ContentControl, IDisposable
             Focusable = false
         };
 
-        Content = _scroll;
+        // 画面之上叠一层非阻塞提示（如 VMware Tools 未运行）。提示是普通 WPF 元素，不会挡住画面的输入之外的区域。
+        _noticeText = new TextBlock
+        {
+            Foreground = Brushes.White,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 13
+        };
+        _notice = new Border
+        {
+            Child = _noticeText,
+            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE6, 0x1E, 0x1E, 0x24)),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(14, 10, 14, 10),
+            Margin = new Thickness(16),
+            MaxWidth = 560,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Visibility = Visibility.Collapsed,
+            Cursor = Cursors.Hand,
+            ToolTip = "点击关闭"
+        };
+        _notice.MouseLeftButtonDown += (_, e) =>
+        {
+            HideNotice();
+            e.Handled = true;
+        };
+        _noticeTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+        _noticeTimer.Tick += (_, _) => HideNotice();
+
+        var host = new Grid();
+        host.Children.Add(_scroll);
+        host.Children.Add(_notice);
+        Content = host;
         Focusable = true;
         Background = Brushes.Black;
 
@@ -82,6 +117,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
         _session.RenderTarget.FrameSizeChanged += OnFrameSizeChanged;
         _session.ClipboardTextReceived += OnClipboardTextReceived;
         _session.CursorChanged += OnCursorChanged;
+        _session.NoticeRaised += OnSessionNotice;
         _viewModel.ActionRequested += OnActionRequested;
 
         Loaded += OnLoaded;
@@ -138,7 +174,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
         // 该事件来自协议线程，这里只登记尺寸，实际重建位图放到 UI 线程。
         _pendingSize = new VncSize(size.Width, size.Height);
 
-        // 首帧到达（已连接）后尝试一次尺寸请求。
+        // 首帧到达（已连接）后尝试一次分辨率请求。
         if (_resizeTimer is not null)
         {
             Dispatcher.BeginInvoke(ScheduleDesktopResize);
@@ -164,7 +200,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
     private void OnResizeTimerTick(object? sender, EventArgs e)
     {
         _resizeTimer?.Stop();
-        if (_disposed || !_session.CanResizeDesktop || _viewModel.VncScale == VncScaleMode.Original)
+        if (_disposed || !_session.CanRequestVmwareResolution || _viewModel.VncScale == VncScaleMode.Original)
         {
             return;
         }
@@ -186,7 +222,30 @@ public sealed class VncSessionView : ContentControl, IDisposable
         }
 
         _lastRequestedSize = (width, height);
-        _session.RequestDesktopSize(width, height);
+        _ = _session.RequestVmwareResolutionAsync(width, height);
+    }
+
+    private void OnSessionNotice(string text)
+    {
+        // 事件可能来自协议线程。
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _noticeText.Text = text;
+            _notice.Visibility = Visibility.Visible;
+            _noticeTimer.Stop();
+            _noticeTimer.Start();
+        });
+    }
+
+    private void HideNotice()
+    {
+        _noticeTimer.Stop();
+        _notice.Visibility = Visibility.Collapsed;
     }
 
     private void OnRendering(object? sender, EventArgs e)
@@ -407,7 +466,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
         var local = e.GetPosition(_image);
         if (ToRemotePosition(local) is { } position)
         {
-            _logger.LogInformation(
+            _logger.LogTrace(
                 "[VNC INPUT] MouseMove local=({lx:0},{ly:0}) remote={position} mask=0x{mask:x2}",
                 local.X, local.Y, position, (int)GetPressedButtons());
             _session.SendPointerEvent(position, GetPressedButtons());
@@ -419,7 +478,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
         var local = e.GetPosition(_image);
         if (ToRemotePosition(local) is { } position)
         {
-            _logger.LogInformation(
+            _logger.LogTrace(
                 "[VNC INPUT] MouseDown button={button} remote={position} mask=0x{mask:x2}",
                 e.ChangedButton, position, (int)GetPressedButtons());
             _session.SendPointerEvent(position, GetPressedButtons());
@@ -431,7 +490,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
         var local = e.GetPosition(_image);
         if (ToRemotePosition(local) is { } position)
         {
-            _logger.LogInformation(
+            _logger.LogTrace(
                 "[VNC INPUT] MouseUp button={button} remote={position} mask=0x{mask:x2}",
                 e.ChangedButton, position, (int)GetPressedButtons());
             _session.SendPointerEvent(position, GetPressedButtons());
@@ -460,7 +519,6 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         if (VncKeyMapper.TryMapSpecialKey(key, out var keySymbol))
         {
-            _logger.LogInformation("[VNC INPUT] KeyDown key={key} keysym={keySymbol}", key, keySymbol);
             _session.SendKeyEvent(keySymbol, isDown: true);
             e.Handled = true;
         }
@@ -472,7 +530,6 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         if (VncKeyMapper.TryMapSpecialKey(key, out var keySymbol))
         {
-            _logger.LogInformation("[VNC INPUT] KeyUp key={key} keysym={keySymbol}", key, keySymbol);
             _session.SendKeyEvent(keySymbol, isDown: false);
             e.Handled = true;
         }
@@ -491,7 +548,6 @@ public sealed class VncSessionView : ContentControl, IDisposable
 
         foreach (var rune in e.Text.EnumerateRunes())
         {
-            _logger.LogInformation("[VNC INPUT] TextInput char='{char}' cp=0x{cp:x4}", rune, rune.Value);
             _session.SendKeyStroke(VncKeyMapper.MapCharacter(rune.Value));
         }
 
@@ -581,6 +637,7 @@ public sealed class VncSessionView : ContentControl, IDisposable
         _session.RenderTarget.FrameSizeChanged -= OnFrameSizeChanged;
         _session.ClipboardTextReceived -= OnClipboardTextReceived;
         _session.CursorChanged -= OnCursorChanged;
+        _session.NoticeRaised -= OnSessionNotice;
         _viewModel.ActionRequested -= OnActionRequested;
 
         // 断开 WriteableBitmap 引用：即使控件仍在可视树中也不再取帧。

@@ -14,12 +14,24 @@ public sealed class VncSessionInputTests
             NullLoggerFactory.Instance);
 
     [Fact]
-    public async Task 未连接时不能调整桌面尺寸()
+    public async Task 未连接时不能请求VMware分辨率()
     {
         await using var session = CreateSession();
 
-        Assert.False(session.CanResizeDesktop);
-        Assert.False(session.RequestDesktopSize(1280, 720));
+        Assert.False(session.CanRequestVmwareResolution);
+        Assert.False(await session.RequestVmwareResolutionAsync(1280, 720));
+    }
+
+    [Fact]
+    public async Task 普通VNC连接永远不请求VMware分辨率()
+    {
+        // 即使凭据和连接器都齐全，没有启用 Vmware 的普通 VNC 连接也不能走 API 改分辨率。
+        var profile = new ConnectionProfile { Name = "t", Host = "h", Port = 5900, Protocol = ProtocolType.Vnc };
+        await using var session = new VncSession(new SessionRequest { Profile = profile }, NullLoggerFactory.Instance,
+            new FakeVmwareConnector());
+
+        Assert.False(session.CanRequestVmwareResolution);
+        Assert.False(await session.RequestVmwareResolutionAsync(1280, 720));
     }
 
     [Fact]

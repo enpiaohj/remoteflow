@@ -139,6 +139,7 @@
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="104" />
                                             <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="150" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <TextBlock VerticalAlignment="Center">
@@ -146,7 +147,19 @@
                                         </TextBlock>
                                         <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
                                                    TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
-                                        <StackPanel Grid.Column="2" Orientation="Horizontal" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolToBool}}">
+                                        <TextBlock Grid.Column="2" Text="{Binding ToolsText}" VerticalAlignment="Center" Margin="8,0"
+                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding ToolsText}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding ToolsMissing}" Value="True">
+                                                            <Setter Property="Foreground" Value="{DynamicResource Status.Warning}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <StackPanel Grid.Column="3" Orientation="Horizontal" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolToBool}}">
                                             <Button Style="{StaticResource Button.Secondary}" Content="控制台" Click="OnConsoleClick"
                                                     IsEnabled="{Binding CanOpenConsole}" />
                                             <Button Style="{StaticResource Button.Secondary}" Content="电源 ▾" Margin="8,0,0,0" Click="OnPowerButtonClick" />

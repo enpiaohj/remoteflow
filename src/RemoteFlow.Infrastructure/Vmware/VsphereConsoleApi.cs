@@ -87,7 +87,8 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
                     new XElement(Vim + "specSet",
                         new XElement(Vim + "propSet", new XElement(Vim + "type", "VirtualMachine"),
                             new XElement(Vim + "pathSet", "name"), new XElement(Vim + "pathSet", "runtime.powerState"),
-                            new XElement(Vim + "pathSet", "config.instanceUuid")),
+                            new XElement(Vim + "pathSet", "config.instanceUuid"),
+                            new XElement(Vim + "pathSet", "guest.toolsRunningStatus")),
                         new XElement(Vim + "objectSet",
                             new XElement(Vim + "obj", new XAttribute("type", "ContainerView"), viewId),
                             new XElement(Vim + "skip", true),
@@ -105,7 +106,8 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
                             .ToDictionary(p => p.Element(Vim + "name")!.Value, p => p.Element(Vim + "val")?.Value);
                         var reference = Required(item, "obj");
                         results.Add(new VsphereVm(reference, props.GetValueOrDefault("name") ?? reference,
-                            props.GetValueOrDefault("runtime.powerState") ?? "unknown", props.GetValueOrDefault("config.instanceUuid")));
+                            props.GetValueOrDefault("runtime.powerState") ?? "unknown", props.GetValueOrDefault("config.instanceUuid"),
+                            props.GetValueOrDefault("guest.toolsRunningStatus")));
                     }
                     if (string.IsNullOrEmpty(token)) break;
                     ct.ThrowIfCancellationRequested();
@@ -182,6 +184,20 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
             var task = await CallAsync(method, [vm], ct);
             await WaitForTaskAsync(task.Value, TimeSpan.FromMinutes(2), ct);
             return VmPowerResult.Completed;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task SetScreenResolutionAsync(string vmReference, int width, int height, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(vmReference);
+        if (width is < 320 or > 8192 || height is < 240 or > 8192) throw new ArgumentOutOfRangeException(nameof(width), "分辨率超出合理范围。");
+        await _gate.WaitAsync(ct);
+        try
+        {
+            EnsureLoggedIn();
+            await CallAsync("SetScreenResolution", [Ref("VirtualMachine", vmReference),
+                new XElement(Vim + "width", width), new XElement(Vim + "height", height)], ct);
         }
         finally { _gate.Release(); }
     }
@@ -341,7 +357,7 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
                 "NotAuthenticatedFault" => "NotAuthenticated",
                 "NoPermissionFault" => "NoPermission",
                 "RestrictedVersionFault" => "RestrictedVersion",
-                "InvalidStateFault" => "InvalidState",
+                "InvalidStateFault" or "InvalidPowerStateFault" => "InvalidState",
                 "ToolsUnavailableFault" => "ToolsUnavailable",
                 "ManagedObjectNotFoundFault" => "ManagedObjectNotFound",
                 _ => "ServerFault"
