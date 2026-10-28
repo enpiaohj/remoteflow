@@ -1,6 +1,7 @@
 using RemoteFlow.Application.FileTransfer;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
+using RemoteFlow.Presentation.ViewModels;
 
 namespace RemoteFlow.Presentation.Services;
 
@@ -94,6 +95,15 @@ public interface IDialogService
     /// </summary>
     Task<ConflictDecision> ResolveTransferConflictAsync(TransferConflict conflict, CancellationToken cancellationToken)
         => Task.FromResult(new ConflictDecision(ConflictAction.Skip));
+
+    /// <summary>
+    /// 添加 / 编辑 ESXi 主机或 vCenter 来源。保存成功返回 true。
+    /// 带默认实现：尚未实现该能力的平台（macOS）与测试替身无需改动即可编译。
+    /// </summary>
+    Task<bool> EditVmwareSourceAsync(VmwareSourceEditorViewModel editor) => Task.FromResult(false);
+
+    /// <summary>虚拟机快照管理对话框，关闭后返回。未实现的平台为空操作。</summary>
+    Task ShowVmwareSnapshotsAsync(VmwareSnapshotManagerViewModel manager) => Task.CompletedTask;
 
     /// <summary>
     /// 打开统一「测试连接」对话框：对 <paramref name="profile"/> 自动执行

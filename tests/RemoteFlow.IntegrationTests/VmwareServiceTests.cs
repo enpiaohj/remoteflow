@@ -12,13 +12,13 @@ namespace RemoteFlow.IntegrationTests;
 /// <summary>ESXi / vCenter 来源：仓储、类型识别、凭据、稳定会话 Id 与写操作前的安全检查。</summary>
 public sealed class VmwareServiceTests : IDisposable
 {
-    private const string Pin = "AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899";
+    private const string Pin = FakeVmwareConnector.Pin;
 
     private readonly TempWorkspace _workspace = new();
     private readonly SqliteCredentialRepository _credentialRepository;
     private readonly SqliteVmwareSourceRepository _sources;
     private readonly CredentialService _credentials;
-    private readonly FakeConnector _connector = new();
+    private readonly FakeVmwareConnector _connector = new();
     private readonly VmwareService _service;
 
     public VmwareServiceTests()
@@ -162,47 +162,5 @@ public sealed class VmwareServiceTests : IDisposable
         Assert.Contains("权限", new VsphereApiException("NoPermission").Message);
         Assert.Contains("VMware Tools", new VsphereApiException("ToolsUnavailable").Message);
         Assert.DoesNotContain("evil", new VsphereApiException("MissingResponseField:evil").Message.Replace("缺少必要字段", ""));
-    }
-
-    private sealed class FakeConnector : IVmwareConnector
-    {
-        public VmwareSourceKind Kind { get; set; } = VmwareSourceKind.EsxiHost;
-        public bool FailLogin { get; set; }
-        public int ConnectCount { get; private set; }
-        public int Disposed { get; set; }
-        public string? LastUser { get; private set; }
-        public string? LastPassword { get; private set; }
-        public IReadOnlyList<VmSnapshot> Snapshots { get; set; } = [];
-        public string? Reverted { get; set; }
-
-        public Task<string> FetchCertificatePinAsync(string host, int port, CancellationToken ct = default) => Task.FromResult(Pin);
-
-        public Task<IVSphereConsoleApi> ConnectAsync(string host, int port, string certPinSha256,
-            string userName, string password, CancellationToken ct = default)
-        {
-            ConnectCount++;
-            LastUser = userName;
-            LastPassword = password;
-            if (FailLogin) throw new VsphereApiException("InvalidLogin");
-            return Task.FromResult<IVSphereConsoleApi>(new FakeApi(this));
-        }
-    }
-
-    private sealed class FakeApi(FakeConnector owner) : IVSphereConsoleApi
-    {
-        public VmwareServerInfo? ServerInfo { get; } = new(owner.Kind, "Fake", "8.0.3", "1");
-        public Task LoginAsync(string userName, string password, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<IReadOnlyList<VsphereVm>> ListVirtualMachinesAsync(CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<VsphereVm>>([new VsphereVm("vm-1", "VM", "poweredOn", "50-aa-bb")]);
-        public Task<WebMksTicket> AcquireWebMksTicketAsync(string vmReference, CancellationToken ct = default)
-            => Task.FromResult(new WebMksTicket("h", 443, "t"));
-        public Task<VmPowerResult> PowerAsync(string vmReference, VmPowerAction action, CancellationToken ct = default)
-            => Task.FromResult(action is VmPowerAction.ShutdownGuest or VmPowerAction.RebootGuest ? VmPowerResult.RequestSent : VmPowerResult.Completed);
-        public Task<IReadOnlyList<VmSnapshot>> ListSnapshotsAsync(string vmReference, CancellationToken ct = default) => Task.FromResult(owner.Snapshots);
-        public Task CreateSnapshotAsync(string vmReference, string name, string description, CancellationToken ct = default) => Task.CompletedTask;
-        public Task RevertSnapshotAsync(string snapshotReference, CancellationToken ct = default) { owner.Reverted = snapshotReference; return Task.CompletedTask; }
-        public Task RemoveSnapshotAsync(string snapshotReference, CancellationToken ct = default) => Task.CompletedTask;
-        public Task LogoutAsync(CancellationToken ct = default) => Task.CompletedTask;
-        public ValueTask DisposeAsync() { owner.Disposed++; return ValueTask.CompletedTask; }
     }
 }

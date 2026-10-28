@@ -49,6 +49,9 @@
         <DataTemplate DataType="{x:Type vm:CredentialsPageViewModel}">
             <pages:CredentialsPage />
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:VmwarePageViewModel}">
+            <pages:VmwarePage />
+        </DataTemplate>
         <DataTemplate DataType="{x:Type vm:SettingsPageViewModel}">
             <pages:SettingsPage />
         </DataTemplate>
@@ -651,6 +654,9 @@
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
                             </Grid>
+                            <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="虚拟化（ESXi / vCenter）"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Vmware, Mode=TwoWay}"
+                                         Tag="{x:Static vm:NavigationPage.Vmware}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Server" />
                             <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="凭据"
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Credentials, Mode=TwoWay}"
                                          Tag="{x:Static vm:NavigationPage.Credentials}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Credential" />

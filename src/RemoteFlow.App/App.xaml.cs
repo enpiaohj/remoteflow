@@ -23,6 +23,9 @@ using RemoteFlow.Protocol.Ssh;
 using RemoteFlow.Protocol.Vnc;
 using RemoteFlow.Core.FileTransfer;
 using RemoteFlow.Infrastructure.Smb;
+using RemoteFlow.Application.Vmware;
+using RemoteFlow.Core.Vmware;
+using RemoteFlow.Infrastructure.Vmware;
 using AppFileTransfer = RemoteFlow.Application.FileTransfer;
 using AppServices = RemoteFlow.Application.Services;
 using RemoteFlow.Presentation.Services;
@@ -319,6 +322,11 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IConnectionProvider, SshConnectionProvider>();
         services.AddSingleton<IConnectionProvider, VncConnectionProvider>();
 
+        // VMware ESXi / vCenter：来源仓储、连接器（证书指纹固定）、服务。VncConnectionProvider 通过可选参数拿到连接器。
+        services.AddSingleton<IVmwareSourceRepository, SqliteVmwareSourceRepository>();
+        services.AddSingleton<IVmwareConnector, VmwareConnector>();
+        services.AddSingleton<VmwareService>();
+
         // ── 文件传输：按连接选通道，新增通道只需在此追加一个工厂 ───
         services.AddSingleton<IRemoteFileSystemFactory, SftpFileSystemFactory>();
         services.AddSingleton<IRemoteFileSystemFactory, SmbFileSystemFactory>();
@@ -348,6 +356,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<HomePageViewModel>();
         services.AddSingleton<ConnectionsPageViewModel>();
         services.AddSingleton<CredentialsPageViewModel>();
+        services.AddSingleton<VmwarePageViewModel>();
         services.AddSingleton<SettingsPageViewModel>();
         services.AddSingleton<CloudSyncViewModel>();
         services.AddSingleton<MainViewModel>();

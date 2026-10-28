@@ -28,6 +28,10 @@ public enum NavigationPage
 
     /// <summary>关于（内嵌页面）。同 <see cref="Help"/>，macOS 侧由菜单栏「关于」承担。</summary>
     About,
+
+    /// <summary>虚拟化（VMware ESXi / vCenter 来源与虚拟机）。Windows 独有入口；macOS 侧栏无此按钮，
+    /// 其 NavigateTo switch 的 default 分支兜底。放在枚举末尾以保持既有取值不变。</summary>
+    Vmware,
 }
 
 /// <summary>
@@ -74,7 +78,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IFileTransferLauncher? fileTransferLauncher = null,
         IFileTransferConnector? fileTransferConnector = null,
         ILoggerFactory? loggerFactory = null,
-        UpdateViewModel? update = null)
+        UpdateViewModel? update = null,
+        VmwarePageViewModel? vmwarePage = null)
     {
         _sessions = sessions;
         Update = update;
@@ -136,6 +141,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // 两页互相只发请求，由主视图模型切页并打开对应编辑器，页面 VM 之间不互相引用。
         _credentialsPage.NewConnectionRequested += async (_, seed) => await CreateConnectionFromSeedAsync(seed);
         ConnectionsPage.NewCredentialRequested += async (_, _) => await NewCredentialAsync();
+
+        // 虚拟化页：打开虚拟机控制台同样走统一的「开会话」漏斗（去重聚焦、失败提示）。
+        VmwarePage = vmwarePage;
+        if (VmwarePage is not null)
+        {
+            VmwarePage.OpenConsoleRequested += async (_, profile) => await OpenSessionAsync(profile);
+        }
 
         // 「文件传输…」入口：不建会话，直接在工作区开一个文件传输 Tab。
         if (_fileTransferLauncher is not null)
@@ -245,9 +257,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public bool IsConnectionListPage =>
         CurrentPage is NavigationPage.Connections or NavigationPage.Favorites or NavigationPage.Recent;
 
+    /// <summary>虚拟化页（可能为 null：未注册 VMware 能力的平台 / 测试）。</summary>
+    public VmwarePageViewModel? VmwarePage { get; }
+
     partial void OnCurrentPageChanged(NavigationPage value)
     {
         OnPropertyChanged(nameof(IsConnectionListPage));
+
+        // 虚拟化页只在可见时自动刷新虚拟机状态。
+        VmwarePage?.SetActive(value == NavigationPage.Vmware);
 
         // 多选是临时上下文：一旦离开对应页面（导航常经 RadioButton 的 TwoWay 提前改
         // CurrentPage，不能只依赖 NavigateTo 里的判断），立即退出并清空选择。
@@ -421,6 +439,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 WorkspaceTab.IconKey = "Ui.Credential";
                 break;
 
+            case NavigationPage.Vmware when VmwarePage is not null:
+                WorkspaceTab.Page = VmwarePage;
+                WorkspaceTab.Title = "虚拟化";
+                WorkspaceTab.Icon = ""; // Icon.Server
+                WorkspaceTab.IconKey = "Ui.Server";
+                break;
+
             case NavigationPage.Settings:
                 // 托盘可经 SettingsPageViewModel.SetLaunchOnStartup 改开机启动，
                 // 进入设置页时把 AppSettings 最新值同步回开关，保证双向一致。
@@ -522,6 +547,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
                 case NavigationPage.Credentials:
                     await _credentialsPage.LoadAsync(ct);
+                    break;
+
+                case NavigationPage.Vmware when VmwarePage is not null:
+                    await VmwarePage.LoadAsync(ct);
                     break;
 
                 case NavigationPage.Settings:

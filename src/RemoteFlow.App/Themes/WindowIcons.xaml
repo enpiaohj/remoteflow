@@ -15,4 +15,8 @@
     <Geometry x:Key="Ui.ChevronDown">F1 M0,0 M20,20 M3.8,7.6 L4.5,6.9 L10,12.4 L15.5,6.9 L16.2,7.6 L10,13.8 Z</Geometry>
     <Geometry x:Key="Ui.ChevronRight">F1 M0,0 M20,20 M7.6,3.8 L6.9,4.5 L12.4,10 L6.9,15.5 L7.6,16.2 L13.8,10 Z</Geometry>
     <Geometry x:Key="Ui.ChevronLeft">F1 M0,0 M20,20 M12.4,3.8 L13.1,4.5 L7.6,10 L13.1,15.5 L12.4,16.2 L6.2,10 Z</Geometry>
+
+    <!-- 虚拟化入口图标：上下两台服务器，各带一个指示点。线性版 / 填充版（选中态）。 -->
+    <Geometry x:Key="Ui.Server">F1 M0,0 M20,20 M3,3 H17 V8.5 H3 Z M4,4 V7.5 H16 V4 Z M5.5,5 H7 V6.5 H5.5 Z M3,11.5 H17 V17 H3 Z M4,12.5 V16 H16 V12.5 Z M5.5,13.5 H7 V15 H5.5 Z</Geometry>
+    <Geometry x:Key="Ui.Server.Filled">F1 M0,0 M20,20 M3,3 H17 V8.5 H3 Z M5.5,5 V6.5 H7 V5 Z M3,11.5 H17 V17 H3 Z M5.5,13.5 V15 H7 V13.5 Z</Geometry>
 </ResourceDictionary>

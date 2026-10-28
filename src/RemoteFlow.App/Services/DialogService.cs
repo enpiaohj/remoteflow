@@ -110,6 +110,16 @@ public sealed class DialogService(
     public Task<GroupEditorResult?> EditGroupAsync(GroupEditorPrompt prompt)
         => InvokeOnUiAsync(() => GroupEditorDialog.Prompt(Owner, prompt));
 
+    public Task<bool> EditVmwareSourceAsync(VmwareSourceEditorViewModel editor)
+        => InvokeOnUiAsync(() => VmwareSourceEditorDialog.Show(Owner, editor));
+
+    public Task ShowVmwareSnapshotsAsync(VmwareSnapshotManagerViewModel manager)
+        => InvokeOnUiAsync(() =>
+        {
+            VmwareSnapshotDialog.Show(Owner, manager);
+            return true;
+        });
+
     public Task<string?> EditGroupNameAsync(GroupNamePrompt prompt)
         => InvokeOnUiAsync(() => GroupNameDialog.Prompt(Owner, prompt));
 
