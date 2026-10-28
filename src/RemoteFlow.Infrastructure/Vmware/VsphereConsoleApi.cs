@@ -68,6 +68,14 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
         finally { _gate.Release(); }
     }
 
+    private static string? NonEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static int? ParseInt(string? value)
+        => int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : null;
+
+    private static long? ParseLong(string? value)
+        => long.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : null;
+
     public async Task<IReadOnlyList<VsphereVm>> ListVirtualMachinesAsync(CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct);
@@ -88,7 +96,12 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
                         new XElement(Vim + "propSet", new XElement(Vim + "type", "VirtualMachine"),
                             new XElement(Vim + "pathSet", "name"), new XElement(Vim + "pathSet", "runtime.powerState"),
                             new XElement(Vim + "pathSet", "config.instanceUuid"),
-                            new XElement(Vim + "pathSet", "guest.toolsRunningStatus")),
+                            new XElement(Vim + "pathSet", "guest.toolsRunningStatus"),
+                            new XElement(Vim + "pathSet", "guest.guestFullName"), new XElement(Vim + "pathSet", "config.guestFullName"),
+                            new XElement(Vim + "pathSet", "guest.ipAddress"),
+                            new XElement(Vim + "pathSet", "config.hardware.numCPU"), new XElement(Vim + "pathSet", "config.hardware.memoryMB"),
+                            new XElement(Vim + "pathSet", "summary.quickStats.uptimeSeconds"),
+                            new XElement(Vim + "pathSet", "config.annotation")),
                         new XElement(Vim + "objectSet",
                             new XElement(Vim + "obj", new XAttribute("type", "ContainerView"), viewId),
                             new XElement(Vim + "skip", true),
@@ -107,7 +120,12 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
                         var reference = Required(item, "obj");
                         results.Add(new VsphereVm(reference, props.GetValueOrDefault("name") ?? reference,
                             props.GetValueOrDefault("runtime.powerState") ?? "unknown", props.GetValueOrDefault("config.instanceUuid"),
-                            props.GetValueOrDefault("guest.toolsRunningStatus")));
+                            props.GetValueOrDefault("guest.toolsRunningStatus"),
+                            NonEmpty(props.GetValueOrDefault("guest.guestFullName")) ?? NonEmpty(props.GetValueOrDefault("config.guestFullName")),
+                            NonEmpty(props.GetValueOrDefault("guest.ipAddress")),
+                            ParseInt(props.GetValueOrDefault("config.hardware.numCPU")), ParseInt(props.GetValueOrDefault("config.hardware.memoryMB")),
+                            ParseLong(props.GetValueOrDefault("summary.quickStats.uptimeSeconds")),
+                            NonEmpty(props.GetValueOrDefault("config.annotation"))));
                     }
                     if (string.IsNullOrEmpty(token)) break;
                     ct.ThrowIfCancellationRequested();

@@ -460,6 +460,38 @@ public sealed class NavigationRefreshTests : IDisposable
         Assert.True(_main.HasInterruptedSession);
         Assert.Contains(nameof(MainViewModel.HasInterruptedSession), changed);
     }
+    [Fact]
+    public async Task 虚拟机控制台会话只计入虚拟化角标_不计入连接工作台()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected(static p => new VisibilityGatedSession(p) { FailOnConnect = p.Name == "坏控制台" });
+        var changed = new List<string?>();
+        _main.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        await _main.OpenSessionAsync(new ConnectionProfile { Name = "普通主机", Host = "a", Protocol = ProtocolType.Ssh });
+        await _main.OpenSessionAsync(new ConnectionProfile
+        {
+            // 角标只看 Vmware.Enabled；测试只注册了 SSH 提供者，所以用 SSH 协议承载。
+            Name = "控制台", Host = "esxi", Protocol = ProtocolType.Ssh, Vmware = new VmwareOptions { Enabled = true, InstanceUuid = "50-aa" }
+        });
+
+        Assert.Equal(1, _main.ConnectionSessionCount);
+        Assert.Equal(1, _main.VmwareSessionCount);
+        Assert.Equal(2, _main.OpenSessionCount); // 退出确认等处仍按全部会话算
+        Assert.Contains(nameof(MainViewModel.VmwareSessionCount), changed);
+
+        // 控制台连接失败只让「虚拟化」角标转警示色。
+        await _main.OpenSessionAsync(new ConnectionProfile
+        {
+            Name = "坏控制台", Host = "esxi", Protocol = ProtocolType.Ssh, Vmware = new VmwareOptions { Enabled = true, InstanceUuid = "50-bb" }
+        });
+        var bad = _main.Tabs.OfType<SessionTabViewModel>().Single(t => t.Session.Profile.Name == "坏控制台");
+        await bad.Session.ConnectAsync();
+
+        Assert.True(_main.HasInterruptedVmwareSession);
+        Assert.False(_main.HasInterruptedConnectionSession);
+        Assert.True(_main.HasInterruptedSession);
+    }
+
     private sealed class VisibilityGatedSession(ConnectionProfile profile) : RemoteSessionBase
     {
         public bool NeverStarts { get; init; }

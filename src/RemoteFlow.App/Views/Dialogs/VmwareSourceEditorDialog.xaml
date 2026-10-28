@@ -7,10 +7,48 @@
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         SizeToContent="Height"
-        Width="560"
+        Width="620"
+        MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}"
+        MaxWidth="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Width}"
         WindowStartupLocation="CenterOwner"
         FontFamily="{StaticResource UiFont}"
         UseLayoutRounding="True" TextElement.Foreground="{DynamicResource Text.Primary}">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+        <!-- 分步标题：数字徽章 + 小标题。 -->
+        <Style x:Key="Dlg.StepBadge" TargetType="Border">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="CornerRadius" Value="11" />
+            <Setter Property="Background" Value="{DynamicResource Brand.Default}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="Dlg.StepNumber" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.OnAccent}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- 状态横幅：普通提示中性底，错误提示红色淡底 + 红字。 -->
+        <Style x:Key="Dlg.Banner" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="12,10" />
+            <Setter Property="Background" Value="{DynamicResource Bg.Subtle}" />
+        </Style>
+        <Style x:Key="Dlg.BannerText" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Status.Danger}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
 
     <Border Background="{DynamicResource Bg.Layer}"
             BorderBrush="{DynamicResource Stroke.Default}"
@@ -21,48 +59,129 @@
             <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.24" Direction="270" />
         </Border.Effect>
 
-        <StackPanel>
-            <StackPanel Margin="28,26,28,0">
-                <TextBlock x:Name="TitleBar" Text="{Binding Title}" Style="{StaticResource Text.SectionTitle}" />
-                <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,8,0,0"
-                           Text="添加一台独立的 ESXi 主机，或一台 vCenter。虚拟机不会保存在 RemoteFlow 里，每次打开页面都从服务器实时读取。" />
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Border Padding="24,20,24,16" BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,0,0,1">
+                <!-- 标题 -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid Width="44" Height="44" VerticalAlignment="Top">
+                        <Border CornerRadius="{StaticResource Radius.Medium}" Background="{DynamicResource Brand.Default}"
+                                Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                        <ContentControl Content="{StaticResource Ui.Server.Filled}" FontSize="22"
+                                        Foreground="{DynamicResource Brand.Default}"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                    <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="TitleBar" Text="{Binding Title}" Style="{StaticResource Text.SectionTitle}" />
+                        <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Text="虚拟机不会保存在 RemoteFlow 里，每次打开虚拟化页面都从服务器实时读取。" />
+                    </StackPanel>
+                </Grid>
 
-                <TextBlock Text="显示名称" Style="{StaticResource Text.Caption}" Margin="0,18,0,6" />
+            </Border>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          Padding="28,20,28,22">
+                <StackPanel>
+                <!-- ① 连接 -->
+                <Grid Margin="0,0,0,14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Style="{StaticResource Dlg.StepBadge}" VerticalAlignment="Top"><TextBlock Text="1" Style="{StaticResource Dlg.StepNumber}" /></Border>
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                        <TextBlock Text="连接" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                        <TextBlock Text="独立的 ESXi 主机，或一台 vCenter" Style="{StaticResource Text.Caption}" Margin="0,3,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+                <TextBlock Text="显示名称" Style="{StaticResource Text.Caption}" Margin="0,0,0,6" />
                 <TextBox Style="{StaticResource Input.TextBox}" MaxLength="60"
                          Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
-
-                <Grid Margin="0,14,0,0">
+                <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="12" />
-                        <ColumnDefinition Width="96" />
+                        <ColumnDefinition Width="110" />
                     </Grid.ColumnDefinitions>
                     <StackPanel>
                         <TextBlock Text="主机地址" Style="{StaticResource Text.Caption}" Margin="0,0,0,6" />
-                        <TextBox Style="{StaticResource Input.TextBox}"
+                        <TextBox Style="{StaticResource Input.TextBox}" FontFamily="{StaticResource MonoFont}"
                                  Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}" />
                     </StackPanel>
                     <StackPanel Grid.Column="2">
                         <TextBlock Text="HTTPS 端口" Style="{StaticResource Text.Caption}" Margin="0,0,0,6" />
-                        <TextBox Style="{StaticResource Input.TextBox}"
+                        <TextBox Style="{StaticResource Input.TextBox}" FontFamily="{StaticResource MonoFont}"
                                  Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}" />
                     </StackPanel>
                 </Grid>
 
-                <!-- 第 1 步：证书指纹。自签名证书很常见，必须由用户核对后才信任，之后只认这一张。 -->
-                <TextBlock Text="证书指纹（SHA-256）" Style="{StaticResource Text.Caption}" Margin="0,18,0,6" />
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBox Style="{StaticResource Input.TextBox}" IsReadOnly="True" FontFamily="Consolas" FontSize="12"
-                             TextWrapping="Wrap" Text="{Binding CertPin, Mode=OneWay}" />
-                    <Button Grid.Column="1" Style="{StaticResource Button.Secondary}" Content="获取指纹"
-                            Margin="8,0,0,0" Command="{Binding FetchPinCommand}" />
-                </Grid>
+                <!-- ② 核对证书：自签名证书很常见，必须由用户核对后才信任，之后只认这一张。 -->
+                <StackPanel Orientation="Horizontal" Margin="0,26,0,12">
+                    <Border Style="{StaticResource Dlg.StepBadge}"><TextBlock Text="2" Style="{StaticResource Dlg.StepNumber}" /></Border>
+                    <TextBlock Text="核对证书" Style="{StaticResource Text.Body}" FontWeight="SemiBold" Margin="10,0,0,0" VerticalAlignment="Center" />
+                    <TextBlock Text="只信任你核对过的这一张证书" Style="{StaticResource Text.Caption}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <Border BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,1,0,1" Padding="0,12">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ContentControl Content="{StaticResource Ui.Shield}" FontSize="18" VerticalAlignment="Center">
+                                <ContentControl.Style>
+                                    <Style TargetType="ContentControl">
+                                        <Setter Property="Foreground" Value="{DynamicResource Text.Tertiary}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasCertPin}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource Status.Success}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ContentControl.Style>
+                            </ContentControl>
+                            <TextBlock Grid.Column="1" Margin="10,0,12,0" VerticalAlignment="Center" TextWrapping="Wrap">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+                                        <Setter Property="Text" Value="尚未获取证书指纹" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasCertPin}" Value="True">
+                                                <Setter Property="Text" Value="已获取，请与服务器上显示的指纹核对" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <Button Grid.Column="2" Style="{StaticResource Button.Secondary}" Content="获取指纹"
+                                    Command="{Binding FetchPinCommand}" />
+                        </Grid>
+                        <!-- 按「AA:BB:…」分组显示，与 ESXi / vCenter 证书详情里的格式一致，便于逐字核对 -->
+                        <Border Margin="0,12,0,0" Padding="12,10" CornerRadius="6" Background="{DynamicResource Bg.Layer}"
+                                BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="1"
+                                Visibility="{Binding HasCertPin, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="{Binding CertPinDisplay}" FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+                                       TextWrapping="Wrap" LineHeight="18" Foreground="{DynamicResource Text.Primary}" />
+                        </Border>
+                    </StackPanel>
+                </Border>
 
-                <TextBlock Text="登录凭据" Style="{StaticResource Text.Caption}" Margin="0,18,0,6" />
+                <!-- ③ 登录 -->
+                <StackPanel Orientation="Horizontal" Margin="0,26,0,12">
+                    <Border Style="{StaticResource Dlg.StepBadge}"><TextBlock Text="3" Style="{StaticResource Dlg.StepNumber}" /></Border>
+                    <TextBlock Text="登录" Style="{StaticResource Text.Body}" FontWeight="SemiBold" Margin="10,0,0,0" VerticalAlignment="Center" />
+                    <TextBlock Text="用于读取虚拟机、开关机和打开控制台" Style="{StaticResource Text.Caption}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Text="登录凭据" Style="{StaticResource Text.Caption}" Margin="0,0,0,6" />
                 <ComboBox Style="{StaticResource Input.ComboBox}"
                           ItemsSource="{Binding CredentialChoices}" SelectedItem="{Binding SelectedCredential}">
                     <ComboBox.ItemTemplate>
@@ -100,27 +219,31 @@
                     </StackPanel>
                 </Grid>
 
-                <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" Margin="0,16,0,0"
-                           Style="{StaticResource Text.Caption}">
-                    <TextBlock.Resources>
-                        <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsStatusError}" Value="True">
-                                    <Setter Property="Foreground" Value="{DynamicResource Status.Danger}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Resources>
-                </TextBlock>
-            </StackPanel>
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ContentControl Content="{StaticResource Ui.Lock}" FontSize="13" Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Top" Margin="0,2,0,0" />
+                    <TextBlock Grid.Column="1" Text="密码经 Windows 数据保护加密保存在本机，不会明文写入配置。" Style="{StaticResource Text.Caption}"
+                               Margin="8,0,0,0" TextWrapping="Wrap" />
+                </Grid>
 
-            <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="0,0,11,11" Margin="0,24,0,0" Padding="24,16">
+                <!-- 状态横幅 -->
+                <Border Style="{StaticResource Dlg.Banner}" Margin="0,18,0,0">
+                    <TextBlock Text="{Binding StatusText}" Style="{StaticResource Dlg.BannerText}" />
+                </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Border Grid.Row="2" Background="{DynamicResource Bg.Subtle}" CornerRadius="0,0,11,11"
+                    BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,1,0,0" Padding="24,16">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Style="{StaticResource Button.Secondary}" Content="取消" IsCancel="True" Click="OnCancelClick" />
                     <Button Style="{StaticResource Button.Primary}" Content="登录并保存" IsDefault="True" Margin="8,0,0,0"
                             IsEnabled="{Binding CanSaveNow}" Click="OnSaveClick" />
                 </StackPanel>
             </Border>
-        </StackPanel>
+        </Grid>
     </Border>
 </Window>

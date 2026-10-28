@@ -19,6 +19,7 @@ public sealed partial class ContextMenuConventionTests
         "Views/Pages/ConnectionResourceTree.xaml",
         "Views/Pages/CredentialsPage.xaml",
         "Views/Pages/HomePage.xaml",
+        "Views/Pages/VmwarePage.xaml",
         "Views/Sessions/FileTransferPanel.xaml",
         "Services/TrayService.cs",
     ];
@@ -37,6 +38,31 @@ public sealed partial class ContextMenuConventionTests
         var danger = items.Where(i => i.Contains("MenuItemAssist.IsDanger=\"True\"", StringComparison.Ordinal)).ToList();
         Assert.Single(danger);
         Assert.Same(danger[0], items[^1]);
+    }
+
+    [Theory]
+    [InlineData("PowerMenu")]
+    [InlineData("VmRowMenu")]
+    public void 虚拟机菜单的危险项集中在最后(string menuKey)
+    {
+        var items = MenuItemsOf(ReadApp("Views/Pages/VmwarePage.xaml"), menuKey);
+
+        var dangerIndexes = items.Select((item, index) => (item, index))
+            .Where(x => x.item.Contains("MenuItemAssist.IsDanger=\"True\"", StringComparison.Ordinal))
+            .Select(x => x.index).ToList();
+
+        Assert.NotEmpty(dangerIndexes);
+        // 危险项必须是末尾连续的一段。
+        Assert.Equal(Enumerable.Range(items.Count - dangerIndexes.Count, dangerIndexes.Count), dangerIndexes);
+    }
+
+    [Fact]
+    public void 虚拟机行菜单的每一项都带图标()
+    {
+        foreach (var item in MenuItemsOf(ReadApp("Views/Pages/VmwarePage.xaml"), "VmRowMenu"))
+        {
+            Assert.Contains("MenuItemAssist.IconKey=", item, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

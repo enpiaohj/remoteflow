@@ -8,23 +8,60 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:VmwarePageViewModel}"
-             Background="Transparent">
+             x:Name="PageRoot"
+             Background="{DynamicResource Bg.Workspace}"
+             SizeChanged="OnPageSizeChanged"
+             TextElement.Foreground="{DynamicResource Text.Primary}">
 
     <UserControl.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:InverseBoolConverter x:Key="InverseBoolToBool" />
 
-        <!-- 虚拟机行里的「电源」菜单。Tag 对应 VmwarePage.xaml.cs 里的动作；危险操作放最后一组并用警示色。 -->
+        <!-- 电源按钮的菜单。Tag 对应 VmwarePage.xaml.cs 里的动作；危险操作放最后一组并用警示色。 -->
         <ContextMenu x:Key="PowerMenu" x:Shared="False" Opened="OnPowerMenuOpened">
-            <MenuItem Tag="poweron" Header="开机" Click="OnPowerMenuClick" />
+            <MenuItem Tag="poweron" Header="开机" views:MenuItemAssist.IconKey="Ui.Power" Click="OnPowerMenuClick" />
             <Separator />
-            <MenuItem Tag="shutdown" Header="正常关机" Click="OnPowerMenuClick" />
-            <MenuItem Tag="reboot" Header="正常重启" Click="OnPowerMenuClick" />
-            <MenuItem Tag="suspend" Header="挂起" Click="OnPowerMenuClick" />
+            <MenuItem Tag="shutdown" Header="正常关机" views:MenuItemAssist.IconKey="Ui.Power" Click="OnPowerMenuClick" />
+            <MenuItem Tag="reboot" Header="正常重启" views:MenuItemAssist.IconKey="Ui.Refresh" Click="OnPowerMenuClick" />
+            <MenuItem Tag="suspend" Header="挂起" views:MenuItemAssist.IconKey="Ui.Pending" Click="OnPowerMenuClick" />
             <Separator />
-            <MenuItem Tag="poweroff" Header="强制断电…" views:MenuItemAssist.IsDanger="True" Click="OnPowerMenuClick" />
-            <MenuItem Tag="reset" Header="强制重置…" views:MenuItemAssist.IsDanger="True" Click="OnPowerMenuClick" />
+            <MenuItem Tag="poweroff" Header="强制断电…" views:MenuItemAssist.IconKey="Ui.Power" views:MenuItemAssist.IsDanger="True" Click="OnPowerMenuClick" />
+            <MenuItem Tag="reset" Header="强制重置…" views:MenuItemAssist.IconKey="Ui.Refresh" views:MenuItemAssist.IsDanger="True" Click="OnPowerMenuClick" />
         </ContextMenu>
+
+        <!-- 虚拟机行的右键菜单（也是行尾「⋯」的菜单）。
+             分组：会话动作 → 电源 → 工具 → 复制 / 跳转 → 破坏性操作（最后）；不适用的项在打开时隐藏。 -->
+        <ContextMenu x:Key="VmRowMenu" x:Shared="False" Opened="OnVmMenuOpened">
+            <MenuItem Tag="console" Header="打开控制台" views:MenuItemAssist.IconKey="Ui.Console" Click="OnVmMenuClick" />
+            <Separator />
+            <MenuItem Tag="poweron" Header="开机" views:MenuItemAssist.IconKey="Ui.Power" Click="OnVmMenuClick" />
+            <MenuItem Tag="shutdown" Header="正常关机" views:MenuItemAssist.IconKey="Ui.Power" Click="OnVmMenuClick" />
+            <MenuItem Tag="reboot" Header="正常重启" views:MenuItemAssist.IconKey="Ui.Refresh" Click="OnVmMenuClick" />
+            <MenuItem Tag="suspend" Header="挂起" views:MenuItemAssist.IconKey="Ui.Pending" Click="OnVmMenuClick" />
+            <Separator />
+            <MenuItem Tag="snapshots" Header="快照管理…" views:MenuItemAssist.IconKey="Ui.Snapshot" Click="OnVmMenuClick" />
+            <Separator />
+            <MenuItem Tag="copyname" Header="复制名称" views:MenuItemAssist.IconKey="Ui.Copy" Click="OnVmMenuClick" />
+            <MenuItem Tag="copyip" Header="复制 IP 地址" views:MenuItemAssist.IconKey="Ui.Copy" Click="OnVmMenuClick" />
+            <MenuItem Tag="refresh" Header="刷新列表" views:MenuItemAssist.IconKey="Ui.Refresh" Click="OnVmMenuClick" />
+            <Separator />
+            <MenuItem Tag="poweroff" Header="强制断电…" views:MenuItemAssist.IconKey="Ui.Power" views:MenuItemAssist.IsDanger="True" Click="OnVmMenuClick" />
+            <MenuItem Tag="reset" Header="强制重置…" views:MenuItemAssist.IconKey="Ui.Refresh" views:MenuItemAssist.IsDanger="True" Click="OnVmMenuClick" />
+        </ContextMenu>
+
+        <!-- 可点击排序的列头。 -->
+        <Style x:Key="Vmware.SortHeader" TargetType="Button" BasedOn="{StaticResource Button.Subtle}">
+            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="ToolTip" Value="点击或按 Enter 排序" />
+        </Style>
 
         <Style x:Key="Vmware.StatusText" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
@@ -34,146 +71,593 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+
+        <!-- 电源状态颜色：运行绿 / 挂起琥珀 / 关机灰。 -->
+        <Style x:Key="Vmware.StateDot" TargetType="Ellipse">
+            <Setter Property="Fill" Value="{DynamicResource Status.Idle}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsPoweredOn}" Value="True">
+                    <Setter Property="Fill" Value="{DynamicResource Status.Success}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSuspended}" Value="True">
+                    <Setter Property="Fill" Value="{DynamicResource Status.Warning}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="Vmware.StateText" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsPoweredOn}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Status.Success}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSuspended}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Status.Warning}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 设备图标：运行中正常显示，关机 / 挂起压暗。 -->
+        <Style x:Key="Vmware.DeviceImage" TargetType="Image" BasedOn="{StaticResource DeviceIcon.Image}">
+            <Setter Property="Opacity" Value="0.45" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsPoweredOn}" Value="True">
+                    <Setter Property="Opacity" Value="1" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 详情面板：键 / 值行。 -->
+        <Style x:Key="Vmware.KvLabel" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+        </Style>
+        <Style x:Key="Vmware.KvValue" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+        </Style>
+
+        <Style x:Key="Vmware.Panel" TargetType="Border" BasedOn="{StaticResource Surface.Card}">
+            <Setter Property="Effect" Value="{x:Null}" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <!-- 空状态沿用工作区底色，以图标、留白和就地操作建立层次。 -->
+        <Style x:Key="Vmware.EmptyTitle" TargetType="TextBlock" BasedOn="{StaticResource Text.SectionTitle}">
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,16,0,0" />
+        </Style>
+        <Style x:Key="Vmware.EmptyDescription" TargetType="TextBlock" BasedOn="{StaticResource Text.BodySecondary}">
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,8,0,0" />
+            <Setter Property="LineHeight" Value="22" />
+        </Style>
+        <Style x:Key="Vmware.EmptyIcon" TargetType="ContentControl">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="FontSize" Value="28" />
+            <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+
+        <!-- 表头与行共用弹性列；视图按实际可用宽度更新可选列。操作列始终保留。 -->
+        <GridLength x:Key="Vmware.Col.Name">2*</GridLength>
+        <GridLength x:Key="Vmware.Col.Ip">1.15*</GridLength>
+        <GridLength x:Key="Vmware.Col.Os">1.4*</GridLength>
+        <GridLength x:Key="Vmware.Col.State">84</GridLength>
+        <GridLength x:Key="Vmware.Col.Spec">104</GridLength>
     </UserControl.Resources>
 
-    <Grid Margin="28,24,28,20">
+    <Grid Margin="16,10,16,0" UseLayoutRounding="True">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- 页头 -->
+        <!-- 页头：标题 + 概览 + 操作 -->
         <Grid Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <StackPanel>
-                <TextBlock Text="虚拟化" Style="{StaticResource Text.PageTitle}" />
-                <TextBlock Style="{StaticResource Text.PageSubtitle}" Margin="0,4,0,0"
-                           Text="管理 ESXi 主机和 vCenter，在 RemoteFlow 里直接打开虚拟机控制台，并执行电源与快照操作。" />
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                <TextBlock Text="虚拟化工作台" Style="{StaticResource Text.SectionTitle}" FontSize="16" />
+                <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Text.Caption}"
+                           VerticalAlignment="Center" Margin="12,0,0,0" />
             </StackPanel>
-            <Button Grid.Column="1" Style="{StaticResource Button.Primary}" Content="添加 ESXi / vCenter"
-                    VerticalAlignment="Center" Command="{Binding AddSourceCommand}" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Style="{StaticResource Button.Icon}" Content="{StaticResource Ui.Refresh}"
+                        ToolTip="刷新虚拟机列表" AutomationProperties.Name="刷新虚拟机列表" Command="{Binding RefreshCommand}" />
+                <Button Style="{StaticResource Button.Primary}" Margin="8,0,0,0" Padding="12,0"
+                        ToolTip="添加 ESXi 主机或 vCenter" Command="{Binding AddSourceCommand}">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.Add}" Width="14" Height="14" VerticalAlignment="Center" />
+                        <TextBlock Text="添加来源" Margin="7,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="1" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <Grid MaxWidth="560" HorizontalAlignment="Left" Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=Grid}}">
+                <TextBox x:Name="WorkspaceSearch" Style="{StaticResource Input.TextBox}" Padding="34,0,12,0"
+                         AutomationProperties.Name="搜索虚拟机" ToolTip="搜索名称、IP 或操作系统"
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+                <ContentControl Content="{StaticResource Ui.Search}" FontSize="14" Foreground="{DynamicResource Text.Tertiary}"
+                                HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0,0,0" IsHitTestVisible="False" />
+                <TextBlock Text="搜索名称、IP、系统…" Margin="34,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                    <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=WorkspaceSearch}" Value=""><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers>
+                    </Style></TextBlock.Style>
+                </TextBlock>
+            </Grid>
+            <TextBlock Grid.Column="1" Text="{Binding StatusText}" Style="{StaticResource Vmware.StatusText}"
+                       MaxWidth="300" Margin="16,0,0,0" VerticalAlignment="Center" ToolTip="{Binding StatusText}" />
         </Grid>
 
         <!-- 还没有来源 -->
-        <Border Grid.Row="1" Style="{StaticResource Surface.Card}"
-                Visibility="{Binding ShowEmptySources, Converter={StaticResource BoolToVisibility}}">
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460">
-                <TextBlock Text="还没有添加 ESXi 主机或 vCenter" Style="{StaticResource Text.SectionTitle}" HorizontalAlignment="Center" />
-                <TextBlock Style="{StaticResource Text.BodySecondary}" TextWrapping="Wrap" TextAlignment="Center" Margin="0,10,0,0"
-                           Text="添加后，这里会实时列出其下的虚拟机，可以直接打开控制台、开关机和管理快照。虚拟机不会保存在连接列表里，也不会和你已有的 RDP / SSH 连接重复。" />
-                <Button Style="{StaticResource Button.Primary}" Content="添加 ESXi / vCenter" HorizontalAlignment="Center"
-                        Margin="0,20,0,0" Command="{Binding AddSourceCommand}" />
-            </StackPanel>
-        </Border>
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      Visibility="{Binding ShowEmptySources, Converter={StaticResource BoolToVisibility}}">
+            <Grid Margin="24,32">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="480">
+                    <TextBlock Text="VMWARE · 虚拟化资源" Style="{StaticResource Text.Label}" HorizontalAlignment="Center" Margin="0,0,0,22" />
+                    <Grid Width="80" Height="80" HorizontalAlignment="Center">
+                        <Border CornerRadius="24" Background="{DynamicResource Brand.Default}" Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                        <ContentControl Style="{StaticResource Vmware.EmptyIcon}" Content="{StaticResource Ui.Server.Filled}" Width="36" Height="36" FontSize="36" />
+                        <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="26" Height="26" CornerRadius="13"
+                                Background="{DynamicResource Bg.Workspace}" BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="1">
+                            <ContentControl Content="{StaticResource Ui.Add}" Foreground="{DynamicResource Brand.Default}" FontSize="14"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </Grid>
+                    <TextBlock Text="从一个管理来源开始" Style="{StaticResource Vmware.EmptyTitle}" FontSize="22" Margin="0,22,0,0" />
+                    <TextBlock Text="接入 ESXi 主机或 vCenter，集中查看虚拟机，&#x0a;让控制台、电源与快照操作触手可及。"
+                               Style="{StaticResource Vmware.EmptyDescription}" />
+                    <Button Style="{StaticResource Button.Primary}" HorizontalAlignment="Center" Margin="0,24,0,0" Padding="18,0"
+                            Command="{Binding AddSourceCommand}">
+                        <StackPanel Orientation="Horizontal">
+                            <ContentControl Content="{StaticResource Ui.Add}" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock Text="添加 ESXi / vCenter" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Border Height="1" Background="{DynamicResource Stroke.Subtle}" Margin="40,28,40,18" />
+                    <TextBlock Text="来源保存管理端点，虚拟机实时读取。&#x0a;已有 RDP / SSH 连接仍在连接列表中，不会重复添加。"
+                               Style="{StaticResource Text.Caption}" TextAlignment="Center" TextWrapping="Wrap" LineHeight="20" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
 
-        <!-- 来源 + 虚拟机 -->
-        <Grid Grid.Row="1" Visibility="{Binding HasSources, Converter={StaticResource BoolToVisibility}}">
+        <!-- 来源 + 虚拟机 + 详情 -->
+        <Grid x:Name="Workbench" Grid.Row="2" Visibility="{Binding HasSources, Converter={StaticResource BoolToVisibility}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition x:Name="DetailRow" Height="0" />
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="250" />
-                <ColumnDefinition Width="16" />
+                <ColumnDefinition x:Name="SourceColumn" Width="212" />
+                <ColumnDefinition Width="12" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="DetailGap" Width="12" />
+                <ColumnDefinition x:Name="DetailColumn" Width="292" />
             </Grid.ColumnDefinitions>
 
-            <!-- 左：来源 -->
-            <Border Style="{StaticResource Surface.Card}">
+            <!-- 左：资源 + 状态 -->
+            <Border Grid.RowSpan="2" Style="{StaticResource Vmware.Panel}" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource Stroke.Subtle}">
                 <Grid>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <TextBlock Text="来源" Style="{StaticResource Text.SectionTitle}" Margin="16,14,16,8" />
+
+                    <TextBlock Text="虚拟化资源" Style="{StaticResource Text.Label}" Margin="18,16,16,6" />
                     <ListBox Grid.Row="1" Style="{StaticResource List.Plain}" ItemsSource="{Binding Sources}"
-                             SelectedItem="{Binding SelectedSource}" BorderThickness="0" Background="Transparent">
+                             SelectedItem="{Binding SelectedSource}" MaxHeight="240" BorderThickness="0" Background="Transparent">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel Margin="12,8">
-                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" />
-                                    <TextBlock Style="{StaticResource Text.Caption}" TextTrimming="CharacterEllipsis">
-                                        <Run Text="{Binding KindText, Mode=OneWay}" /><Run Text="　·　" /><Run Text="{Binding Address, Mode=OneWay}" />
-                                    </TextBlock>
-                                </StackPanel>
+                                <Grid Margin="8,6" MinHeight="38">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid Width="32" Height="32" VerticalAlignment="Center">
+                                        <Border CornerRadius="{StaticResource Radius.Medium}" Background="{DynamicResource Brand.Default}"
+                                                Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                                        <ContentControl Content="{StaticResource Ui.Server.Filled}" FontSize="16"
+                                                        Foreground="{DynamicResource Brand.Default}"
+                                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Grid>
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Style="{StaticResource Text.Caption}" TextTrimming="CharacterEllipsis" Margin="0,1,0,0">
+                                            <Run Text="{Binding KindText, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding Address, Mode=OneWay}" FontFamily="{StaticResource MonoFont}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="12,8,12,12">
-                        <Button Style="{StaticResource Button.Secondary}" Content="编辑" Command="{Binding EditSourceCommand}" />
-                        <Button Style="{StaticResource Button.Secondary}" Content="删除" Margin="8,0,0,0" Command="{Binding DeleteSourceCommand}" />
+
+                    <Border Grid.Row="2" Style="{StaticResource Surface.Divider}" Margin="16,10,16,0" />
+                    <TextBlock Grid.Row="2" Text="状态" Style="{StaticResource Text.Label}" Margin="18,18,16,6" />
+                    <ListBox Grid.Row="3" Style="{StaticResource List.Plain}" ItemsSource="{Binding FilterItems}"
+                             SelectedItem="{Binding SelectedFilter}" BorderThickness="0" Background="Transparent">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="10,2" MinHeight="26">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="2,0,10,0">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Fill" Value="{DynamicResource Text.Tertiary}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Filter}" Value="Running">
+                                                        <Setter Property="Fill" Value="{DynamicResource Status.Success}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Filter}" Value="Stopped">
+                                                        <Setter Property="Fill" Value="{DynamicResource Status.Idle}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Filter}" Value="Suspended">
+                                                        <Setter Property="Fill" Value="{DynamicResource Status.Warning}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+                                    <TextBlock Grid.Column="1" Text="{Binding Title}" Style="{StaticResource Text.Body}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Count}" Style="{StaticResource Text.Caption}" VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <Border Grid.Row="5" Style="{StaticResource Surface.Divider}" VerticalAlignment="Top" />
+                    <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="10,10,10,10">
+                        <Button Style="{StaticResource Button.Subtle}" Content="编辑来源" Command="{Binding EditSourceCommand}" />
+                        <Button Style="{StaticResource Button.Subtle}" Content="删除" Margin="4,0,0,0" Command="{Binding DeleteSourceCommand}" />
                     </StackPanel>
                 </Grid>
             </Border>
 
-            <!-- 右：虚拟机 -->
-            <Border Grid.Column="2" Style="{StaticResource Surface.Card}">
+            <!-- 中：虚拟机表格 -->
+            <Border x:Name="TablePanel" Grid.Column="2" Style="{StaticResource Vmware.Panel}" SizeChanged="OnTableSizeChanged">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <Grid Margin="16,14,16,10">
+                    <!-- 列头 -->
+                    <Grid x:Name="TableHeader" Grid.Row="1" Margin="16,0,32,0" Height="32">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="220" />
-                            <ColumnDefinition Width="8" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="12" />
-                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="{StaticResource Vmware.Col.Name}" />
+                            <ColumnDefinition Width="{StaticResource Vmware.Col.Ip}" />
+                            <ColumnDefinition Width="{StaticResource Vmware.Col.Os}" />
+                            <ColumnDefinition Width="{StaticResource Vmware.Col.State}" />
+                            <ColumnDefinition Width="{StaticResource Vmware.Col.Spec}" />
+                            <ColumnDefinition Width="96" />
                         </Grid.ColumnDefinitions>
-                        <TextBox Style="{StaticResource Input.TextBox}" ToolTip="按虚拟机名称搜索"
-                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
-                        <Button Grid.Column="2" Style="{StaticResource Button.Secondary}" Content="刷新" Command="{Binding RefreshCommand}" />
-                        <TextBlock Grid.Column="4" Text="{Binding StatusText}" Style="{StaticResource Vmware.StatusText}"
-                                   VerticalAlignment="Center" ToolTip="{Binding StatusText}" />
+                        <Button Style="{StaticResource Vmware.SortHeader}" Command="{Binding SortByCommand}" CommandParameter="Name">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="名称" Style="{StaticResource Text.Label}" />
+                                <TextBlock Text="{Binding NameSortGlyph}" Style="{StaticResource Text.Label}" Margin="4,0,0,0" Foreground="{DynamicResource Brand.Default}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Grid.Column="1" Style="{StaticResource Vmware.SortHeader}" Command="{Binding SortByCommand}" CommandParameter="Ip">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="IP 地址" Style="{StaticResource Text.Label}" />
+                                <TextBlock Text="{Binding IpSortGlyph}" Style="{StaticResource Text.Label}" Margin="4,0,0,0" Foreground="{DynamicResource Brand.Default}" />
+                            </StackPanel>
+                        </Button>
+                        <TextBlock Grid.Column="2" Text="操作系统" Style="{StaticResource Text.Label}" VerticalAlignment="Center" />
+                        <Button Grid.Column="3" Style="{StaticResource Vmware.SortHeader}" Command="{Binding SortByCommand}" CommandParameter="State">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="状态" Style="{StaticResource Text.Label}" />
+                                <TextBlock Text="{Binding StateSortGlyph}" Style="{StaticResource Text.Label}" Margin="4,0,0,0" Foreground="{DynamicResource Brand.Default}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Grid.Column="4" Style="{StaticResource Vmware.SortHeader}" Command="{Binding SortByCommand}" CommandParameter="Memory">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="CPU · 内存" Style="{StaticResource Text.Label}" />
+                                <TextBlock Text="{Binding MemorySortGlyph}" Style="{StaticResource Text.Label}" Margin="4,0,0,0" Foreground="{DynamicResource Brand.Default}" />
+                            </StackPanel>
+                        </Button>
+                        <TextBlock Grid.Column="5" Text="操作" Style="{StaticResource Text.Label}" VerticalAlignment="Center"
+                                   HorizontalAlignment="Right" Margin="0,0,52,0" />
                     </Grid>
 
-                    <Grid Grid.Row="1">
+                    <Grid Grid.Row="2">
+                        <Border Style="{StaticResource Surface.Divider}" VerticalAlignment="Top" />
                         <ListBox x:Name="VmList" Style="{StaticResource List.Plain}" ItemsSource="{Binding Vms}"
+                                 SelectedItem="{Binding SelectedVm}" Margin="0,2,0,0" PreviewMouseRightButtonDown="OnVmListRightClick"
                                  BorderThickness="0" Background="Transparent" MouseDoubleClick="OnVmDoubleClick"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="12,6" MinHeight="30">
+                                    <Grid Margin="8,2" MinHeight="34" ContextMenu="{StaticResource VmRowMenu}" Background="Transparent" Loaded="OnVmRowLoaded">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="104" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="150" />
-                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="{StaticResource Vmware.Col.Name}" />
+                                            <ColumnDefinition Width="{StaticResource Vmware.Col.Ip}" />
+                                            <ColumnDefinition Width="{StaticResource Vmware.Col.Os}" />
+                                            <ColumnDefinition Width="{StaticResource Vmware.Col.State}" />
+                                            <ColumnDefinition Width="{StaticResource Vmware.Col.Spec}" />
+                                            <ColumnDefinition Width="96" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock VerticalAlignment="Center">
-                                            <Run Text="{Binding PowerGlyph, Mode=OneWay}" /><Run Text=" " /><Run Text="{Binding PowerText, Mode=OneWay}" />
-                                        </TextBlock>
-                                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
-                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
-                                        <TextBlock Grid.Column="2" Text="{Binding ToolsText}" VerticalAlignment="Center" Margin="8,0"
-                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding ToolsText}">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding ToolsMissing}" Value="True">
-                                                            <Setter Property="Foreground" Value="{DynamicResource Status.Warning}" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                        <StackPanel Grid.Column="3" Orientation="Horizontal" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolToBool}}">
-                                            <Button Style="{StaticResource Button.Secondary}" Content="控制台" Click="OnConsoleClick"
-                                                    IsEnabled="{Binding CanOpenConsole}" />
-                                            <Button Style="{StaticResource Button.Secondary}" Content="电源 ▾" Margin="8,0,0,0" Click="OnPowerButtonClick" />
-                                            <Button Style="{StaticResource Button.Secondary}" Content="快照" Margin="8,0,0,0" Click="OnSnapshotsClick" />
+
+                                        <!-- 名称：设备图标块（按客户机系统选图标，运行中带淡色底） -->
+                                        <Grid VerticalAlignment="Center">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Grid Width="34" Height="34">
+                                                <Border Style="{StaticResource IconTile.Background}" Width="34" Height="34" Background="{DynamicResource Bg.Subtle}" />
+                                                <Border Style="{StaticResource IconTile.Background}" Width="34" Height="34" Background="{DynamicResource Brand.Default}"
+                                                        Opacity="{StaticResource IconTile.ColorBgOpacity}"
+                                                        Visibility="{Binding IsPoweredOn, Converter={StaticResource BoolToVisibility}}" />
+                                                <Image Style="{StaticResource Vmware.DeviceImage}" Width="24" Height="24"
+                                                       Source="{Binding DeviceIconKey, Converter={StaticResource Controls.KeyToImageSource}, ConverterParameter=DeviceIcon.VirtualMachine}" />
+                                            </Grid>
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" Style="{StaticResource Text.Body}" Margin="10,0,10,0"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                        </Grid>
+
+                                        <TextBlock Grid.Column="1" Text="{Binding IpText}" Style="{StaticResource Text.Caption}"
+                                                   Foreground="{DynamicResource Text.Secondary}" FontFamily="{StaticResource MonoFont}"
+                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="2" Text="{Binding GuestOsShortText}" Style="{StaticResource Text.Caption}"
+                                                   Foreground="{DynamicResource Text.Secondary}" Margin="0,0,10,0"
+                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding GuestOsText}" />
+
+                                        <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Ellipse Style="{StaticResource Vmware.StateDot}" Width="7" Height="7" Margin="0,0,6,0" />
+                                            <TextBlock Text="{Binding PowerText}" Style="{StaticResource Vmware.StateText}" />
+                                        </StackPanel>
+
+                                        <TextBlock Grid.Column="4" Text="{Binding CpuMemoryText}" Style="{StaticResource Text.Caption}"
+                                                   Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
+
+                                        <!-- 行尾操作：主操作随状态变化（运行中=控制台，已关机 / 挂起=开机），其余收进「⋯」菜单 -->
+                                        <StackPanel Grid.Column="5" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                    IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolToBool}}">
+                                            <Button Style="{StaticResource Button.Icon}" Width="30" Height="30" MinWidth="30" MinHeight="30" FontSize="15"
+                                                    Content="{StaticResource Ui.Console}" ToolTip="打开控制台" Click="OnConsoleClick"
+                                                    Visibility="{Binding CanOpenConsole, Converter={StaticResource BoolToVisibility}}" />
+                                            <Button Style="{StaticResource Button.Icon}" Width="30" Height="30" MinWidth="30" MinHeight="30" FontSize="15"
+                                                    Content="{StaticResource Ui.Power}" ToolTip="开机" Click="OnPowerOnClick"
+                                                    Visibility="{Binding CanPowerOn, Converter={StaticResource BoolToVisibility}}" />
+                                            <Button Style="{StaticResource Button.Icon}" Width="30" Height="30" MinWidth="30" MinHeight="30" FontSize="15"
+                                                    Content="{StaticResource Ui.Snapshot}" ToolTip="快照" Click="OnSnapshotsClick" />
+                                            <Button Style="{StaticResource Button.Icon}" Width="30" Height="30" MinWidth="30" MinHeight="30" FontSize="15"
+                                                    Content="{StaticResource Ui.More}" ToolTip="更多操作" Click="OnMoreButtonClick" />
                                         </StackPanel>
                                     </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
 
-                        <TextBlock Text="该来源下没有虚拟机" Style="{StaticResource Text.BodySecondary}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Visibility="{Binding ShowNoVms, Converter={StaticResource BoolToVisibility}}" />
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Visibility="{Binding ShowNoVms, Converter={StaticResource BoolToVisibility}}">
+                            <Grid Margin="16,28">
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="320">
+                                    <ContentControl Style="{StaticResource Vmware.EmptyIcon}" Content="{StaticResource Ui.Server.Filled}" />
+                                    <TextBlock Text="来源已连接，暂无虚拟机" Style="{StaticResource Vmware.EmptyTitle}" />
+                                    <TextBlock Text="此来源当前返回 0 台虚拟机。&#x0a;创建或注册虚拟机后，刷新即可查看。" Style="{StaticResource Vmware.EmptyDescription}" />
+                                    <Button Style="{StaticResource Button.Secondary}" Content="刷新列表" Command="{Binding RefreshCommand}"
+                                            HorizontalAlignment="Center" Margin="0,20,0,0" />
+                                </StackPanel>
+                            </Grid>
+                        </ScrollViewer>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Visibility="{Binding ShowNoMatches, Converter={StaticResource BoolToVisibility}}">
+                            <Grid Margin="16,28">
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="320">
+                                    <ContentControl Style="{StaticResource Vmware.EmptyIcon}" Content="{StaticResource Ui.Search}" />
+                                    <TextBlock Text="没有找到匹配的虚拟机" Style="{StaticResource Vmware.EmptyTitle}" />
+                                    <TextBlock Text="试试其他名称、IP 或操作系统，&#x0a;也可以重置搜索与状态筛选。" Style="{StaticResource Vmware.EmptyDescription}" />
+                                    <Button Style="{StaticResource Button.Secondary}" Content="重置搜索与筛选" Command="{Binding ResetFiltersCommand}"
+                                            HorizontalAlignment="Center" Margin="0,20,0,0" />
+                                    <TextBlock Text="仅重置当前筛选，保留已选来源" Style="{StaticResource Text.Caption}"
+                                               TextWrapping="Wrap" TextAlignment="Center" Margin="0,12,0,0" />
+                                </StackPanel>
+                            </Grid>
+                        </ScrollViewer>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Visibility="{Binding ShowLoadingVms, Converter={StaticResource BoolToVisibility}}">
+                            <Grid Margin="16,28">
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="320">
+                                    <ContentControl Style="{StaticResource Vmware.EmptyIcon}" Content="{StaticResource Ui.Pending}" />
+                                    <TextBlock Text="正在读取虚拟机" Style="{StaticResource Vmware.EmptyTitle}" />
+                                    <TextBlock Text="正在连接管理来源并获取最新清单，&#x0a;首次读取可能需要一点时间。" Style="{StaticResource Vmware.EmptyDescription}" />
+                                    <ProgressBar IsIndeterminate="True" Height="3" Width="120" Margin="0,22,0,0"
+                                                 AutomationProperties.Name="正在读取虚拟机"
+                                                 Foreground="{DynamicResource Brand.Default}" Background="{DynamicResource Bg.Subtle}" />
+                                </StackPanel>
+                            </Grid>
+                        </ScrollViewer>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Visibility="{Binding ShowLoadError, Converter={StaticResource BoolToVisibility}}">
+                            <Grid Margin="16,28">
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="340">
+                                    <ContentControl Style="{StaticResource Vmware.EmptyIcon}" Content="{StaticResource Ui.Server.Filled}"
+                                                    Foreground="{DynamicResource Status.Warning}" />
+                                    <TextBlock Text="暂时无法读取虚拟机" Style="{StaticResource Vmware.EmptyTitle}" />
+                                    <TextBlock Text="请检查网络、来源地址与登录凭据。&#x0a;可重试连接，或编辑来源后重新读取。" Style="{StaticResource Vmware.EmptyDescription}" />
+                                    <WrapPanel HorizontalAlignment="Center" Margin="0,16,0,0">
+                                        <Button Style="{StaticResource Button.Primary}" Content="重新读取" Command="{Binding RefreshCommand}" Margin="4" />
+                                        <Button Style="{StaticResource Button.Secondary}" Content="编辑来源" Command="{Binding EditSourceCommand}" Margin="4" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Grid>
+                        </ScrollViewer>
                     </Grid>
+                    <Border Grid.Row="3" Style="{StaticResource Surface.Divider}" VerticalAlignment="Top" />
+                    <TextBlock Grid.Row="3" Text="{Binding ListSummaryText}" Style="{StaticResource Text.Caption}" Margin="18,9,18,10" />
+                </Grid>
+            </Border>
+
+            <!-- 右：详情 -->
+            <Border x:Name="DetailPanel" Grid.Column="4" Style="{StaticResource Vmware.Panel}" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource Stroke.Subtle}">
+                <Grid>
+                    <!-- 未选中 -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Visibility="{Binding ShowNoSelection, Converter={StaticResource BoolToVisibility}}">
+                        <Grid Margin="18,24">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="220">
+                                <Grid Width="48" Height="48" HorizontalAlignment="Center">
+                                    <Border CornerRadius="{StaticResource Radius.Medium}" Background="{DynamicResource Bg.Subtle}" />
+                                    <ContentControl Content="{StaticResource Ui.Console}" FontSize="22"
+                                                    Foreground="{DynamicResource Text.Tertiary}"
+                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Grid>
+                                <TextBlock Text="虚拟机详情" Style="{StaticResource Vmware.EmptyTitle}" FontSize="14" />
+                                <TextBlock Text="{Binding NoSelectionDescription}" Style="{StaticResource Vmware.EmptyDescription}" FontSize="12" />
+                            </StackPanel>
+                        </Grid>
+                    </ScrollViewer>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  Visibility="{Binding HasSelectedVm, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel DataContext="{Binding SelectedVm}" Margin="18,18,18,18">
+                            <!-- 标题 -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid Width="48" Height="48" VerticalAlignment="Top">
+                                    <Border Style="{StaticResource IconTile.Background}" Width="48" Height="48" Background="{DynamicResource Bg.Subtle}" />
+                                    <Border Style="{StaticResource IconTile.Background}" Width="48" Height="48" Background="{DynamicResource Brand.Default}"
+                                            Opacity="{StaticResource IconTile.ColorBgOpacity}"
+                                            Visibility="{Binding IsPoweredOn, Converter={StaticResource BoolToVisibility}}" />
+                                    <Image Style="{StaticResource Vmware.DeviceImage}" Width="34" Height="34"
+                                           Source="{Binding DeviceIconKey, Converter={StaticResource Controls.KeyToImageSource}, ConverterParameter=DeviceIcon.VirtualMachine}" />
+                                </Grid>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.SectionTitle}" TextWrapping="Wrap"
+                                               MaxHeight="44" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <Ellipse Style="{StaticResource Vmware.StateDot}" Width="7" Height="7" Margin="0,0,6,0" />
+                                        <TextBlock Text="{Binding PowerText}" Style="{StaticResource Vmware.StateText}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- 主操作：忙碌时整体禁用（外层 IsEnabled 与按钮自身 CanOpenConsole 叠加） -->
+                            <StackPanel IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolToBool}}" Margin="0,18,0,0">
+                                <!-- 主按钮随状态切换：运行中=打开控制台，已关机 / 挂起=开机 -->
+                                <Button Style="{StaticResource Button.Primary}" Content="打开控制台" HorizontalAlignment="Stretch"
+                                        Click="OnConsoleClick" Visibility="{Binding CanOpenConsole, Converter={StaticResource BoolToVisibility}}" />
+                                <Button Style="{StaticResource Button.Primary}" Content="开机" HorizontalAlignment="Stretch"
+                                        Click="OnPowerOnClick" Visibility="{Binding CanPowerOn, Converter={StaticResource BoolToVisibility}}" />
+                                <UniformGrid Columns="2" Margin="0,8,0,0">
+                                    <Button Style="{StaticResource Button.Secondary}" Content="电源 ▾" Margin="0,0,4,0" HorizontalAlignment="Stretch"
+                                            Click="OnPowerButtonClick" />
+                                    <Button Style="{StaticResource Button.Secondary}" Content="快照" Margin="4,0,0,0" HorizontalAlignment="Stretch"
+                                            Click="OnSnapshotsClick" />
+                                </UniformGrid>
+                            </StackPanel>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,18,0,14" />
+                            <TextBlock Text="基本信息" Style="{StaticResource Text.Label}" Margin="0,0,0,10" />
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="92" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Text="来源" Style="{StaticResource Vmware.KvLabel}" />
+                                <TextBlock Grid.Column="1" Style="{StaticResource Vmware.KvValue}" Margin="0,0,0,10"
+                                           Text="{Binding DataContext.SelectedSource.Name, ElementName=PageRoot}" />
+
+                                <TextBlock Grid.Row="1" Text="操作系统" Style="{StaticResource Vmware.KvLabel}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Vmware.KvValue}" Margin="0,0,0,10" Text="{Binding GuestOsText}" />
+
+                                <TextBlock Grid.Row="2" Text="IP 地址" Style="{StaticResource Vmware.KvLabel}" />
+                                <Grid Grid.Row="2" Grid.Column="1" Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource Vmware.KvValue}" FontFamily="{StaticResource MonoFont}" Text="{Binding IpText}" />
+                                    <Button Grid.Column="1" Style="{StaticResource Button.Icon}" Width="22" Height="22" MinWidth="22" MinHeight="22" FontSize="12"
+                                            HorizontalAlignment="Left" Margin="6,-3,0,-3" Content="{StaticResource Ui.Copy}" ToolTip="复制 IP 地址"
+                                            Tag="copyip" Click="OnCopyClick" Visibility="{Binding HasIp, Converter={StaticResource BoolToVisibility}}" />
+                                </Grid>
+
+                                <TextBlock Grid.Row="3" Text="CPU" Style="{StaticResource Vmware.KvLabel}" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource Vmware.KvValue}" Margin="0,0,0,10" Text="{Binding CpuText}" />
+
+                                <TextBlock Grid.Row="4" Text="内存" Style="{StaticResource Vmware.KvLabel}" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource Vmware.KvValue}" Margin="0,0,0,10" Text="{Binding MemoryText}" />
+
+                                <TextBlock Grid.Row="5" Text="VMware Tools" Style="{StaticResource Vmware.KvLabel}" />
+                                <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,0,0,10">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Vmware.KvValue}">
+                                            <Setter Property="Text" Value="{Binding ToolsText}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasToolsText}" Value="False">
+                                                    <Setter Property="Text" Value="—" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding ToolsMissing}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Status.Warning}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <TextBlock Grid.Row="6" Text="运行时长" Style="{StaticResource Vmware.KvLabel}" />
+                                <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource Vmware.KvValue}" Margin="0,0,0,10" Text="{Binding UptimeText}" />
+
+                                <TextBlock Grid.Row="7" Text="虚拟机 ID" Style="{StaticResource Vmware.KvLabel}" />
+                                <Grid Grid.Row="7" Grid.Column="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource Vmware.KvValue}" TextWrapping="NoWrap" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                               Text="{Binding InstanceIdText}" ToolTip="{Binding InstanceIdText}" />
+                                    <Button Grid.Column="1" Style="{StaticResource Button.Icon}" Width="22" Height="22" MinWidth="22" MinHeight="22" FontSize="12"
+                                            Margin="4,-3,0,-3" Content="{StaticResource Ui.Copy}" ToolTip="复制虚拟机 ID"
+                                            Tag="copyid" Click="OnCopyClick" Visibility="{Binding HasInstanceId, Converter={StaticResource BoolToVisibility}}" />
+                                </Grid>
+                            </Grid>
+
+                            <StackPanel Visibility="{Binding HasNotes, Converter={StaticResource BoolToVisibility}}">
+                                <Border Style="{StaticResource Surface.Divider}" Margin="0,16,0,14" />
+                                <TextBlock Text="备注" Style="{StaticResource Text.Label}" Margin="0,0,0,8" />
+                                <TextBlock Text="{Binding NotesText}" Style="{StaticResource Text.BodySecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
                 </Grid>
             </Border>
         </Grid>

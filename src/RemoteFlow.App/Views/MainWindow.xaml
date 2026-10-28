@@ -258,10 +258,29 @@
             <Setter Property="IsHitTestVisible" Value="False" />
             <Setter Property="Background" Value="{DynamicResource Brand.Default}" />
             <Style.Triggers>
-                <DataTrigger Binding="{Binding OpenSessionCount}" Value="0">
+                <DataTrigger Binding="{Binding ConnectionSessionCount}" Value="0">
                     <Setter Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding HasInterruptedSession}" Value="True">
+                <DataTrigger Binding="{Binding HasInterruptedConnectionSession}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Status.Danger}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="Nav.VmwareCountBadge" TargetType="Border">
+            <Setter Property="MinWidth" Value="15" />
+            <Setter Property="Height" Value="15" />
+            <Setter Property="Padding" Value="4,0" />
+            <Setter Property="CornerRadius" Value="7.5" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="0,2,2,0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="Background" Value="{DynamicResource Brand.Default}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding VmwareSessionCount}" Value="0">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding HasInterruptedVmwareSession}" Value="True">
                     <Setter Property="Background" Value="{DynamicResource Status.Danger}" />
                 </DataTrigger>
             </Style.Triggers>
@@ -648,15 +667,24 @@
                                              IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Connections, Mode=TwoWay}"
                                              Tag="{x:Static vm:NavigationPage.Connections}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Connections" />
                                 <Border Style="{StaticResource Nav.CountBadge}"
-                                        ToolTip="{Binding OpenSessionCount, StringFormat=已打开 {0} 个会话}">
-                                    <TextBlock Text="{Binding OpenSessionCount}" FontSize="9.5" FontWeight="SemiBold"
+                                        ToolTip="{Binding ConnectionSessionCount, StringFormat=已打开 {0} 个会话}">
+                                    <TextBlock Text="{Binding ConnectionSessionCount}" FontSize="9.5" FontWeight="SemiBold"
                                                Foreground="{DynamicResource Text.OnAccent}"
                                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
                             </Grid>
-                            <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="虚拟化（ESXi / vCenter）"
-                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Vmware, Mode=TwoWay}"
-                                         Tag="{x:Static vm:NavigationPage.Vmware}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Server" />
+                            <!-- 虚拟化 + 打开的虚拟机控制台数角标（口径与连接工作台分开） -->
+                            <Grid HorizontalAlignment="Center">
+                                <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="虚拟化（ESXi / vCenter）"
+                                             IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Vmware, Mode=TwoWay}"
+                                             Tag="{x:Static vm:NavigationPage.Vmware}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Server" />
+                                <Border Style="{StaticResource Nav.VmwareCountBadge}"
+                                        ToolTip="{Binding VmwareSessionCount, StringFormat=已打开 {0} 个虚拟机控制台}">
+                                    <TextBlock Text="{Binding VmwareSessionCount}" FontSize="9.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Text.OnAccent}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </Grid>
                             <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="凭据"
                                          IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Credentials, Mode=TwoWay}"
                                          Tag="{x:Static vm:NavigationPage.Credentials}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Credential" />

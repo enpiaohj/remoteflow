@@ -45,7 +45,9 @@ public interface IVmwareConnector
 /// VMware Tools 运行状态（guest.toolsRunningStatus 原值，如 guestToolsRunning / guestToolsNotRunning）；
 /// 未取到时为 null。它决定鼠标能否精确定位、分辨率能否随窗口调整。
 /// </param>
-public sealed record VsphereVm(string Reference, string Name, string PowerState, string? InstanceUuid, string? ToolsStatus = null)
+public sealed record VsphereVm(string Reference, string Name, string PowerState, string? InstanceUuid, string? ToolsStatus = null,
+    string? GuestOs = null, string? IpAddress = null, int? CpuCount = null, int? MemoryMb = null, long? UptimeSeconds = null,
+    string? Notes = null)
 {
     /// <summary>VMware Tools 是否在运行。状态未知时按未运行处理（宁可提示，也不假装可用）。</summary>
     public bool ToolsRunning => ToolsStatus is "guestToolsRunning" or "guestToolsExecutingScripts";

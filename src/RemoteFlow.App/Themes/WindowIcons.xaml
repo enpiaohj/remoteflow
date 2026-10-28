@@ -22,4 +22,12 @@
 
     <!-- 分辨率：显示器轮廓 + 内部一块小矩形（示意画面尺寸）。 -->
     <Geometry x:Key="Ui.Resolution">F1 M0,0 M20,20 M3,3 H17 V14 H3 Z M4,4 V13 H16 V4 Z M6,6 H11 V11 H6 Z M7,16 H13 V17 H7 Z</Geometry>
+
+
+    <!-- 快照：相机机身 + 镜头。 -->
+    <Geometry x:Key="Ui.Snapshot">F1 M0,0 M20,20 M2,6 H6 L7.5,4 H12.5 L14,6 H18 V16 H2 Z M10,8 A3,3 0 1 0 10,14 A3,3 0 1 0 10,8 Z M10,9.2 A1.8,1.8 0 1 1 10,12.8 A1.8,1.8 0 1 1 10,9.2 Z</Geometry>
+
+    <!-- 控制台：显示器轮廓 + 命令行提示符 “&gt;_”。 -->
+    <Geometry x:Key="Ui.Console">F1 M0,0 M20,20 M2,3 H18 V15 H2 Z M3,4 V14 H17 V4 Z M5.2,6.2 L8.8,9 L5.2,11.8 L4.6,11 L7.3,9 L4.6,7 Z M10,11.5 H14 V12.5 H10 Z M7,16.5 H13 V17.5 H7 Z</Geometry>
+
 </ResourceDictionary>

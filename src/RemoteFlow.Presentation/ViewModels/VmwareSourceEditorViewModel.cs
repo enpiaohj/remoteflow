@@ -67,7 +67,24 @@ public sealed partial class VmwareSourceEditorViewModel : ObservableObject
     private string _userName = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCertPin))]
+    [NotifyPropertyChangedFor(nameof(CertPinDisplay))]
     private string _certPin;
+
+    public bool HasCertPin => !string.IsNullOrEmpty(CertPin);
+
+    /// <summary>
+    /// 指纹按「AA:BB:CC…」每两位一组显示，与 ESXi / vCenter 证书详情里的格式一致，方便逐字核对。
+    /// 只做显示，保存的仍是原值。
+    /// </summary>
+    public string CertPinDisplay
+    {
+        get
+        {
+            var hex = new string((CertPin ?? string.Empty).Where(Uri.IsHexDigit).Select(char.ToUpperInvariant).ToArray());
+            return hex.Length == 0 ? string.Empty : string.Join(':', Enumerable.Range(0, hex.Length / 2).Select(i => hex.Substring(i * 2, 2)));
+        }
+    }
 
     /// <summary>用户已确认过当前指纹。主机或端口变化会使其失效，必须重新获取。</summary>
     [ObservableProperty]

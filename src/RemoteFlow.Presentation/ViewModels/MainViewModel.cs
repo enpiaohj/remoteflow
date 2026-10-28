@@ -107,7 +107,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Tabs.CollectionChanged += (_, _) =>
         {
             OnPropertyChanged(nameof(OpenSessionCount));
-            OnPropertyChanged(nameof(HasInterruptedSession));
+            OnPropertyChanged(nameof(ConnectionSessionCount));
+            OnPropertyChanged(nameof(VmwareSessionCount));
+            RaiseInterruptedChanged();
         };
 
         // 会话由各页面通过 SessionManager 创建，主窗口只负责把它呈现为 Tab。
@@ -311,6 +313,28 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public bool HasInterruptedSession => Tabs.OfType<SessionTabViewModel>()
         .Any(t => t.Session.State is ConnectionState.Failed or ConnectionState.Disconnected);
+
+    /// <summary>
+    /// 「连接工作台」图标的角标：只算普通连接的会话。VMware 控制台会话属于「虚拟化」页，
+    /// 不能算进这里（否则开一个虚拟机控制台，计数却跑到连接工作台图标上）。
+    /// </summary>
+    public int ConnectionSessionCount => Tabs.OfType<SessionTabViewModel>().Count(t => !t.IsVmwareConsole);
+
+    /// <summary>「虚拟化」图标的角标：只算 VMware 控制台会话。</summary>
+    public int VmwareSessionCount => Tabs.OfType<SessionTabViewModel>().Count(t => t.IsVmwareConsole);
+
+    public bool HasInterruptedConnectionSession => Tabs.OfType<SessionTabViewModel>()
+        .Any(t => !t.IsVmwareConsole && t.Session.State is ConnectionState.Failed or ConnectionState.Disconnected);
+
+    public bool HasInterruptedVmwareSession => Tabs.OfType<SessionTabViewModel>()
+        .Any(t => t.IsVmwareConsole && t.Session.State is ConnectionState.Failed or ConnectionState.Disconnected);
+
+    private void RaiseInterruptedChanged()
+    {
+        OnPropertyChanged(nameof(HasInterruptedSession));
+        OnPropertyChanged(nameof(HasInterruptedConnectionSession));
+        OnPropertyChanged(nameof(HasInterruptedVmwareSession));
+    }
 
     /// <summary>
     /// 版本号，放底部状态栏常驻显示——之前只在设置页「常规」标签最底下才能看到，
@@ -836,7 +860,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         OnPropertyChanged(nameof(SessionStatusText));
         OnPropertyChanged(nameof(SessionStatusBrushKey));
-        OnPropertyChanged(nameof(HasInterruptedSession));
+        RaiseInterruptedChanged();
     }
 
     // ── 文件传输 Tab ──────────────────────────────────────────────

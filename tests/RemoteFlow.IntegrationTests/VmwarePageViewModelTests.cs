@@ -18,6 +18,7 @@ public sealed class VmwarePageViewModelTests : IDisposable
     private readonly TempWorkspace _workspace = new();
     private readonly FakeVmwareConnector _connector = new();
     private readonly RecordingDialogs _dialogs = new();
+    private readonly RefreshTimerFactory _timers = new();
     private readonly VmwareService _service;
     private readonly VmwarePageViewModel _page;
     private VmwareSource _source = null!;
@@ -29,7 +30,7 @@ public sealed class VmwarePageViewModelTests : IDisposable
         var credentials = new CredentialService(
             new SqliteCredentialRepository(database), new InMemoryCredentialVault(), NullLogger<CredentialService>.Instance);
         _service = new VmwareService(_connector, new SqliteVmwareSourceRepository(database), credentials, NullLogger<VmwareService>.Instance);
-        _page = new VmwarePageViewModel(_service, credentials, _dialogs, new ManualTimerFactory());
+        _page = new VmwarePageViewModel(_service, credentials, _dialogs, _timers);
         _connector.Vms =
         [
             new VsphereVm("vm-2", "web-02", "poweredOff", "50-02"),
@@ -57,6 +58,137 @@ public sealed class VmwarePageViewModelTests : IDisposable
     private async Task WaitForVmsAsync()
     {
         for (var i = 0; i < 100 && _page.Vms.Count == 0 && !_page.IsStatusError; i++) await Task.Delay(20);
+    }
+
+    private static VsphereVm RichVm(string reference, string name, string power, string? os, string? ip, int cpu, int memoryMb, long? uptime = null)
+        => new(reference, name, power, "50-" + reference, "guestToolsRunning", os, ip, cpu, memoryMb, uptime, "备注");
+
+    [Fact]
+    public async Task 状态筛选与数量随列表更新()
+    {
+        _connector.Vms =
+        [
+            RichVm("a", "alpha", "poweredOn", "Microsoft Windows Server 2019 (64-bit)", "203.0.113.1", 4, 8192),
+            RichVm("b", "bravo", "poweredOn", "Ubuntu Linux (64-bit)", "203.0.113.2", 2, 2048),
+            RichVm("c", "charlie", "poweredOff", null, null, 1, 512)
+        ];
+        await LoadWithSourceAsync();
+
+        Assert.Equal([3, 2, 1, 0], _page.FilterItems.Select(i => i.Count));
+        Assert.Equal("3 台虚拟机 · 2 运行中", _page.SummaryText);
+
+        _page.SelectedFilter = _page.FilterItems.Single(i => i.Filter == VmwareStateFilter.Stopped);
+        Assert.Equal(["charlie"], _page.Vms.Select(v => v.Name));
+
+        // 数量不受筛选影响。
+        Assert.Equal(2, _page.RunningCount);
+    }
+
+    [Fact]
+    public async Task 搜索同时匹配名称_IP与操作系统()
+    {
+        _connector.Vms =
+        [
+            RichVm("a", "alpha", "poweredOn", "Microsoft Windows Server 2019 (64-bit)", "203.0.113.1", 4, 8192),
+            RichVm("b", "bravo", "poweredOn", "Ubuntu Linux (64-bit)", "203.0.113.2", 2, 2048)
+        ];
+        await LoadWithSourceAsync();
+
+        _page.SearchText = "203.0.113.2";
+        Assert.Equal(["bravo"], _page.Vms.Select(v => v.Name));
+
+        _page.SearchText = "ubuntu";
+        Assert.Equal(["bravo"], _page.Vms.Select(v => v.Name));
+
+        _page.SearchText = "ALPHA";
+        Assert.Equal(["alpha"], _page.Vms.Select(v => v.Name));
+    }
+
+    [Fact]
+    public async Task 刷新后保持选中的虚拟机_并默认选中第一台()
+    {
+        _connector.Vms =
+        [
+            RichVm("a", "alpha", "poweredOn", null, null, 1, 1024),
+            RichVm("b", "bravo", "poweredOn", null, null, 1, 1024)
+        ];
+        await LoadWithSourceAsync();
+        Assert.Equal("alpha", _page.SelectedVm?.Name);
+
+        _page.SelectedVm = _page.Vms.Single(v => v.Name == "bravo");
+        _page.SearchText = string.Empty; // 触发一次重建列表
+        Assert.Equal("bravo", _page.SelectedVm?.Name);
+
+        // 选中项被筛掉时落到第一行，而不是留下一个不在列表里的选中项。
+        _page.SearchText = "alpha";
+        Assert.Equal("alpha", _page.SelectedVm?.Name);
+    }
+
+    [Fact]
+    public async Task 点列头排序_同列再点反向_IP按数值排()
+    {
+        _connector.Vms =
+        [
+            RichVm("a", "alpha", "poweredOff", null, "203.0.113.20", 1, 4096),
+            RichVm("b", "bravo", "poweredOn", null, "203.0.113.3", 1, 1024),
+            RichVm("c", "charlie", "poweredOn", null, null, 1, 2048)
+        ];
+        await LoadWithSourceAsync();
+        Assert.Equal(["alpha", "bravo", "charlie"], _page.Vms.Select(v => v.Name));
+
+        _page.SortByCommand.Execute("Ip");
+        Assert.Equal(["bravo", "alpha", "charlie"], _page.Vms.Select(v => v.Name)); // 3 < 20，没有 IP 的排最后
+        Assert.Equal("↑", _page.IpSortGlyph);
+        Assert.Equal(string.Empty, _page.NameSortGlyph);
+
+        _page.SortByCommand.Execute("Ip");
+        Assert.Equal("↓", _page.IpSortGlyph);
+        Assert.Equal("charlie", _page.Vms[0].Name);
+
+        _page.SortByCommand.Execute("State");
+        Assert.Equal(["bravo", "charlie", "alpha"], _page.Vms.Select(v => v.Name)); // 运行中在前，同状态按名称
+
+        _page.SortByCommand.Execute("Memory");
+        Assert.Equal(["bravo", "charlie", "alpha"], _page.Vms.Select(v => v.Name));
+    }
+
+    [Fact]
+    public async Task 列表汇总在筛选时显示显示数与总数()
+    {
+        _connector.Vms =
+        [
+            RichVm("a", "alpha", "poweredOn", null, null, 1, 1024),
+            RichVm("b", "bravo", "poweredOff", null, null, 1, 1024)
+        ];
+        await LoadWithSourceAsync();
+        Assert.Equal("共 2 台", _page.ListSummaryText);
+
+        _page.SearchText = "alpha";
+        Assert.Equal("显示 1 / 共 2 台", _page.ListSummaryText);
+    }
+
+    [Fact]
+    public void 行显示属性_系统短名_图标_内存_时长()
+    {
+        var win = new VmwareVmItemViewModel(RichVm("a", "w", "poweredOn", "Microsoft Windows Server 2019 (64-bit)", "203.0.113.1", 4, 6144, 90_000));
+        Assert.Equal("Windows Server 2019", win.GuestOsShortText);
+        Assert.Equal("DeviceIcon.WindowsServer", win.DeviceIconKey);
+        Assert.Equal("6 GB", win.MemoryText);
+        Assert.Equal("4 核 · 6 GB", win.CpuMemoryText);
+        Assert.Equal("1 天 1 小时", win.UptimeText);
+
+        var pc = new VmwareVmItemViewModel(RichVm("b", "p", "poweredOn", "Microsoft Windows 10 (64-bit)", null, 2, 512));
+        Assert.Equal("DeviceIcon.WindowsPc", pc.DeviceIconKey);
+        Assert.Equal("512 MB", pc.MemoryText);
+
+        var linux = new VmwareVmItemViewModel(RichVm("c", "l", "poweredOff", "Ubuntu Linux (64-bit)", null, 2, 2048, 500));
+        Assert.Equal("DeviceIcon.Linux", linux.DeviceIconKey);
+        Assert.Equal("—", linux.UptimeText); // 已关机没有运行时长
+        Assert.Equal("—", linux.IpText);
+
+        var unknown = new VmwareVmItemViewModel(new VsphereVm("d", "u", "poweredOn", null));
+        Assert.Equal("DeviceIcon.VirtualMachine", unknown.DeviceIconKey);
+        Assert.Equal("—", unknown.CpuMemoryText);
     }
 
     [Fact]
@@ -295,6 +427,57 @@ public sealed class VmwarePageViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task 来源编辑器指纹按两位一组冒号分隔显示_保存值不变()
+    {
+        var editor = new VmwareSourceEditorViewModel(_service, null, []) { Host = "esxi.example.test" };
+        Assert.False(editor.HasCertPin);
+        Assert.Equal(string.Empty, editor.CertPinDisplay);
+
+        await editor.FetchPinCommand.ExecuteAsync(null);
+
+        Assert.True(editor.HasCertPin);
+        var expected = string.Join(':', Enumerable.Range(0, FakeVmwareConnector.Pin.Length / 2)
+            .Select(i => FakeVmwareConnector.Pin.Substring(i * 2, 2).ToUpperInvariant()));
+        Assert.Equal(expected, editor.CertPinDisplay);
+        Assert.Equal(FakeVmwareConnector.Pin, editor.CertPin); // 显示用的分组格式不能污染要保存的原值
+
+        // 改了地址，旧指纹立即失效，显示也随之清空。
+        editor.Host = "other.example.test";
+        Assert.False(editor.HasCertPin);
+        Assert.Equal(string.Empty, editor.CertPinDisplay);
+    }
+
+    [Fact]
+    public void 快照行显示属性_层级缩进_当前标记_说明与数量()
+    {
+        var root = new VmwareSnapshotItem(new VmSnapshot("s1", "基线", "", null, false, 0));
+        var child = new VmwareSnapshotItem(new VmSnapshot("s2", "升级前", "补丁前的状态", new DateTimeOffset(2026, 5, 13, 13, 3, 0, TimeSpan.Zero), true, 1));
+        var deep = new VmwareSnapshotItem(new VmSnapshot("s3", "很深", "", null, false, 20));
+
+        Assert.Equal(0, root.IndentLeft);
+        Assert.Equal(22, child.IndentLeft);
+        Assert.Equal(6 * 22, deep.IndentLeft); // 缩进有上限，层级再深也不会把名称挤出窗口
+        Assert.Equal("基线", root.NameText);
+        Assert.False(root.IsCurrent);
+        Assert.True(child.IsCurrent);
+        Assert.False(root.HasDescription);
+        Assert.True(child.HasDescription);
+    }
+
+    [Fact]
+    public async Task 快照管理的数量说明随列表更新()
+    {
+        await LoadWithSourceAsync();
+        var manager = new VmwareSnapshotManagerViewModel(_service, _source, _connector.Vms[1], _dialogs);
+        await manager.LoadAsync();
+        Assert.Equal(string.Empty, manager.CountText);
+
+        _connector.Snapshots = [new VmSnapshot("a", "甲", "", null, false, 0), new VmSnapshot("b", "乙", "", null, true, 1)];
+        await manager.RefreshCommand.ExecuteAsync(null);
+        Assert.Equal("2 个快照", manager.CountText);
+    }
+
+    [Fact]
     public async Task 来源编辑器新建凭据时缺少密码不保存()
     {
         var editor = new VmwareSourceEditorViewModel(_service, null, []) { Host = "esxi.example.test", UserName = "root" };
@@ -305,6 +488,133 @@ public sealed class VmwarePageViewModelTests : IDisposable
         Assert.Null(editor.Saved);
         Assert.True(editor.IsStatusError);
         Assert.Equal(0, _connector.ConnectCount);
+    }
+
+    [Fact]
+    public async Task 首次加载只显示加载态_成功零台后才显示来源空态()
+    {
+        _source = await _service.SaveSourceAsync(
+            new VmwareSource { Host = "esxi.example.test", CertPinSha256 = FakeVmwareConnector.Pin }, "root", "secret");
+        var pending = new TaskCompletionSource<IReadOnlyList<VsphereVm>>();
+        _connector.ListVmsAsync = _ => pending.Task;
+        var changed = new List<string?>();
+        _page.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        await _page.LoadAsync();
+        Assert.True(_page.ShowLoadingVms);
+        Assert.False(_page.ShowNoVms);
+        Assert.False(_page.ShowNoMatches);
+        Assert.False(_page.ShowLoadError);
+
+        pending.SetResult([]);
+        await WaitUntilAsync(() => !_page.IsLoading);
+        Assert.True(_page.ShowNoVms);
+        Assert.False(_page.ShowLoadingVms);
+        Assert.False(_page.ShowLoadError);
+        Assert.Contains(nameof(_page.ShowNoVms), changed);
+        Assert.Contains(nameof(_page.NoSelectionDescription), changed);
+    }
+
+    [Fact]
+    public async Task 无匹配重置搜索与状态筛选_保留来源和排序()
+    {
+        await LoadWithSourceAsync();
+        var source = _page.SelectedSource;
+        _page.SortByCommand.Execute("Memory");
+        _page.SearchText = "missing";
+        _page.SelectedFilter = _page.FilterItems[1];
+        Assert.True(_page.ShowNoMatches);
+        Assert.False(_page.ShowNoVms);
+        Assert.True(_page.ShowNoSelection);
+
+        _page.ResetFiltersCommand.Execute(null);
+        Assert.Same(source, _page.SelectedSource);
+        Assert.Same(_page.FilterItems[0], _page.SelectedFilter);
+        Assert.Equal(string.Empty, _page.SearchText);
+        Assert.Equal(VmwareSortKey.Memory, _page.SortKey);
+        Assert.Equal(3, _page.Vms.Count);
+        Assert.False(_page.ShowNoMatches);
+        Assert.False(_page.ShowNoSelection);
+    }
+
+    [Fact]
+    public async Task 读取失败显示恢复入口_重试成功清除错误态()
+    {
+        await LoadWithSourceAsync();
+        _connector.FailLogin = true;
+        await _page.RefreshCommand.ExecuteAsync(null);
+        Assert.True(_page.ShowLoadError);
+        Assert.False(_page.ShowNoVms);
+        Assert.Null(_page.SelectedVm);
+        Assert.True(_page.EditSourceCommand.CanExecute(null));
+
+        _connector.FailLogin = false;
+        await _page.RefreshCommand.ExecuteAsync(null);
+        Assert.False(_page.ShowLoadError);
+        Assert.False(_page.IsStatusError);
+        Assert.Equal(3, _page.Vms.Count);
+    }
+
+    [Fact]
+    public async Task 静默刷新失败保留列表与选中项_且错误不会被伪装成空态()
+    {
+        await LoadWithSourceAsync();
+        var selected = _page.SelectedVm;
+        _connector.FailLogin = true;
+        _timers.Timer.Fire();
+        await WaitUntilAsync(() => _page.IsStatusError);
+        Assert.Equal(3, _page.Vms.Count);
+        Assert.Same(selected, _page.SelectedVm);
+        Assert.False(_page.ShowLoadError);
+        Assert.False(_page.ShowNoVms);
+        Assert.Contains("密码", _page.StatusText);
+    }
+
+    [Fact]
+    public async Task 切换来源立即启动新加载_旧请求结束不能覆盖新加载状态()
+    {
+        await LoadWithSourceAsync();
+        var other = await _service.SaveSourceAsync(
+            new VmwareSource { Name = "第二来源", Host = "other.example.test", CertPinSha256 = FakeVmwareConnector.Pin }, "root", "secret");
+        var oldRequest = new TaskCompletionSource<IReadOnlyList<VsphereVm>>();
+        _connector.ListVmsAsync = _ => oldRequest.Task;
+        var oldRefresh = _page.RefreshCommand.ExecuteAsync(null);
+        var newRequest = new TaskCompletionSource<IReadOnlyList<VsphereVm>>();
+        var newStarted = false;
+        _connector.ListVmsAsync = _ => { newStarted = true; return newRequest.Task; };
+        _page.SelectedSource = new VmwareSourceItemViewModel(other);
+        await WaitUntilAsync(() => newStarted);
+        Assert.True(_page.ShowLoadingVms);
+
+        oldRequest.SetResult(_connector.Vms);
+        await oldRefresh;
+        Assert.True(_page.ShowLoadingVms);
+        Assert.Empty(_page.Vms);
+        newRequest.SetResult([]);
+        await WaitUntilAsync(() => !_page.IsLoading);
+        Assert.True(_page.ShowNoVms);
+        Assert.Equal(other.Id, _page.SelectedSource.Source.Id);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        for (var i = 0; i < 100 && !condition(); i++) await Task.Delay(20);
+        Assert.True(condition(), "页面未在预期时间内完成状态转换。");
+    }
+
+    private sealed class RefreshTimerFactory : RemoteFlow.Presentation.Host.IUiTimerFactory
+    {
+        public RefreshTimer Timer { get; } = new();
+        public RemoteFlow.Presentation.Host.IUiTimer Create(TimeSpan interval) => Timer;
+    }
+
+    private sealed class RefreshTimer : RemoteFlow.Presentation.Host.IUiTimer
+    {
+        public TimeSpan Interval { get; set; }
+        public event EventHandler? Tick;
+        public void Fire() => Tick?.Invoke(this, EventArgs.Empty);
+        public void Start() { }
+        public void Stop() { }
+        public void Dispose() { }
     }
 
     private sealed class RecordingDialogs : IDialogService

@@ -19,6 +19,32 @@ public sealed class VmwareSourceItemViewModel(VmwareSource source)
     public string KindText => Source.Kind == VmwareSourceKind.VCenter ? "vCenter" : "ESXi 主机";
 }
 
+public enum VmwareStateFilter
+{
+    All,
+    Running,
+    Stopped,
+    Suspended
+}
+
+public enum VmwareSortKey
+{
+    Name,
+    Ip,
+    State,
+    Memory
+}
+
+/// <summary>左侧「状态」筛选里的一项，数量随刷新更新。</summary>
+public sealed partial class VmwareFilterItemViewModel(VmwareStateFilter filter, string title) : ObservableObject
+{
+    public VmwareStateFilter Filter { get; } = filter;
+    public string Title { get; } = title;
+
+    [ObservableProperty]
+    private int _count;
+}
+
 /// <summary>虚拟机列表中的一行（实时数据）。</summary>
 public sealed partial class VmwareVmItemViewModel(VsphereVm vm) : ObservableObject
 {
@@ -51,6 +77,73 @@ public sealed partial class VmwareVmItemViewModel(VsphereVm vm) : ObservableObje
         : Vm.ToolsRunning ? "VMware Tools 运行中" : "未运行 VMware Tools";
 
     public bool ToolsMissing => IsPoweredOn && !Vm.ToolsRunning;
+
+    public bool HasToolsText => ToolsText.Length > 0;
+
+    /// <summary>IP 由客户机里的 VMware Tools 上报，关机或没装 Tools 时没有。</summary>
+    public string IpText => Vm.IpAddress ?? "—";
+
+    public string GuestOsText => Vm.GuestOs ?? "—";
+
+    /// <summary>表格里用的短名：去掉厂商前缀与位数后缀（完整名称见详情面板）。</summary>
+    public string GuestOsShortText => Vm.GuestOs is { } os
+        ? os.Replace("Microsoft ", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace(" (64-bit)", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace(" (32-bit)", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Trim()
+        : "—";
+
+    public string CpuText => Vm.CpuCount is { } cpu ? $"{cpu} 核" : "—";
+
+    public string MemoryText => Vm.MemoryMb switch
+    {
+        null => "—",
+        >= 1024 => $"{Vm.MemoryMb.Value / 1024.0:0.#} GB",
+        var mb => $"{mb} MB"
+    };
+
+    public string CpuMemoryText => Vm.CpuCount is null && Vm.MemoryMb is null ? "—" : $"{CpuText} · {MemoryText}";
+
+    /// <summary>运行时长只对运行中的虚拟机有意义。</summary>
+    public string UptimeText
+    {
+        get
+        {
+            if (!IsPoweredOn || Vm.UptimeSeconds is not { } seconds) return "—";
+            var span = TimeSpan.FromSeconds(seconds);
+            if (span.TotalDays >= 1) return $"{(int)span.TotalDays} 天 {span.Hours} 小时";
+            if (span.TotalHours >= 1) return $"{(int)span.TotalHours} 小时 {span.Minutes} 分钟";
+            return $"{Math.Max(1, (int)span.TotalMinutes)} 分钟";
+        }
+    }
+
+    public string InstanceIdText => Vm.InstanceUuid ?? "—";
+
+    public bool HasIp => Vm.IpAddress is not null;
+
+    public bool HasInstanceId => Vm.InstanceUuid is not null;
+
+    public string NotesText => Vm.Notes ?? string.Empty;
+
+    public bool HasNotes => !string.IsNullOrWhiteSpace(Vm.Notes);
+
+    /// <summary>按客户机操作系统挑设备图标；识别不了就用通用虚拟机图标。资源键见 DeviceIcons.xaml。</summary>
+    public string DeviceIconKey
+    {
+        get
+        {
+            var os = Vm.GuestOs ?? string.Empty;
+            if (os.Contains("Windows", StringComparison.OrdinalIgnoreCase))
+                return os.Contains("Server", StringComparison.OrdinalIgnoreCase) ? "DeviceIcon.WindowsServer" : "DeviceIcon.WindowsPc";
+            if (LinuxHints.Any(h => os.Contains(h, StringComparison.OrdinalIgnoreCase))) return "DeviceIcon.Linux";
+            if (os.Contains("Mac", StringComparison.OrdinalIgnoreCase) || os.Contains("Darwin", StringComparison.OrdinalIgnoreCase))
+                return "DeviceIcon.Mac";
+            return "DeviceIcon.VirtualMachine";
+        }
+    }
+
+    private static readonly string[] LinuxHints =
+        ["Linux", "Ubuntu", "Debian", "CentOS", "Red Hat", "RHEL", "SUSE", "Fedora", "Rocky", "Alma", "Photon"];
 
     public bool CanOpenConsole => IsPoweredOn;
     public bool CanPowerOn => IsPoweredOff || IsSuspended;
@@ -91,7 +184,46 @@ public sealed partial class VmwarePageViewModel : ObservableObject, IDisposable
         _dialogs = dialogs;
         _timer = timers.Create(RefreshInterval);
         _timer.Tick += async (_, _) => await RefreshVmsAsync(silent: true);
+        _selectedFilter = FilterItems[0];
     }
+
+    public ObservableCollection<VmwareFilterItemViewModel> FilterItems { get; } =
+    [
+        new(VmwareStateFilter.All, "所有虚拟机"),
+        new(VmwareStateFilter.Running, "运行中"),
+        new(VmwareStateFilter.Stopped, "已关机"),
+        new(VmwareStateFilter.Suspended, "已挂起")
+    ];
+
+    [ObservableProperty]
+    private VmwareFilterItemViewModel? _selectedFilter;
+
+    partial void OnSelectedFilterChanged(VmwareFilterItemViewModel? value)
+    {
+        if (value is not null) ApplyFilter();
+    }
+
+    /// <summary>右侧详情面板展示的虚拟机。刷新后按引用保持选中。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedVm))]
+    private VmwareVmItemViewModel? _selectedVm;
+
+    public bool HasSelectedVm => SelectedVm is not null;
+
+    public bool ShowNoSelection => SelectedSource is not null && SelectedVm is null;
+
+    public string NoSelectionDescription => ShowLoadingVms ? "读取完成后，可在这里查看虚拟机详情。"
+        : ShowLoadError ? "恢复连接后，即可查看配置与可用操作。"
+        : ShowNoMatches ? "重置筛选后，选择虚拟机查看配置与可用操作。"
+        : ShowNoVms ? "来源中的虚拟机会显示在左侧列表。"
+        : "在列表中选择虚拟机，查看配置、打开控制台或管理快照。";
+
+    partial void OnSelectedVmChanged(VmwareVmItemViewModel? value) => OnPropertyChanged(nameof(ShowNoSelection));
+
+    public int TotalCount => _allVms.Count;
+
+    /// <summary>页头旁的概览，如「22 台虚拟机 · 14 运行中」。</summary>
+    public string SummaryText => _allVms.Count == 0 ? string.Empty : $"{_allVms.Count} 台虚拟机 · {RunningCount} 运行中";
 
     public ObservableCollection<VmwareSourceItemViewModel> Sources { get; } = [];
 
@@ -120,7 +252,66 @@ public sealed partial class VmwarePageViewModel : ObservableObject, IDisposable
 
     public bool ShowEmptySources => Sources.Count == 0;
 
-    public bool ShowNoVms => SelectedSource is not null && !IsLoading && Vms.Count == 0 && !IsStatusError;
+    private bool _hasLoadedVms;
+    private bool _loadFailed;
+
+    public bool ShowLoadingVms => SelectedSource is not null && IsLoading && !HasAnyVms;
+    public bool ShowLoadError => SelectedSource is not null && !IsLoading && !HasAnyVms && _loadFailed;
+    public bool ShowNoVms => SelectedSource is not null && !IsLoading && _hasLoadedVms && !HasAnyVms && !_loadFailed;
+    public bool ShowNoMatches => SelectedSource is not null && HasAnyVms && Vms.Count == 0;
+
+    private void RaiseEmptyStatesChanged()
+    {
+        OnPropertyChanged(nameof(ShowLoadingVms));
+        OnPropertyChanged(nameof(ShowLoadError));
+        OnPropertyChanged(nameof(ShowNoVms));
+        OnPropertyChanged(nameof(ShowNoMatches));
+        OnPropertyChanged(nameof(ShowNoSelection));
+        OnPropertyChanged(nameof(NoSelectionDescription));
+    }
+
+    partial void OnIsLoadingChanged(bool value) => RaiseEmptyStatesChanged();
+
+    [RelayCommand]
+    private void ResetFilters()
+    {
+        SearchText = string.Empty;
+        SelectedFilter = FilterItems[0];
+    }
+
+    /// <summary>当前来源下各电源状态的虚拟机数量（不受搜索过滤影响，用于页头的概览徽章）。</summary>
+    public int RunningCount => _allVms.Count(v => v.IsPoweredOn);
+
+    public int StoppedCount => _allVms.Count(v => v.IsPoweredOff);
+
+    public int SuspendedCount => _allVms.Count(v => v.IsSuspended);
+
+    public bool HasSuspended => SuspendedCount > 0;
+
+    public bool HasAnyVms => _allVms.Count > 0;
+
+    private void RaiseCountsChanged()
+    {
+        foreach (var item in FilterItems)
+        {
+            item.Count = item.Filter switch
+            {
+                VmwareStateFilter.Running => RunningCount,
+                VmwareStateFilter.Stopped => StoppedCount,
+                VmwareStateFilter.Suspended => SuspendedCount,
+                _ => _allVms.Count
+            };
+        }
+
+        OnPropertyChanged(nameof(TotalCount));
+        OnPropertyChanged(nameof(SummaryText));
+        OnPropertyChanged(nameof(ShowNoSelection));
+        OnPropertyChanged(nameof(RunningCount));
+        OnPropertyChanged(nameof(StoppedCount));
+        OnPropertyChanged(nameof(SuspendedCount));
+        OnPropertyChanged(nameof(HasSuspended));
+        OnPropertyChanged(nameof(HasAnyVms));
+    }
 
     /// <summary>用户要求打开某台虚拟机的控制台；由主窗口接到统一的会话漏斗。</summary>
     public event EventHandler<ConnectionProfile>? OpenConsoleRequested;
@@ -129,9 +320,20 @@ public sealed partial class VmwarePageViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedSourceChanged(VmwareSourceItemViewModel? value)
     {
+        ++_loadVersion;
+        _loadCts?.Cancel();
+        _refreshing = false;
+        _hasLoadedVms = false;
+        _loadFailed = false;
         _allVms.Clear();
         Vms.Clear();
-        OnPropertyChanged(nameof(ShowNoVms));
+        SelectedVm = null;
+        IsStatusError = false;
+        StatusText = string.Empty;
+        IsLoading = value is not null;
+        RaiseCountsChanged();
+        OnPropertyChanged(nameof(ListSummaryText));
+        RaiseEmptyStatesChanged();
         _ = RefreshVmsAsync(silent: false);
     }
 
@@ -209,6 +411,7 @@ public sealed partial class VmwarePageViewModel : ObservableObject, IDisposable
         _refreshing = true;
         var version = ++_loadVersion;
         _loadCts?.Cancel();
+        _loadCts?.Dispose();
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
 
@@ -233,6 +436,8 @@ public sealed partial class VmwarePageViewModel : ObservableObject, IDisposable
                 _allVms.Add(new VmwareVmItemViewModel(vm) { IsBusy = busy.Contains(vm.Reference) });
             }
 
+            _hasLoadedVms = true;
+            _loadFailed = false;
             ApplyFilter();
             if (!silent || DateTime.UtcNow >= _statusHoldUntil)
             {
@@ -253,17 +458,22 @@ public sealed partial class VmwarePageViewModel : ObservableObject, IDisposable
                 StatusText = VmwareErrors.Describe(ex);
             }
 
+            _loadFailed = true;
             if (!silent)
             {
                 _allVms.Clear();
-                Vms.Clear();
+                ApplyFilter();
             }
         }
         finally
         {
-            _refreshing = false;
-            IsLoading = false;
-            OnPropertyChanged(nameof(ShowNoVms));
+            // 旧来源的请求不能清除新来源仍在加载的标记。
+            if (version == _loadVersion)
+            {
+                _refreshing = false;
+                IsLoading = false;
+                RaiseEmptyStatesChanged();
+            }
         }
     }
 
@@ -272,14 +482,120 @@ public sealed partial class VmwarePageViewModel : ObservableObject, IDisposable
     private void ApplyFilter()
     {
         var keyword = SearchText.Trim();
+        var filter = SelectedFilter?.Filter ?? VmwareStateFilter.All;
+        var keepReference = SelectedVm?.Vm.Reference;
         Vms.Clear();
-        foreach (var vm in _allVms.Where(v => keyword.Length == 0 || v.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
+        foreach (var vm in Sort(_allVms.Where(v => MatchesFilter(v, filter) && MatchesKeyword(v, keyword))))
         {
             Vms.Add(vm);
         }
 
-        OnPropertyChanged(nameof(ShowNoVms));
+        // 保持原选中；原来的被过滤掉或还没选过时落到第一行，让右侧详情不空着。
+        SelectedVm = (keepReference is null ? null : Vms.FirstOrDefault(v => v.Vm.Reference == keepReference)) ?? Vms.FirstOrDefault();
+
+        RaiseCountsChanged();
+        OnPropertyChanged(nameof(ListSummaryText));
+        RaiseEmptyStatesChanged();
     }
+
+    // ── 排序 ──────────────────────────────────────────────────────
+
+    [ObservableProperty]
+    private VmwareSortKey _sortKey = VmwareSortKey.Name;
+
+    [ObservableProperty]
+    private bool _sortDescending;
+
+    public string NameSortGlyph => SortGlyph(VmwareSortKey.Name);
+    public string IpSortGlyph => SortGlyph(VmwareSortKey.Ip);
+    public string StateSortGlyph => SortGlyph(VmwareSortKey.State);
+    public string MemorySortGlyph => SortGlyph(VmwareSortKey.Memory);
+
+    private string SortGlyph(VmwareSortKey key) => SortKey != key ? string.Empty : SortDescending ? "↓" : "↑";
+
+    /// <summary>点列头：同一列再点切换升降序，换列则从升序开始。</summary>
+    [RelayCommand]
+    private void SortBy(string? key)
+    {
+        if (!Enum.TryParse<VmwareSortKey>(key, out var next)) return;
+        if (SortKey == next)
+        {
+            SortDescending = !SortDescending;
+        }
+        else
+        {
+            SortKey = next;
+            SortDescending = false;
+        }
+
+        OnPropertyChanged(nameof(NameSortGlyph));
+        OnPropertyChanged(nameof(IpSortGlyph));
+        OnPropertyChanged(nameof(StateSortGlyph));
+        OnPropertyChanged(nameof(MemorySortGlyph));
+        ApplyFilter();
+    }
+
+    private IEnumerable<VmwareVmItemViewModel> Sort(IEnumerable<VmwareVmItemViewModel> source)
+    {
+        // 排序键相同（或缺失，如关机的虚拟机没有 IP）时一律回落到名称，保证稳定。
+        var ordered = SortKey switch
+        {
+            VmwareSortKey.Ip => source.OrderBy(v => IpSortKey(v.Vm.IpAddress), StringComparer.Ordinal),
+            VmwareSortKey.State => source.OrderBy(v => v.IsPoweredOn ? 0 : v.IsSuspended ? 1 : 2),
+            VmwareSortKey.Memory => source.OrderBy(v => v.Vm.MemoryMb ?? -1),
+            _ => source.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase)
+        };
+
+        if (SortDescending)
+        {
+            ordered = SortKey switch
+            {
+                VmwareSortKey.Ip => source.OrderByDescending(v => IpSortKey(v.Vm.IpAddress), StringComparer.Ordinal),
+                VmwareSortKey.State => source.OrderByDescending(v => v.IsPoweredOn ? 0 : v.IsSuspended ? 1 : 2),
+                VmwareSortKey.Memory => source.OrderByDescending(v => v.Vm.MemoryMb ?? -1),
+                _ => source.OrderByDescending(v => v.Name, StringComparer.OrdinalIgnoreCase)
+            };
+        }
+
+        return ordered.ThenBy(v => v.Name, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>IPv4 补零成定长字符串后按字典序即数值序；没有 IP / 非 IPv4 排在最后。</summary>
+    private static string IpSortKey(string? ip)
+    {
+        if (ip is null) return "~";
+        var parts = ip.Split('.');
+        return parts.Length == 4 && parts.All(p => int.TryParse(p, out _))
+            ? string.Join('.', parts.Select(p => int.Parse(p).ToString("D3")))
+            : "~" + ip;
+    }
+
+    /// <summary>表格底部汇总：筛选 / 搜索生效时显示「显示 x / 共 y 台」。</summary>
+    public string ListSummaryText => _allVms.Count == 0 ? string.Empty
+        : Vms.Count == _allVms.Count ? $"共 {_allVms.Count} 台" : $"显示 {Vms.Count} / 共 {_allVms.Count} 台";
+
+    /// <summary>页面级的轻提示（如「已复制」），沿用状态栏文字并短暂保留，避免马上被静默刷新覆盖。</summary>
+    public void ReportInfo(string message)
+    {
+        IsStatusError = false;
+        StatusText = message;
+        _statusHoldUntil = DateTime.UtcNow + TimeSpan.FromSeconds(4);
+    }
+
+    private static bool MatchesFilter(VmwareVmItemViewModel vm, VmwareStateFilter filter) => filter switch
+    {
+        VmwareStateFilter.Running => vm.IsPoweredOn,
+        VmwareStateFilter.Stopped => vm.IsPoweredOff,
+        VmwareStateFilter.Suspended => vm.IsSuspended,
+        _ => true
+    };
+
+    /// <summary>搜索同时匹配名称、IP 与操作系统。</summary>
+    private static bool MatchesKeyword(VmwareVmItemViewModel vm, string keyword)
+        => keyword.Length == 0
+           || vm.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase)
+           || (vm.Vm.IpAddress?.Contains(keyword, StringComparison.OrdinalIgnoreCase) ?? false)
+           || (vm.Vm.GuestOs?.Contains(keyword, StringComparison.OrdinalIgnoreCase) ?? false);
 
     // ── 虚拟机动作 ────────────────────────────────────────────────
 

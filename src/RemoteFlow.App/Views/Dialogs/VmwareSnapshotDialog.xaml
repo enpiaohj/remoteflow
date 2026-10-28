@@ -7,10 +7,41 @@
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         SizeToContent="Height"
-        Width="680"
+        Width="760"
+        MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}"
+        MaxWidth="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Width}"
         WindowStartupLocation="CenterOwner"
         FontFamily="{StaticResource UiFont}"
         UseLayoutRounding="True" TextElement.Foreground="{DynamicResource Text.Primary}">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+        <!-- 状态横幅：普通提示中性底，错误提示红字。 -->
+        <Style x:Key="Dlg.Banner" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="12,10" />
+            <Setter Property="Background" Value="{DynamicResource Bg.Subtle}" />
+        </Style>
+        <Style x:Key="Dlg.BannerText" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Status.Danger}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 「当前」标记：品牌色淡底小胶囊。 -->
+        <Style x:Key="Snapshot.CurrentChip" TargetType="Border">
+            <Setter Property="CornerRadius" Value="9" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </Window.Resources>
 
     <Border Background="{DynamicResource Bg.Layer}"
             BorderBrush="{DynamicResource Stroke.Default}"
@@ -21,39 +52,131 @@
             <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.24" Direction="270" />
         </Border.Effect>
 
-        <StackPanel>
-            <StackPanel Margin="28,26,28,0">
-                <TextBlock x:Name="TitleBar" Text="{Binding Title}" Style="{StaticResource Text.SectionTitle}" />
-                <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,8,0,0" />
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Border Padding="24,20,24,16" BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,0,0,1">
+                <!-- 标题 -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid Width="44" Height="44" VerticalAlignment="Top">
+                        <Border CornerRadius="{StaticResource Radius.Medium}" Background="{DynamicResource Brand.Default}"
+                                Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                        <ContentControl Content="{StaticResource Ui.Snapshot}" FontSize="22"
+                                        Foreground="{DynamicResource Brand.Default}"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                    <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                        <TextBlock x:Name="TitleBar" Text="{Binding Title}" Style="{StaticResource Text.SectionTitle}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Subtitle}" Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                    </StackPanel>
+                </Grid>
+
+            </Border>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          Padding="28,20,28,20">
+                <StackPanel>
+                <!-- 列表头：数量 + 操作 -->
+                <Grid Margin="0,0,0,10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="快照" Style="{StaticResource Text.Label}" />
+                        <TextBlock Text="{Binding CountText}" Style="{StaticResource Text.Caption}" Margin="10,0,0,0" />
+                    </StackPanel>
+                    <WrapPanel Grid.Row="1" Margin="0,12,0,0">
+                        <Button Style="{StaticResource Button.Secondary}" Content="恢复到所选快照" Margin="0,0,6,4" Command="{Binding RevertCommand}" />
+                        <Button Style="{StaticResource Button.Subtle}" Content="删除" Margin="0,0,6,4" Command="{Binding RemoveCommand}" />
+                        <Button Style="{StaticResource Button.Subtle}" Content="刷新" Margin="0,0,0,4" Command="{Binding RefreshCommand}" />
+                    </WrapPanel>
+                </Grid>
 
                 <!-- 快照列表 -->
-                <Border Margin="0,16,0,0" Height="210" BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="1"
+                <Border Height="232" BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="1"
                         CornerRadius="8" Background="{DynamicResource Bg.Subtle}">
                     <Grid>
                         <ListBox Style="{StaticResource List.Plain}" ItemsSource="{Binding Items}"
-                                 SelectedItem="{Binding SelectedItem}" BorderThickness="0" Background="Transparent">
+                                 SelectedItem="{Binding SelectedItem}" BorderThickness="0" Background="Transparent" Margin="0,4"
+                                 HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto" AutomationProperties.Name="虚拟机快照列表">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem" BasedOn="{StaticResource List.Row}">
+                                    <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="MinHeight" Value="60" />
+                                </Style>
+                            </ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="10,6">
+                                    <Grid Margin="10,6" MinHeight="40">
                                         <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="140" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding Description}" Style="{StaticResource Text.Caption}"
-                                                       TextTrimming="CharacterEllipsis" />
+                                        <!-- 层级用左侧占位列表达；当前快照用品牌色图标块，其它为中性 -->
+                                        <Border Width="{Binding IndentLeft}" />
+                                        <Grid Grid.Column="1" Width="34" Height="34" VerticalAlignment="Center">
+                                            <Border CornerRadius="{StaticResource Radius.Medium}" Background="{DynamicResource Bg.Layer}" />
+                                            <Border CornerRadius="{StaticResource Radius.Medium}" Background="{DynamicResource Brand.Default}"
+                                                    Opacity="{StaticResource IconTile.ColorBgOpacity}"
+                                                    Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVisibility}}" />
+                                            <ContentControl Content="{StaticResource Ui.Snapshot}" FontSize="16"
+                                                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <ContentControl.Style>
+                                                    <Style TargetType="ContentControl">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Text.Tertiary}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </ContentControl.Style>
+                                            </ContentControl>
+                                        </Grid>
+                                        <StackPanel Grid.Column="2" Margin="12,0,12,0" VerticalAlignment="Center">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding NameText}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding NameText}" VerticalAlignment="Center" />
+                                                <Border Grid.Column="1" Style="{StaticResource Snapshot.CurrentChip}"
+                                                        Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVisibility}}">
+                                                    <Grid>
+                                                        <Border CornerRadius="9" Background="{DynamicResource Brand.Default}" Opacity="{StaticResource IconTile.ColorBgOpacity}" />
+                                                        <TextBlock Text="当前" FontSize="10.5" FontWeight="SemiBold" Margin="7,1"
+                                                                   Foreground="{DynamicResource Brand.Default}" />
+                                                    </Grid>
+                                                </Border>
+                                            </Grid>
+                                            <TextBlock Text="{Binding Description}" Style="{StaticResource Text.Caption}" Margin="0,3,0,0"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding Description}"
+                                                       Visibility="{Binding HasDescription, Converter={StaticResource BoolToVisibility}}" />
                                         </StackPanel>
-                                        <TextBlock Grid.Column="1" Text="{Binding CreatedText}" Style="{StaticResource Text.Caption}"
-                                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="3" Text="{Binding CreatedText}" Style="{StaticResource Text.Caption}"
+                                                   FontFamily="{StaticResource MonoFont}" VerticalAlignment="Center" />
                                     </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                        <TextBlock Text="这台虚拟机还没有快照"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+
+                        <!-- 空状态 -->
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsEmpty}" Value="True">
@@ -61,53 +184,57 @@
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
+                            </StackPanel.Style>
+                            <ContentControl Content="{StaticResource Ui.Snapshot}" FontSize="26" Foreground="{DynamicResource Text.Tertiary}"
+                                            HorizontalAlignment="Center" />
+                            <TextBlock Text="这台虚拟机还没有快照" Style="{StaticResource Text.BodySecondary}" Margin="0,8,0,0" HorizontalAlignment="Center" />
+                            <TextBlock Text="为当前状态建立一个还原点，从下方创建第一个快照。" Style="{StaticResource Text.Caption}"
+                                       Margin="16,4,16,0" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" />
+                        </StackPanel>
                     </Grid>
                 </Border>
 
-                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                    <Button Style="{StaticResource Button.Secondary}" Content="恢复到所选快照" Command="{Binding RevertCommand}" />
-                    <Button Style="{StaticResource Button.Secondary}" Content="删除所选快照" Margin="8,0,0,0" Command="{Binding RemoveCommand}" />
-                    <Button Style="{StaticResource Button.Secondary}" Content="刷新" Margin="8,0,0,0" Command="{Binding RefreshCommand}" />
-                </StackPanel>
-
                 <!-- 创建 -->
-                <TextBlock Text="创建新快照" Style="{StaticResource Text.Caption}" Margin="0,18,0,6" />
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="200" />
-                        <ColumnDefinition Width="12" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBox Style="{StaticResource Input.TextBox}" MaxLength="80"
-                             Text="{Binding NewName, UpdateSourceTrigger=PropertyChanged}" />
-                    <TextBox Grid.Column="2" Style="{StaticResource Input.TextBox}" MaxLength="200"
-                             Text="{Binding NewDescription, UpdateSourceTrigger=PropertyChanged}" />
-                    <Button Grid.Column="3" Style="{StaticResource Button.Primary}" Content="创建" Margin="8,0,0,0"
-                            Command="{Binding CreateCommand}" />
-                </Grid>
-                <TextBlock Text="左侧填名称，右侧可选填说明。新快照不包含虚拟机内存。" Style="{StaticResource Text.Caption}" Margin="0,6,0,0" />
+                <Border Margin="0,18,0,0" Padding="0,16,0,0" BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,1,0,0">
+                    <StackPanel>
+                        <TextBlock Text="创建新快照" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="名称" Style="{StaticResource Text.Caption}" Margin="0,0,0,6" />
+                            <TextBlock Grid.Column="2" Text="说明（可选）" Style="{StaticResource Text.Caption}" Margin="0,0,0,6" />
+                            <TextBox Grid.Row="1" Style="{StaticResource Input.TextBox}" MaxLength="80"
+                                     Text="{Binding NewName, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBox Grid.Row="1" Grid.Column="2" Style="{StaticResource Input.TextBox}" MaxLength="200"
+                                     Text="{Binding NewDescription, UpdateSourceTrigger=PropertyChanged}" />
+                            <Button Grid.Row="1" Grid.Column="3" Style="{StaticResource Button.Primary}" Content="创建" Margin="10,0,0,0"
+                                    MinWidth="80" Command="{Binding CreateCommand}" />
+                        </Grid>
+                        <TextBlock Text="新快照不包含虚拟机内存：恢复后虚拟机会处于关机状态。" Style="{StaticResource Text.Caption}" Margin="0,8,0,0" />
+                    </StackPanel>
+                </Border>
 
-                <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" Margin="0,14,0,0">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsStatusError}" Value="True">
-                                    <Setter Property="Foreground" Value="{DynamicResource Status.Danger}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-            </StackPanel>
+                <!-- 状态横幅 -->
+                <Border Style="{StaticResource Dlg.Banner}" Margin="0,14,0,0">
+                    <TextBlock Text="{Binding StatusText}" Style="{StaticResource Dlg.BannerText}" />
+                </Border>
+                </StackPanel>
+            </ScrollViewer>
 
-            <Border Background="{DynamicResource Bg.Subtle}" CornerRadius="0,0,11,11" Margin="0,20,0,0" Padding="24,16">
+            <Border Grid.Row="2" Background="{DynamicResource Bg.Subtle}" CornerRadius="0,0,11,11"
+                    BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="0,1,0,0" Padding="24,16">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Style="{StaticResource Button.Secondary}" Content="关闭" IsCancel="True" IsDefault="True" Click="OnCloseClick" />
                 </StackPanel>
             </Border>
-        </StackPanel>
+        </Grid>
     </Border>
 </Window>

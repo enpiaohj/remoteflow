@@ -15,6 +15,15 @@ public sealed record VmwareSnapshotItem(VmSnapshot Snapshot)
     public string CreatedText => Snapshot.CreatedAt is { } time ? time.LocalDateTime.ToString("yyyy-MM-dd HH:mm") : "—";
 
     public string Description => Snapshot.Description;
+
+    // 以下供列表模板使用：名称与「当前」标记分开显示，层级用左缩进表达（不再靠名称前补空格）。
+    public string NameText => Snapshot.Name;
+
+    public bool IsCurrent => Snapshot.IsCurrent;
+
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Snapshot.Description);
+
+    public double IndentLeft => Math.Min(Snapshot.Depth, 6) * 22;
 }
 
 /// <summary>
@@ -32,6 +41,9 @@ public sealed partial class VmwareSnapshotManagerViewModel(
     public string Subtitle => $"{source.Name}　·　快照用于回到某个状态，不能替代备份。";
 
     public ObservableCollection<VmwareSnapshotItem> Items { get; } = [];
+
+    /// <summary>列表上方的数量说明，没有快照时为空。</summary>
+    public string CountText => Items.Count == 0 ? string.Empty : $"{Items.Count} 个快照";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RevertCommand))]
@@ -75,6 +87,7 @@ public sealed partial class VmwareSnapshotManagerViewModel(
             Items.Clear();
             foreach (var snapshot in snapshots) Items.Add(new VmwareSnapshotItem(snapshot));
             IsEmpty = Items.Count == 0;
+            OnPropertyChanged(nameof(CountText));
             return IsEmpty ? "这台虚拟机还没有快照。" : $"共 {Items.Count} 个快照。";
         });
     }
@@ -141,6 +154,7 @@ public sealed partial class VmwareSnapshotManagerViewModel(
         Items.Clear();
         foreach (var snapshot in snapshots) Items.Add(new VmwareSnapshotItem(snapshot));
         IsEmpty = Items.Count == 0;
+        OnPropertyChanged(nameof(CountText));
     }
 
     private async Task RunAsync(string busyText, Func<Task<string>> action)

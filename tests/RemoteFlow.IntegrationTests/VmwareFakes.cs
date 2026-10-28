@@ -9,6 +9,7 @@ internal sealed class FakeVmwareConnector : IVmwareConnector
 
     public VmwareSourceKind Kind { get; set; } = VmwareSourceKind.EsxiHost;
     public bool FailLogin { get; set; }
+    public Func<CancellationToken, Task<IReadOnlyList<VsphereVm>>>? ListVmsAsync { get; set; }
     public int ConnectCount { get; private set; }
     public int Disposed { get; set; }
     public string? LastUser { get; private set; }
@@ -44,7 +45,8 @@ internal sealed class FakeVmwareApi(FakeVmwareConnector owner) : IVSphereConsole
 
     public Task LoginAsync(string userName, string password, CancellationToken ct = default) => Task.CompletedTask;
 
-    public Task<IReadOnlyList<VsphereVm>> ListVirtualMachinesAsync(CancellationToken ct = default) => Task.FromResult(owner.Vms);
+    public Task<IReadOnlyList<VsphereVm>> ListVirtualMachinesAsync(CancellationToken ct = default)
+        => owner.ListVmsAsync?.Invoke(ct) ?? Task.FromResult(owner.Vms);
 
     public Task<WebMksTicket> AcquireWebMksTicketAsync(string vmReference, CancellationToken ct = default)
         => Task.FromResult(new WebMksTicket("h", 443, "t"));
