@@ -708,7 +708,7 @@
                             <TextBlock Grid.Column="7" Text="{Binding RecentHeaderText}" Style="{StaticResource Text.Label}" Margin="0,0,10,0"
                                        Background="Transparent" Cursor="Hand" ToolTip="按最近连接排序" Tag="LastConnected"
                                        MouseLeftButtonUp="OnSortHeaderClick" />
-                            <TextBlock Grid.Column="11" Text="收藏" Style="{StaticResource Text.Label}" />
+                            <TextBlock Grid.Column="9" Grid.ColumnSpan="4" Text="操作" HorizontalAlignment="Center" Style="{StaticResource Text.Label}" />
                         </Grid>
 
                         <!-- 批量操作栏（勾选 ≥1 项时替换列头） -->
