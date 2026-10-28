@@ -60,6 +60,9 @@ public sealed class ConnectionProfile
     /// <summary>文件传输专项参数（通道 / SFTP 端口）。老连接缺该字段时取默认值，行为与未配置一致。</summary>
     public FileTransferOptions FileTransfer { get; set; } = new();
 
+    /// <summary>VMware ESXi 虚拟机控制台参数。老连接缺该字段时取默认值（未启用）。</summary>
+    public VmwareOptions Vmware { get; set; } = new();
+
     /// <summary>按协议返回标准默认端口。</summary>
     public static int GetDefaultPort(ProtocolType protocol) => protocol switch
     {
@@ -91,7 +94,8 @@ public sealed class ConnectionProfile
             Rdp = Rdp.Clone(),
             Ssh = Ssh.Clone(),
             Vnc = Vnc.Clone(),
-            FileTransfer = FileTransfer.Clone()
+            FileTransfer = FileTransfer.Clone(),
+            Vmware = Vmware.Clone()
         };
     }
 }

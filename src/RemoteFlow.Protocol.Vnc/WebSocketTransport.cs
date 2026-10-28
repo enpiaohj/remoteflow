@@ -17,8 +17,14 @@ public sealed class WebSocketTransportParameters : TransportParameters
 {
     public required Uri Url { get; init; }
 
-    /// <summary>期望的服务器证书 SHA-256 指纹（十六进制，大小写及分隔符不限）。</summary>
-    public required string PinSha256 { get; init; }
+    /// <summary>期望的服务器证书 SHA-256 指纹（十六进制，大小写及分隔符不限）。与 <see cref="PinSha1"/> 至少给一个。</summary>
+    public string PinSha256 { get; init; } = string.Empty;
+
+    /// <summary>
+    /// 期望的服务器证书 SHA-1 指纹。仅用于 vCenter 票据自带的目标主机指纹（VMware 官方客户端同样依赖它）。
+    /// 同时给出 SHA-256 时以 SHA-256 为准。
+    /// </summary>
+    public string PinSha1 { get; init; } = string.Empty;
 
     public string SubProtocol { get; init; } = "binary";
 
@@ -27,10 +33,14 @@ public sealed class WebSocketTransportParameters : TransportParameters
     public override void Validate()
     {
         if (Url.Scheme != "wss") throw new InvalidOperationException("仅支持 wss 地址。");
-        if (string.IsNullOrWhiteSpace(PinSha256)) throw new InvalidOperationException("必须提供证书指纹。");
+        if (NormalizeHex(PinSha256).Length != 64 && NormalizeHex(PinSha1).Length != 40)
+            throw new InvalidOperationException("必须提供有效的证书指纹（SHA-256 或 SHA-1）。");
     }
 
     protected override IEnumerable<FreezableParametersObject> GetDescendants() => [];
+
+    internal static string NormalizeHex(string? value)
+        => new((value ?? string.Empty).Where(Uri.IsHexDigit).Select(char.ToUpperInvariant).ToArray());
 }
 
 /// <summary>只替换传输层：其余 RFB 解码、编码、消息处理沿用库的默认实现。</summary>
@@ -46,8 +56,12 @@ public sealed class WebSocketTransportConnector(WebSocketTransportParameters par
 {
     public async Task<ITransport> ConnectAsync(CancellationToken cancellationToken = default)
     {
-        var expected = NormalizePin(parameters.PinSha256);
-        if (expected.Length != 64) throw new InvalidOperationException("证书指纹必须是 64 位十六进制 SHA-256。");
+        var sha256 = WebSocketTransportParameters.NormalizeHex(parameters.PinSha256);
+        var sha1 = WebSocketTransportParameters.NormalizeHex(parameters.PinSha1);
+        // 有 SHA-256 就只认 SHA-256；否则才退到 SHA-1（vCenter 票据自带的目标主机指纹）。
+        var useSha256 = sha256.Length == 64;
+        var expected = useSha256 ? sha256 : sha1;
+        if (!useSha256 && sha1.Length != 40) throw new InvalidOperationException("证书指纹无效。");
 
         var socket = new ClientWebSocket();
         try
@@ -55,7 +69,8 @@ public sealed class WebSocketTransportConnector(WebSocketTransportParameters par
             socket.Options.AddSubProtocol(parameters.SubProtocol);
             socket.Options.RemoteCertificateValidationCallback = (_, cert, _, _) =>
                 cert is not null && CryptographicOperations.FixedTimeEquals(
-                    SHA256.HashData(cert.GetRawCertData()), Convert.FromHexString(expected));
+                    useSha256 ? SHA256.HashData(cert.GetRawCertData()) : SHA1.HashData(cert.GetRawCertData()),
+                    Convert.FromHexString(expected));
             await socket.ConnectAsync(parameters.Url, cancellationToken).ConfigureAwait(false);
             return new WebSocketTransport(socket);
         }
@@ -66,8 +81,6 @@ public sealed class WebSocketTransportConnector(WebSocketTransportParameters par
         }
     }
 
-    private static string NormalizePin(string value)
-        => new(value.Where(Uri.IsHexDigit).Select(char.ToUpperInvariant).ToArray());
 }
 
 internal sealed class WebSocketTransport(ClientWebSocket socket) : ITransport

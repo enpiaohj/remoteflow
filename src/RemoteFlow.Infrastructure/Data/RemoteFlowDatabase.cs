@@ -17,7 +17,7 @@ namespace RemoteFlow.Infrastructure.Data;
 public sealed class RemoteFlowDatabase
 {
     /// <summary>当前 Schema 版本。新增迁移时递增，并在 <see cref="Migrations"/> 中追加脚本。</summary>
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 8;
 
     private readonly string _connectionString;
     private readonly ILogger<RemoteFlowDatabase> _logger;
@@ -385,6 +385,22 @@ public sealed class RemoteFlowDatabase
         [7] = """
         ALTER TABLE connection_groups ADD COLUMN is_built_in INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE tags ADD COLUMN icon TEXT NOT NULL DEFAULT 'TagIcon.Tag';
+        """,
+
+        // v8：VMware ESXi 资源来源。只存主机端点 / 凭据引用 / 证书指纹，虚拟机不落库（实时读取）。
+        [8] = """
+        CREATE TABLE vmware_sources (
+            id            TEXT PRIMARY KEY NOT NULL,
+            name          TEXT NOT NULL,
+            host          TEXT NOT NULL,
+            port          INTEGER NOT NULL DEFAULT 443,
+            kind          INTEGER NOT NULL DEFAULT 0,
+            credential_id TEXT NULL REFERENCES credentials(id) ON DELETE SET NULL,
+            cert_pin      TEXT NOT NULL,
+            sort_order    INTEGER NOT NULL DEFAULT 0,
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL
+        );
         """
     };
 }

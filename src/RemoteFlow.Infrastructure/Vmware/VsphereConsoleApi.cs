@@ -20,6 +20,8 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
     private string? _viewManager;
     private bool _loggedIn;
 
+    public VmwareServerInfo? ServerInfo { get; private set; }
+
     public VsphereConsoleApi(Uri endpoint, HttpMessageHandler? handler = null)
     {
         if (endpoint.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(endpoint.UserInfo)
@@ -53,6 +55,12 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
             _sessionManager = Required(content, "sessionManager");
             _propertyCollector = Required(content, "propertyCollector");
             _viewManager = Required(content, "viewManager");
+            var about = content.Element(Vim + "about");
+            ServerInfo = new VmwareServerInfo(
+                about?.Element(Vim + "apiType")?.Value == "VirtualCenter" ? VmwareSourceKind.VCenter : VmwareSourceKind.EsxiHost,
+                about?.Element(Vim + "fullName")?.Value ?? string.Empty,
+                about?.Element(Vim + "version")?.Value ?? string.Empty,
+                about?.Element(Vim + "build")?.Value ?? string.Empty);
             await CallAsync("Login", [Ref("SessionManager", _sessionManager),
                 new XElement(Vim + "userName", userName), new XElement(Vim + "password", password)], ct);
             _loggedIn = true;
@@ -132,7 +140,7 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
                 throw new VsphereApiException("InvalidTicketEndpoint");
             if (Uri.CheckHostName(host) == UriHostNameType.Unknown || port is < 1 or > 65535)
                 throw new VsphereApiException("InvalidTicketEndpoint");
-            return new WebMksTicket(host, port, Required(result, "ticket"));
+            return new WebMksTicket(host, port, Required(result, "ticket"), result.Element(Vim + "sslThumbprint")?.Value);
         }
         finally { _gate.Release(); }
     }
@@ -147,6 +155,157 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
             finally { _loggedIn = false; }
         }
         finally { _gate.Release(); }
+    }
+
+    public async Task<VmPowerResult> PowerAsync(string vmReference, VmPowerAction action, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(vmReference);
+        await _gate.WaitAsync(ct);
+        try
+        {
+            EnsureLoggedIn();
+            var vm = Ref("VirtualMachine", vmReference);
+            // 正常关机/重启没有服务端任务：只能确认请求已发给客户机，不能声称已经完成。
+            if (action is VmPowerAction.ShutdownGuest or VmPowerAction.RebootGuest)
+            {
+                await CallAsync(action == VmPowerAction.ShutdownGuest ? "ShutdownGuest" : "RebootGuest", [vm], ct);
+                return VmPowerResult.RequestSent;
+            }
+            var method = action switch
+            {
+                VmPowerAction.PowerOn => "PowerOnVM_Task",
+                VmPowerAction.PowerOff => "PowerOffVM_Task",
+                VmPowerAction.Reset => "ResetVM_Task",
+                VmPowerAction.Suspend => "SuspendVM_Task",
+                _ => throw new ArgumentOutOfRangeException(nameof(action))
+            };
+            var task = await CallAsync(method, [vm], ct);
+            await WaitForTaskAsync(task.Value, TimeSpan.FromMinutes(2), ct);
+            return VmPowerResult.Completed;
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<IReadOnlyList<VmSnapshot>> ListSnapshotsAsync(string vmReference, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(vmReference);
+        await _gate.WaitAsync(ct);
+        try
+        {
+            EnsureLoggedIn();
+            var props = await GetPropsAsync("VirtualMachine", vmReference, ["snapshot"], ct);
+            if (!props.TryGetValue("snapshot", out var snapshot)) return [];
+            var current = snapshot.Element(Vim + "currentSnapshot")?.Value;
+            return Flatten(snapshot.Elements(Vim + "rootSnapshotList"), current, 0).ToArray();
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task CreateSnapshotAsync(string vmReference, string name, string description, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(vmReference);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        await _gate.WaitAsync(ct);
+        try
+        {
+            EnsureLoggedIn();
+            // 默认不含内存、不做文件系统静默：与虚拟机运行状态无关，行为可预期。
+            var task = await CallAsync("CreateSnapshot_Task", [Ref("VirtualMachine", vmReference),
+                new XElement(Vim + "name", name), new XElement(Vim + "description", description ?? string.Empty),
+                new XElement(Vim + "memory", false), new XElement(Vim + "quiesce", false)], ct);
+            await WaitForTaskAsync(task.Value, TimeSpan.FromMinutes(10), ct);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task RevertSnapshotAsync(string snapshotReference, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(snapshotReference);
+        await _gate.WaitAsync(ct);
+        try
+        {
+            EnsureLoggedIn();
+            var task = await CallAsync("RevertToSnapshot_Task", [Ref("VirtualMachineSnapshot", snapshotReference)], ct);
+            await WaitForTaskAsync(task.Value, TimeSpan.FromMinutes(10), ct);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task RemoveSnapshotAsync(string snapshotReference, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(snapshotReference);
+        await _gate.WaitAsync(ct);
+        try
+        {
+            EnsureLoggedIn();
+            // 只删这一个快照，子快照保留（合并到上一级）。
+            var task = await CallAsync("RemoveSnapshot_Task", [Ref("VirtualMachineSnapshot", snapshotReference),
+                new XElement(Vim + "removeChildren", false)], ct);
+            await WaitForTaskAsync(task.Value, TimeSpan.FromMinutes(10), ct);
+        }
+        finally { _gate.Release(); }
+    }
+
+    private static IEnumerable<VmSnapshot> Flatten(IEnumerable<XElement> nodes, string? currentRef, int depth)
+    {
+        foreach (var node in nodes)
+        {
+            var reference = node.Element(Vim + "snapshot")?.Value ?? string.Empty;
+            DateTimeOffset? created = DateTimeOffset.TryParse(node.Element(Vim + "createTime")?.Value,
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var time) ? time : null;
+            yield return new VmSnapshot(reference, node.Element(Vim + "name")?.Value ?? reference,
+                node.Element(Vim + "description")?.Value ?? string.Empty, created,
+                reference.Length > 0 && reference == currentRef, depth);
+            foreach (var child in Flatten(node.Elements(Vim + "childSnapshotList"), currentRef, depth + 1))
+                yield return child;
+        }
+    }
+
+    /// <summary>轮询服务端任务直到终态。超时只代表不再等待，不代表任务失败或已取消。</summary>
+    private async Task WaitForTaskAsync(string taskReference, TimeSpan timeout, CancellationToken ct)
+    {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(timeout);
+        try
+        {
+            while (true)
+            {
+                var props = await GetPropsAsync("Task", taskReference, ["info.state", "info.error"], limit.Token);
+                var state = props.GetValueOrDefault("info.state")?.Value;
+                if (state == "success") return;
+                if (state == "error")
+                {
+                    var fault = props.GetValueOrDefault("info.error")?.Elements().FirstOrDefault(e => e.Name.LocalName == "fault");
+                    var type = fault?.Attributes().FirstOrDefault(a => a.Name.LocalName == "type")?.Value.Split(':').Last();
+                    throw new VsphereApiException(type switch
+                    {
+                        "NoPermission" => "NoPermission",
+                        "InvalidState" or "InvalidPowerState" or "InvalidVmState" => "InvalidState",
+                        "ToolsUnavailable" => "ToolsUnavailable",
+                        "RestrictedVersion" => "RestrictedVersion",
+                        _ => "TaskFailed"
+                    });
+                }
+                await Task.Delay(500, limit.Token);
+            }
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new VsphereApiException("TaskTimeout");
+        }
+    }
+
+    private async Task<Dictionary<string, XElement>> GetPropsAsync(string type, string reference, string[] paths, CancellationToken ct)
+    {
+        var response = await CallAsync("RetrievePropertiesEx", [Ref("PropertyCollector", _propertyCollector!),
+            new XElement(Vim + "specSet",
+                new XElement(Vim + "propSet", new XElement(Vim + "type", type), paths.Select(p => new XElement(Vim + "pathSet", p))),
+                new XElement(Vim + "objectSet", new XElement(Vim + "obj", new XAttribute("type", type), reference), new XElement(Vim + "skip", false))),
+            new XElement(Vim + "options")], ct);
+        var result = new Dictionary<string, XElement>();
+        foreach (var set in response.Elements(Vim + "objects").Elements(Vim + "propSet"))
+            if (set.Element(Vim + "name")?.Value is { } name && set.Element(Vim + "val") is { } val) result[name] = val;
+        return result;
     }
 
     private async Task<XElement> CallAsync(string method, IEnumerable<XElement> args, CancellationToken ct)
@@ -183,6 +342,7 @@ public sealed class VsphereConsoleApi : IVSphereConsoleApi
                 "NoPermissionFault" => "NoPermission",
                 "RestrictedVersionFault" => "RestrictedVersion",
                 "InvalidStateFault" => "InvalidState",
+                "ToolsUnavailableFault" => "ToolsUnavailable",
                 "ManagedObjectNotFoundFault" => "ManagedObjectNotFound",
                 _ => "ServerFault"
             });

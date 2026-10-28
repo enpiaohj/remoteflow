@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Net.Sockets;
 using MarcusW.VncClient;
 using MarcusW.VncClient.Output;
@@ -9,6 +10,7 @@ using MarcusW.VncClient.Security;
 using Microsoft.Extensions.Logging;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
+using RemoteFlow.Core.Vmware;
 using VncConnectionState = MarcusW.VncClient.ConnectionState;
 using VncExtendedClipboardData = MarcusW.VncClient.Protocol.Implementation.ExtendedClipboardData;
 using VncExtendedClipboardFormat = MarcusW.VncClient.Protocol.Implementation.ExtendedClipboardFormat;
@@ -54,8 +56,12 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
     /// </summary>
     private int _releaseClaimed;
 
-    public VncSession(SessionRequest request, ILoggerFactory loggerFactory)
+    private readonly IVmwareConnector? _vmware;
+    private string? _userName;
+
+    public VncSession(SessionRequest request, ILoggerFactory loggerFactory, IVmwareConnector? vmware = null)
     {
+        _vmware = vmware;
         _request = request;
         _credential = request.Credential;
         _loggerFactory = loggerFactory;
@@ -116,18 +122,30 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
             // 密码在连接期间需要多次可用（认证、断线重连），
             // 因此从凭据取出后立即释放凭据对象本身。
             _password = _credential?.Password;
+            _userName = _credential?.Username;
             _credential?.Dispose();
             _credential = null;
 
-            var client = new VncLibClient(_loggerFactory);
+            // 会话级取消：调用方 token 与会话关闭流程（Disconnect / Dispose / 远端关）任一取消，
+            // 都会打断本次连接（含 ESXi 登录与取票据）。
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, _lifecycleCts.Token);
 
-            var parameters = new ConnectParameters
-            {
-                TransportParameters = new TcpTransportParameters
+            var client = Profile.Vmware.Enabled
+                ? new VncLibClient(_loggerFactory, new WebSocketVncImplementation())
+                : new VncLibClient(_loggerFactory);
+
+            var transport = Profile.Vmware.Enabled
+                ? await ResolveVmwareTransportAsync(linkedCts.Token)
+                : new TcpTransportParameters
                 {
                     Host = Profile.Host,
                     Port = Profile.Port
-                },
+                };
+
+            var parameters = new ConnectParameters
+            {
+                TransportParameters = transport,
                 AuthenticationHandler = this,
                 InitialRenderTarget = RenderTarget,
 
@@ -152,11 +170,6 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
                 // 不让协议库在后台无限重试，避免用户看不到真实状态。
                 MaxReconnectAttempts = 0
             };
-
-            // 会话级取消：调用方 token 与会话关闭流程（Disconnect / Dispose / 远端关）任一取消，
-            // 都会打断本次连接。连接中关闭会话因此能立刻中断，而不是干等库自身超时。
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken, _lifecycleCts.Token);
 
             var connection = await client.ConnectAsync(parameters, linkedCts.Token);
 
@@ -634,6 +647,97 @@ public sealed class VncSession : IRemoteSession, IAuthenticationHandler
     }
 
     /// <summary>把协议库异常映射为标准化错误码。</summary>
+
+    /// <summary>
+    /// 连接 ESXi 虚拟机控制台：登录 → 按 UUID 找到虚拟机 → 取一次性票据 → 返回 WSS 传输参数。
+    /// 每次连接（含重连）都重新取票据；票据不落库、不进日志，错误文案只含固定说明。
+    /// </summary>
+    private async Task<TransportParameters> ResolveVmwareTransportAsync(CancellationToken ct)
+    {
+        var options = Profile.Vmware;
+        var vmware = _vmware ?? throw ConnectionException.FromCode(ConnectionErrorCode.ComponentUnavailable);
+        if (string.IsNullOrEmpty(_userName) || string.IsNullOrEmpty(_password))
+        {
+            throw new ConnectionException(ConnectionErrorCode.CredentialMissing,
+                "该虚拟机连接需要选择带用户名和密码的 ESXi 凭据。");
+        }
+
+        if (string.IsNullOrEmpty(options.InstanceUuid) || string.IsNullOrEmpty(options.CertPinSha256))
+        {
+            throw new ConnectionException(ConnectionErrorCode.ProtocolNegotiationFailed,
+                "虚拟机连接缺少 UUID 或证书指纹，请重新导入该虚拟机。");
+        }
+
+        IVSphereConsoleApi api;
+        try
+        {
+            api = await vmware.ConnectAsync(Profile.Host, Profile.Port, options.CertPinSha256, _userName, _password, ct);
+        }
+        catch (VsphereApiException ex)
+        {
+            throw new ConnectionException(
+                ex.FaultCode.StartsWith("InvalidLogin", StringComparison.Ordinal)
+                    ? ConnectionErrorCode.AuthenticationFailed
+                    : ConnectionErrorCode.ProtocolNegotiationFailed,
+                ex.Message);
+        }
+        catch (HttpRequestException)
+        {
+            throw new ConnectionException(ConnectionErrorCode.NetworkUnreachable,
+                "无法与 ESXi 建立安全连接：主机不可达，或证书与已记录的指纹不一致（证书更换后需重新导入该虚拟机）。");
+        }
+
+        await using (api)
+        {
+            try
+            {
+                var vms = await api.ListVirtualMachinesAsync(ct);
+                var vm = vms.FirstOrDefault(v => string.Equals(v.InstanceUuid, options.InstanceUuid, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new ConnectionException(ConnectionErrorCode.ProtocolNegotiationFailed,
+                        $"在 ESXi 上找不到虚拟机“{options.VmName}”（UUID 不匹配），可能已删除或重新创建。");
+                if (vm.PowerState != "poweredOn")
+                {
+                    throw new ConnectionException(ConnectionErrorCode.RemoteClosed,
+                        $"虚拟机“{vm.Name}”当前未运行（{DescribePowerState(vm.PowerState)}），请先开机。");
+                }
+
+                var ticket = await api.AcquireWebMksTicketAsync(vm.Reference, ct);
+                var url = new UriBuilder("wss", ticket.Host, ticket.Port)
+                {
+                    Path = "/ticket/" + Uri.EscapeDataString(ticket.Ticket)
+                }.Uri;
+
+                // 独立 ESXi：票据指向登录的同一台主机，沿用已核对的 SHA-256 指纹。
+                if (string.Equals(ticket.Host, Profile.Host, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new WebSocketTransportParameters { Url = url, PinSha256 = options.CertPinSha256 };
+                }
+
+                // vCenter：票据指向承载该虚拟机的 ESXi 主机，证书不是已核对的那一张。
+                // 票据经已固定指纹的 vCenter 通道送达，自带目标主机证书的 SHA-1 指纹，可据此校验；
+                // 没有这个指纹就无法确认目标主机身份，直接阻止，绝不放行。
+                if (WebSocketTransportParameters.NormalizeHex(ticket.SslThumbprint).Length == 40)
+                {
+                    return new WebSocketTransportParameters { Url = url, PinSha1 = ticket.SslThumbprint! };
+                }
+
+                throw new ConnectionException(ConnectionErrorCode.ProtocolNegotiationFailed,
+                    "控制台目标主机与管理端点不同，且服务器没有提供该主机的证书指纹，已阻止连接。");
+            }
+            catch (VsphereApiException ex)
+            {
+                throw new ConnectionException(ConnectionErrorCode.ProtocolNegotiationFailed, ex.Message);
+            }
+        }
+    }
+
+    private static string DescribePowerState(string state) => state switch
+    {
+        "poweredOff" => "已关机",
+        "suspended" => "已挂起",
+        _ => state
+    };
+
     private static ConnectionErrorCode MapError(Exception ex) => ex switch
     {
         ConnectionException connectionException => connectionException.ErrorCode,

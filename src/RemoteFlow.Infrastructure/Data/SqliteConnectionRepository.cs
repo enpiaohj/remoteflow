@@ -7,7 +7,7 @@ namespace RemoteFlow.Infrastructure.Data;
 
 /// <summary>
 /// 连接资产的 SQLite 仓储实现。
-/// 协议专项参数（RDP/SSH/VNC）与文件传输参数以 JSON 存入 <c>options_json</c> 列，
+/// 协议专项参数（RDP/SSH/VNC）、文件传输与 VMware 控制台参数以 JSON 存入 <c>options_json</c> 列，
 /// 新增协议参数时无需 Schema 迁移。
 /// </summary>
 public sealed class SqliteConnectionRepository(RemoteFlowDatabase database) : IConnectionRepository
@@ -18,7 +18,7 @@ public sealed class SqliteConnectionRepository(RemoteFlowDatabase database) : IC
     /// 协议参数的 JSON 载体。<see cref="FileTransfer"/> 是后加的字段，带默认值 null：
     /// 升级前写入的老数据没有该键，反序列化得到 null，由 <see cref="Map"/> 补默认值，行为与「未配置」一致。
     /// </summary>
-    private sealed record OptionsPayload(RdpOptions Rdp, SshOptions Ssh, VncOptions Vnc, FileTransferOptions? FileTransfer = null);
+    private sealed record OptionsPayload(RdpOptions Rdp, SshOptions Ssh, VncOptions Vnc, FileTransferOptions? FileTransfer = null, VmwareOptions? Vmware = null);
 
     public async Task<IReadOnlyList<ConnectionProfile>> GetAllAsync(CancellationToken ct = default)
     {
@@ -172,7 +172,7 @@ public sealed class SqliteConnectionRepository(RemoteFlowDatabase database) : IC
 
     private static void BindProfile(SqliteCommand command, ConnectionProfile profile)
     {
-        var options = new OptionsPayload(profile.Rdp, profile.Ssh, profile.Vnc, profile.FileTransfer);
+        var options = new OptionsPayload(profile.Rdp, profile.Ssh, profile.Vnc, profile.FileTransfer, profile.Vmware);
 
         command.Parameters.AddWithValue("$id", profile.Id.ToString());
         command.Parameters.AddWithValue("$name", profile.Name);
@@ -222,7 +222,8 @@ public sealed class SqliteConnectionRepository(RemoteFlowDatabase database) : IC
             Rdp = options?.Rdp ?? new RdpOptions(),
             Ssh = options?.Ssh ?? new SshOptions(),
             Vnc = options?.Vnc ?? new VncOptions(),
-            FileTransfer = options?.FileTransfer ?? new FileTransferOptions()
+            FileTransfer = options?.FileTransfer ?? new FileTransferOptions(),
+            Vmware = options?.Vmware ?? new VmwareOptions()
         };
     }
 

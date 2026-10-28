@@ -432,6 +432,18 @@ public sealed class SessionManager : IAsyncDisposable
 
     private async Task HandleStateChangeAsync(SessionEntry entry, IRemoteSession session, SessionStateChangedEventArgs e)
     {
+        // ESXi 虚拟机来自实时来源、不是已保存的连接：不写普通历史和「最近连接」，
+        // 否则会留下指向不存在连接的条目。失败原因仍记日志。
+        if (session.Profile.Vmware.Enabled)
+        {
+            if (e.NewState == ConnectionState.Failed)
+            {
+                _logger.LogWarning("ESXi 虚拟机会话 {SessionId} 连接失败：错误码 {ErrorCode}", session.SessionId, e.ErrorCode);
+            }
+
+            return;
+        }
+
         switch (e.NewState)
         {
             case ConnectionState.Connecting when entry.HistoryId is null:
