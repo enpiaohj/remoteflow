@@ -44,6 +44,46 @@ public partial class ConnectionEditorDialog : Window
     /// <summary>用户是否选择了「保存并连接」。</summary>
     public bool ConnectImmediately { get; private set; }
 
+    /// <summary>
+    /// 凭据下拉展开时从第一行开始显示：WPF 默认把已选项滚到可视区，
+    /// 选中的不是第一项时，第一行「＋ 新建凭据…」会被顶出可视区，要向上滚才能看到。
+    /// </summary>
+    private void OnCredentialDropDownOpened(object? sender, EventArgs e)
+    {
+        if (sender is not System.Windows.Controls.ComboBox combo)
+        {
+            return;
+        }
+
+        combo.Dispatcher.BeginInvoke(() =>
+        {
+            if (combo.Template.FindName("PART_Popup", combo) is System.Windows.Controls.Primitives.Popup { Child: { } child }
+                && FindScrollViewer(child) is { } viewer)
+            {
+                viewer.ScrollToTop();
+            }
+        }, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    private static System.Windows.Controls.ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is System.Windows.Controls.ScrollViewer viewer)
+            {
+                return viewer;
+            }
+
+            if (FindScrollViewer(child) is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
+    }
+
     private void OnSaveClick(object sender, RoutedEventArgs e) => TrySave(connect: false);
 
     private void OnSaveAndConnectClick(object sender, RoutedEventArgs e) => TrySave(connect: true);

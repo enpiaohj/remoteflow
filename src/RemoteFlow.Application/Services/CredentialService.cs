@@ -173,6 +173,43 @@ public sealed class CredentialService(
         return credential is null ? null : await vault.ResolveAsync(credential, ct);
     }
 
+    /// <summary>
+    /// 判断一次连接是否要用户当场补充凭据：
+    /// 没分配凭据 → 每次输入账号和密码；凭据只有账户名（没存密码）→ 每次输入密码；其余照常使用保存的凭据。
+    /// 凭据记录已丢失、私钥登录这两种情况不在此处理，沿用原有路径（缺失报错 / 私钥认证）。
+    /// </summary>
+    public async Task<ConnectionCredentialRequirement> GetConnectionRequirementAsync(
+        ConnectionProfile profile, CancellationToken ct = default)
+    {
+        if (profile.CredentialId is not { } credentialId)
+        {
+            var type = profile.Protocol switch
+            {
+                ProtocolType.Ssh => CredentialType.SshPassword,
+                ProtocolType.Vnc => CredentialType.VncPassword,
+                _ => CredentialType.LocalPassword,
+            };
+
+            return new ConnectionCredentialRequirement(
+                type == CredentialType.VncPassword
+                    ? ConnectionCredentialPrompt.PasswordOnly
+                    : ConnectionCredentialPrompt.UsernameAndPassword,
+                type);
+        }
+
+        var credential = await repository.GetByIdAsync(credentialId, ct);
+        if (credential is null
+            || Credential.RequiresPrivateKey(credential.Type)
+            || !string.IsNullOrEmpty(credential.SecretReference)
+            || !string.IsNullOrEmpty(credential.KeyReference))
+        {
+            return ConnectionCredentialRequirement.NotRequired;
+        }
+
+        return new ConnectionCredentialRequirement(
+            ConnectionCredentialPrompt.PasswordOnly, credential.Type, credential.Username, credential.Domain);
+    }
+
     /// <summary>写入新 Secret 并删除旧密文；传入空字符串表示清除。</summary>
     private async Task<string?> ReplaceSecretAsync(
         string? existingReference, string newReference, string value, CancellationToken ct)

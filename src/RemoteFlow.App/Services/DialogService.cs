@@ -20,9 +20,34 @@ public sealed class DialogService(
     ConnectionService connections,
     DefaultGroupResolver defaultGroup,
     ICredentialRepository credentials,
+    CredentialService credentialService,
     AppSettings settings,
     ILoggerFactory loggerFactory) : IDialogService, IConnectionEditorDialogService, IConnectionSeedDialogService
 {
+    /// <summary>
+    /// 连接编辑器里「新建凭据」：弹出凭据编辑框，确认后立即落库并返回。
+    /// 落库失败（如名称为空等校验不过）给出提示并返回 null，不让编辑器处于半完成状态。
+    /// </summary>
+    private async Task<Credential?> CreateCredentialForEditorAsync()
+    {
+        var result = await EditCredentialAsync(null);
+        if (result is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await credentialService.CreateAsync(result.Credential, result.Password, result.PrivateKey);
+        }
+        catch (Exception ex)
+        {
+            loggerFactory.CreateLogger<DialogService>().LogError(ex, "新建凭据失败");
+            await ShowMessageAsync("无法新建凭据", ex.Message, DialogKind.Error);
+            return null;
+        }
+    }
+
     /// <summary>取当前活动窗口作为对话框宿主，保证居中显示且正确模态。</summary>
     private static Window? Owner =>
         System.Windows.Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive)
@@ -84,7 +109,8 @@ public sealed class DialogService(
                 settings,
                 resolvedGroupId,
                 preselectedProtocol,
-                seed);
+                seed,
+                CreateCredentialForEditorAsync);
             var dialog = new ConnectionEditorDialog(viewModel, ManageTagsAsync) { Owner = Owner };
 
             return dialog.ShowDialog() == true && dialog.Result is { } profile
@@ -167,6 +193,11 @@ public sealed class DialogService(
 
     public Task<string?> PromptPasswordAsync(string title, string message, bool confirm)
         => InvokeOnUiAsync(() => PasswordPromptDialog.Prompt(Owner, title, message, confirm));
+
+    public bool SupportsConnectionCredentialPrompt => true;
+
+    public Task<ConnectionCredentialInput?> PromptConnectionCredentialAsync(ConnectionCredentialRequest request)
+        => InvokeOnUiAsync(() => ConnectionCredentialDialog.Prompt(Owner, request));
 
     public string? PickFileToOpen(string title, string filter)
     {

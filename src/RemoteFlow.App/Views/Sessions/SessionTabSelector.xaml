@@ -37,9 +37,15 @@
                      叠在图标右上角会切断协议图标的框线（实测压掉 37%~55% 笔迹，
                      框形图标的右上角正是边框所在），协议因此难以辨认。
                      只在会话数 ≥ 2 时出现，N ≤ 1 时整块收起、与旧版逐像素一致。 -->
+                <!-- 会话 / 文件传输：与普通标签相同的设备图标（16×16），不再用与页面图标雷同的协议线框图标 -->
+                <Image x:Name="HeaderDeviceIcon"
+                       Width="16" Height="16"
+                       VerticalAlignment="Center"
+                       Visibility="Collapsed" />
+                <!-- 仅「活动连接」（未选中会话）时使用 -->
                 <Path x:Name="HeaderIcon"
                       Style="{StaticResource UiIcon}"
-                      Width="15" Height="15"
+                      Width="16" Height="16"
                       VerticalAlignment="Center"
                       Fill="{DynamicResource Text.Secondary}" />
                 <!-- 角标 + 标题共用一个有上限的 Grid：角标列 Auto、标题列星号。

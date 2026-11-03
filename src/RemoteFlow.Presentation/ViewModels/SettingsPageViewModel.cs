@@ -56,6 +56,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     /// <summary>全屏悬浮工具条延迟下拉的一项：<see cref="Ms"/> 为 0 表示立即。</summary>
     public sealed record PillDelayOption(int Ms, string Label);
 
+    public sealed record SessionTabLayoutOption(SessionTabLayout Value, string Label);
+
+    public sealed record SessionPillPositionOption(SessionPillPosition Value, string Label);
+
 
     private const string CsvFilter = "CSV 文件 (*.csv)|*.csv|所有文件 (*.*)|*.*";
     private const string BackupFilter = "RemoteFlow 加密备份 (*.rfbackup)|*.rfbackup|所有文件 (*.*)|*.*";
@@ -365,6 +369,33 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     // ── 会话 → 全屏悬浮工具条 ─────────────────────────────────────
 
     /// <summary>顶沿悬停唤出延迟的可选值（两个全屏档共用一套刻度）。</summary>
+    // ── 会话与全屏工具条位置 ──────────────────────────────────────
+
+    public IReadOnlyList<SessionTabLayoutOption> SessionTabLayoutOptions { get; } =
+    [
+        new(SessionTabLayout.AutoCollapse, "自动折叠"),
+        new(SessionTabLayout.Scroll, "横向滚动"),
+    ];
+
+    public IReadOnlyList<SessionPillPositionOption> SessionPillPositionOptions { get; } =
+    [
+        new(SessionPillPosition.Left, "靠左"),
+        new(SessionPillPosition.Center, "居中"),
+        new(SessionPillPosition.Right, "靠右"),
+    ];
+
+    [ObservableProperty]
+    private SessionTabLayoutOption _selectedSessionTabLayout = new(SessionTabLayout.AutoCollapse, "自动折叠");
+
+    [ObservableProperty]
+    private SessionPillPositionOption _selectedSessionPillPosition = new(SessionPillPosition.Center, "居中");
+
+    [ObservableProperty]
+    private bool _confirmCloseSession = true;
+
+    [ObservableProperty]
+    private bool _offerRestoreSessions = true;
+
     public IReadOnlyList<PillDelayOption> PillRevealDelayOptions { get; } =
     [
         new(0, "立即"),
@@ -463,6 +494,13 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
         MaxConcurrentSessions = _settings.MaxConcurrentSessions;
         PresenceProbeEnabled = _settings.PresenceProbeEnabled;
+
+        SelectedSessionTabLayout = SessionTabLayoutOptions.FirstOrDefault(o => o.Value == _settings.SessionTabLayout)
+            ?? SessionTabLayoutOptions[0];
+        SelectedSessionPillPosition = SessionPillPositionOptions.FirstOrDefault(o => o.Value == _settings.SessionPillPosition)
+            ?? SessionPillPositionOptions[1];
+        ConfirmCloseSession = _settings.ConfirmCloseSession;
+        OfferRestoreSessions = _settings.OfferRestoreSessions;
 
         SelectedPillRevealDelayWindowFull = NearestPillDelay(PillRevealDelayOptions, _settings.PillRevealDelayWindowFullMs);
         SelectedPillHideDelayWindowFull = NearestPillDelay(PillHideDelayOptions, _settings.PillHideDelayWindowFullMs);
@@ -662,6 +700,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
     partial void OnVncClipboardToLocalChanged(bool value) => Save();
     partial void OnMaxConcurrentSessionsChanged(int value) => Save();
     partial void OnPresenceProbeEnabledChanged(bool value) => Save();
+    partial void OnSelectedSessionTabLayoutChanged(SessionTabLayoutOption value) => Save();
+    partial void OnSelectedSessionPillPositionChanged(SessionPillPositionOption value) => Save();
+    partial void OnConfirmCloseSessionChanged(bool value) => Save();
+    partial void OnOfferRestoreSessionsChanged(bool value) => Save();
     partial void OnSelectedPillRevealDelayWindowFullChanged(PillDelayOption value) => Save();
     partial void OnSelectedPillHideDelayWindowFullChanged(PillDelayOption value) => Save();
     partial void OnSelectedPillRevealDelayScreenFullChanged(PillDelayOption value) => Save();
@@ -713,6 +755,11 @@ public sealed partial class SettingsPageViewModel : ObservableObject
 
         _settings.MaxConcurrentSessions = Math.Clamp(MaxConcurrentSessions, 1, 100);
         _settings.PresenceProbeEnabled = PresenceProbeEnabled;
+
+        _settings.SessionTabLayout = SelectedSessionTabLayout.Value;
+        _settings.SessionPillPosition = SelectedSessionPillPosition.Value;
+        _settings.ConfirmCloseSession = ConfirmCloseSession;
+        _settings.OfferRestoreSessions = OfferRestoreSessions;
 
         _settings.PillRevealDelayWindowFullMs = SelectedPillRevealDelayWindowFull.Ms;
         _settings.PillHideDelayWindowFullMs = SelectedPillHideDelayWindowFull.Ms;

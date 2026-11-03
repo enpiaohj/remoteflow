@@ -535,7 +535,7 @@ public partial class SessionHostView : UserControl
         var width = PillBar.ActualWidth > 0 ? PillBar.ActualWidth : 320;
         var left = _userMoved
             ? ToolbarPopup.HorizontalOffset + PillBar.Margin.Left
-            : Math.Max(0, (RootGrid.ActualWidth - width) / 2);
+            : InitialPillLeft(width);
         return rel.X >= Math.Max(0, left) && rel.X <= Math.Min(RootGrid.ActualWidth, left + width)
             && rel.Y >= 0 && rel.Y <= height;
     }
@@ -848,15 +848,32 @@ public partial class SessionHostView : UserControl
         }
         else
         {
-            // 居中的是「可见的药丸本体」，需要扣掉 Border 自身的左边距。
+            // 定位的是「可见的药丸本体」，需要扣掉 Border 自身的左边距。
             var barWidth = PillBar.ActualWidth > 0 ? PillBar.ActualWidth : 320;
-            h = Math.Max(0, (RootGrid.ActualWidth - barWidth) / 2 - PillBar.Margin.Left);
+            h = Math.Max(0, InitialPillLeft(barWidth) - PillBar.Margin.Left);
             v = 0;
         }
 
         ToolbarPopup.HorizontalOffset = h + 0.5;
         ToolbarPopup.HorizontalOffset = h;
         ToolbarPopup.VerticalOffset = v;
+    }
+
+    /// <summary>药丸未被拖动时的左缘位置（相对 RootGrid）：按设置靠左 / 居中 / 靠右，靠边时留出一点边距。</summary>
+    private double InitialPillLeft(double barWidth)
+    {
+        const double EdgeMargin = 24;
+        var free = Math.Max(0, RootGrid.ActualWidth - barWidth);
+        // 非 RemoteFlow 的宿主（单元测试里的 Application）没有 DI 容器，按默认居中处理。
+        var position = System.Windows.Application.Current is App
+            ? App.Services.GetService<AppSettings>()?.SessionPillPosition ?? SessionPillPosition.Center
+            : SessionPillPosition.Center;
+        return position switch
+        {
+            SessionPillPosition.Left => Math.Min(EdgeMargin, free),
+            SessionPillPosition.Right => Math.Max(0, free - EdgeMargin),
+            _ => free / 2,
+        };
     }
 
     private double ClampHorizontal(double value)

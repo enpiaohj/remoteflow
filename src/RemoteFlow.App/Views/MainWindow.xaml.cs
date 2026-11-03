@@ -98,7 +98,16 @@ public partial class MainWindow : Window
             Dispatcher.BeginInvoke(
                 EvaluateSessionTabLayout,
                 System.Windows.Threading.DispatcherPriority.Loaded);
+
+            // 窗口画出来之后再问是否恢复上次的会话，避免对话框盖在一片空白窗口上。
+            Dispatcher.BeginInvoke(
+                async () => await _viewModel.OfferRestoreSessionsAsync(),
+                System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         };
+
+        // 设置里改了会话标签显示方式：立刻按新方式重新判定。
+        SettingsPageViewModel.SettingsSaved += OnSettingsSaved;
+        Closed += (_, _) => SettingsPageViewModel.SettingsSaved -= OnSettingsSaved;
 
         // RDP / VNC 会话内嵌原生 HWND，键盘焦点在里面时会把普通按键（含 F11）
         // 直接转发给远端，WPF 的 OnPreviewKeyDown 与线程消息预处理都拦不到。
@@ -714,8 +723,64 @@ public partial class MainWindow : Window
     /// <summary>当前是否处于紧凑模式（工作台 Tab + 会话选择器）。</summary>
     private bool _isCompactTabMode;
 
+    private void OnSettingsSaved(object? sender, EventArgs e)
+        => Dispatcher.BeginInvoke(
+            EvaluateSessionTabLayout,
+            System.Windows.Threading.DispatcherPriority.Loaded);
+
+    /// <summary>横向滚动模式下，两个滚动箭头占的宽度。</summary>
+    private const double TabNavArrowsWidth = 56;
+
+    private void OnTabNavPrevClick(object sender, RoutedEventArgs e) => ScrollTabStrip(-1);
+
+    private void OnTabNavNextClick(object sender, RoutedEventArgs e) => ScrollTabStrip(1);
+
+    /// <summary>按可视宽度的一大半滚动一屏，保证前后两屏之间有重叠，不会错过标签。</summary>
+    private void ScrollTabStrip(int direction)
+    {
+        var step = Math.Max(120, TabScrollViewer.ViewportWidth * 0.6);
+        TabScrollViewer.ScrollToHorizontalOffset(
+            Math.Clamp(TabScrollViewer.HorizontalOffset + direction * step, 0, TabScrollViewer.ScrollableWidth));
+    }
+
+    /// <summary>鼠标滚轮横向滚动标签条（竖直滚轮在标题栏上没有别的用途）。</summary>
+    private void OnTabStripMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (TabScrollViewer.ScrollableWidth <= 0)
+        {
+            return;
+        }
+
+        TabScrollViewer.ScrollToHorizontalOffset(
+            Math.Clamp(TabScrollViewer.HorizontalOffset - e.Delta, 0, TabScrollViewer.ScrollableWidth));
+        e.Handled = true;
+    }
+
+    /// <summary>左右箭头的可用状态：已在最左 / 最右端时对应箭头置灰。</summary>
+    private void UpdateTabNavEnabled()
+    {
+        TabNavPrevButton.IsEnabled = TabScrollViewer.HorizontalOffset > 0.5;
+        TabNavNextButton.IsEnabled =
+            TabScrollViewer.HorizontalOffset + TabScrollViewer.ViewportWidth < TabScrollViewer.ExtentWidth - 0.5;
+    }
+
+    private void OnNewTabButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || FindResource("NewItemMenu") is not ContextMenu menu)
+        {
+            return;
+        }
+
+        menu.DataContext = _viewModel;
+        menu.PlacementTarget = button;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
     private void OnTabStripScrollChanged(object sender, System.Windows.Controls.ScrollChangedEventArgs e)
     {
+        UpdateTabNavEnabled();
+
         // 会话标题等变化会改变普通 Tab 的需求宽度（ExtentWidth），需重判模式。
         if (e.ExtentWidthChange != 0)
         {
@@ -742,12 +807,23 @@ public partial class MainWindow : Window
             return;
         }
 
-        var sessionCount = _viewModel.Tabs.OfType<SessionTabViewModel>().Count();
+        var layout = _settings.SessionTabLayout;
+
         var available = Math.Max(
             0,
             TabStripHost.ActualWidth - TabStripHost.Padding.Left - TabStripHost.Padding.Right);
+
+        // 横向滚动模式（类似 Excel 工作表）：放不下时左侧出现滚动箭头，标签区收窄后内部滚动。
+        // 用「不含箭头的可用宽度」判断是否溢出，箭头出现后不会反过来触发自己消失。
+        var showArrows = SessionTabLayoutPolicy.ShouldShowScrollArrows(layout, TabScrollViewer.ExtentWidth, available);
+        var arrowVisibility = showArrows ? Visibility.Visible : Visibility.Collapsed;
+        TabNavPrevButton.Visibility = arrowVisibility;
+        TabNavNextButton.Visibility = arrowVisibility;
+        TabScrollViewer.MaxWidth = Math.Max(0, available - (showArrows ? TabNavArrowsWidth : 0));
+        UpdateTabNavEnabled();
+
         var compact = SessionTabLayoutPolicy.ShouldUseCompactMode(
-            sessionCount,
+            layout,
             TabScrollViewer.ExtentWidth,
             available);
 
@@ -1117,6 +1193,9 @@ public partial class MainWindow : Window
             CancelExit(e);
             return;
         }
+
+        // 已确认退出：先记下还开着的会话，下次启动时询问是否恢复。
+        _viewModel.SaveSessionSnapshot();
 
         RemoveKeyboardHook();
 

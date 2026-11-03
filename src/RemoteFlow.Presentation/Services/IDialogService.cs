@@ -70,6 +70,16 @@ public interface IDialogService
     /// </summary>
     Task<string?> PromptPasswordAsync(string title, string message, bool confirm);
 
+    /// <summary>
+    /// 平台是否提供「连接前输入账号 / 密码」的对话框。不提供的平台（macOS）沿用原有行为：
+    /// 没有分配凭据就不补充，直接按原路径连接。带默认实现，测试替身无需改动。
+    /// </summary>
+    bool SupportsConnectionCredentialPrompt => false;
+
+    /// <summary>连接前向用户索取账号 / 密码。取消返回 null（放弃本次连接）。</summary>
+    Task<ConnectionCredentialInput?> PromptConnectionCredentialAsync(ConnectionCredentialRequest request)
+        => Task.FromResult<ConnectionCredentialInput?>(null);
+
     /// <summary>选择要打开的文件，取消返回 null。</summary>
     string? PickFileToOpen(string title, string filter);
 

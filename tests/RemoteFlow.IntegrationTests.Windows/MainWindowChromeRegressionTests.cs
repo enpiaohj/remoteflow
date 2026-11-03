@@ -14,14 +14,18 @@ public sealed class MainWindowChromeRegressionTests
         var code = File.ReadAllText(FindProjectFile(
             "src", "RemoteFlow.App", "Views", "MainWindow.xaml.cs"));
 
-        // 原生横向滚动条保持隐藏；箭头方案已由紧凑选择器取代。
+        // 原生横向滚动条保持隐藏。旧的「TabScrollLeft/RightButton」箭头方案已被紧凑选择器取代，
+        // 不再使用；「横向滚动」模式（类似 Excel 工作表）是用户明确要求的可选模式，
+        // 用 TabNavPrev/NextButton 两个新控件实现，仅在该模式且标签溢出时显示。
         Assert.Contains(
             "HorizontalScrollBarVisibility=\"Hidden\"",
             markup,
             StringComparison.Ordinal);
         Assert.DoesNotContain("TabScrollLeftButton", markup, StringComparison.Ordinal);
         Assert.DoesNotContain("TabScrollRightButton", markup, StringComparison.Ordinal);
-        Assert.DoesNotContain("ScrollTabStrip", code, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TabNavPrevButton\"", markup, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"TabNavNextButton\"", markup, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"NewTabButton\"", markup, StringComparison.Ordinal);
 
         // 双呈现容器与紧凑判定。
         Assert.Contains("x:Name=\"NormalTabStrip\"", markup, StringComparison.Ordinal);

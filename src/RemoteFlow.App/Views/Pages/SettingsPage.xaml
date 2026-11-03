@@ -417,6 +417,71 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- 会话 -->
+                    <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
+                        <StackPanel>
+                            <StackPanel Style="{StaticResource Settings.CardHeader}">
+                                <Image Style="{StaticResource Settings.CardIcon}" Source="{StaticResource Id.Sessions}" />
+                                <TextBlock Text="会话" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
+                            </StackPanel>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="260" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="会话标签显示方式" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="自动折叠：标题栏空间不足时，将会话标签收纳为「当前会话」下拉列表。横向滚动：始终逐个显示标签，空间不足时通过左侧箭头或鼠标滚轮左右滚动（类似 Excel 工作表标签）。"
+                                               Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding SessionTabLayoutOptions}" SelectedItem="{Binding SelectedSessionTabLayout}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="关闭当前会话前确认" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="关闭正在查看且仍处于连接状态的会话时先确认，防止误操作。关闭其他标签、批量关闭以及已断开的会话不提示。"
+                                               Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
+                                          IsChecked="{Binding ConfirmCloseSession}" />
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
+
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="启动时询问是否恢复上次的会话" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="退出时记住仍开着的会话列表（只记连接，不记密码），下次启动询问是否重新打开。需要输入密码的连接会照常再次询问。"
+                                               Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
+                                          IsChecked="{Binding OfferRestoreSessions}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
                     <!-- 全屏悬浮工具条 -->
                     <Border Style="{StaticResource Surface.Card}" Padding="24,20" Margin="0,0,0,20">
                         <StackPanel>
@@ -424,6 +489,28 @@
                                 <Image Style="{StaticResource Settings.CardIcon}" Source="{StaticResource Id.FloatingToolbar}" />
                                 <TextBlock Text="全屏悬浮工具条" Style="{StaticResource Text.SectionTitle}" Margin="10,0,0,0" />
                             </StackPanel>
+
+                            <Grid Style="{StaticResource SettingRow}" Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0"
+                                            MaxWidth="560" HorizontalAlignment="Left">
+                                    <TextBlock Text="初始位置" Style="{StaticResource Text.Body}" />
+                                    <TextBlock Text="工具条出现在屏幕顶沿的左侧、中间还是右侧；在会话里拖动过它之后，以拖动的位置为准。" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource Input.ComboBox}" VerticalAlignment="Center"
+                                          ItemsSource="{Binding SessionPillPositionOptions}" SelectedItem="{Binding SelectedSessionPillPosition}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Style="{StaticResource Surface.Divider}" Margin="0,14" />
 
                             <Grid Style="{StaticResource SettingRow}" Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>

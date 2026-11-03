@@ -308,6 +308,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<AppServices.ConnectionService>();
         services.AddSingleton<AppServices.GroupService>();
         services.AddSingleton<AppServices.CredentialService>();
+        services.AddSingleton<AppServices.RememberedCredentialService>();
         services.AddSingleton<AppServices.ConnectionSearchService>();
         services.AddSingleton<PresenceProbeService>();
         services.AddSingleton<AppServices.ImportExportService>();

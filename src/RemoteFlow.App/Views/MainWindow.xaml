@@ -66,8 +66,23 @@
         <DataTemplate DataType="{x:Type vm:SessionTabViewModel}">
             <sessions:SessionToolsBar />
         </DataTemplate>
+        <!-- 页面 Tab 激活时：若是从某个会话切出来的，右侧给出「返回 会话名」，一键回到离开前的会话。 -->
         <DataTemplate DataType="{x:Type vm:PageTabViewModel}">
-            <Grid Width="0" />
+            <Button Style="{StaticResource Button.Subtle}"
+                    Margin="0,0,8,0"
+                    VerticalAlignment="Center"
+                    shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                    Command="{Binding DataContext.ReturnToSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ToolTip="回到离开前的会话"
+                    Visibility="{Binding DataContext.CanReturnToSession, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronLeft}"
+                          Width="12" Height="12" Fill="{DynamicResource Brand.Default}" />
+                    <TextBlock Text="{Binding DataContext.ReturnTabLabel, RelativeSource={RelativeSource AncestorType=Window}}"
+                               Margin="6,0,0,0" MaxWidth="180" TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource Brand.Default}" />
+                </StackPanel>
+            </Button>
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:FileTransferTabViewModel}">
             <Grid Width="0" />
@@ -92,6 +107,19 @@
                       Click="OnTabCloseRightClick" />
             <Separator />
             <MenuItem Header="关闭全部会话" views:MenuItemAssist.IconKey="Ui.Sessions" views:MenuItemAssist.IsDanger="True" Click="OnTabCloseAllClick" />
+        </ContextMenu>
+
+        <!-- 标题栏「+」菜单：新建连接 / 凭据 / 分组 / 虚拟化来源。动作直接走主视图模型命令。 -->
+        <ContextMenu x:Key="NewItemMenu" x:Shared="False" Placement="Bottom">
+            <MenuItem Header="新建连接" InputGestureText="Ctrl+N" views:MenuItemAssist.IconKey="Ui.Connections"
+                      Command="{Binding NewConnectionCommand}" />
+            <MenuItem Header="新建凭据" views:MenuItemAssist.IconKey="Ui.Credential"
+                      Command="{Binding NewCredentialCommand}" />
+            <MenuItem Header="新建分组" views:MenuItemAssist.IconKey="Ui.Folder"
+                      Command="{Binding NewGroupCommand}" />
+            <Separator />
+            <MenuItem Header="添加 ESXi / vCenter 来源" views:MenuItemAssist.IconKey="Ui.Server"
+                      Command="{Binding AddVmwareSourceCommand}" />
         </ContextMenu>
 
         <!-- 文件传输 Tab 右键菜单：它不是会话，只有复制地址与关闭 -->
@@ -173,14 +201,35 @@
                                 <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Layer}" />
-                                <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Stroke.Subtle}" />
+                                <!-- 当前标签用品牌淡底 + 品牌色描边突出，与其余标签一眼区分 -->
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Selected}" />
+                                <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- 标签标题：当前标签用主文字色，其余降为次要文字色。字重保持不变，避免切换时标签宽度跳动。 -->
+        <Style x:Key="Workspace.TabTitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 标签条上的小图标按钮：滚动箭头、新建「+」 -->
+        <Style x:Key="Workspace.TabBarButton" TargetType="Button" BasedOn="{StaticResource Button.Icon}">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+            <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+        </Style>
+
         <!-- 模块图标栏的单个入口：34×34 圆角方块，选中 = 品牌淡底 -->
         <!-- 页面 Tab 图标（DataContext = PageTabViewModel）：常态线性、当前 Tab 填充并用品牌色 -->
         <Style x:Key="Workspace.PageTabIcon" TargetType="Path" BasedOn="{StaticResource UiIcon}">
@@ -239,6 +288,31 @@
                                 <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Selected}" />
                                 <Setter TargetName="Indicator" Property="Visibility" Value="Visible" />
                                 <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 导航栏「返回会话」：与导航项同尺寸，品牌色醒目，点击回到离开前的会话 -->
+        <Style x:Key="Nav.ReturnItem" TargetType="Button">
+            <Setter Property="Width" Value="38" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Margin" Value="0,3" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Brand.Default}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{DynamicResource Bg.Selected}" CornerRadius="8" SnapsToDevicePixels="True">
+                            <Path Style="{StaticResource UiIcon}" Width="19" Height="19"
+                                  Fill="{TemplateBinding Foreground}"
+                                  Data="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource UiIconGeometry}}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Bg.Hover}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -372,8 +446,25 @@
                         </Border.Style>
                         <Grid>
                             <Border x:Name="NormalTabStrip">
+                              <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                                <!-- 「横向滚动」模式（类似 Excel 工作表）：标签放不下时左侧出现的滚动箭头 -->
+                                <Button x:Name="TabNavPrevButton"
+                                        Style="{StaticResource Workspace.TabBarButton}"
+                                        Content="{StaticResource Ui.ChevronLeft}"
+                                        ToolTip="向左滚动标签"
+                                        AutomationProperties.Name="向左滚动标签"
+                                        Visibility="Collapsed"
+                                        Click="OnTabNavPrevClick" />
+                                <Button x:Name="TabNavNextButton"
+                                        Style="{StaticResource Workspace.TabBarButton}"
+                                        Content="{StaticResource Ui.ChevronRight}"
+                                        ToolTip="向右滚动标签"
+                                        AutomationProperties.Name="向右滚动标签"
+                                        Visibility="Collapsed"
+                                        Click="OnTabNavNextClick" />
                                 <ScrollViewer x:Name="TabScrollViewer"
                                               ScrollChanged="OnTabStripScrollChanged"
+                                              PreviewMouseWheel="OnTabStripMouseWheel"
                                               HorizontalScrollBarVisibility="Hidden"
                                               VerticalScrollBarVisibility="Disabled">
                                     <ItemsControl x:Name="TabHeadersItemsControl"
@@ -419,12 +510,12 @@
                                                             </Image.Style>
                                                         </Image>
                                                         <TextBlock Text="{Binding Title}"
+                                                                   Style="{StaticResource Workspace.TabTitle}"
                                                                    Margin="8,0,0,0"
                                                                    MaxWidth="150"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    VerticalAlignment="Center"
-                                                                   FontSize="13"
-                                                                   Foreground="{DynamicResource Text.Primary}" />
+                                                                   FontSize="13" />
 
                                                         <!-- 会话状态点：与状态文字一起出现在 Tab 提示中 -->
                                                         <Ellipse Width="7" Height="7" Margin="8,0,0,0" VerticalAlignment="Center"
@@ -470,12 +561,12 @@
                                                             </Image.Style>
                                                         </Image>
                                                         <TextBlock Text="{Binding Title}"
+                                                                   Style="{StaticResource Workspace.TabTitle}"
                                                                    Margin="8,0,0,0"
                                                                    MaxWidth="150"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    VerticalAlignment="Center"
-                                                                   FontSize="13"
-                                                                   Foreground="{DynamicResource Text.Primary}" />
+                                                                   FontSize="13" />
                                                         <Button Style="{StaticResource Button.Icon}"
                                                                 Width="26" Height="26" Margin="6,0,-2,0"
                                                                 FontSize="11"
@@ -488,6 +579,7 @@
                                         </ItemsControl.Resources>
                                     </ItemsControl>
                                 </ScrollViewer>
+                              </StackPanel>
                             </Border>
 
                             <!-- 紧凑：模块入口（图标，名称由页面标题唯一展示）+ 当前会话选择器 -->
@@ -517,6 +609,12 @@
 
                 <!-- 窗口控制 -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal">
+                    <!-- 新建入口：与窗口按钮同款，新建连接 / 凭据 / 分组 / 虚拟化来源 -->
+                    <Button x:Name="NewTabButton" Style="{StaticResource CaptionButton}"
+                            Content="{StaticResource Ui.Add}"
+                            Click="OnNewTabButtonClick"
+                            ToolTip="新建（连接 / 凭据 / 分组 / 虚拟化来源）"
+                            AutomationProperties.Name="新建" />
                     <Button Style="{StaticResource CaptionButton}" Content="{StaticResource Ui.WindowMinimize}"
                             Click="OnMinimizeClick" ToolTip="最小化" />
                     <Button x:Name="MaximizeButton" Style="{StaticResource CaptionButton}" Content="{StaticResource Ui.WindowMaximize}"
@@ -693,6 +791,15 @@
 
                     <!-- 底部：设置 / 帮助。「关于」（含软件更新）已在 设置 → 关于，不再单独占位。 -->
                     <StackPanel Grid.Row="1" Margin="0,0,0,10">
+                        <!-- 返回离开前的会话：放在导航栏底部（设置 / 帮助之上），与导航项分组区分，
+                             仅在从会话切到页面时出现 -->
+                        <Button Style="{StaticResource Nav.ReturnItem}"
+                                Content="Ui.ChevronLeft"
+                                Command="{Binding ReturnToSessionCommand}"
+                                ToolTip="{Binding ReturnTabLabel}"
+                                AutomationProperties.Name="返回会话"
+                                Margin="0,3,0,10"
+                                Visibility="{Binding CanReturnToSession, Converter={StaticResource BoolToVisibility}}" />
                         <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="设置"
                                      IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Settings, Mode=TwoWay}"
                                      Tag="{x:Static vm:NavigationPage.Settings}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Settings" />

@@ -18,6 +18,9 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
     private readonly ConnectionProfile _profile;
     private readonly bool _isNew;
 
+    /// <summary>新建凭据并落库的回调；为 null 的平台不显示「新建凭据」入口。返回 null 表示用户取消。</summary>
+    private readonly Func<Task<Credential?>>? _createCredentialAsync;
+
     /// <summary>端口是否被用户手工改过。未改过时切换协议会自动带出新默认端口。</summary>
     private bool _portManuallyEdited;
 
@@ -29,8 +32,10 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         AppSettings defaults,
         Guid? defaultGroupId = null,
         ProtocolType? preselectedProtocol = null,
-        Services.ConnectionEditorSeed? seed = null)
+        Services.ConnectionEditorSeed? seed = null,
+        Func<Task<Credential?>>? createCredentialAsync = null)
     {
+        _createCredentialAsync = createCredentialAsync;
         _isNew = existing is null;
         _profile = existing is null ? new ConnectionProfile() : existing.Clone(existing.Name);
 
@@ -88,6 +93,9 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
         // 「未指定」与「未分组」用 null 作为哨兵项，避免额外的可空判断散落在界面里。
         AvailableCredentials = [new CredentialOption(null, "未指定"),
             .. credentials.Select(c => new CredentialOption(c.Id, c.Name))];
+        CredentialChoices = createCredentialAsync is null
+            ? [.. AvailableCredentials]
+            : [CredentialOption.NewCredentialEntry, .. AvailableCredentials];
         // 「未分组」用 null 哨兵项表示；数据库里的系统「未分组」行不重复列出。
         AvailableGroups = [new GroupOption(null, "未分组"),
             .. groups.Where(g => !g.IsSystem)
@@ -325,6 +333,73 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
 
     [ObservableProperty]
     private CredentialOption _selectedCredential;
+
+    /// <summary>
+    /// 凭据下拉的数据源：第一行是「＋ 新建凭据…」（平台提供新建能力时），其后是「未指定」和已有凭据。
+    /// 新建成功的凭据会追加到末尾并自动选中。<see cref="AvailableCredentials"/> 保持不含操作项（macOS 编辑器在用）。
+    /// </summary>
+    public ObservableCollection<CredentialOption> CredentialChoices { get; private set; } = [];
+
+    /// <summary>
+    /// 下拉当前选中项。选中「＋ 新建凭据…」时不改变真正的选中值：弹出新建对话框，
+    /// 建好后自动选中新凭据，取消则下拉回到原来的选择。
+    /// </summary>
+    public CredentialOption SelectedCredentialChoice
+    {
+        get => SelectedCredential;
+        set
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            if (value.IsNewCredentialEntry)
+            {
+                _ = CreateCredentialAsync();
+                OnPropertyChanged(); // 让下拉立刻回到真实选中项，不停在操作项上。
+                return;
+            }
+
+            SelectedCredential = value;
+        }
+    }
+
+    partial void OnSelectedCredentialChanged(CredentialOption value)
+        => OnPropertyChanged(nameof(SelectedCredentialChoice));
+
+    private bool _creatingCredential;
+
+    private async Task CreateCredentialAsync()
+    {
+        if (_createCredentialAsync is null || _creatingCredential)
+        {
+            return;
+        }
+
+        _creatingCredential = true;
+        try
+        {
+            // 先让出一次：等下拉的绑定更新结束后再通知回退、再弹对话框，
+            // 否则 WPF 会忽略在属性赋值过程中发出的同名变更通知，下拉停在「新建凭据」上。
+            await Task.Yield();
+            OnPropertyChanged(nameof(SelectedCredentialChoice));
+
+            if (await _createCredentialAsync() is not { } created)
+            {
+                return;
+            }
+
+            var option = new CredentialOption(created.Id, created.Name);
+            CredentialChoices.Add(option);
+            SelectedCredential = option;
+        }
+        finally
+        {
+            _creatingCredential = false;
+            OnPropertyChanged(nameof(SelectedCredentialChoice));
+        }
+    }
 
     [ObservableProperty]
     private GroupOption _selectedGroup;
@@ -615,9 +690,17 @@ public sealed partial class ConnectionEditorViewModel : ObservableObject
     }
 }
 
-/// <summary>凭据下拉项。Id 为 null 表示「未指定」。</summary>
+/// <summary>
+/// 凭据下拉项。Id 为 null 表示「未指定」；<see cref="NewCredentialEntry"/> 是下拉第一行的
+/// 「＋ 新建凭据…」操作项（不是真实凭据，永远不会成为连接的选中值）。
+/// </summary>
 public sealed record CredentialOption(Guid? Id, string Name)
 {
+    /// <summary>下拉第一行的「新建凭据」操作项。选中它会打开新建凭据对话框，而不是选中一个凭据。</summary>
+    public static CredentialOption NewCredentialEntry { get; } = new(Guid.Empty, "＋ 新建凭据…");
+
+    public bool IsNewCredentialEntry => Id == Guid.Empty;
+
     public override string ToString() => Name;
 }
 

@@ -9,6 +9,7 @@ using RemoteFlow.Application.FileTransfer;
 using RemoteFlow.Application.Services;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
+using RemoteFlow.Infrastructure.Settings;
 
 namespace RemoteFlow.Presentation.ViewModels;
 
@@ -56,6 +57,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly IFileTransferLauncher? _fileTransferLauncher;
     private readonly IFileTransferConnector? _fileTransferConnector;
     private readonly ILoggerFactory? _loggerFactory;
+    private readonly AppSettings _settings;
+    private readonly JsonSettingsStore? _settingsStore;
+    private readonly RememberedCredentialService? _rememberedCredentials;
+    private bool _restoreOffered;
     private CancellationTokenSource? _pageReloadCts;
     private Task _pageReloadTask = Task.CompletedTask;
     private int _pageReloadVersion;
@@ -79,9 +84,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IFileTransferConnector? fileTransferConnector = null,
         ILoggerFactory? loggerFactory = null,
         UpdateViewModel? update = null,
-        VmwarePageViewModel? vmwarePage = null)
+        VmwarePageViewModel? vmwarePage = null,
+        JsonSettingsStore? settingsStore = null,
+        RememberedCredentialService? rememberedCredentials = null)
     {
+        _rememberedCredentials = rememberedCredentials;
         _sessions = sessions;
+        _settings = settings;
+        _settingsStore = settingsStore;
         Update = update;
         _aboutPage = new AboutPageViewModel { Update = update };
         _ui = uiDispatcher;
@@ -109,6 +119,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(OpenSessionCount));
             OnPropertyChanged(nameof(ConnectionSessionCount));
             OnPropertyChanged(nameof(VmwareSessionCount));
+            OnPropertyChanged(nameof(CanReturnToSession));
             RaiseInterruptedChanged();
         };
 
@@ -185,6 +196,29 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private WorkspaceTabViewModel? _selectedTab;
+
+    /// <summary>
+    /// 从会话（或文件传输）切到页面（建凭据、改设置等）时记下离开的那个 Tab，
+    /// 页面上据此给出「返回」入口，一键回到离开前的会话。切回任何会话 Tab、或该 Tab 被关闭后清除。
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanReturnToSession))]
+    [NotifyPropertyChangedFor(nameof(ReturnTabLabel))]
+    private WorkspaceTabViewModel? _returnTab;
+
+    /// <summary>是否存在可返回的会话（且它还开着）。</summary>
+    public bool CanReturnToSession => ReturnTab is not null && Tabs.Contains(ReturnTab);
+
+    public string ReturnTabLabel => ReturnTab is null ? string.Empty : $"返回 {ReturnTab.Title}";
+
+    [RelayCommand]
+    private void ReturnToSession()
+    {
+        if (ReturnTab is { } tab && Tabs.Contains(tab))
+        {
+            SelectedTab = tab;
+        }
+    }
 
     [ObservableProperty]
     private NavigationPage _currentPage = NavigationPage.Home;
@@ -376,6 +410,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         OnPropertyChanged(nameof(IsSessionSelected));
         OnPropertyChanged(nameof(IsNavRailHidden));
+
+        // 离开会话去页面：记下来源，页面上给「返回」；回到任何会话 / 传输 Tab 则清除。
+        if (newValue is PageTabViewModel && oldValue is SessionTabViewModel or FileTransferTabViewModel)
+        {
+            ReturnTab = oldValue;
+        }
+        else if (newValue is SessionTabViewModel or FileTransferTabViewModel)
+        {
+            ReturnTab = null;
+        }
 
         // 离开会话时回到常规档，避免用户回到列表却看不到导航。
         if (newValue is not SessionTabViewModel)
@@ -709,10 +753,114 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         return ConnectionsPage.CreateConnectionAsync(seed?.Protocol, seed?.GroupId, seed);
     }
 
+    [RelayCommand]
     private async Task NewCredentialAsync()
     {
         NavigateTo(NavigationPage.Credentials);
         await _credentialsPage.CreateCommand.ExecuteAsync(null);
+    }
+
+    /// <summary>标题栏「+」→ 新建分组：切到连接工作台并打开新建分组对话框。</summary>
+    [RelayCommand]
+    private async Task NewGroupAsync()
+    {
+        NavigateTo(NavigationPage.Connections);
+        await ConnectionsPage.CreateGroupCommand.ExecuteAsync(null);
+    }
+
+    /// <summary>标题栏「+」→ 添加 ESXi / vCenter 来源：切到虚拟化页并打开来源编辑器。</summary>
+    [RelayCommand]
+    private async Task AddVmwareSourceAsync()
+    {
+        if (VmwarePage is null)
+        {
+            return;
+        }
+
+        NavigateTo(NavigationPage.Vmware);
+        await VmwarePage.AddSourceCommand.ExecuteAsync(null);
+    }
+
+    // ── 记住并恢复上次的会话 ──────────────────────────────────────
+
+    /// <summary>
+    /// 退出前记下仍开着的会话所对应的连接 Id（只记 Id，不含凭据；VMware 控制台会话不记）。
+    /// 在用户已确认退出、会话尚未关闭时调用。写盘走线程池，避免在 UI 线程上阻塞等待异步 IO。
+    /// </summary>
+    public void SaveSessionSnapshot()
+    {
+        _settings.LastSessionProfileIds =
+        [
+            .. Tabs.OfType<SessionTabViewModel>()
+                .Where(t => !t.IsVmwareConsole)
+                .Select(t => t.Session.Profile.Id)
+                .Distinct()
+                .Select(id => id.ToString())
+        ];
+        PersistSettings();
+    }
+
+    private void PersistSettings()
+    {
+        if (_settingsStore is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Task.Run(() => _settingsStore.SaveAsync(_settings)).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "保存会话列表失败（尽力而为，不影响退出）");
+        }
+    }
+
+    /// <summary>
+    /// 启动后询问是否恢复上次退出时还开着的会话。每次启动只询问一次；记录询问后即清空，
+    /// 不论用户选择什么都不会重复提示。需要输入密码的连接会在打开时照常弹出输入框。
+    /// </summary>
+    public async Task OfferRestoreSessionsAsync()
+    {
+        if (_restoreOffered)
+        {
+            return;
+        }
+
+        _restoreOffered = true;
+        if (!_settings.OfferRestoreSessions || _settings.LastSessionProfileIds.Count == 0)
+        {
+            return;
+        }
+
+        var ids = _settings.LastSessionProfileIds
+            .Select(s => Guid.TryParse(s, out var id) ? id : (Guid?)null)
+            .OfType<Guid>()
+            .ToList();
+
+        _settings.LastSessionProfileIds = [];
+        PersistSettings();
+
+        var profiles = await _sessions.GetProfilesAsync(ids);
+        if (profiles.Count == 0 || Tabs.OfType<SessionTabViewModel>().Any())
+        {
+            return;
+        }
+
+        var names = string.Join("、", profiles.Take(5).Select(p => p.Name));
+        if (profiles.Count > 5)
+        {
+            names += $" 等 {profiles.Count} 台";
+        }
+
+        if (await _dialogs.ConfirmAsync(
+                "恢复上次的会话",
+                $"上次退出时还开着 {profiles.Count} 个会话：\n{names}\n\n要重新打开它们吗？\n需要输入密码的连接会照常询问。",
+                "全部打开"))
+        {
+            await OpenSessionsSequentiallyAsync(profiles);
+        }
     }
 
     /// <summary>Ctrl+K：聚焦全局搜索。实际聚焦由视图处理。</summary>
@@ -822,6 +970,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         tab.ActionRequested -= OnSessionActionRequested;
         tab.Dispose();
         Tabs.Remove(tab);
+        if (ReferenceEquals(ReturnTab, tab))
+        {
+            ReturnTab = null;
+        }
 
         // 最后一个会话关闭时回到常规档，否则用户会停在没有导航的空白全屏里。
         if (Tabs.OfType<SessionTabViewModel>().Any() is false)
@@ -919,6 +1071,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var wasSelected = ReferenceEquals(SelectedTab, tab);
         Tabs.Remove(tab);
         tab.Dispose();
+        if (ReferenceEquals(ReturnTab, tab))
+        {
+            ReturnTab = null;
+        }
 
         if (wasSelected)
         {
@@ -926,7 +1082,46 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task CloseSessionAsync(Guid sessionId) => await _sessions.CloseSessionAsync(sessionId);
+    /// <summary>会话还连着（含连接中 / 重连中）：关闭它会真的断开远端，值得先确认。已断开 / 失败的会话直接关。</summary>
+    private static bool IsLive(SessionTabViewModel tab)
+        => tab.Session.State is ConnectionState.Connected or ConnectionState.Connecting or ConnectionState.Reconnecting;
+
+    /// <summary>
+    /// 关闭会话前的确认（设置里可关）。一批会话只问一次；没有仍连着的会话时不打扰。
+    /// 只对「用户主动关闭」的入口生效，退出应用等流程有各自的确认。
+    /// </summary>
+    private async Task<bool> ConfirmCloseAsync(IReadOnlyList<SessionTabViewModel> tabs)
+    {
+        if (!_settings.ConfirmCloseSession)
+        {
+            return true;
+        }
+
+        var live = tabs.Where(IsLive).ToList();
+        if (live.Count == 0)
+        {
+            return true;
+        }
+
+        var what = live.Count == 1 ? $"「{live[0].Title}」" : $"{live.Count} 个会话";
+        return await _dialogs.ConfirmAsync(
+            "关闭当前会话",
+            $"关闭后将断开与远端主机的连接：{what}。\n\n是否关闭当前会话？",
+            "关闭会话",
+            isDanger: true);
+    }
+
+    private async Task CloseSessionAsync(Guid sessionId)
+    {
+        // 只对「当前正在看的会话」确认（防误点关闭）；关闭别的标签、批量关闭都是有意为之，不打扰。
+        var tab = Tabs.OfType<SessionTabViewModel>().FirstOrDefault(t => t.Session.SessionId == sessionId);
+        if (tab is not null && ReferenceEquals(tab, SelectedTab) && !await ConfirmCloseAsync([tab]))
+        {
+            return;
+        }
+
+        await _sessions.CloseSessionAsync(sessionId);
+    }
 
     /// <summary>
     /// 统一「点设备→开会话」漏斗。同一 Profile 已有会话（连接中或已连）则聚焦其 Tab，
@@ -961,27 +1156,132 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return; // 已有同设备的创建请求在跑，聚焦等它建完由 SessionCreated 切过去。
         }
 
+        ResolvedCredential? entered = null;
         try
         {
+            var (proceed, credential) = await PromptCredentialIfNeededAsync(profile);
+            if (!proceed)
+            {
+                _openingProfileIds.Remove(profile.Id); // 用户取消输入：放弃本次连接，不算失败。
+                return;
+            }
+
+            entered = credential;
+
             // 成功路径不在此移除占位：等 OnSessionCreated 建出 Tab 时移除，堵住连点竞态。
-            await _sessions.CreateSessionAsync(profile);
+            await _sessions.CreateSessionAsync(profile, credentialOverride: entered);
         }
         catch (ConnectionException ex)
         {
+            entered?.Dispose();
             _openingProfileIds.Remove(profile.Id);
             await ReportOpenFailureAsync(profile, ex.Message, DialogKind.Error, failures);
         }
         catch (InvalidOperationException ex)
         {
+            entered?.Dispose();
             _openingProfileIds.Remove(profile.Id);
             await ReportOpenFailureAsync(profile, ex.Message, DialogKind.Warning, failures);
         }
         catch (Exception ex)
         {
+            entered?.Dispose();
             _openingProfileIds.Remove(profile.Id);
             _logger.LogError(ex, "创建会话失败：{ConnectionName}", profile.Name);
             await ReportOpenFailureAsync(profile, "创建会话时发生未知错误，详情请查看日志。", DialogKind.Error, failures);
         }
+    }
+
+    /// <summary>
+    /// 连接没分配凭据 / 凭据只有账户名时，弹框让用户当场输入（每次连接都输入，不保存）。
+    /// <c>Proceed=false</c> 表示用户取消，调用方放弃本次连接。平台不提供该对话框（macOS）时原样放行。
+    /// </summary>
+    private async Task<(bool Proceed, ResolvedCredential? Credential)> PromptCredentialIfNeededAsync(
+        ConnectionProfile profile)
+    {
+        if (!_dialogs.SupportsConnectionCredentialPrompt)
+        {
+            return (true, null);
+        }
+
+        var requirement = await _sessions.GetCredentialRequirementAsync(profile);
+        if (requirement.Prompt == ConnectionCredentialPrompt.None)
+        {
+            return (true, null);
+        }
+
+        var saved = (await _sessions.GetSelectableCredentialsAsync(profile))
+            .Where(c => c.Id != profile.CredentialId)
+            .Select(c => new SavedCredentialChoice(
+                c.Id,
+                c.Name,
+                string.IsNullOrEmpty(c.Domain) ? c.Username : $"{c.Domain}\\{c.Username}"))
+            .ToList();
+
+        var input = await _dialogs.PromptConnectionCredentialAsync(
+            new ConnectionCredentialRequest(profile.Name, $"{profile.Host}:{profile.Port}", requirement, saved));
+        if (input is null)
+        {
+            return (false, null);
+        }
+
+        // 在「更多选项」里选了已保存的凭据：直接用它连接；勾选记住则把它分配给该连接。
+        if (input.SavedCredentialId is { } savedId)
+        {
+            var resolved = await _sessions.ResolveSavedCredentialAsync(savedId);
+            if (resolved is null)
+            {
+                await _dialogs.ShowMessageAsync("无法使用该凭据", "该凭据的密码或密钥已不在本机保险库中，请重新选择或编辑该凭据。", DialogKind.Warning);
+                return (false, null);
+            }
+
+            if (input.Remember && _rememberedCredentials is not null)
+            {
+                try
+                {
+                    await _rememberedCredentials.AssignAsync(profile, savedId);
+                    _ = ReloadCurrentPageAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "分配凭据失败：{ConnectionName}", profile.Name);
+                }
+            }
+
+            return (true, resolved);
+        }
+
+        // VNC 允许留空（服务器可能不要口令）：此时不带凭据，由协议层按「无认证」处理。
+        if (input.Password.Length == 0 && !requirement.NeedsUsername)
+        {
+            return (true, null);
+        }
+
+        // 勾选「记住我的凭据」：新建 / 补全凭据并分配给该连接，下次不再询问。
+        // 保存失败不挡住这次连接，只提示一下。
+        if (input.Remember && input.Password.Length > 0 && _rememberedCredentials is not null)
+        {
+            try
+            {
+                await _rememberedCredentials.RememberAsync(
+                    profile, requirement, input.Username, input.Domain, input.Password,
+                    input.CredentialName, input.CredentialType);
+                _ = ReloadCurrentPageAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "记住凭据失败：{ConnectionName}", profile.Name);
+                await _dialogs.ShowMessageAsync("无法保存凭据", "这次连接会继续，但凭据没有保存，下次仍需输入。", DialogKind.Warning);
+            }
+        }
+
+        return (true, new ResolvedCredential
+        {
+            Type = requirement.Type,
+            Username = input.Username,
+            Domain = input.Domain,
+            Password = input.Password,
+        });
     }
 
     private Task ReportOpenFailureAsync(
@@ -1176,22 +1476,34 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // 与 OpenSessionAsync 共用创建占位：OnSessionCreated 无论来源都会释放该 Profile 的占位，
         // 重连若不登记，会把同一设备上正在进行的「打开」的占位提前放掉，连点就能再开出重复会话。
         var registered = _openingProfileIds.Add(profile.Id);
+        ResolvedCredential? entered = null;
         try
         {
-            await _sessions.CreateSessionAsync(profile);
+            var (proceed, credential) = await PromptCredentialIfNeededAsync(profile);
+            if (!proceed)
+            {
+                ReleaseOpeningPlaceholder(profile.Id, registered);
+                return;
+            }
+
+            entered = credential;
+            await _sessions.CreateSessionAsync(profile, credentialOverride: entered);
         }
         catch (ConnectionException ex)
         {
+            entered?.Dispose();
             ReleaseOpeningPlaceholder(profile.Id, registered);
             await _dialogs.ShowMessageAsync("无法重新连接", ex.Message, DialogKind.Error);
         }
         catch (InvalidOperationException ex)
         {
+            entered?.Dispose();
             ReleaseOpeningPlaceholder(profile.Id, registered);
             await _dialogs.ShowMessageAsync("无法重新连接", ex.Message, DialogKind.Warning);
         }
         catch
         {
+            entered?.Dispose();
             ReleaseOpeningPlaceholder(profile.Id, registered);
             throw;
         }
@@ -1210,7 +1522,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task CloseOtherSessionsAsync(SessionTabViewModel? keep)
     {
-        foreach (var tab in Tabs.OfType<SessionTabViewModel>().Where(t => !ReferenceEquals(t, keep)).ToList())
+        var others = Tabs.OfType<SessionTabViewModel>().Where(t => !ReferenceEquals(t, keep)).ToList();
+        foreach (var tab in others)
         {
             await _sessions.CloseSessionAsync(tab.Session.SessionId);
         }
@@ -1233,9 +1546,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         // Skip(anchorIndex + 1) 已天然排除锚点本身；OfType 只收 SessionTab，
         // 常驻页面 Tab（索引 0，PageTabViewModel）不可能出现在锚点右侧，此处兜底过滤。
-        foreach (var tab in Tabs.Skip(anchorIndex + 1).OfType<SessionTabViewModel>().ToList())
+        var right = Tabs.Skip(anchorIndex + 1).OfType<SessionTabViewModel>().ToList();
+        foreach (var tab in right)
         {
-            await CloseSessionAsync(tab.Session.SessionId);
+            await _sessions.CloseSessionAsync(tab.Session.SessionId);
         }
     }
 

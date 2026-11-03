@@ -26,10 +26,16 @@ public sealed class NavigationRefreshTests : IDisposable
     private readonly FileTransferLauncher _launcher = new();
     private readonly FakeTransferConnector _connector = new();
     private readonly CredentialsPageViewModel _credentialsPage;
+    private readonly EmptyConnectionRepository _connectionRepository = new();
+    private readonly AppSettings _settings = new()
+    {
+        DefaultLandingPage = LandingPage.Home,
+        PresenceProbeEnabled = false,
+    };
 
     public NavigationRefreshTests()
     {
-        var connectionsRepository = new EmptyConnectionRepository();
+        var connectionsRepository = _connectionRepository;
         var connections = new ConnectionService(
             connectionsRepository,
             new EmptyGroupRepository(),
@@ -46,11 +52,7 @@ public sealed class NavigationRefreshTests : IDisposable
             history,
             new NoOpSshHostKeyPolicy(),
             NullLogger<SessionManager>.Instance);
-        var settings = new AppSettings
-        {
-            DefaultLandingPage = LandingPage.Home,
-            PresenceProbeEnabled = false,
-        };
+        var settings = _settings;
         var settingsStore = new JsonSettingsStore(
             Path.Combine(_workspace.Root, "settings.json"),
             NullLogger<JsonSettingsStore>.Instance);
@@ -213,6 +215,269 @@ public sealed class NavigationRefreshTests : IDisposable
 
         Assert.Single(_main.Tabs.OfType<SessionTabViewModel>());
         Assert.Equal(1, _sessions.ActiveSessionCount);
+    }
+
+    [Fact]
+    public async Task 连接没分配凭据时每次连接都弹框输入账号和密码()
+    {
+        _dialogs.SupportsConnectionCredentialPrompt = true;
+        _dialogs.CredentialAnswer = new ConnectionCredentialInput("root", "", "pw-1");
+        var profile = new ConnectionProfile { Name = "主机A", Host = "host-a", Port = 22, Protocol = ProtocolType.Ssh };
+
+        await _main.OpenSessionAsync(profile);
+
+        var request = Assert.Single(_dialogs.CredentialRequests);
+        Assert.Equal(ConnectionCredentialPrompt.UsernameAndPassword, request.Requirement.Prompt);
+        Assert.Equal("host-a:22", request.Target);
+        Assert.Equal("root", _provider.LastCredential?.Username);
+        Assert.Equal("pw-1", _provider.LastCredential?.Password);
+
+        // 关掉会话再连：不记忆上一次输入，必须再问一次。
+        var tab = Assert.Single(_main.Tabs.OfType<SessionTabViewModel>());
+        await _sessions.CloseSessionAsync(tab.Session.SessionId);
+        _dialogs.CredentialAnswer = new ConnectionCredentialInput("root", "", "pw-2");
+        await _main.OpenSessionAsync(profile);
+
+        Assert.Equal(2, _dialogs.CredentialRequests.Count);
+        Assert.Equal("pw-2", _provider.LastCredential?.Password);
+    }
+
+    [Fact]
+    public async Task 凭据只有账户名时账户名固定_只让用户输入密码()
+    {
+        var credential = new Credential
+        {
+            Name = "只有账号", Type = CredentialType.SshPassword, Username = "deploy", SecretReference = null,
+        };
+        _credentialRepository.Items[credential.Id] = credential;
+        _dialogs.SupportsConnectionCredentialPrompt = true;
+        _dialogs.CredentialAnswer = new ConnectionCredentialInput("deploy", "", "typed");
+
+        await _main.OpenSessionAsync(new ConnectionProfile
+        {
+            Name = "主机B", Host = "host-b", Protocol = ProtocolType.Ssh, CredentialId = credential.Id,
+        });
+
+        var request = Assert.Single(_dialogs.CredentialRequests);
+        Assert.Equal(ConnectionCredentialPrompt.PasswordOnly, request.Requirement.Prompt);
+        Assert.Equal("deploy", request.Requirement.Username);
+        Assert.Equal("deploy", _provider.LastCredential?.Username);
+        Assert.Equal("typed", _provider.LastCredential?.Password);
+    }
+
+    [Fact]
+    public async Task 用户取消输入凭据_不创建会话也不弹错误_且可再次发起()
+    {
+        _dialogs.SupportsConnectionCredentialPrompt = true;
+        _dialogs.CredentialAnswer = null;
+        var profile = new ConnectionProfile { Name = "主机C", Host = "host-c", Protocol = ProtocolType.Ssh };
+
+        await _main.OpenSessionAsync(profile);
+
+        Assert.Equal(0, _provider.CreatedCount);
+        Assert.Empty(_main.Tabs.OfType<SessionTabViewModel>());
+        Assert.Empty(_dialogs.Messages);
+
+        // 取消后创建占位必须释放，否则再点这台设备会被当成「正在创建」而静默忽略。
+        _dialogs.CredentialAnswer = new ConnectionCredentialInput("u", "", "p");
+        await _main.OpenSessionAsync(profile);
+        Assert.Single(_main.Tabs.OfType<SessionTabViewModel>());
+    }
+
+    [Fact]
+    public async Task 平台不提供输入框时保持原有行为_直接创建会话()
+    {
+        _dialogs.SupportsConnectionCredentialPrompt = false;
+
+        await _main.OpenSessionAsync(new ConnectionProfile { Name = "主机D", Host = "host-d", Protocol = ProtocolType.Ssh });
+
+        Assert.Empty(_dialogs.CredentialRequests);
+        Assert.Equal(1, _provider.CreatedCount);
+        Assert.Null(_provider.LastCredential);
+    }
+
+    // ── 关闭会话确认（设置 ConfirmCloseSession）──────────────────────
+
+    [Fact]
+    public async Task 关闭仍连着的会话先确认_点否则会话保留_点是才关闭()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected();
+        await _main.OpenSessionAsync(new ConnectionProfile { Name = "生产库", Host = "h", Protocol = ProtocolType.Ssh });
+        var tab = Assert.Single(_main.Tabs.OfType<SessionTabViewModel>());
+        await WaitUntilAsync(() => tab.Session.State == ConnectionState.Connected);
+
+        _dialogs.ConfirmAnswer = false;
+        await tab.CloseCommand.ExecuteAsync(null);
+
+        var asked = Assert.Single(_dialogs.Confirms);
+        Assert.Contains("生产库", asked.Message);
+        Assert.Single(_main.Tabs.OfType<SessionTabViewModel>());
+
+        _dialogs.ConfirmAnswer = true;
+        await tab.CloseCommand.ExecuteAsync(null);
+
+        await WaitUntilAsync(() => _main.Tabs.OfType<SessionTabViewModel>().Count() == 0);
+        Assert.Equal(2, _dialogs.Confirms.Count);
+    }
+
+    [Fact]
+    public async Task 设置里关闭确认后直接关闭_已断开的会话也不打扰()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected(static p => new VisibilityGatedSession(p) { FailOnConnect = p.Name == "坏主机" });
+
+        // 已失败的会话：即使开着确认也直接关。
+        await _main.OpenSessionAsync(new ConnectionProfile { Name = "坏主机", Host = "b", Protocol = ProtocolType.Ssh });
+        var bad = Assert.Single(_main.Tabs.OfType<SessionTabViewModel>());
+        await bad.Session.ConnectAsync();
+        await bad.CloseCommand.ExecuteAsync(null);
+        await WaitUntilAsync(() => _main.Tabs.OfType<SessionTabViewModel>().Count() == 0);
+        Assert.Empty(_dialogs.Confirms);
+
+        // 关掉设置后，连着的会话也直接关。
+        _settings.ConfirmCloseSession = false;
+        await _main.OpenSessionAsync(new ConnectionProfile { Name = "好主机", Host = "g", Protocol = ProtocolType.Ssh });
+        var good = Assert.Single(_main.Tabs.OfType<SessionTabViewModel>());
+        await WaitUntilAsync(() => good.Session.State == ConnectionState.Connected);
+        await good.CloseCommand.ExecuteAsync(null);
+        await WaitUntilAsync(() => _main.Tabs.OfType<SessionTabViewModel>().Count() == 0);
+        Assert.Empty(_dialogs.Confirms);
+    }
+
+    [Fact]
+    public async Task 批量关闭与关闭非当前标签都不提示_只提示当前会话()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected();
+        await _main.OpenSessionsSequentiallyAsync(NineProfiles().Take(3).ToList());
+        var tabs = _main.Tabs.OfType<SessionTabViewModel>().ToList();
+        await WaitUntilAsync(() => tabs.All(t => t.Session.State == ConnectionState.Connected));
+        _main.SelectedTab = tabs[0];
+        _dialogs.ConfirmAnswer = false; // 若误弹确认并答「否」，下面的关闭就会失败。
+
+        // 关闭不是当前查看的标签（点其他标签上的 ×）：直接关。
+        await tabs[2].CloseCommand.ExecuteAsync(null);
+        await WaitUntilAsync(() => _main.Tabs.OfType<SessionTabViewModel>().Count() == 2);
+
+        // 批量关闭其他会话：直接关。
+        await _main.CloseOtherSessionsCommand.ExecuteAsync(tabs[0]);
+        await WaitUntilAsync(() => _main.Tabs.OfType<SessionTabViewModel>().Count() == 1);
+
+        Assert.Empty(_dialogs.Confirms);
+    }
+
+    // ── 返回离开前的会话 ──────────────────────────────────────────
+
+    [Fact]
+    public async Task 从会话切到页面后可一键返回离开前的会话()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected();
+        await _main.OpenSessionAsync(new ConnectionProfile { Name = "主机A", Host = "a", Protocol = ProtocolType.Ssh });
+        await _main.OpenSessionAsync(new ConnectionProfile { Name = "主机B", Host = "b", Protocol = ProtocolType.Ssh });
+        var first = _main.Tabs.OfType<SessionTabViewModel>().First();
+        _main.SelectedTab = first;
+        Assert.False(_main.CanReturnToSession);
+
+        // 切出去建凭据：记下离开的会话。
+        _main.NavigateTo(NavigationPage.Credentials);
+        Assert.Same(_main.WorkspaceTab, _main.SelectedTab);
+        Assert.Same(first, _main.ReturnTab);
+        Assert.True(_main.CanReturnToSession);
+        Assert.Equal("返回 主机A", _main.ReturnTabLabel);
+
+        // 页面之间来回换不丢失返回目标。
+        _main.NavigateTo(NavigationPage.Home);
+        Assert.Same(first, _main.ReturnTab);
+
+        _main.ReturnToSessionCommand.Execute(null);
+        Assert.Same(first, _main.SelectedTab);
+        Assert.Null(_main.ReturnTab);
+        Assert.False(_main.CanReturnToSession);
+    }
+
+    [Fact]
+    public async Task 离开前的会话被关闭后不再提供返回入口()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected();
+        _settings.ConfirmCloseSession = false;
+        await _main.OpenSessionAsync(new ConnectionProfile { Name = "主机A", Host = "a", Protocol = ProtocolType.Ssh });
+        var tab = Assert.Single(_main.Tabs.OfType<SessionTabViewModel>());
+        _main.NavigateTo(NavigationPage.Credentials);
+        Assert.True(_main.CanReturnToSession);
+
+        await _sessions.CloseSessionAsync(tab.Session.SessionId);
+
+        await WaitUntilAsync(() => !_main.CanReturnToSession);
+        Assert.Null(_main.ReturnTab);
+    }
+
+    // ── 记住并恢复上次的会话 ──────────────────────────────────────
+
+    [Fact]
+    public async Task 退出前记下仍开着的会话_不含凭据且按标签顺序()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected();
+        var a = new ConnectionProfile { Name = "主机A", Host = "a", Protocol = ProtocolType.Ssh };
+        var b = new ConnectionProfile { Name = "主机B", Host = "b", Protocol = ProtocolType.Ssh };
+        await _main.OpenSessionAsync(a);
+        await _main.OpenSessionAsync(b);
+
+        _main.SaveSessionSnapshot();
+
+        Assert.Equal([a.Id.ToString(), b.Id.ToString()], _settings.LastSessionProfileIds);
+    }
+
+    [Fact]
+    public async Task 启动时询问恢复_确认后按原顺序重新打开_已删除的连接跳过()
+    {
+        SimulateViewsThatConnectOnlyWhenSelected();
+        var a = new ConnectionProfile { Name = "主机A", Host = "a", Protocol = ProtocolType.Ssh };
+        var b = new ConnectionProfile { Name = "主机B", Host = "b", Protocol = ProtocolType.Ssh };
+        _connectionRepository.Items[a.Id] = a;
+        _connectionRepository.Items[b.Id] = b;
+        var deleted = Guid.NewGuid();
+        _settings.LastSessionProfileIds = [a.Id.ToString(), deleted.ToString(), b.Id.ToString(), "不是Guid"];
+        _dialogs.ConfirmAnswer = true;
+
+        await _main.OfferRestoreSessionsAsync();
+
+        var asked = Assert.Single(_dialogs.Confirms);
+        Assert.Contains("2 个会话", asked.Message);
+        Assert.Equal(
+            ["主机A", "主机B"],
+            _main.Tabs.OfType<SessionTabViewModel>().Select(t => t.Session.Profile.Name).ToArray());
+        Assert.Empty(_settings.LastSessionProfileIds);
+
+        // 每次启动只问一次。
+        await _main.OfferRestoreSessionsAsync();
+        Assert.Single(_dialogs.Confirms);
+    }
+
+    [Fact]
+    public async Task 启动时选择不恢复_不开会话且记录被清空()
+    {
+        var a = new ConnectionProfile { Name = "主机A", Host = "a", Protocol = ProtocolType.Ssh };
+        _connectionRepository.Items[a.Id] = a;
+        _settings.LastSessionProfileIds = [a.Id.ToString()];
+        _dialogs.ConfirmAnswer = false;
+
+        await _main.OfferRestoreSessionsAsync();
+
+        Assert.Single(_dialogs.Confirms);
+        Assert.Empty(_main.Tabs.OfType<SessionTabViewModel>());
+        Assert.Empty(_settings.LastSessionProfileIds);
+    }
+
+    [Fact]
+    public async Task 关闭恢复提示的设置后不询问也不开会话()
+    {
+        var a = new ConnectionProfile { Name = "主机A", Host = "a", Protocol = ProtocolType.Ssh };
+        _connectionRepository.Items[a.Id] = a;
+        _settings.OfferRestoreSessions = false;
+        _settings.LastSessionProfileIds = [a.Id.ToString()];
+
+        await _main.OfferRestoreSessionsAsync();
+
+        Assert.Empty(_dialogs.Confirms);
+        Assert.Empty(_main.Tabs.OfType<SessionTabViewModel>());
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)
@@ -545,8 +810,17 @@ public sealed class NavigationRefreshTests : IDisposable
             return true;
         }
 
+        public int CreatedCount { get; private set; }
+
+        /// <summary>最近一次创建会话时收到的凭据（用于断言「当场输入」的凭据确实传到了协议层）。</summary>
+        public ResolvedCredential? LastCredential { get; private set; }
+
         public IRemoteSession CreateSession(SessionRequest request)
-            => Factory?.Invoke(request.Profile) ?? new ScriptedSession(request.Profile, FailTabCreation);
+        {
+            CreatedCount++;
+            LastCredential = request.Credential;
+            return Factory?.Invoke(request.Profile) ?? new ScriptedSession(request.Profile, FailTabCreation);
+        }
     }
 
     /// <summary>
@@ -601,8 +875,10 @@ public sealed class NavigationRefreshTests : IDisposable
             return Task.FromResult<IReadOnlyList<Credential>>([]);
         }
 
+        public Dictionary<Guid, Credential> Items { get; } = [];
+
         public Task<Credential?> GetByIdAsync(Guid id, CancellationToken ct = default)
-            => Task.FromResult<Credential?>(null);
+            => Task.FromResult(Items.GetValueOrDefault(id));
 
         public Task AddAsync(Credential credential, CancellationToken ct = default) => Task.CompletedTask;
 
@@ -620,11 +896,14 @@ public sealed class NavigationRefreshTests : IDisposable
 
     private sealed class EmptyConnectionRepository : IConnectionRepository
     {
+        /// <summary>按 Id 能取回的连接（恢复上次会话的测试用）；默认空。</summary>
+        public Dictionary<Guid, ConnectionProfile> Items { get; } = [];
+
         public Task<IReadOnlyList<ConnectionProfile>> GetAllAsync(CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<ConnectionProfile>>([]);
 
         public Task<ConnectionProfile?> GetByIdAsync(Guid id, CancellationToken ct = default)
-            => Task.FromResult<ConnectionProfile?>(null);
+            => Task.FromResult(Items.GetValueOrDefault(id));
 
         public Task AddAsync(ConnectionProfile profile, CancellationToken ct = default) => Task.CompletedTask;
 
@@ -728,8 +1007,16 @@ public sealed class NavigationRefreshTests : IDisposable
 
     private sealed class NullDialogService : IDialogService
     {
+        /// <summary>对 ConfirmAsync 的应答，默认「否」。</summary>
+        public bool ConfirmAnswer { get; set; }
+
+        public List<(string Title, string Message)> Confirms { get; } = [];
+
         public Task<bool> ConfirmAsync(string title, string message, string confirmText = "确定", bool isDanger = false)
-            => Task.FromResult(false);
+        {
+            Confirms.Add((title, message));
+            return Task.FromResult(ConfirmAnswer);
+        }
 
         public List<(string Title, string Message, DialogKind Kind)> Messages { get; } = [];
 
@@ -767,6 +1054,19 @@ public sealed class NavigationRefreshTests : IDisposable
 
         public Task<string?> PromptPasswordAsync(string title, string message, bool confirm)
             => Task.FromResult<string?>(null);
+
+        public bool SupportsConnectionCredentialPrompt { get; set; }
+
+        public List<ConnectionCredentialRequest> CredentialRequests { get; } = [];
+
+        /// <summary>对「连接前输入凭据」的应答；null 表示用户取消。</summary>
+        public ConnectionCredentialInput? CredentialAnswer { get; set; }
+
+        public Task<ConnectionCredentialInput?> PromptConnectionCredentialAsync(ConnectionCredentialRequest request)
+        {
+            CredentialRequests.Add(request);
+            return Task.FromResult(CredentialAnswer);
+        }
 
         public string? PickFileToOpen(string title, string filter) => null;
 

@@ -14,7 +14,7 @@ namespace RemoteFlow.App.Views.Sessions;
 /// <summary>
 /// 紧凑模式的「当前会话」选择器。
 /// <para>
-/// 会话达到 <see cref="SessionTabLayoutPolicy.CompactSessionThreshold"/> 个或标题栏放不下时，
+/// 「自动折叠」模式下标题栏被标签占满（见 <see cref="SessionTabLayoutPolicy"/>）时，
 /// 由 <see cref="MainWindow"/> 把 Tab 列表切换为本控件：收起态显示当前 Tab
 /// （会话 / 文件传输 / 「活动连接」）并在会话数 ≥ 2 时于图标右上角挂数字角标，
 /// 展开态用 Popup 按打开顺序列出全部可关闭 Tab。单击行切换、行尾按钮关闭、右键复用
@@ -205,9 +205,19 @@ public sealed partial class SessionTabSelector : UserControl
         }
     }
 
+    /// <summary>头部显示设备图标（与标题栏普通标签一致），隐藏「活动连接」用的线框图标。</summary>
+    private void ShowDeviceIcon(string deviceIconKey)
+    {
+        HeaderDeviceIcon.Source = new ResourceKeyToImageSourceConverter()
+            .Convert(deviceIconKey, typeof(System.Windows.Media.ImageSource), null!, System.Globalization.CultureInfo.InvariantCulture)
+            as System.Windows.Media.ImageSource;
+        HeaderDeviceIcon.Visibility = Visibility.Visible;
+        HeaderIcon.Visibility = Visibility.Collapsed;
+    }
+
     private void ShowSessionHeader(SessionTabViewModel session)
     {
-        HeaderIcon.Data = UiIconResources.Find(UiIconResources.ProtocolKey(session.Protocol));
+        ShowDeviceIcon(session.DeviceIconKey);
         HeaderTitle.Text = session.Title;
         SelectorToggle.ToolTip = $"{session.StateText} · {session.Title}";
         if (TryFindResource(session.StateBrushKey) is Brush brush)
@@ -228,7 +238,7 @@ public sealed partial class SessionTabSelector : UserControl
     /// </summary>
     private void ShowTransferHeader(FileTransferTabViewModel transfer)
     {
-        HeaderIcon.Data = UiIconResources.Find("Ui.FileTransfer");
+        ShowDeviceIcon(transfer.DeviceIconKey);
         HeaderTitle.Text = transfer.Title;
         SelectorToggle.ToolTip = transfer.TabToolTip;
         HeaderDot.Visibility = Visibility.Collapsed;
@@ -238,6 +248,8 @@ public sealed partial class SessionTabSelector : UserControl
 
     private void ShowWorkspaceHeader()
     {
+        HeaderDeviceIcon.Visibility = Visibility.Collapsed;
+        HeaderIcon.Visibility = Visibility.Visible;
         HeaderIcon.Data = UiIconResources.Find("Ui.Sessions");
         HeaderTitle.Text = "活动连接";
         SelectorToggle.ToolTip = "选择会话";

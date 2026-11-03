@@ -31,6 +31,24 @@ public enum WindowCloseBehavior
     MinimizeToTray = 1
 }
 
+/// <summary>标题栏会话标签的呈现方式。</summary>
+public enum SessionTabLayout
+{
+    /// <summary>自动折叠：标题栏放得下就逐个显示标签，放不下时折叠成「当前会话」下拉选择器。</summary>
+    AutoCollapse = 0,
+
+    /// <summary>横向滚动（类似 Excel 工作表）：标签始终逐个显示，放不下时两端出现左右箭头，可滚动切换。</summary>
+    Scroll = 1
+}
+
+/// <summary>全屏悬浮工具条（药丸）的初始水平位置。用户拖动过之后以拖动位置为准。</summary>
+public enum SessionPillPosition
+{
+    Center = 0,
+    Left = 1,
+    Right = 2
+}
+
 /// <summary>日期格式。</summary>
 public enum AppDateFormat
 {
@@ -139,6 +157,24 @@ public sealed class AppSettings
 
     /// <summary>完全全屏档：鼠标离开后收起延迟。语义同窗口最大化档。</summary>
     public int PillHideDelayScreenFullMs { get; set; } = 900;
+
+    /// <summary>全屏悬浮工具条的初始水平位置（左 / 中 / 右）。默认居中。</summary>
+    public SessionPillPosition SessionPillPosition { get; set; } = SessionPillPosition.Center;
+
+    // ── 会话 ──────────────────────────────────────────────
+    /// <summary>标题栏会话标签的呈现方式。默认自动折叠，仅在标题栏放不下时才折叠。</summary>
+    public SessionTabLayout SessionTabLayout { get; set; } = SessionTabLayout.AutoCollapse;
+
+    /// <summary>关闭一个仍在连接 / 已连接的会话前先确认，避免误点 × 丢掉进行中的连接。</summary>
+    public bool ConfirmCloseSession { get; set; } = true;
+
+    /// <summary>启动时，若上次退出时还开着会话，提示是否重新打开这些会话。</summary>
+    public bool OfferRestoreSessions { get; set; } = true;
+
+    /// <summary>
+    /// 上次退出时仍开着的会话所对应的连接 Id（只存 Id，不含任何凭据）。启动提示恢复后清空。
+    /// </summary>
+    public List<string> LastSessionProfileIds { get; set; } = [];
 
     /// <summary>启动或新建连接后默认打开的页面。</summary>
     public LandingPage DefaultLandingPage { get; set; } = LandingPage.Connections;
@@ -253,6 +289,7 @@ public sealed class AppSettings
     {
         var copy = (AppSettings)MemberwiseClone();
         copy.CollapsedGroupIds = [.. CollapsedGroupIds];
+        copy.LastSessionProfileIds = [.. LastSessionProfileIds];
         return copy;
     }
 }

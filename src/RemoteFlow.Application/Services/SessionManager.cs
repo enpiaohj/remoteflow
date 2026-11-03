@@ -160,7 +160,64 @@ public sealed class SessionManager : IAsyncDisposable
     /// <see cref="IRemoteSession.ConnectAsync"/>，本类通过状态事件接管历史记录。
     /// </para>
     /// </summary>
-    public async Task<IRemoteSession> CreateSessionAsync(ConnectionProfile profile, CancellationToken ct = default)
+    /// <summary>按 Id 取回仍然存在的连接（已被删除的跳过），保持传入顺序。启动时恢复上次会话用。</summary>
+    public async Task<IReadOnlyList<ConnectionProfile>> GetProfilesAsync(
+        IEnumerable<Guid> ids, CancellationToken ct = default)
+    {
+        var profiles = new List<ConnectionProfile>();
+        foreach (var id in ids)
+        {
+            if (await _connections.GetByIdAsync(id, ct) is { } profile)
+            {
+                profiles.Add(profile);
+            }
+        }
+
+        return profiles;
+    }
+
+    /// <summary>
+    /// 该连接可直接选用的已保存凭据（协议匹配、且保险库里有密码 / 私钥），供连接前输入框的「更多选项」列出。
+    /// </summary>
+    public async Task<IReadOnlyList<Credential>> GetSelectableCredentialsAsync(
+        ConnectionProfile profile, CancellationToken ct = default)
+    {
+        CredentialType[] types = profile.Protocol switch
+        {
+            ProtocolType.Ssh => [CredentialType.SshPassword, CredentialType.SshPrivateKey, CredentialType.LocalPassword],
+            ProtocolType.Rdp => [CredentialType.WindowsDomain, CredentialType.LocalPassword],
+            _ => [],
+        };
+
+        return [.. (await _credentials.GetAllAsync(ct))
+            .Where(c => types.Contains(c.Type)
+                        && (!string.IsNullOrEmpty(c.SecretReference) || !string.IsNullOrEmpty(c.KeyReference)))
+            .OrderBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase)];
+    }
+
+    /// <summary>取出一条已保存凭据用于本次连接；记录或密钥已丢失时返回 null。调用方用完须 Dispose。</summary>
+    public async Task<ResolvedCredential?> ResolveSavedCredentialAsync(Guid credentialId, CancellationToken ct = default)
+    {
+        var resolved = await _credentials.ResolveAsync(credentialId, ct);
+        if (resolved is null || resolved.SecretMissing)
+        {
+            resolved?.Dispose();
+            return null;
+        }
+
+        return resolved;
+    }
+
+    public Task<ConnectionCredentialRequirement> GetCredentialRequirementAsync(
+        ConnectionProfile profile, CancellationToken ct = default)
+        => _credentials.GetConnectionRequirementAsync(profile, ct);
+
+    /// <param name="credentialOverride">
+    /// 本次连接由用户当场输入的凭据（连接没分配凭据 / 凭据只有账户名时）。非 null 时不再去保险库解析；
+    /// 会话创建成功后由会话接管并负责释放，创建失败时本方法负责释放。
+    /// </param>
+    public async Task<IRemoteSession> CreateSessionAsync(
+        ConnectionProfile profile, CancellationToken ct = default, ResolvedCredential? credentialOverride = null)
     {
         if (_sessions.Count >= MaxConcurrentSessions)
         {
@@ -181,8 +238,8 @@ public sealed class SessionManager : IAsyncDisposable
         }
 
         // 凭据在此刻才解析，且只在会话存续期间持有。
-        ResolvedCredential? credential = null;
-        if (profile.CredentialId is { } credentialId)
+        ResolvedCredential? credential = credentialOverride;
+        if (credential is null && profile.CredentialId is { } credentialId)
         {
             credential = await _credentials.ResolveAsync(credentialId, ct)
                 ?? throw ConnectionException.FromCode(ConnectionErrorCode.CredentialMissing);
