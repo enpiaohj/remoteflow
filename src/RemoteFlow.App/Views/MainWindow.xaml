@@ -66,23 +66,9 @@
         <DataTemplate DataType="{x:Type vm:SessionTabViewModel}">
             <sessions:SessionToolsBar />
         </DataTemplate>
-        <!-- 页面 Tab 激活时：若是从某个会话切出来的，右侧给出「返回 会话名」，一键回到离开前的会话。 -->
+        <!-- 页面不占用右侧会话工具条；返回入口位于紧凑会话选择器与左侧导航栏。 -->
         <DataTemplate DataType="{x:Type vm:PageTabViewModel}">
-            <Button Style="{StaticResource Button.Subtle}"
-                    Margin="0,0,8,0"
-                    VerticalAlignment="Center"
-                    shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                    Command="{Binding DataContext.ReturnToSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                    ToolTip="回到离开前的会话"
-                    Visibility="{Binding DataContext.CanReturnToSession, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
-                <StackPanel Orientation="Horizontal">
-                    <Path Style="{StaticResource UiIcon}" Data="{StaticResource Ui.ChevronLeft}"
-                          Width="12" Height="12" Fill="{DynamicResource Brand.Default}" />
-                    <TextBlock Text="{Binding DataContext.ReturnTabLabel, RelativeSource={RelativeSource AncestorType=Window}}"
-                               Margin="6,0,0,0" MaxWidth="180" TextTrimming="CharacterEllipsis"
-                               Foreground="{DynamicResource Brand.Default}" />
-                </StackPanel>
-            </Button>
+            <Grid Width="0" />
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:FileTransferTabViewModel}">
             <Grid Width="0" />
@@ -107,6 +93,8 @@
                       Click="OnTabCloseRightClick" />
             <Separator />
             <MenuItem Header="关闭全部会话" views:MenuItemAssist.IconKey="Ui.Sessions" views:MenuItemAssist.IsDanger="True" Click="OnTabCloseAllClick" />
+            <MenuItem Tag="restartDevice" Header="重启…" views:MenuItemAssist.IconKey="Ui.Refresh" views:MenuItemAssist.IsDanger="True" Visibility="Collapsed" />
+            <MenuItem Tag="shutdownDevice" Header="关机…" views:MenuItemAssist.IconKey="Ui.Power" views:MenuItemAssist.IsDanger="True" Visibility="Collapsed" />
         </ContextMenu>
 
         <!-- 标题栏「+」菜单：新建连接 / 凭据 / 分组 / 虚拟化来源。动作直接走主视图模型命令。 -->
@@ -421,6 +409,31 @@
                     <TextBlock Text="RemoteFlow" FontSize="15" FontWeight="SemiBold" Margin="2,0,0,0" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding AppVersion}" FontSize="12" Margin="8,1,0,0"
                                Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
+                    <Button x:Name="UpdateHintButton" Style="{StaticResource Button.Subtle}"
+                            Width="30" Height="28" MinWidth="0" MinHeight="0" Margin="8,0,0,0" Padding="6"
+                            Background="{DynamicResource Bg.Selected}" Foreground="{DynamicResource Brand.Default}"
+                            ToolTip="{Binding Update.StatusText}" AutomationProperties.Name="软件更新"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnUpdateHintClick"
+                            Visibility="{Binding Update.ShowUpdateHint, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed, TargetNullValue=Collapsed}">
+                        <Path Data="{StaticResource Ui.Download}" Style="{StaticResource UiIcon}" Width="16" Height="16" />
+                        <Button.ContextMenu>
+                            <ContextMenu DataContext="{Binding PlacementTarget.DataContext.Update, RelativeSource={RelativeSource Self}}">
+                                <MenuItem Header="{Binding LatestVersionText}" IsEnabled="False" />
+                                <MenuItem Header="{Binding StatusText}" IsEnabled="False" />
+                                <Separator />
+                                <MenuItem Header="立即下载" Command="{Binding InstallCommand}" views:MenuItemAssist.IconKey="Ui.Download"
+                                          Visibility="{Binding CanInstall, Converter={StaticResource BoolToVisibility}}" />
+                                <MenuItem Header="打开下载页" Command="{Binding OpenReleasePageCommand}" views:MenuItemAssist.IconKey="Ui.Download"
+                                          Visibility="{Binding CanOpenReleasePage, Converter={StaticResource BoolToVisibility}}" />
+                                <MenuItem Header="取消下载" Command="{Binding CancelDownloadCommand}"
+                                          Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVisibility}}" />
+                                <MenuItem Header="立即重启以完成更新…" Command="{Binding RestartCommand}"
+                                          Visibility="{Binding IsReadyToRestart, Converter={StaticResource BoolToVisibility}}" />
+                                <Separator />
+                                <MenuItem Header="本次不再提示" Command="{Binding DismissUpdateHintCommand}" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                 </StackPanel>
 
                     <!-- 标签条：常驻标题栏行（浏览器式），无会话 / 有会话统一；
@@ -796,7 +809,7 @@
                         <Button Style="{StaticResource Nav.ReturnItem}"
                                 Content="Ui.ChevronLeft"
                                 Command="{Binding ReturnToSessionCommand}"
-                                ToolTip="{Binding ReturnTabLabel}"
+                                ToolTip="{Binding ReturnTabToolTip}"
                                 AutomationProperties.Name="返回会话"
                                 Margin="0,3,0,10"
                                 Visibility="{Binding CanReturnToSession, Converter={StaticResource BoolToVisibility}}" />
@@ -819,13 +832,6 @@
                         <Ellipse Width="7" Height="7" VerticalAlignment="Center"
                                  Fill="{Binding SessionStatusBrushKey, Converter={StaticResource KeyToBrush}}" />
                         <TextBlock Text="{Binding SessionStatusText}" Style="{StaticResource Text.Caption}" Margin="8,0,0,0" />
-                        <!-- 有新版本：点击跳到「关于」的软件更新区。没有更新实现或没有新版本时不占位。 -->
-                        <Button x:Name="UpdateHintButton" Style="{StaticResource Button.Subtle}"
-                                Margin="14,0,0,0" Padding="8,0" Height="20" MinHeight="20" FontSize="11.5"
-                                Foreground="{DynamicResource Brand.Default}"
-                                Content="有新版本可用"
-                                Click="OnUpdateHintClick"
-                                Visibility="{Binding Update.HasUpdate, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed, TargetNullValue=Collapsed}" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <!-- 连接工作台分页：放在状态栏右侧，不占列表区域。仅在连接工作台（非会话模式）且开启分页、有数据时显示。 -->

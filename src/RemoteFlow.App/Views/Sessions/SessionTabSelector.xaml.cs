@@ -16,7 +16,7 @@ namespace RemoteFlow.App.Views.Sessions;
 /// <para>
 /// 「自动折叠」模式下标题栏被标签占满（见 <see cref="SessionTabLayoutPolicy"/>）时，
 /// 由 <see cref="MainWindow"/> 把 Tab 列表切换为本控件：收起态显示当前 Tab
-/// （会话 / 文件传输 / 「活动连接」）并在会话数 ≥ 2 时于图标右上角挂数字角标，
+/// （会话 / 文件传输 / 页面的返回入口），页面返回态显示会话数量（含 1），当前会话态在 ≥ 2 时显示角标，
 /// 展开态用 Popup 按打开顺序列出全部可关闭 Tab。单击行切换、行尾按钮关闭、右键复用
 /// 主窗口共享的会话菜单；↑/↓ 移动高亮、Enter 切换、Delete 关闭、Esc 收起。
 /// 只改 <see cref="MainViewModel.SelectedTab"/>，不创建 / 销毁会话。
@@ -142,7 +142,8 @@ public sealed partial class SessionTabSelector : UserControl
 
     private void OnMainPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainViewModel.SelectedTab))
+        if (e.PropertyName is nameof(MainViewModel.SelectedTab) or nameof(MainViewModel.ReturnTab)
+            or nameof(MainViewModel.CanReturnToSession))
         {
             // 弹出层开着时同步高亮；收起态刷新头部。
             if (SelectorPopup.IsOpen)
@@ -175,6 +176,28 @@ public sealed partial class SessionTabSelector : UserControl
         else
         {
             ShowWorkspaceHeader();
+        }
+
+        // 页面态以离开前的实际 Tab 作为返回目标，账号 / 状态提示与当前会话共用一份。
+        if (_main?.SelectedTab is not (SessionTabViewModel or FileTransferTabViewModel)
+            && _main?.ReturnTab is { } returnTab && _listedTabs.Contains(returnTab))
+        {
+            if (returnTab is SessionTabViewModel returnSession)
+            {
+                _headerTab = returnSession;
+                returnSession.PropertyChanged += OnHeaderTabPropertyChanged;
+                ShowSessionHeader(returnSession);
+                HeaderTitle.Text = _main.ReturnTabLabel;
+            }
+            else if (returnTab is FileTransferTabViewModel returnTransfer)
+            {
+                _headerTransferTab = returnTransfer;
+                returnTransfer.PropertyChanged += OnHeaderTabPropertyChanged;
+                ShowTransferHeader(returnTransfer);
+                HeaderTitle.Text = _main.ReturnTabLabel;
+            }
+
+            HeaderClose.Visibility = Visibility.Collapsed;
         }
 
         UpdateCountBadge();
@@ -219,7 +242,7 @@ public sealed partial class SessionTabSelector : UserControl
     {
         ShowDeviceIcon(session.DeviceIconKey);
         HeaderTitle.Text = session.Title;
-        SelectorToggle.ToolTip = $"{session.StateText} · {session.Title}";
+        SelectorToggle.ToolTip = session.TabToolTip;
         if (TryFindResource(session.StateBrushKey) is Brush brush)
         {
             HeaderDot.Fill = brush;
@@ -259,7 +282,7 @@ public sealed partial class SessionTabSelector : UserControl
     }
 
     /// <summary>
-    /// 会话数角标：≥2 才显示（「1」没有信息量），上限 99。
+    /// 会话数角标：页面返回态从 1 起显示，当前会话态从 2 起显示，上限 99。
     /// 角标排在图标右侧、与标题同处一个有宽度上限的 Grid（见 XAML）：
     /// 角标一出现，标题所在的星号列自动收缩并省略，不必在此换算标题上限。
     /// <para>
@@ -271,7 +294,8 @@ public sealed partial class SessionTabSelector : UserControl
     private void UpdateCountBadge()
     {
         var count = _listedTabs.Count(static t => t is SessionTabViewModel);
-        if (count < 2)
+        var returning = _main?.SelectedTab is PageTabViewModel && _main.CanReturnToSession;
+        if (count == 0 || (count == 1 && !returning))
         {
             HeaderCountBadge.Visibility = Visibility.Collapsed;
             return;
@@ -288,6 +312,25 @@ public sealed partial class SessionTabSelector : UserControl
 
     private void OnToggleClick(object sender, RoutedEventArgs e)
     {
+        if (_main?.SelectedTab is PageTabViewModel && _main.CanReturnToSession)
+        {
+            SelectorPopup.IsOpen = false;
+            SelectorToggle.IsChecked = false;
+            _main.ReturnToSessionCommand.Execute(null);
+            return;
+        }
+
+        TogglePopup();
+    }
+
+    private void OnArrowClick(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        TogglePopup();
+    }
+
+    private void TogglePopup()
+    {
         if (SelectorPopup.IsOpen)
         {
             SelectorPopup.IsOpen = false;
@@ -296,8 +339,8 @@ public sealed partial class SessionTabSelector : UserControl
 
         SyncListSelection();
 
-        SelectorPopup.IsOpen = true;
         SelectorToggle.IsChecked = true;
+        SelectorPopup.IsOpen = true;
 
         // 等列表布局完成后再把当前会话滚入可视区并交给键盘。
         Dispatcher.BeginInvoke(BringCurrentIntoView, System.Windows.Threading.DispatcherPriority.Loaded);

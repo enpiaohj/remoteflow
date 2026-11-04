@@ -52,6 +52,42 @@ public sealed class SessionManagerLifecycleTests : IDisposable
         _workspace.Dispose();
     }
 
+    [Theory]
+    [InlineData("operator", "EXAMPLE", "EXAMPLE\\operator")]
+    [InlineData("EXAMPLE\\operator", "EXAMPLE", "EXAMPLE\\operator")]
+    [InlineData("operator@example.test", "EXAMPLE", "operator@example.test")]
+    [InlineData("operator", null, "operator")]
+    [InlineData("", "EXAMPLE", "")]
+    public async Task 账号元数据在创建通知前复制且关闭后移除(string username, string? domain, string expected)
+    {
+        using var credential = new ResolvedCredential { Type = CredentialType.LocalPassword, Username = username, Domain = domain ?? string.Empty };
+        string? observed = null;
+        _manager.SessionCreated += (_, created) => observed = _manager.GetSessionAccount(created.SessionId);
+        var session = await _manager.CreateSessionAsync(NewProfile("账号元数据"), credentialOverride: credential);
+        credential.Dispose();
+
+        Assert.Equal(expected, observed);
+        Assert.Equal(expected, _manager.GetSessionAccount(session.SessionId));
+        await _manager.CloseSessionAsync(session.SessionId);
+        Assert.Null(_manager.GetSessionAccount(session.SessionId));
+    }
+
+    [Fact]
+    public async Task Rdp账号使用连接设置中的域回退()
+    {
+        var credentials = new CredentialService(new SqliteCredentialRepository(_database),
+            new InMemoryCredentialVault(), NullLogger<CredentialService>.Instance);
+        await using var manager = new SessionManager([new FakeProvider(ProtocolType.Rdp)], credentials,
+            new SqliteConnectionRepository(_database), new SqliteHistoryRepository(_database),
+            new NoOpSshHostKeyPolicy(), NullLogger<SessionManager>.Instance);
+        var profile = new ConnectionProfile { Name = "域回退", Host = "rdp.example", Protocol = ProtocolType.Rdp };
+        profile.Rdp.Domain = "EXAMPLE";
+        using var credential = new ResolvedCredential { Type = CredentialType.LocalPassword, Username = "operator" };
+        var session = await manager.CreateSessionAsync(profile, credentialOverride: credential);
+
+        Assert.Equal("EXAMPLE\\operator", manager.GetSessionAccount(session.SessionId));
+    }
+
     [Fact]
     public async Task 循环25次_簿记与事件精确()
     {

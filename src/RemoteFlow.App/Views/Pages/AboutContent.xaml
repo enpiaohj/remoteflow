@@ -183,9 +183,9 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="启动时自动检查更新" Style="{StaticResource Text.Body}" />
+                            <TextBlock Text="自动检查更新" Style="{StaticResource Text.Body}" />
                             <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,12,0"
-                                       Text="默认关闭。开启后每次启动会访问一次 GitHub 查询最新版本，只提示、不自动下载。更新包下载后会校验 SHA-256；更新后文件名跟随新版本，开机启动项与快捷方式会自动指向新文件。" />
+                                       Text="默认关闭。开启后启动时及每隔 4 小时访问 GitHub 检查新版本，只提示、不自动下载。更新包下载后会校验 SHA-256；更新后文件名跟随新版本，开机启动项与快捷方式会自动指向新文件。" />
                         </StackPanel>
                         <CheckBox Grid.Column="1" Style="{StaticResource Toggle.Switch}" VerticalAlignment="Center"
                                   IsChecked="{Binding AutoCheck}" />
@@ -231,7 +231,7 @@
 
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="对外通信" Style="{StaticResource About.Label}" Margin="0,10,0,0" VerticalAlignment="Top" />
                         <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource About.Body}" Margin="0,10,0,0">
-                            除你发起的远程连接（RDP / SSH / VNC）、显式启用并配对的 AppsCloud 云同步，以及你主动点击「检查更新」或开启「启动时自动检查更新」时访问 GitHub 发布页外，应用不向任何第三方服务发送数据，亦不包含遥测、崩溃报告或使用统计组件。
+                            除你发起的远程连接（RDP / SSH / VNC）、显式启用并配对的 AppsCloud 云同步，以及你主动点击「检查更新」或开启「自动检查更新」时访问 GitHub 发布页外，应用不向任何第三方服务发送数据，亦不包含遥测、崩溃报告或使用统计组件。
                         </TextBlock>
 
                         <TextBlock Grid.Row="3" Grid.Column="0" Text="主机密钥" Style="{StaticResource About.Label}" Margin="0,10,0,0" VerticalAlignment="Top" />

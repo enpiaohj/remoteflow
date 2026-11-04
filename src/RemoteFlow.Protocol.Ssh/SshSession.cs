@@ -21,7 +21,7 @@ namespace RemoteFlow.Protocol.Ssh;
 /// 也会由终端侧的解码器正确拼接，不会出现半个汉字变乱码的问题。
 /// </para>
 /// </summary>
-public sealed class SshSession : IRemoteSession, IFileTransferSession
+public sealed partial class SshSession : IRemoteSession, IFileTransferSession, IRemotePowerSession
 {
     private readonly SessionRequest _request;
     private readonly ILogger _logger;

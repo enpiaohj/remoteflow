@@ -23,7 +23,8 @@ internal static class UiTestHost
     {
         if (System.Windows.Application.Current is null)
         {
-            _ = new System.Windows.Application();
+            // 测试中的临时窗口关闭后仍会创建新窗口，不应触发整个 WPF 应用退出。
+            _ = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         }
 
         var resources = System.Windows.Application.Current!.Resources;

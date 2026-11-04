@@ -27,7 +27,7 @@ namespace RemoteFlow.Protocol.Vnc;
 /// <summary>
 /// VNC / macOS Screen Sharing 会话。基于 RFB 协议的纯托管实现，无原生依赖。
 /// </summary>
-public sealed class VncSession : IRemoteSession, IAuthenticationHandler
+public sealed partial class VncSession : IRemoteSession, IAuthenticationHandler, IRemotePowerSession
 {
     private readonly SessionRequest _request;
     private readonly ILoggerFactory _loggerFactory;

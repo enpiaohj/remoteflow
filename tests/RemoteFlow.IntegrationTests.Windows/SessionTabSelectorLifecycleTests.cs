@@ -89,6 +89,59 @@ public sealed class SessionTabSelectorLifecycleTests
         });
     }
 
+    [Fact]
+    public void PageHeader_ReturnsToRememberedSession_ArrowOnlyOpensList_AndShowsAccount()
+    {
+        UiTestHost.RunOnSta(() =>
+        {
+            UiTestHost.LoadAppResources();
+            Window? window = null;
+            using var tab = NewSessionTab("演示会话", @"EXAMPLE\operator");
+            try
+            {
+                var main = CreateMainViewModel();
+                main.Tabs.Add(tab);
+                var page = new PageTabViewModel();
+                main.Tabs.Insert(0, page);
+                typeof(MainViewModel).GetField("_selectedTab", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .SetValue(main, page);
+                main.ReturnTab = tab;
+                var selector = new SessionTabSelector { DataContext = main };
+                window = new Window
+                {
+                    ShowInTaskbar = false, ShowActivated = false, Left = -10000, Top = -10000,
+                    Width = 400, Height = 80, Content = selector
+                };
+                window.Show();
+                Flush();
+                var toggle = (System.Windows.Controls.Primitives.ToggleButton)selector.FindName("SelectorToggle");
+                var popup = (System.Windows.Controls.Primitives.Popup)selector.FindName("SelectorPopup");
+                Assert.Equal($"返回 {tab.Title}", ((TextBlock)selector.FindName("HeaderTitle")).Text);
+                Assert.Equal("1", ((TextBlock)selector.FindName("HeaderCountText")).Text);
+                Assert.Equal(Visibility.Visible, ((Border)selector.FindName("HeaderCountBadge")).Visibility);
+                Assert.Equal(Visibility.Collapsed, ((Button)selector.FindName("HeaderClose")).Visibility);
+                Assert.Equal(tab.TabToolTip, toggle.ToolTip);
+                Assert.Contains(@"账号：EXAMPLE\operator", (string)toggle.ToolTip, StringComparison.Ordinal);
+
+                ((Button)selector.FindName("SelectorArrow")).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                Assert.True(popup.IsOpen, $"Popup={popup.IsOpen}; Checked={toggle.IsChecked}; Selected={main.SelectedTab?.GetType().Name}");
+                Assert.Same(page, main.SelectedTab);
+                popup.IsOpen = false;
+                toggle.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                Assert.Same(tab, main.SelectedTab);
+                Assert.False(popup.IsOpen);
+                Assert.Equal(tab.Title, ((TextBlock)selector.FindName("HeaderTitle")).Text);
+                Assert.Equal(Visibility.Visible, ((Button)selector.FindName("HeaderClose")).Visibility);
+                Assert.Equal(tab.TabToolTip, toggle.ToolTip);
+            }
+            finally
+            {
+                window?.Close();
+                UiTestHost.RestoreAppResources();
+            }
+        });
+    }
+
     private static void Flush() =>
         Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ContextIdle);
 
@@ -105,12 +158,12 @@ public sealed class SessionTabSelectorLifecycleTests
         return main;
     }
 
-    private static SessionTabViewModel NewSessionTab(string name) => new(
+    private static SessionTabViewModel NewSessionTab(string name, string? account = null) => new(
         new FakeSession(new ConnectionProfile { Name = name, Host = name, Protocol = ProtocolType.Ssh }),
         _ => Task.CompletedTask,
         _ => Task.CompletedTask,
         SynchronousUiDispatcher.Instance,
-        new NoOpTimerFactory());
+        new NoOpTimerFactory(), account: account);
 
     private sealed class FakeSession(ConnectionProfile profile) : RemoteSessionBase
     {

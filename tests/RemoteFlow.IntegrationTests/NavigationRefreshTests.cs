@@ -198,6 +198,74 @@ public sealed class NavigationRefreshTests : IDisposable
     }
 
     [Fact]
+    public async Task 返回入口保留离开前会话及本次实际账号且状态实时刷新()
+    {
+        _provider.Factory = _ => new FakeSession();
+        using var credential = new ResolvedCredential { Type = CredentialType.SshPassword, Username = "operator", Domain = "EXAMPLE" };
+        var session = await _sessions.CreateSessionAsync(
+            new ConnectionProfile { Name = "演示主机", Host = "demo.example", Protocol = ProtocolType.Ssh, Port = 2222 },
+            credentialOverride: credential);
+        var tab = Assert.Single(_main.Tabs.OfType<SessionTabViewModel>());
+        _main.SelectedTab = _main.WorkspaceTab;
+
+        Assert.Same(tab, _main.ReturnTab);
+        Assert.True(_main.CanReturnToSession);
+        Assert.Contains("EXAMPLE\\operator", _main.ReturnTabToolTip, StringComparison.Ordinal);
+        Assert.Equal(tab.TabToolTip, _main.ReturnTabToolTip);
+        var changes = new List<string?>();
+        _main.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
+        ((FakeSession)session).RaiseStateChanged(ConnectionState.Idle, ConnectionState.Connected);
+        Assert.Contains("已连接", _main.ReturnTabToolTip, StringComparison.Ordinal);
+        Assert.Contains(nameof(MainViewModel.ReturnTabToolTip), changes);
+
+        _main.ReturnToSessionCommand.Execute(null);
+        Assert.Same(tab, _main.SelectedTab);
+        Assert.Null(_main.ReturnTab);
+        Assert.False(_main.CanReturnToSession);
+        await _sessions.CloseSessionAsync(session.SessionId);
+    }
+
+    [Fact]
+    public async Task 返回目标关闭后改用剩余会话且全部关闭后隐藏()
+    {
+        var first = await _sessions.CreateSessionAsync(new ConnectionProfile
+        {
+            Name = "甲", Host = "a.example", Protocol = ProtocolType.Ssh
+        });
+        var second = await _sessions.CreateSessionAsync(new ConnectionProfile
+        {
+            Name = "乙", Host = "b.example", Protocol = ProtocolType.Ssh
+        });
+        _main.SelectedTab = _main.WorkspaceTab;
+        Assert.Equal("乙", _main.ReturnTab!.Title);
+
+        await _sessions.CloseSessionAsync(second.SessionId);
+        Assert.True(_main.CanReturnToSession);
+        Assert.Equal("甲", _main.ReturnTab!.Title);
+        Assert.Contains("a.example", _main.ReturnTabToolTip, StringComparison.Ordinal);
+
+        await _sessions.CloseSessionAsync(first.SessionId);
+        Assert.False(_main.CanReturnToSession);
+        Assert.Null(_main.ReturnTab);
+        Assert.Empty(_main.ReturnTabToolTip);
+    }
+
+    [Fact]
+    public void 文件传输返回入口显示传输详情()
+    {
+        _launcher.Open(new ConnectionProfile { Name = "文件主机", Host = "files.example", Protocol = ProtocolType.Ssh });
+        var transfer = Assert.IsType<FileTransferTabViewModel>(_main.SelectedTab);
+        _main.SelectedTab = _main.WorkspaceTab;
+
+        Assert.Same(transfer, _main.ReturnTab);
+        Assert.True(_main.CanReturnToSession);
+        Assert.Equal(transfer.TabToolTip, _main.ReturnTabToolTip);
+        Assert.Equal(0, _main.OpenSessionCount);
+        _main.ReturnToSessionCommand.Execute(null);
+        Assert.Same(transfer, _main.SelectedTab);
+    }
+
+    [Fact]
     public async Task 会话Tab创建失败时关闭该会话并释放创建占位()
     {
         var profile = new ConnectionProfile { Name = "主机C", Host = "host-c", Protocol = ProtocolType.Ssh };

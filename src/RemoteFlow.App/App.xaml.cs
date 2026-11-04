@@ -447,7 +447,7 @@ public partial class App : System.Windows.Application
 
     /// <summary>
     /// 更新相关的启动收尾：清理上次更新留下的旧版本文件；更新后首次启动时按当前设置重写开机启动项；
-    /// 用户开启了「启动时自动检查」才在后台检查一次（默认关闭，不联网）。
+    /// 用户开启「自动检查更新」后启动定时检测（默认关闭，不联网）。
     /// </summary>
     private void InitializeUpdates(bool afterUpdate, bool updateFailed)
     {
@@ -492,15 +492,8 @@ public partial class App : System.Windows.Application
             }
         }
 
-        if (settings.AutoCheckUpdates)
-        {
-            var update = Services.GetRequiredService<UpdateViewModel>();
-            _ = Dispatcher.InvokeAsync(async () =>
-            {
-                await Task.Delay(TimeSpan.FromSeconds(8));
-                await update.CheckOnStartupAsync();
-            });
-        }
+        Services.GetRequiredService<UpdateViewModel>()
+            .StartAutomaticChecks(Services.GetRequiredService<RemoteFlow.Presentation.Host.IUiTimerFactory>());
     }
 
     private void ApplyTheme()

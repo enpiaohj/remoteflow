@@ -36,8 +36,16 @@ public sealed partial class ContextMenuConventionTests
 
         Assert.NotEmpty(items);
         var danger = items.Where(i => i.Contains("MenuItemAssist.IsDanger=\"True\"", StringComparison.Ordinal)).ToList();
-        Assert.Single(danger);
-        Assert.Same(danger[0], items[^1]);
+        if (menuKey == "SessionTabContextMenu")
+        {
+            Assert.Equal(3, danger.Count);
+            Assert.Equal(danger, items.TakeLast(danger.Count));
+        }
+        else
+        {
+            Assert.Single(danger);
+            Assert.Same(danger[0], items[^1]);
+        }
     }
 
     [Theory]

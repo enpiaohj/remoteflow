@@ -927,7 +927,15 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnUpdateHintClick(object sender, RoutedEventArgs e) => _viewModel.NavigateTo(NavigationPage.About);
+    private void OnUpdateHintClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { ContextMenu: { } menu } button)
+        {
+            menu.PlacementTarget = button;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            menu.IsOpen = true;
+        }
+    }
 
     private void OnTabHeaderChecked(object sender, RoutedEventArgs e)
     {
@@ -963,6 +971,16 @@ public partial class MainWindow : Window
         if (sender is not ContextMenu menu || ResolveTab(menu) is not { } tab)
         {
             return;
+        }
+
+        // 命令在菜单打开时绑定到右键目标，确认期间切换标签也不会改变操作对象。
+        foreach (var item in menu.Items.OfType<MenuItem>())
+        {
+            if (Equals(item.Tag, "shutdownDevice") || Equals(item.Tag, "restartDevice"))
+            {
+                item.Visibility = tab.SupportsPowerActions ? Visibility.Visible : Visibility.Collapsed;
+                item.Command = Equals(item.Tag, "shutdownDevice") ? tab.ShutdownCommand : tab.RestartDeviceCommand;
+            }
         }
 
         var sessionCount = _viewModel.Tabs.OfType<SessionTabViewModel>().Count();

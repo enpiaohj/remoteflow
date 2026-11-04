@@ -54,6 +54,30 @@ public sealed class SessionTabViewModelTests
         Assert.Contains("已连接", vm.TabToolTip, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("EXAMPLE\\operator", "EXAMPLE\\operator")]
+    [InlineData("operator@example.test", "operator@example.test")]
+    [InlineData(null, "未提供账号")]
+    [InlineData(" ", "未提供账号")]
+    public void 悬停详情包含连接信息与实际账号(string? account, string expected)
+    {
+        using var vm = new SessionTabViewModel(
+            new FakeSession(), _ => Task.CompletedTask, _ => Task.CompletedTask,
+            SynchronousUiDispatcher.Instance, new ManualTimerFactory(), account: account);
+
+        Assert.Contains($"名称：{vm.Title}", vm.TabToolTip, StringComparison.Ordinal);
+        Assert.Contains("协议：SSH", vm.TabToolTip, StringComparison.Ordinal);
+        Assert.Contains($"主机：{vm.Profile.Host}:{vm.Profile.Port}", vm.TabToolTip, StringComparison.Ordinal);
+        Assert.Contains($"账号：{expected}", vm.TabToolTip, StringComparison.Ordinal);
+        Assert.Contains("状态：准备中", vm.TabToolTip, StringComparison.Ordinal);
+
+        var notifications = new List<string?>();
+        vm.PropertyChanged += (_, e) => notifications.Add(e.PropertyName);
+        ((FakeSession)vm.Session).RaiseStateChanged(ConnectionState.Idle, ConnectionState.Failed);
+        Assert.Contains("状态：连接失败", vm.TabToolTip, StringComparison.Ordinal);
+        Assert.Contains(nameof(SessionTabViewModel.TabToolTip), notifications);
+    }
+
     [Fact]
     public void 会话状态色与全应用统一语义一致()
     {

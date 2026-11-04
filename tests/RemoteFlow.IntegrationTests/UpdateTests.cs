@@ -385,6 +385,89 @@ public sealed class UpdateTests
         Assert.Equal("只有一句说明", vm.Notes);
     }
 
+    [Fact]
+    public async Task 本次不再提示保留手动更新能力且重复检查不复位()
+    {
+        var feed = new FakeFeed { Latest = Release(1, HashA) };
+        using var vm = NewViewModel(feed, new FakeInstaller(), new AppSettings { AutoCheckUpdates = true });
+        await vm.CheckOnStartupAsync();
+        Assert.True(vm.ShowUpdateHint);
+        vm.DismissUpdateHintCommand.Execute(null);
+        await vm.CheckOnStartupAsync();
+        Assert.False(vm.ShowUpdateHint);
+        Assert.True(vm.HasUpdate);
+        Assert.True(vm.CanInstall);
+        using var nextRun = NewViewModel(feed, new FakeInstaller(), new AppSettings());
+        await nextRun.CheckCommand.ExecuteAsync(null);
+        Assert.True(nextRun.ShowUpdateHint);
+    }
+
+    [Fact]
+    public async Task 自动检查失败保留已经发现的新版本()
+    {
+        var feed = new FakeFeed { Latest = Release(1, HashA) };
+        using var vm = NewViewModel(feed, new FakeInstaller(), new AppSettings { AutoCheckUpdates = true });
+        await vm.CheckOnStartupAsync();
+        feed.CheckError = new HttpRequestException("offline");
+        await vm.CheckOnStartupAsync();
+        Assert.Equal(UpdateState.Available, vm.State);
+        Assert.True(vm.ShowUpdateHint);
+        Assert.True(vm.CanInstall);
+    }
+
+    [Fact]
+    public async Task 待重启时不再自动检查或重复下载()
+    {
+        var feed = new FakeFeed { Latest = Release(1, HashA) };
+        using var vm = NewViewModel(feed, new FakeInstaller(), new AppSettings { AutoCheckUpdates = true });
+        await vm.CheckOnStartupAsync();
+        await vm.InstallCommand.ExecuteAsync(null);
+        await vm.CheckOnStartupAsync();
+        Assert.Equal(1, feed.CheckCount);
+        Assert.Equal(UpdateState.ReadyToRestart, vm.State);
+    }
+
+    [Fact]
+    public void 自动检查计时器支持周期与运行时开关并在释放时停止()
+    {
+        var feed = new FakeFeed { Latest = Release(1, HashA) };
+        using var vm = NewViewModel(feed, new FakeInstaller(), new AppSettings());
+        var factory = new UpdateTimerFactory();
+        vm.StartAutomaticChecks(factory);
+        Assert.False(factory.Timer.Running);
+        vm.AutoCheck = true;
+        Assert.Equal(TimeSpan.FromSeconds(8), factory.Timer.Interval);
+        factory.Timer.Fire();
+        Assert.Equal(1, feed.CheckCount);
+        Assert.Equal(TimeSpan.FromHours(4), factory.Timer.Interval);
+        factory.Timer.Fire();
+        Assert.Equal(2, feed.CheckCount);
+        vm.AutoCheck = false;
+        factory.Timer.Fire();
+        Assert.Equal(2, feed.CheckCount);
+        vm.Dispose();
+        Assert.True(factory.Timer.Disposed);
+        Assert.False(factory.Timer.Running);
+    }
+
+    private sealed class UpdateTimerFactory : IUiTimerFactory
+    {
+        public UpdateTimer Timer { get; } = new();
+        public IUiTimer Create(TimeSpan interval) { Timer.Interval = interval; return Timer; }
+    }
+
+    private sealed class UpdateTimer : IUiTimer
+    {
+        public TimeSpan Interval { get; set; }
+        public event EventHandler? Tick;
+        public bool Running { get; private set; }
+        public bool Disposed { get; private set; }
+        public void Start() => Running = true;
+        public void Stop() => Running = false;
+        public void Dispose() { Disposed = true; Running = false; }
+        public void Fire() { if (Running) Tick?.Invoke(this, EventArgs.Empty); }
+    }
+
     // ── 辅助 ──
 
     private static UpdateViewModel NewViewModel(FakeFeed feed, FakeInstaller installer, AppSettings settings, IDialogService? dialogs = null)

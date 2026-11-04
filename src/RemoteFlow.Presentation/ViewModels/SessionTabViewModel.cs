@@ -42,13 +42,16 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         IUiTimerFactory timerFactory,
         IDialogService? dialogs = null,
         ILogger? logger = null,
-        Action<ConnectionProfile>? openFileTransferTab = null)
+        Action<ConnectionProfile>? openFileTransferTab = null,
+        string? account = null)
     {
         Session = session;
+        AccountDisplay = string.IsNullOrWhiteSpace(account) ? "未提供账号" : account;
         _closeCallback = closeCallback;
         _reconnectCallback = reconnectCallback;
         _openFileTransferTab = openFileTransferTab;
         _ui = uiDispatcher;
+        InitializePowerActions(dialogs, logger);
 
         Title = session.Profile.Name;
         Icon = session.Protocol switch
@@ -159,18 +162,21 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     /// <summary>设备类型配色资源键。</summary>
     public string DeviceBrushKey => DeviceVisual.AccentBrushKey;
 
-    public string ProtocolName => Protocol switch
+    public string ProtocolName => IsVmwareConsole ? "VMware 控制台（VNC）" : Protocol switch
     {
         ProtocolType.Rdp => "RDP",
         ProtocolType.Ssh => "SSH",
         _ => "VNC"
     };
 
+    /// <summary>本次连接实际使用的账号，仅含用户名 / 域，不持有解析后的凭据。</summary>
+    public string AccountDisplay { get; }
+
     /// <summary>会话选择器第二行：主机 · 协议。</summary>
     public string TabHostLine => $"{Profile.Host} · {ProtocolName}";
 
-    /// <summary>标签悬停提示：名称 · 协议 · 状态。图标不再表达协议，协议由这里补足。</summary>
-    public string TabToolTip => $"{Title} · {ProtocolName} · {StateText}";
+    /// <summary>所有会话入口共用的悬停详情，账号来自本次连接而非 Profile 的凭据绑定。</summary>
+    public string TabToolTip => $"名称：{Title}\n协议：{ProtocolName}\n主机：{HostPortLine}\n账号：{AccountDisplay}\n状态：{StateText}";
 
     /// <summary>连接质量详情状态（Flyout 绑定源）。</summary>
     public SessionQualityState Quality { get; }

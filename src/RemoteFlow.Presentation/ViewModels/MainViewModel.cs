@@ -119,6 +119,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(OpenSessionCount));
             OnPropertyChanged(nameof(ConnectionSessionCount));
             OnPropertyChanged(nameof(VmwareSessionCount));
+            if (ReturnTab is { } returnTab && !Tabs.Contains(returnTab))
+            {
+                ReturnTab = Tabs.LastOrDefault(t => t is SessionTabViewModel or FileTransferTabViewModel);
+            }
+
             OnPropertyChanged(nameof(CanReturnToSession));
             RaiseInterruptedChanged();
         };
@@ -204,12 +209,46 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanReturnToSession))]
     [NotifyPropertyChangedFor(nameof(ReturnTabLabel))]
+    [NotifyPropertyChangedFor(nameof(ReturnTabToolTip))]
     private WorkspaceTabViewModel? _returnTab;
 
     /// <summary>是否存在可返回的会话（且它还开着）。</summary>
     public bool CanReturnToSession => ReturnTab is not null && Tabs.Contains(ReturnTab);
 
     public string ReturnTabLabel => ReturnTab is null ? string.Empty : $"返回 {ReturnTab.Title}";
+
+    public string ReturnTabToolTip => ReturnTab switch
+    {
+        SessionTabViewModel session => session.TabToolTip,
+        FileTransferTabViewModel transfer => transfer.TabToolTip,
+        _ => string.Empty
+    };
+
+    partial void OnReturnTabChanged(WorkspaceTabViewModel? oldValue, WorkspaceTabViewModel? newValue)
+    {
+        if (oldValue is not null)
+        {
+            oldValue.PropertyChanged -= OnReturnTabPropertyChanged;
+        }
+
+        if (newValue is not null)
+        {
+            newValue.PropertyChanged += OnReturnTabPropertyChanged;
+        }
+    }
+
+    private void OnReturnTabPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(WorkspaceTabViewModel.Title))
+        {
+            OnPropertyChanged(nameof(ReturnTabLabel));
+        }
+
+        if (e.PropertyName is nameof(WorkspaceTabViewModel.Title) or nameof(SessionTabViewModel.TabToolTip))
+        {
+            OnPropertyChanged(nameof(ReturnTabToolTip));
+        }
+    }
 
     [RelayCommand]
     private void ReturnToSession()
@@ -886,7 +925,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             tab = new SessionTabViewModel(
                 session, CloseSessionAsync, ReconnectAsync, _ui, _timerFactory, _dialogs, _logger,
-                _fileTransferLauncher is null ? null : _fileTransferLauncher.Open);
+                _fileTransferLauncher is null ? null : _fileTransferLauncher.Open,
+                account: _sessions.GetSessionAccount(session.SessionId));
 
             // 会话工具条里的「全屏」由主窗口层处理（隐藏导航/详情、窗口去边框铺满）；
             // 协议专属动作（缩放、Ctrl+Alt+Del 等）由各协议视图自己订阅处理。
@@ -1567,6 +1607,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         _disposed = true;
+        if (ReturnTab is not null)
+        {
+            ReturnTab.PropertyChanged -= OnReturnTabPropertyChanged;
+        }
+
         _pageReloadCts?.Cancel();
         _sessions.SessionCreated -= OnSessionCreated;
         _sessions.SessionClosed -= OnSessionClosed;

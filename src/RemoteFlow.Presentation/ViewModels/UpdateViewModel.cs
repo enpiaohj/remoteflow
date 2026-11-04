@@ -28,7 +28,7 @@ public enum UpdateState
 /// 任何一步失败都保留「打开下载页」这条退路，不让用户卡住。
 /// </para>
 /// </summary>
-public sealed partial class UpdateViewModel : ObservableObject
+public sealed partial class UpdateViewModel : ObservableObject, IDisposable
 {
     private readonly IUpdateService _service;
     private readonly IUpdateInstaller _installer;
@@ -39,6 +39,11 @@ public sealed partial class UpdateViewModel : ObservableObject
     private readonly ILogger _logger;
     private readonly Version _currentVersion;
     private CancellationTokenSource? _downloadCts;
+    private readonly CancellationTokenSource _lifetime = new();
+    private IUiTimer? _automaticTimer;
+    private bool _automaticChecksStarted;
+    private bool _hintDismissed;
+    private bool _disposed;
 
     public UpdateViewModel(
         IUpdateService service,
@@ -67,6 +72,7 @@ public sealed partial class UpdateViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsBusy))]
     [NotifyPropertyChangedFor(nameof(HasUpdate))]
+    [NotifyPropertyChangedFor(nameof(ShowUpdateHint))]
     [NotifyPropertyChangedFor(nameof(IsDownloading))]
     [NotifyPropertyChangedFor(nameof(IsReadyToRestart))]
     [NotifyPropertyChangedFor(nameof(CanInstall))]
@@ -81,6 +87,8 @@ public sealed partial class UpdateViewModel : ObservableObject
     /// <summary>检查到的最新版本（可能不比当前新）。</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LatestVersionText))]
+    [NotifyPropertyChangedFor(nameof(HasUpdate))]
+    [NotifyPropertyChangedFor(nameof(ShowUpdateHint))]
     [NotifyPropertyChangedFor(nameof(Notes))]
     [NotifyPropertyChangedFor(nameof(CanOpenReleasePage))]
     private UpdateRelease? _latest;
@@ -89,7 +97,7 @@ public sealed partial class UpdateViewModel : ObservableObject
     [ObservableProperty]
     private double _progress;
 
-    /// <summary>启动时自动检查更新。默认关闭；改动立即保存。</summary>
+    /// <summary>启动后及运行期间定期检查更新。默认关闭；改动立即保存。</summary>
     [ObservableProperty]
     private bool _autoCheck;
 
@@ -122,7 +130,47 @@ public sealed partial class UpdateViewModel : ObservableObject
 
     /// <summary>有比当前更新的版本（含已下载待重启）。状态栏提示与关于页都看它。</summary>
     public bool HasUpdate => Latest is not null && Latest.Version > _currentVersion
-        && State is UpdateState.Available or UpdateState.Downloading or UpdateState.ReadyToRestart or UpdateState.Failed;
+        && State is UpdateState.Checking or UpdateState.Available or UpdateState.Downloading or UpdateState.ReadyToRestart or UpdateState.Failed;
+
+    public bool ShowUpdateHint => HasUpdate && !_hintDismissed;
+
+    [RelayCommand]
+    private void DismissUpdateHint()
+    {
+        _hintDismissed = true;
+        OnPropertyChanged(nameof(ShowUpdateHint));
+    }
+
+    /// <summary>启动后首次延迟检查，此后每四小时检查；开关在本次运行中即时生效。</summary>
+    public void StartAutomaticChecks(IUiTimerFactory timerFactory)
+    {
+        if (_disposed || _automaticChecksStarted) return;
+        _automaticChecksStarted = true;
+        _automaticTimer = timerFactory.Create(TimeSpan.FromSeconds(8));
+        _automaticTimer.Tick += OnAutomaticCheck;
+        if (AutoCheck) _automaticTimer.Start();
+    }
+
+    private async void OnAutomaticCheck(object? sender, EventArgs e)
+    {
+        if (_automaticTimer is not null) _automaticTimer.Interval = TimeSpan.FromHours(4);
+        await CheckOnStartupAsync();
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (_automaticTimer is not null)
+        {
+            _automaticTimer.Stop();
+            _automaticTimer.Tick -= OnAutomaticCheck;
+            _automaticTimer.Dispose();
+        }
+        _lifetime.Cancel();
+        _downloadCts?.Cancel();
+        _lifetime.Dispose();
+    }
 
     /// <summary>能否应用内安装：有新版本、当前运行形态支持原地替换。</summary>
     public bool CanInstall => State is UpdateState.Available or UpdateState.Failed
@@ -133,6 +181,15 @@ public sealed partial class UpdateViewModel : ObservableObject
     partial void OnAutoCheckChanged(bool value)
     {
         _settings.AutoCheckUpdates = value;
+        if (_automaticTimer is not null)
+        {
+            if (value)
+            {
+                _automaticTimer.Interval = TimeSpan.FromSeconds(8);
+                _automaticTimer.Start();
+            }
+            else _automaticTimer.Stop();
+        }
         if (_settingsStore is not null)
         {
             _ = SaveSettingsAsync();
@@ -154,7 +211,7 @@ public sealed partial class UpdateViewModel : ObservableObject
     /// <summary>启动时的自动检查：只在开关打开时执行，失败不打扰用户。</summary>
     public async Task CheckOnStartupAsync()
     {
-        if (!AutoCheck || IsBusy)
+        if (!AutoCheck || !CanCheck())
         {
             return;
         }
@@ -165,16 +222,28 @@ public sealed partial class UpdateViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanCheck))]
     private Task CheckAsync() => CheckCoreAsync(silent: false);
 
-    private bool CanCheck() => !IsBusy && State != UpdateState.ReadyToRestart;
+    private bool CanCheck() => !_disposed && !IsBusy && State != UpdateState.ReadyToRestart;
 
     private async Task CheckCoreAsync(bool silent)
     {
+        if (!CanCheck()) return;
+        var previousState = State;
+        var previousStatus = StatusText;
+        var previousRelease = Latest;
         State = UpdateState.Checking;
         StatusText = "正在检查更新…";
 
         try
         {
-            var latest = await _service.GetLatestAsync(CancellationToken.None);
+            var latest = await _service.GetLatestAsync(_lifetime.Token);
+            if (_disposed) return;
+            if (silent && previousRelease is not null && previousRelease.Version > _currentVersion
+                && (latest is null || latest.Version < previousRelease.Version))
+            {
+                State = previousState;
+                StatusText = previousStatus;
+                return;
+            }
             Latest = latest;
 
             if (latest is null || latest.Version <= _currentVersion)
@@ -191,12 +260,13 @@ public sealed partial class UpdateViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            if (_disposed && ex is OperationCanceledException) return;
             _logger.LogWarning(ex, "检查更新失败");
             if (silent)
             {
-                // 自动检查失败（没网、访问不了 GitHub）不值得打扰：回到未检查状态。
-                State = UpdateState.Idle;
-                StatusText = "尚未检查。";
+                // 网络暂时失败时保留已知更新和下载入口。
+                State = previousState;
+                StatusText = previousStatus;
                 return;
             }
 
@@ -215,7 +285,7 @@ public sealed partial class UpdateViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanInstall))]
     private async Task InstallAsync()
     {
-        if (Latest is not { } release)
+        if (_disposed || !CanInstall || Latest is not { } release)
         {
             return;
         }
@@ -256,6 +326,7 @@ public sealed partial class UpdateViewModel : ObservableObject
             cts.Dispose();
         }
 
+        if (_disposed) return;
         try
         {
             _installer.Apply(package);

@@ -67,6 +67,10 @@ public sealed class SessionManager : IAsyncDisposable
     /// <summary>当前全部活动会话。</summary>
     public IReadOnlyList<IRemoteSession> ActiveSessions => _sessions.Values.Select(e => e.Session).ToList();
 
+    /// <summary>本次连接实际解析的账号（仅非 Secret 元数据）；关闭移除后不再保留。</summary>
+    public string? GetSessionAccount(Guid sessionId)
+        => _sessions.TryGetValue(sessionId, out var entry) ? entry.Account : null;
+
     /// <summary>指定 Profile 是否存在于活动集合（含 Connecting / Connected / Failed 尚未移除）。纯内存派生。</summary>
     public bool HasActiveSession(Guid connectionProfileId)
         => _sessions.Values.Any(e => e.Session.Profile.Id == connectionProfileId);
@@ -253,6 +257,22 @@ public sealed class SessionManager : IAsyncDisposable
             }
         }
 
+        // Provider 可在创建时接管或释放凭据，先复制展示所需的非 Secret 字段。
+        var domain = credential?.Domain;
+        if (profile.Protocol == ProtocolType.Rdp && string.IsNullOrEmpty(domain))
+        {
+            domain = profile.Rdp.Domain;
+        }
+
+        var account = string.Empty;
+        if (!string.IsNullOrWhiteSpace(credential?.Username))
+        {
+            account = string.IsNullOrWhiteSpace(domain)
+                      || credential.Username.Contains('\\') || credential.Username.Contains('@')
+                ? credential.Username
+                : $"{domain}\\{credential.Username}";
+        }
+
         IRemoteSession session;
         try
         {
@@ -270,7 +290,7 @@ public sealed class SessionManager : IAsyncDisposable
             throw;
         }
 
-        var entry = new SessionEntry(session);
+        var entry = new SessionEntry(session, account);
         _sessions[session.SessionId] = entry;
 
         session.StateChanged += OnSessionStateChanged;
@@ -609,9 +629,11 @@ public sealed class SessionManager : IAsyncDisposable
     public async ValueTask DisposeAsync() => await CloseAllAsync();
 
     /// <summary>会话及其历史记录状态。</summary>
-    private sealed class SessionEntry(IRemoteSession session)
+    private sealed class SessionEntry(IRemoteSession session, string account)
     {
         public IRemoteSession Session { get; } = session;
+
+        public string Account { get; } = account;
 
         /// <summary>对应的历史记录 Id。会话进入 Connecting 后才产生。</summary>
         public Guid? HistoryId { get; set; }
