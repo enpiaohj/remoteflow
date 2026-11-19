@@ -846,16 +846,11 @@ public partial class MainWindow : Window
             _viewModel.SelectedTab = _dragTab;
             if (TabContainer(_viewModel.Tabs.IndexOf(_dragTab)) is { } lifted)
             {
-                Panel.SetZIndex(lifted, 100);
-                lifted.Opacity = 0.9;
-                lifted.Effect = new System.Windows.Media.Effects.DropShadowEffect
-                {
-                    BlurRadius = 10, ShadowDepth = 2, Opacity = 0.25, Direction = 270
-                };
+                LiftTab(lifted);
             }
 
             TabHeadersItemsControl.CaptureMouse();
-            TabHeadersItemsControl.Cursor = Cursors.SizeWE;
+            Mouse.OverrideCursor = DragCursors.Closed;
             e.Handled = true;
         }
 
@@ -885,6 +880,45 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// 被拖标签该落在哪个序号。<paramref name="widths"/> 为当前各标签宽度（含被拖的），
+    /// <paramref name="desiredLeft"/> 为被拖标签想要的左边缘。
+    /// 换位判断用被拖标签的「边缘」对「邻居中点」：向左看左边缘、向右看右边缘。
+    /// 用中线会在被拖标签比邻居宽、且已被限制在边界时永远到不了邻居中点——表现为拖到第一个位置不动、画面重叠。
+    /// 越过中点才换位，换位后邻居会让出一个被拖标签的宽度，不会立刻反向换回，所以不抖动。
+    /// </summary>
+    internal static int ComputeDropIndex(IReadOnlyList<double> widths, int firstMovable, int oldIndex, double desiredLeft)
+    {
+        double LeftOf(int index)
+        {
+            var left = 0d;
+            for (var i = 0; i < index; i++)
+            {
+                left += widths[i];
+            }
+
+            return left;
+        }
+
+        for (var i = firstMovable; i < oldIndex; i++)
+        {
+            if (desiredLeft < LeftOf(i) + widths[i] / 2)
+            {
+                return i;
+            }
+        }
+
+        var right = desiredLeft + widths[oldIndex];
+        for (var i = widths.Count - 1; i > oldIndex; i--)
+        {
+            if (right > LeftOf(i) + widths[i] / 2)
+            {
+                return i;
+            }
+        }
+
+        return oldIndex;
+    }
     private void FollowCursor(double cursorX)
     {
         if (_dragTab is null)
@@ -901,29 +935,8 @@ public partial class MainWindow : Window
         var firstMovable = _viewModel.Tabs.TakeWhile(static t => t is PageTabViewModel).Count();
         var total = TabNaturalLeft(_viewModel.Tabs.Count);
         var desiredLeft = Math.Clamp(cursorX - _dragGrabOffset, TabNaturalLeft(firstMovable), Math.Max(0, total - dragged.ActualWidth));
-        var center = desiredLeft + dragged.ActualWidth / 2;
-
-        // 新位置 = 中线左侧有多少个「其它标签的中点」（去掉被拖标签后的序号即最终序号）。
-        var newIndex = 0;
-        var running = 0d;
-        for (var i = 0; i < _viewModel.Tabs.Count; i++)
-        {
-            if (i == oldIndex)
-            {
-                continue;
-            }
-
-            var width = TabContainer(i)?.ActualWidth ?? 0;
-            if (running + width / 2 < center)
-            {
-                newIndex++;
-            }
-
-            running += width;
-        }
-
-        newIndex = Math.Max(newIndex, firstMovable);
-
+        var widths = Enumerable.Range(0, _viewModel.Tabs.Count).Select(i => TabContainer(i)?.ActualWidth ?? 0).ToList();
+        var newIndex = ComputeDropIndex(widths, firstMovable, oldIndex, desiredLeft);
         if (newIndex != oldIndex)
         {
             // 换位前记下各标签的左边缘，换位后让邻居从旧位置滑向新位置。
@@ -957,17 +970,31 @@ public partial class MainWindow : Window
 
         if (TabContainer(_viewModel.Tabs.IndexOf(_dragTab)) is { } current)
         {
+            // 每次换位后 WPF 会重新生成标签容器，抬起的外观要重新套用。
+            LiftTab(current);
             var transform = EnsureTranslate(current);
             transform.BeginAnimation(TranslateTransform.XProperty, null);
             transform.X = desiredLeft - TabNaturalLeft(_viewModel.Tabs.IndexOf(_dragTab));
         }
     }
 
+    private static void LiftTab(FrameworkElement container)
+    {
+        Panel.SetZIndex(container, 100);
+        container.Opacity = 0.9;
+        container.Effect ??= new System.Windows.Media.Effects.DropShadowEffect
+        {
+            BlurRadius = 10, ShadowDepth = 2, Opacity = 0.25, Direction = 270
+        };
+    }
+
     private void OnTabDragEnd(object sender, MouseEventArgs e) => EndTabDrag();
 
     private void OnTabDragLostCapture(object sender, MouseEventArgs e)
     {
-        if (_dragging)
+        // 只响应标签条自己丢失捕获。按下时标签（RadioButton）自己持有的捕获被我们接管时，
+        // 它的 LostMouseCapture 也会冒泡到这里，若不过滤会让拖动刚开始就被结束。
+        if (_dragging && ReferenceEquals(e.OriginalSource, TabHeadersItemsControl))
         {
             EndTabDrag();
         }
@@ -985,7 +1012,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        TabHeadersItemsControl.Cursor = null;
+        Mouse.OverrideCursor = null;
         if (TabHeadersItemsControl.IsMouseCaptured)
         {
             TabHeadersItemsControl.ReleaseMouseCapture();

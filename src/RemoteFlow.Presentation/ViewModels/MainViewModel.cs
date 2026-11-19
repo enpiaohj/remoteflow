@@ -111,7 +111,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         WorkspaceTab = new PageTabViewModel();
         Tabs = [WorkspaceTab];
+        HostTabs = [WorkspaceTab];
         SelectedTab = WorkspaceTab;
+
+        // 内容区的画面宿主跟随增删，但忽略换位：WPF 把集合的 Move 当成「移除 + 新增」，
+        // 画面控件（RDP ActiveX / WebView2 / VNC）会被销毁重建而黑屏。
+        Tabs.CollectionChanged += OnTabsChangedForHosts;
 
         // 会话增减时刷新导航栏的会话数角标与中断状态。
         Tabs.CollectionChanged += (_, _) =>
@@ -198,6 +203,39 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>工作区全部 Tab：索引 0 是页面，其后为各远程会话。</summary>
     public ObservableCollection<WorkspaceTabViewModel> Tabs { get; }
+
+    /// <summary>
+    /// 内容区画面宿主所绑定的集合：与 <see cref="Tabs"/> 成员一致，但<b>顺序固定</b>（只在末尾追加），
+    /// 标签换位（<see cref="MoveTab"/>）不会让会话画面被销毁重建。顺序只影响标题栏，不影响内容区。
+    /// </summary>
+    public ObservableCollection<WorkspaceTabViewModel> HostTabs { get; } = [];
+
+    private void OnTabsChangedForHosts(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        switch (e.Action)
+        {
+            case System.Collections.Specialized.NotifyCollectionChangedAction.Move:
+                return;
+            case System.Collections.Specialized.NotifyCollectionChangedAction.Reset:
+                HostTabs.Clear();
+                foreach (var tab in Tabs)
+                {
+                    HostTabs.Add(tab);
+                }
+
+                return;
+        }
+
+        foreach (var removed in e.OldItems?.OfType<WorkspaceTabViewModel>() ?? [])
+        {
+            HostTabs.Remove(removed);
+        }
+
+        foreach (var added in e.NewItems?.OfType<WorkspaceTabViewModel>() ?? [])
+        {
+            HostTabs.Add(added);
+        }
+    }
 
     /// <summary>
     /// 拖动调整标签顺序。只有会话 / 文件传输标签可移动，且只能在它们之间换位：
@@ -927,16 +965,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var names = string.Join("、", profiles.Take(5).Select(p => p.Name));
-        if (profiles.Count > 5)
+        // 一行一个、带协议，比用顿号连成一长串好读；太多时只列前 8 个。
+        const int listed = 8;
+        var lines = profiles.Take(listed).Select(p => $"•  {p.Name}（{p.Protocol.ToString().ToUpperInvariant()}）").ToList();
+        if (profiles.Count > listed)
         {
-            names += $" 等 {profiles.Count} 台";
+            lines.Add($"……另有 {profiles.Count - listed} 个");
         }
 
         if (await _dialogs.ConfirmAsync(
                 "恢复上次的会话",
-                $"上次退出时还开着 {profiles.Count} 个会话：\n{names}\n\n要重新打开它们吗？\n需要输入密码的连接会照常询问。",
-                "全部打开"))
+                $"上次退出时有 {profiles.Count} 个会话还开着：\n\n{string.Join("\n", lines)}\n\n要现在重新打开吗？需要输入密码的连接会照常询问。",
+                "重新打开"))
         {
             await OpenSessionsSequentiallyAsync(profiles);
         }

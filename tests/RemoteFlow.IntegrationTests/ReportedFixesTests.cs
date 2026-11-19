@@ -92,6 +92,42 @@ public sealed class ReportedFixesTests
     }
 
     [Fact]
+    public void 标签换位不改变画面宿主顺序_避免会话画面被重建而黑屏()
+    {
+        var main = (MainViewModel)RuntimeHelpers.GetUninitializedObject(typeof(MainViewModel));
+        var tabs = new ObservableCollection<WorkspaceTabViewModel>();
+        var hosts = new ObservableCollection<WorkspaceTabViewModel>();
+        typeof(MainViewModel).GetField("<Tabs>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(main, tabs);
+        typeof(MainViewModel).GetField("<HostTabs>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(main, hosts);
+        tabs.CollectionChanged += (System.Collections.Specialized.NotifyCollectionChangedEventHandler)Delegate.CreateDelegate(
+            typeof(System.Collections.Specialized.NotifyCollectionChangedEventHandler), main, "OnTabsChangedForHosts");
+
+        var page = new PageTabViewModel();
+        using var a = NewSessionTab();
+        using var b = NewSessionTab();
+        using var c = NewSessionTab();
+        foreach (var tab in new WorkspaceTabViewModel[] { page, a, b, c })
+        {
+            tabs.Add(tab);
+        }
+
+        var moves = 0;
+        hosts.CollectionChanged += (_, _) => moves++;
+        var before = moves;
+
+        Assert.True(main.MoveTab(c, 1));
+        Assert.Equal(new WorkspaceTabViewModel[] { page, c, a, b }, tabs.ToArray());
+        // 宿主集合一个通知都不能收到，否则 WPF 会销毁并重建会话画面。
+        Assert.Equal(before, moves);
+        Assert.Equal(new WorkspaceTabViewModel[] { page, a, b, c }, hosts.ToArray());
+
+        tabs.Remove(b);
+        using var d = NewSessionTab();
+        tabs.Add(d);
+        Assert.Equal(new WorkspaceTabViewModel[] { page, a, c, d }, hosts.ToArray());
+    }
+
+    [Fact]
     public void 相对移动在边界停住且跳过页面标签()
     {
         var main = (MainViewModel)RuntimeHelpers.GetUninitializedObject(typeof(MainViewModel));

@@ -518,6 +518,7 @@ public sealed partial class SessionTabSelector : UserControl
         _gripTab = tab;
         _gripDragging = true;
         SessionsList.CaptureMouse();
+        Mouse.OverrideCursor = RemoteFlow.App.Views.DragCursors.Closed;
         ApplyDragLook();
     }
 
@@ -585,7 +586,7 @@ public sealed partial class SessionTabSelector : UserControl
 
     private void OnListDragLostCapture(object sender, MouseEventArgs e)
     {
-        if (_gripDragging)
+        if (_gripDragging && ReferenceEquals(e.OriginalSource, SessionsList))
         {
             EndGripDrag();
         }
@@ -607,6 +608,7 @@ public sealed partial class SessionTabSelector : UserControl
     {
         _gripTab = null;
         _gripDragging = false;
+        Mouse.OverrideCursor = null;
         if (SessionsList.IsMouseCaptured)
         {
             SessionsList.ReleaseMouseCapture();

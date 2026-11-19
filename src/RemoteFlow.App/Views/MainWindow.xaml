@@ -705,7 +705,8 @@
                             </Grid>
                         </Border>
 
-                        <ItemsControl ItemsSource="{Binding Tabs}"
+                        <!-- 画面宿主绑 HostTabs（顺序固定）：标签换位不能让会话画面重建，否则 RDP / 终端 / VNC 会黑屏 -->
+                        <ItemsControl ItemsSource="{Binding HostTabs}"
                                       HorizontalContentAlignment="Stretch"
                                       VerticalContentAlignment="Stretch">
                             <ItemsControl.ItemsPanel>

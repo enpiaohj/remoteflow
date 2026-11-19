@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
              xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
+             xmlns:views="clr-namespace:RemoteFlow.App.Views"
              xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
              mc:Ignorable="d"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -170,7 +171,7 @@
 
                                 <!-- 拖动手柄：按住上下拖动调整顺序（行本身的单击仍是切换会话） -->
                                 <Border Grid.Column="0" Width="16" Height="30" Background="Transparent"
-                                        Cursor="SizeNS" Margin="-4,0,2,0"
+                                        Cursor="{x:Static views:DragCursors.Open}" Margin="-4,0,2,0"
                                         ToolTip="拖动调整顺序"
                                         PreviewMouseLeftButtonDown="OnGripMouseDown">
                                     <Path Fill="{DynamicResource Text.Tertiary}" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -238,7 +239,7 @@
 
                                 <!-- 拖动手柄：按住上下拖动调整顺序（行本身的单击仍是切换会话） -->
                                 <Border Grid.Column="0" Width="16" Height="30" Background="Transparent"
-                                        Cursor="SizeNS" Margin="-4,0,2,0"
+                                        Cursor="{x:Static views:DragCursors.Open}" Margin="-4,0,2,0"
                                         ToolTip="拖动调整顺序"
                                         PreviewMouseLeftButtonDown="OnGripMouseDown">
                                     <Path Fill="{DynamicResource Text.Tertiary}" HorizontalAlignment="Center" VerticalAlignment="Center">

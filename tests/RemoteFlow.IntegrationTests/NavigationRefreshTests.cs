@@ -509,6 +509,8 @@ public sealed class NavigationRefreshTests : IDisposable
 
         var asked = Assert.Single(_dialogs.Confirms);
         Assert.Contains("2 个会话", asked.Message);
+        // 一行一个、带协议，不再用顿号连成一串。
+        Assert.Contains("•  主机A（SSH）\n•  主机B（SSH）", asked.Message);
         Assert.Equal(
             ["主机A", "主机B"],
             _main.Tabs.OfType<SessionTabViewModel>().Select(t => t.Session.Profile.Name).ToArray());
