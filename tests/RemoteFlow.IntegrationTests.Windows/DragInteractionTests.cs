@@ -1,10 +1,9 @@
-using System.IO;
 using RemoteFlow.App.Views;
 using Xunit;
 
 namespace RemoteFlow.IntegrationTests;
 
-/// <summary>标签拖动：换位序号规则（含拖到第一个位置）与自绘手掌光标。</summary>
+/// <summary>标签拖动：换位序号规则（含拖到第一个位置）。</summary>
 [Collection(WpfApplicationCollection.Name)]
 public sealed class DragInteractionTests
 {
@@ -51,49 +50,5 @@ public sealed class DragInteractionTests
         double[] after = [40, 80, 120, 100];
         // 被拖标签左边缘仍是 99：不应再被判定要往右换回。
         Assert.Equal(1, MainWindow.ComputeDropIndex(after, 1, 1, 99));
-    }
-
-    [Fact]
-    public void 手掌光标能被系统加载_且张开与抓握是两个不同的图形()
-    {
-        UiTestHost.RunOnSta(() =>
-        {
-            Assert.NotNull(DragCursors.Open);
-            Assert.NotNull(DragCursors.Closed);
-
-            var open = DragCursors.RenderPixels(closed: false, 32);
-            var closed = DragCursors.RenderPixels(closed: true, 32);
-            Assert.NotEqual(open, closed);
-            // 真有内容：不透明像素占一定比例，且四周有透明留白。
-            Assert.InRange(CountOpaque(open), 150, 900);
-            Assert.InRange(CountOpaque(closed), 150, 900);
-
-            var file = DragCursors.BuildCursorFile(closed: true);
-            Assert.Equal(0, BitConverter.ToUInt16(file, 0));
-            Assert.Equal(2, BitConverter.ToUInt16(file, 2)); // 光标
-            Assert.Equal(3, BitConverter.ToUInt16(file, 4)); // 32 / 48 / 64 三个尺寸
-
-            // 设置了环境变量时输出预览图，供人工目测形状。
-            if (Environment.GetEnvironmentVariable("REMOTEFLOW_CURSOR_PREVIEW_DIR") is { Length: > 0 } dir)
-            {
-                Directory.CreateDirectory(dir);
-                File.WriteAllBytes(Path.Combine(dir, "hand-open.png"), DragCursors.RenderPreviewPng(false, 256));
-                File.WriteAllBytes(Path.Combine(dir, "hand-closed.png"), DragCursors.RenderPreviewPng(true, 256));
-            }
-        });
-    }
-
-    private static int CountOpaque(byte[] bgra)
-    {
-        var count = 0;
-        for (var i = 3; i < bgra.Length; i += 4)
-        {
-            if (bgra[i] > 200)
-            {
-                count++;
-            }
-        }
-
-        return count;
     }
 }

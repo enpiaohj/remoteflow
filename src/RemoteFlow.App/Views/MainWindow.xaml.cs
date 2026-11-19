@@ -850,7 +850,7 @@ public partial class MainWindow : Window
             }
 
             TabHeadersItemsControl.CaptureMouse();
-            Mouse.OverrideCursor = DragCursors.Closed;
+            Mouse.OverrideCursor = Cursors.SizeAll; // Windows 标准「移动」光标（微软规范：以移动为主要动作时使用）
             e.Handled = true;
         }
 

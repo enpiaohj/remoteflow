@@ -518,7 +518,7 @@ public sealed partial class SessionTabSelector : UserControl
         _gripTab = tab;
         _gripDragging = true;
         SessionsList.CaptureMouse();
-        Mouse.OverrideCursor = RemoteFlow.App.Views.DragCursors.Closed;
+        Mouse.OverrideCursor = Cursors.SizeAll; // Windows 标准「移动」光标
         ApplyDragLook();
     }
 
