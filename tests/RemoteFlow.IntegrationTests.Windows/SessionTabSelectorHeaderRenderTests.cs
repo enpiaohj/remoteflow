@@ -47,7 +47,9 @@ public sealed class SessionTabSelectorHeaderRenderTests
                          })
                 {
                     UiTestHost.UsePalette(dark);
-                    var output = Path.Combine(AppContext.BaseDirectory, name);
+                    // 每个测试进程写独立目录：固定路径在并发运行 / 杀毒扫描占用文件时会随机失败。
+                    var output = Path.Combine(AppContext.BaseDirectory, "ui-render", Environment.ProcessId.ToString(), name);
+                    Directory.CreateDirectory(Path.GetDirectoryName(output)!);
                     Render(output, scenarios);
                     outputs.Add(output);
                 }
