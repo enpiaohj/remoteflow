@@ -998,10 +998,20 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             _tagIcons = tags.ToDictionary(t => t.Id, t => TagIconCatalog.Normalize(t.Icon));
             RebuildGroupTargets();
 
+            // 刷新重建行对象，探测结果要沿用，否则按状态筛选时整个列表会瞬间清空。
+            var previousProbes = _allItems
+                .Where(i => i.Presence is PresenceState.Online or PresenceState.Offline && i.LastProbedAt is not null)
+                .ToDictionary(i => i.Id, i => (Online: i.Presence == PresenceState.Online, At: i.LastProbedAt!.Value));
+
             _allItems.Clear();
             foreach (var profile in profiles)
             {
-                _allItems.Add(CreateItem(profile));
+                var created = CreateItem(profile);
+                if (previousProbes.TryGetValue(profile.Id, out var probe))
+                {
+                    created.SetProbeResult(probe.Online, probe.At);
+                }
+                _allItems.Add(created);
             }
 
             // 标签筛选下拉重建；当前选中项若已被删除则回到「全部标签」。
@@ -1149,7 +1159,11 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         }
     }
 
-    private void ApplyFilter()
+    /// <summary>
+    /// 除「在线状态」外的全部视图 / 分组 / 协议 / 标签 / 页内文字筛选。
+    /// 探测需要覆盖这个集合：状态筛选本身依赖探测结果，不能反过来用它限定探测范围。
+    /// </summary>
+    private IEnumerable<ConnectionItemViewModel> FilterWithoutPresence()
     {
         IEnumerable<ConnectionItemViewModel> source = _allItems;
 
@@ -1208,6 +1222,13 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                 || i.Profile.TagIds.Any(id => _tagNames.TryGetValue(id, out var name)
                     && name.Contains(q, StringComparison.CurrentCultureIgnoreCase)));
         }
+
+        return source;
+    }
+
+    private void ApplyFilter()
+    {
+        var source = FilterWithoutPresence();
 
         // 在线状态筛选：探测关闭时下拉已隐藏，这里对 All 短路即可。
         // 在线 = 存在活动会话，或最近一次探测可达。
@@ -1719,11 +1740,34 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// 优先用列表里的那份（与行共享同一个 Profile），没有就直接用保存结果。
     /// </para>
     /// </summary>
-    private Task ConnectSavedAsync(Guid profileId, ConnectionProfile saved)
+    private async Task ConnectSavedAsync(Guid profileId, ConnectionProfile saved)
     {
         var profile = _allItems.FirstOrDefault(i => i.Id == profileId)?.Profile ?? saved;
+
+        // 该主机已有会话时，它还在用旧配置（旧凭据 / 地址）；直接聚焦等于「保存并连接」没生效。
+        // 征得同意后关闭旧会话，再按新配置新建。
+        var staleSessionIds = _sessions?.ActiveSessions
+            .Where(s => s.Profile.Id == profileId)
+            .Select(s => s.SessionId)
+            .ToList() ?? [];
+        if (staleSessionIds.Count > 0)
+        {
+            var reconnect = await _dialogs.ConfirmAsync(
+                "重新连接",
+                $"「{profile.Name}」已有打开的会话，仍在使用修改前的配置。\n\n关闭现有会话并按新配置重新连接吗？未保存的远程工作将丢失。",
+                "重新连接");
+            if (!reconnect)
+            {
+                return;
+            }
+
+            foreach (var sessionId in staleSessionIds)
+            {
+                await _sessions!.CloseSessionAsync(sessionId);
+            }
+        }
+
         OpenConnectionRequested?.Invoke(this, profile);
-        return Task.CompletedTask;
     }
 
     private Task<ConnectionEditorResult?> OpenConnectionEditorAsync(
@@ -1922,7 +1966,11 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             return;
         }
 
-        var snapshot = _filtered.ToList();
+        // 状态筛选生效时，_filtered 只含已有结果匹配的行（甚至为空）；
+        // 探测必须覆盖「除状态外」的全部筛选结果，否则刷新后永远无法恢复。
+        var snapshot = PresenceFilter == PresenceFilterOption.All
+            ? _filtered.ToList()
+            : FilterWithoutPresence().ToList();
         if (snapshot.Count == 0)
         {
             return;
@@ -2034,6 +2082,18 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
 
                 _logger.LogWarning("在线探测收尾：{Count} 项未返回结果，已落定为离线", stuck.Count);
                 RefreshPresenceCounts();
+            });
+        }
+
+        // 状态筛选依赖探测结果：整批完成后按新结果重新筛一遍（只在筛选生效时，避免无谓重建）。
+        if (!ct.IsCancellationRequested && PresenceFilter != PresenceFilterOption.All)
+        {
+            _ui.Post(() =>
+            {
+                if (!ct.IsCancellationRequested)
+                {
+                    ApplyFilter();
+                }
             });
         }
     }

@@ -199,6 +199,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>工作区全部 Tab：索引 0 是页面，其后为各远程会话。</summary>
     public ObservableCollection<WorkspaceTabViewModel> Tabs { get; }
 
+    /// <summary>
+    /// 拖动调整标签顺序。只有会话 / 文件传输标签可移动，且只能在它们之间换位：
+    /// 页面标签（工作台等）固定在最前，不参与排序。返回是否真的移动了。
+    /// </summary>
+    public bool MoveTab(WorkspaceTabViewModel tab, int newIndex)
+    {
+        var oldIndex = Tabs.IndexOf(tab);
+        if (oldIndex < 0 || newIndex < 0 || newIndex >= Tabs.Count || newIndex == oldIndex
+            || tab is PageTabViewModel || Tabs[newIndex] is PageTabViewModel)
+        {
+            return false;
+        }
+
+        Tabs.Move(oldIndex, newIndex);
+        return true;
+    }
+
     [ObservableProperty]
     private WorkspaceTabViewModel? _selectedTab;
 
@@ -1519,6 +1536,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ResolvedCredential? entered = null;
         try
         {
+            // 会话里持有的是连接时的配置对象；期间若编辑过（换凭据 / 改地址），重连必须取最新保存的版本。
+            if ((await _sessions.GetProfilesAsync([profile.Id])).FirstOrDefault() is { } latest)
+            {
+                profile = latest;
+            }
+
             var (proceed, credential) = await PromptCredentialIfNeededAsync(profile);
             if (!proceed)
             {

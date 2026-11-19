@@ -152,6 +152,9 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
     /// <summary>最近一次探测完成的时间（tooltip 用）。null 表示从未探测。</summary>
     private DateTimeOffset? _lastProbedAt;
 
+    /// <summary>最近一次探测完成时间；行对象重建时用来沿用上次结果。</summary>
+    public DateTimeOffset? LastProbedAt => _lastProbedAt;
+
     partial void OnPresenceChanged(PresenceState value) => RaisePresenceDisplays();
 
     partial void OnIsConnectedChanged(bool value) => RaisePresenceDisplays();

@@ -743,6 +743,91 @@ public partial class MainWindow : Window
             Math.Clamp(TabScrollViewer.HorizontalOffset + direction * step, 0, TabScrollViewer.ScrollableWidth));
     }
 
+    // ── 拖动调整标签顺序 ─────────────────────────────────────────
+
+    private WorkspaceTabViewModel? _dragTab;
+    private System.Windows.Point _dragStart;
+    private bool _dragging;
+
+    private void OnTabDragStart(object sender, MouseButtonEventArgs e)
+    {
+        _dragTab = null;
+        _dragging = false;
+
+        // 点在标签内的按钮（关闭等）上不启动拖动。
+        for (var node = e.OriginalSource as DependencyObject; node is not null and not ItemsControl;
+             node = node is Visual or System.Windows.Media.Media3D.Visual3D
+                 ? VisualTreeHelper.GetParent(node)
+                 : LogicalTreeHelper.GetParent(node))
+        {
+            if (node is System.Windows.Controls.Primitives.ButtonBase and not RadioButton)
+            {
+                return;
+            }
+
+            if (node is ContentPresenter { Content: WorkspaceTabViewModel tab } && tab is not PageTabViewModel)
+            {
+                _dragTab = tab;
+                _dragStart = e.GetPosition(TabHeadersItemsControl);
+                return;
+            }
+        }
+    }
+
+    private void OnTabDragMove(object sender, MouseEventArgs e)
+    {
+        if (_dragTab is null)
+        {
+            return;
+        }
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            OnTabDragEnd(sender, e);
+            return;
+        }
+
+        var position = e.GetPosition(TabHeadersItemsControl);
+        if (!_dragging && Math.Abs(position.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance)
+        {
+            return;
+        }
+
+        _dragging = true;
+
+        var oldIndex = _viewModel.Tabs.IndexOf(_dragTab);
+        if (oldIndex < 0 || TabHeadersItemsControl.ItemContainerGenerator.ContainerFromIndex(oldIndex) is not FrameworkElement dragged)
+        {
+            return;
+        }
+
+        // 光标越过相邻标签、且被拖标签的边缘已越过它时才换位（避免宽窄不一时来回抖动）。
+        for (var i = 0; i < _viewModel.Tabs.Count; i++)
+        {
+            if (i == oldIndex
+                || TabHeadersItemsControl.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement target)
+            {
+                continue;
+            }
+
+            var left = target.TranslatePoint(new System.Windows.Point(0, 0), TabHeadersItemsControl).X;
+            var right = left + target.ActualWidth;
+            var shouldMove = i > oldIndex
+                ? position.X > right - dragged.ActualWidth && position.X <= right
+                : position.X < left + dragged.ActualWidth && position.X >= left;
+            if (shouldMove && _viewModel.MoveTab(_dragTab, i))
+            {
+                break;
+            }
+        }
+    }
+
+    private void OnTabDragEnd(object sender, MouseEventArgs e)
+    {
+        _dragTab = null;
+        _dragging = false;
+    }
+
     /// <summary>鼠标滚轮横向滚动标签条（竖直滚轮在标题栏上没有别的用途）。</summary>
     private void OnTabStripMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
     {

@@ -481,7 +481,10 @@
                                               HorizontalScrollBarVisibility="Hidden"
                                               VerticalScrollBarVisibility="Disabled">
                                     <ItemsControl x:Name="TabHeadersItemsControl"
-                                                  ItemsSource="{Binding Tabs}">
+                                                  ItemsSource="{Binding Tabs}"
+                                                  PreviewMouseLeftButtonDown="OnTabDragStart"
+                                                  PreviewMouseMove="OnTabDragMove"
+                                                  PreviewMouseLeftButtonUp="OnTabDragEnd">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
                                                 <StackPanel Orientation="Horizontal" />
