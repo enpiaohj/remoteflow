@@ -73,6 +73,8 @@ public sealed partial class UpdateViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(IsBusy))]
     [NotifyPropertyChangedFor(nameof(HasUpdate))]
     [NotifyPropertyChangedFor(nameof(ShowUpdateHint))]
+    [NotifyPropertyChangedFor(nameof(HintLabel))]
+    [NotifyPropertyChangedFor(nameof(SettingsRailToolTip))]
     [NotifyPropertyChangedFor(nameof(IsDownloading))]
     [NotifyPropertyChangedFor(nameof(IsReadyToRestart))]
     [NotifyPropertyChangedFor(nameof(CanInstall))]
@@ -89,12 +91,15 @@ public sealed partial class UpdateViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(LatestVersionText))]
     [NotifyPropertyChangedFor(nameof(HasUpdate))]
     [NotifyPropertyChangedFor(nameof(ShowUpdateHint))]
+    [NotifyPropertyChangedFor(nameof(HintLabel))]
+    [NotifyPropertyChangedFor(nameof(SettingsRailToolTip))]
     [NotifyPropertyChangedFor(nameof(Notes))]
     [NotifyPropertyChangedFor(nameof(CanOpenReleasePage))]
     private UpdateRelease? _latest;
 
     /// <summary>下载进度 0–100。</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HintLabel))]
     private double _progress;
 
     /// <summary>启动后及运行期间定期检查更新。默认关闭；改动立即保存。</summary>
@@ -134,11 +139,26 @@ public sealed partial class UpdateViewModel : ObservableObject, IDisposable
 
     public bool ShowUpdateHint => HasUpdate && !_hintDismissed;
 
+    /// <summary>导航栏「设置」图标的提示：有新版本时说明红点的含义。</summary>
+    public string SettingsRailToolTip => ShowUpdateHint ? "设置 · 有新版本可用" : "设置";
+
+    /// <summary>
+    /// 标题栏更新按钮上的文字。带文字比单个图标醒目得多（Sparkle / Rogue Amoeba 等都是「Update Available」文字按钮），
+    /// 并随状态变化：有新版本 → 下载中（含进度）→ 待重启。
+    /// </summary>
+    public string HintLabel => State switch
+    {
+        UpdateState.Downloading => Progress > 0 ? $"下载中 {Progress:0}%" : "下载中…",
+        UpdateState.ReadyToRestart => "重启完成更新",
+        _ => string.IsNullOrEmpty(LatestVersionText) ? "有新版本" : $"新版本 {LatestVersionText}"
+    };
+
     [RelayCommand]
     private void DismissUpdateHint()
     {
         _hintDismissed = true;
         OnPropertyChanged(nameof(ShowUpdateHint));
+        OnPropertyChanged(nameof(SettingsRailToolTip));
     }
 
     /// <summary>启动后首次延迟检查，此后每四小时检查；开关在本次运行中即时生效。</summary>

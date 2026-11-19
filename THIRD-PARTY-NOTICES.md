@@ -26,6 +26,7 @@ RemoteFlow 按GPL-3.0 许可证发布。本文件列出随源码分发 / 运行�
 - **mstscax.dll（RDP ActiveX）** —— 随 Windows 系统组件提供，不随本应用分发，遵循 Microsoft Windows 许可条款。
 - **xterm.js**（经 WebView2 内嵌资源加载，SSH 终端前端）—— MIT，https://xtermjs.org
 - **Fluent UI System Icons**（Microsoft，界面线性操作图标的矢量几何，由 `scripts/build-ui-icons.py` 生成 `Themes/UiIcons.xaml`）—— MIT，https://github.com/microsoft/fluentui-system-icons ；许可证全文见文末。
+- **Font Awesome Free 6.5.2**（`hand`、`hand-back-fist` 两个图标的矢量路径，用于拖动标签时的手掌光标，`src/RemoteFlow.App/Views/DragCursors.cs`）—— 图标 CC BY 4.0，https://fontawesome.com/license/free ；Copyright 2024 Fonticons, Inc.；已改动：缩放并加描边后渲染为光标位图。
 
 ## macOS 平台
 

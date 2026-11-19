@@ -403,6 +403,26 @@ public sealed class UpdateTests
     }
 
     [Fact]
+    public async Task 标题栏更新按钮文字随状态变化_有新版本_下载中_待重启()
+    {
+        var feed = new FakeFeed { Latest = Release(1, HashA) };
+        using var vm = NewViewModel(feed, new FakeInstaller(), new AppSettings());
+        var changed = new List<string?>();
+        vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        await vm.CheckCommand.ExecuteAsync(null);
+        Assert.Equal($"新版本 {vm.LatestVersionText}", vm.HintLabel);
+        Assert.Contains(nameof(UpdateViewModel.HintLabel), changed);
+
+        vm.Progress = 42;
+        vm.State = UpdateState.Downloading;
+        Assert.Equal("下载中 42%", vm.HintLabel);
+
+        vm.State = UpdateState.ReadyToRestart;
+        Assert.Equal("重启完成更新", vm.HintLabel);
+    }
+
+    [Fact]
     public async Task 自动检查失败保留已经发现的新版本()
     {
         var feed = new FakeFeed { Latest = Release(1, HashA) };

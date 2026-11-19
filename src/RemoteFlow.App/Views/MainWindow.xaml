@@ -416,13 +416,53 @@
                     <TextBlock Text="RemoteFlow" FontSize="15" FontWeight="SemiBold" Margin="2,0,0,0" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding AppVersion}" FontSize="12" Margin="8,1,0,0"
                                Foreground="{DynamicResource Text.Tertiary}" VerticalAlignment="Center" />
-                    <Button x:Name="UpdateHintButton" Style="{StaticResource Button.Subtle}"
-                            Width="30" Height="28" MinWidth="0" MinHeight="0" Margin="8,0,0,0" Padding="6"
-                            Background="{DynamicResource Bg.Selected}" Foreground="{DynamicResource Brand.Default}"
+                    <!-- 更新提示：带文字的品牌色按钮（图标 + 「新版本 v0.x.y」），出现时发光脉动 3 次后静止。
+                         主流做法（Sparkle / Rogue Amoeba 的 Update Available 按钮、Chrome 工具栏的彩色 Update）都是
+                         主窗口里常驻、有文字、有颜色、不弹模态框抢焦点；单个小图标太容易被忽略。 -->
+                    <Button x:Name="UpdateHintButton"
+                            Height="26" Margin="10,0,0,0" Cursor="Hand" Focusable="False"
                             ToolTip="{Binding Update.StatusText}" AutomationProperties.Name="软件更新"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True" Click="OnUpdateHintClick"
                             Visibility="{Binding Update.ShowUpdateHint, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed, TargetNullValue=Collapsed}">
-                        <Path Data="{StaticResource Ui.Download}" Style="{StaticResource UiIcon}" Width="16" Height="16" />
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Pill" CornerRadius="13" Padding="10,0,12,0"
+                                        Background="{DynamicResource Brand.Default}" SnapsToDevicePixels="True">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#3352CE" BlurRadius="0" ShadowDepth="0" Opacity="0" />
+                                    </Border.Effect>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Path Data="{StaticResource Ui.Download}" Style="{StaticResource UiIcon}"
+                                              Width="13" Height="13" Margin="0,0,6,0"
+                                              Fill="{DynamicResource Text.OnAccent}" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding Update.HintLabel}" FontSize="12" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Text.OnAccent}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Brand.Hover}" />
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Pill" Property="Background" Value="{DynamicResource Brand.Pressed}" />
+                                    </Trigger>
+                                    <Trigger Property="IsVisible" Value="True">
+                                        <Trigger.EnterActions>
+                                            <BeginStoryboard>
+                                                <Storyboard RepeatBehavior="3x" AutoReverse="True">
+                                                    <DoubleAnimation Storyboard.TargetName="Pill"
+                                                                     Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.BlurRadius)"
+                                                                     From="0" To="16" Duration="0:0:0.7" />
+                                                    <DoubleAnimation Storyboard.TargetName="Pill"
+                                                                     Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.Opacity)"
+                                                                     From="0" To="0.85" Duration="0:0:0.7" />
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </Trigger.EnterActions>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
                         <Button.ContextMenu>
                             <ContextMenu DataContext="{Binding PlacementTarget.DataContext.Update, RelativeSource={RelativeSource Self}}">
                                 <MenuItem Header="{Binding LatestVersionText}" IsEnabled="False" />
@@ -825,9 +865,17 @@
                                 AutomationProperties.Name="返回会话"
                                 Margin="0,3,0,10"
                                 Visibility="{Binding CanReturnToSession, Converter={StaticResource BoolToVisibility}}" />
-                        <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="设置"
-                                     IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Settings, Mode=TwoWay}"
-                                     Tag="{x:Static vm:NavigationPage.Settings}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Settings" />
+                        <!-- 设置图标右上角的红点：有可用更新时出现（VS Code 的齿轮角标同样做法），更新入口在 设置 → 关于 -->
+                        <Grid HorizontalAlignment="Center">
+                            <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav"
+                                         ToolTip="{Binding Update.SettingsRailToolTip, FallbackValue=设置}"
+                                         IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Settings, Mode=TwoWay}"
+                                         Tag="{x:Static vm:NavigationPage.Settings}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Settings" />
+                            <Ellipse Width="9" Height="9" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="17,7,0,0"
+                                     Fill="{DynamicResource Status.Danger}" Stroke="{DynamicResource Bg.Sidebar}" StrokeThickness="1.5"
+                                     IsHitTestVisible="False"
+                                     Visibility="{Binding Update.ShowUpdateHint, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed, TargetNullValue=Collapsed}" />
+                        </Grid>
                         <RadioButton Style="{StaticResource Nav.RailItem}" GroupName="Nav" ToolTip="帮助"
                                      IsChecked="{Binding CurrentPage, Converter={StaticResource EnumToBool}, ConverterParameter=Help, Mode=TwoWay}"
                                      Tag="{x:Static vm:NavigationPage.Help}" PreviewMouseLeftButtonUp="OnNavRailSameItemClick" Content="Ui.Help" />

@@ -27,47 +27,30 @@ public static class DragCursors
 
     private static readonly int[] Sizes = [32, 48, 64];
 
-    /// <summary>手掌 / 拳头的形状，坐标系 32×32。每个形状先以黑色加粗描边铺一层，再以白色铺一层，
-    /// 形状之间留出的细缝因此显示为黑色分隔线（手指之间的线）。</summary>
-    private static IEnumerable<Geometry> Shapes(bool closed)
+    // 矢量路径取自 Font Awesome Free 6.5.2（CC BY 4.0，Copyright 2024 Fonticons, Inc.，https://fontawesome.com/license/free）：
+    // 张开的手掌 = solid/hand（viewBox 512×512）；抓握 = solid/hand-back-fist（viewBox 448×512）。
+    // 本处缩放到 32×32 画布并加描边渲染成光标位图，署名见 THIRD-PARTY-NOTICES.md。
+    private const string OpenHandPath =
+        "M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V64c0-17.7-14.3-32-32-32s-32 14.3-32 32V336c0 1.5 0 3.1 .1 4.6L67.6 283c-16-15.2-41.3-14.6-56.6 1.4s-14.6 41.3 1.4 56.6L124.8 448c43.1 41.1 100.4 64 160 64H304c97.2 0 176-78.8 176-176V128c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V64c0-17.7-14.3-32-32-32s-32 14.3-32 32V240c0 8.8-7.2 16-16 16s-16-7.2-16-16V32z";
+
+    private const string ClosedHandPath =
+        "M144 0C117.5 0 96 21.5 96 48V96v28.5V176c0 8.8-7.2 16-16 16s-16-7.2-16-16V149.3l-9 7.5C40.4 169 32 187 32 206V244c0 38 16.9 74 46.1 98.3L128 384v96c0 17.7 14.3 32 32 32H320c17.7 0 32-14.3 32-32V374.7c46.9-19 80-65 80-118.7V176 160 144c0-26.5-21.5-48-48-48c-12.4 0-23.6 4.7-32.1 12.3C350 83.5 329.3 64 304 64c-12.4 0-23.6 4.7-32.1 12.3C270 51.5 249.3 32 224 32c-12.4 0-23.6 4.7-32.1 12.3C190 19.5 169.3 0 144 0z";
+
+    /// <summary>手形几何，已缩放并居中到 32×32 画布（四周留 2.5 单位给描边）。</summary>
+    private static Geometry HandShape(bool closed)
     {
-        static Geometry Round(double x, double y, double w, double h, double r)
-        {
-            var g = new RectangleGeometry(new Rect(x, y, w, h), r, r);
-            g.Freeze();
-            return g;
-        }
-
-        if (closed)
-        {
-            // 拳头：手背 + 四个指节 + 横在前面的拇指。
-            yield return Round(8.5, 14.5, 16.5, 13, 5);
-            yield return Round(9.2, 11, 3.4, 9, 1.7);
-            yield return Round(13.2, 10.2, 3.4, 9.8, 1.7);
-            yield return Round(17.2, 10.6, 3.4, 9.4, 1.7);
-            yield return Round(21.2, 11.6, 3.4, 8.4, 1.7);
-            yield return Round(9.8, 19.6, 8.2, 3.6, 1.8);
-            yield break;
-        }
-
-        // 手掌：手心 + 四指 + 斜向左上的拇指。
-        yield return Round(9, 16, 15.6, 12, 4.5);
-        yield return Round(9.4, 5, 3.3, 15, 1.65);
-        yield return Round(13.5, 2.5, 3.3, 17, 1.65);
-        yield return Round(17.6, 4, 3.3, 16, 1.65);
-        yield return Round(21.7, 8, 3.3, 13, 1.65);
-
-        var thumb = new RectangleGeometry(new Rect(-1.7, 0, 3.4, 11), 1.7, 1.7)
-        {
-            Transform = new TransformGroup
-            {
-                Children = [new RotateTransform(143), new TranslateTransform(10, 22)]
-            }
-        };
-        thumb.Freeze();
-        yield return thumb;
+        var geometry = Geometry.Parse(closed ? ClosedHandPath : OpenHandPath).Clone();
+        var bounds = geometry.Bounds;
+        const double box = 27;
+        var scale = box / Math.Max(bounds.Width, bounds.Height);
+        var group = new TransformGroup();
+        group.Children.Add(new TranslateTransform(-bounds.X - bounds.Width / 2, -bounds.Y - bounds.Height / 2));
+        group.Children.Add(new ScaleTransform(scale, scale));
+        group.Children.Add(new TranslateTransform(16, 16));
+        geometry.Transform = group;
+        geometry.Freeze();
+        return geometry;
     }
-
     /// <summary>把手形渲染成 <paramref name="size"/> 像素见方的 BGRA（非预乘）像素，自上而下。</summary>
     internal static byte[] RenderPixels(bool closed, int size)
     {
@@ -75,18 +58,10 @@ public static class DragCursors
         using (var dc = visual.RenderOpen())
         {
             dc.PushTransform(new ScaleTransform(size / 32.0, size / 32.0));
-            var outline = new Pen(Brushes.Black, 2.4) { LineJoin = PenLineJoin.Round };
-            var shapes = Shapes(closed).ToList();
-            foreach (var shape in shapes)
-            {
-                dc.DrawGeometry(Brushes.Black, outline, shape);
-            }
-
-            foreach (var shape in shapes)
-            {
-                dc.DrawGeometry(Brushes.White, null, shape);
-            }
-
+            // 先铺一层加粗的黑色（外描边），再铺白色填充：描边只向外扩，不吃掉手指之间的细缝。
+            var shape = HandShape(closed);
+            dc.DrawGeometry(Brushes.Black, new Pen(Brushes.Black, 2.6) { LineJoin = PenLineJoin.Round }, shape);
+            dc.DrawGeometry(Brushes.White, null, shape);
             dc.Pop();
         }
 

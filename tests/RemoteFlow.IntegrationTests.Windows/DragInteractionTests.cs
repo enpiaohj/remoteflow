@@ -65,8 +65,8 @@ public sealed class DragInteractionTests
             var closed = DragCursors.RenderPixels(closed: true, 32);
             Assert.NotEqual(open, closed);
             // 真有内容：不透明像素占一定比例，且四周有透明留白。
-            Assert.InRange(CountOpaque(open), 120, 700);
-            Assert.InRange(CountOpaque(closed), 120, 700);
+            Assert.InRange(CountOpaque(open), 150, 900);
+            Assert.InRange(CountOpaque(closed), 150, 900);
 
             var file = DragCursors.BuildCursorFile(closed: true);
             Assert.Equal(0, BitConverter.ToUInt16(file, 0));
