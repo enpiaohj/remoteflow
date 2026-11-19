@@ -58,6 +58,9 @@ public sealed partial class SessionTabSelector : UserControl
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         SessionsList.ItemsSource = _listedTabs;
+        SessionsList.PreviewMouseMove += OnListDragMove;
+        SessionsList.PreviewMouseLeftButtonUp += OnListDragUp;
+        SessionsList.LostMouseCapture += OnListDragLostCapture;
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -126,7 +129,28 @@ public sealed partial class SessionTabSelector : UserControl
     // ── 会话列表同步 ─────────────────────────────────────────────
 
     private void OnTabsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-        => RebuildSessionTabs();
+    {
+        // 拖动 / 菜单换位：只在镜像里同步移动，不重建列表——重建会销毁正在拖动的手柄元素、中断拖动，
+        // 也会让滚动位置跳回顶部。
+        if (e.Action == NotifyCollectionChangedAction.Move
+            && _main is not null
+            && e.NewItems?.Count == 1
+            && e.NewItems[0] is WorkspaceTabViewModel moved
+            && _listedTabs.IndexOf(moved) is var oldListed and >= 0)
+        {
+            var newListed = _main.Tabs
+                .TakeWhile(t => !ReferenceEquals(t, moved))
+                .Count(static t => t is SessionTabViewModel or FileTransferTabViewModel);
+            if (oldListed != newListed)
+            {
+                _listedTabs.Move(oldListed, newListed);
+            }
+
+            return;
+        }
+
+        RebuildSessionTabs();
+    }
 
     private void RebuildSessionTabs()
     {
@@ -425,6 +449,23 @@ public sealed partial class SessionTabSelector : UserControl
 
     private void OnSessionsListPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        // Alt + ↑ / ↓：把高亮的标签上移 / 下移一位（与 VS Code 等编辑器的移动行一致）。
+        if (Keyboard.Modifiers == ModifierKeys.Alt && key is Key.Up or Key.Down)
+        {
+            if (_main is not null && SessionsList.SelectedItem is WorkspaceTabViewModel selected
+                && _main.MoveTabBy(selected, key == Key.Up ? -1 : 1)
+                && SessionsList.ItemContainerGenerator.ContainerFromItem(selected) is FrameworkElement moved)
+            {
+                moved.BringIntoView();
+                moved.Focus();
+            }
+
+            e.Handled = true;
+            return;
+        }
+
         switch (e.Key)
         {
             case Key.Up:
@@ -458,6 +499,121 @@ public sealed partial class SessionTabSelector : UserControl
         }
     }
 
+    // ── 拖动手柄：上下拖动调整顺序 ───────────────────────────────
+    // WPF 对集合的 Move 通知会重建行容器，手柄元素随之销毁、捕获丢失，
+    // 所以拖动期间由「列表本身」捕获鼠标（它不会被重建），行的外观每次换位后重新套用。
+
+    private WorkspaceTabViewModel? _gripTab;
+    private bool _gripDragging;
+
+    private void OnGripMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: WorkspaceTabViewModel tab })
+        {
+            return;
+        }
+
+        // 拦住事件：否则行会被选中并立即切换会话、收起列表，拖动无从开始。
+        e.Handled = true;
+        _gripTab = tab;
+        _gripDragging = true;
+        SessionsList.CaptureMouse();
+        ApplyDragLook();
+    }
+
+    private void OnListDragMove(object sender, MouseEventArgs e)
+    {
+        if (!_gripDragging || _gripTab is null || _main is null)
+        {
+            return;
+        }
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            EndGripDrag();
+            return;
+        }
+
+        e.Handled = true;
+        var y = e.GetPosition(SessionsList).Y;
+
+        // 靠近上下边缘时自动滚动。
+        if (FindScrollViewer(SessionsList) is { ScrollableHeight: > 0 } viewer)
+        {
+            const double edge = 26;
+            if (y < edge)
+            {
+                viewer.ScrollToVerticalOffset(Math.Max(0, viewer.VerticalOffset - 14));
+            }
+            else if (y > SessionsList.ActualHeight - edge)
+            {
+                viewer.ScrollToVerticalOffset(Math.Min(viewer.ScrollableHeight, viewer.VerticalOffset + 14));
+            }
+        }
+
+        // 光标进入哪一行，就与那一行换位；行高一致，不会来回抖动。
+        for (var i = 0; i < _listedTabs.Count; i++)
+        {
+            if (ReferenceEquals(_listedTabs[i], _gripTab)
+                || SessionsList.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement row)
+            {
+                continue;
+            }
+
+            var top = row.TranslatePoint(new Point(0, 0), SessionsList).Y;
+            if (y >= top && y < top + row.ActualHeight)
+            {
+                if (_main.MoveTab(_gripTab, _main.Tabs.IndexOf(_listedTabs[i])))
+                {
+                    SessionsList.UpdateLayout();
+                    ApplyDragLook();
+                }
+
+                break;
+            }
+        }
+    }
+
+    private void OnListDragUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_gripDragging)
+        {
+            e.Handled = true;
+            EndGripDrag();
+        }
+    }
+
+    private void OnListDragLostCapture(object sender, MouseEventArgs e)
+    {
+        if (_gripDragging)
+        {
+            EndGripDrag();
+        }
+    }
+
+    /// <summary>被拖的行淡一点，表明它正在被移动；每次换位后行容器会换新，需重新套用。</summary>
+    private void ApplyDragLook()
+    {
+        foreach (var tab in _listedTabs)
+        {
+            if (SessionsList.ItemContainerGenerator.ContainerFromItem(tab) is FrameworkElement row)
+            {
+                row.Opacity = _gripDragging && ReferenceEquals(tab, _gripTab) ? 0.75 : 1;
+            }
+        }
+    }
+
+    private void EndGripDrag()
+    {
+        _gripTab = null;
+        _gripDragging = false;
+        if (SessionsList.IsMouseCaptured)
+        {
+            SessionsList.ReleaseMouseCapture();
+        }
+
+        ApplyDragLook();
+    }
     private void MoveHighlight(int delta)
     {
         if (_listedTabs.Count == 0)

@@ -162,17 +162,37 @@
                             <Grid Margin="6,0" MinHeight="38" Background="Transparent">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
+                                <!-- 拖动手柄：按住上下拖动调整顺序（行本身的单击仍是切换会话） -->
+                                <Border Grid.Column="0" Width="16" Height="30" Background="Transparent"
+                                        Cursor="SizeNS" Margin="-4,0,2,0"
+                                        ToolTip="拖动调整顺序"
+                                        PreviewMouseLeftButtonDown="OnGripMouseDown">
+                                    <Path Fill="{DynamicResource Text.Tertiary}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Path.Data>
+                                            <GeometryGroup>
+                                                <EllipseGeometry Center="2,2" RadiusX="1.2" RadiusY="1.2" />
+                                                <EllipseGeometry Center="6,2" RadiusX="1.2" RadiusY="1.2" />
+                                                <EllipseGeometry Center="2,6" RadiusX="1.2" RadiusY="1.2" />
+                                                <EllipseGeometry Center="6,6" RadiusX="1.2" RadiusY="1.2" />
+                                                <EllipseGeometry Center="2,10" RadiusX="1.2" RadiusY="1.2" />
+                                                <EllipseGeometry Center="6,10" RadiusX="1.2" RadiusY="1.2" />
+                                            </GeometryGroup>
+                                        </Path.Data>
+                                    </Path>
+                                </Border>
+
                                 <!-- 与会话标签一致：主机设备图标；协议写在第二行主机后 -->
-                                <Image Grid.Column="0" Style="{StaticResource DeviceIcon.Image}"
+                                <Image Grid.Column="1" Style="{StaticResource DeviceIcon.Image}"
                                        Width="20" Height="20" VerticalAlignment="Center"
                                        Source="{Binding DeviceIconKey, Converter={StaticResource KeyToImageSource}}" />
 
-                                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <StackPanel Grid.Column="2" Margin="10,0,0,0" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding Title}"
                                                FontSize="13"
                                                TextTrimming="CharacterEllipsis"
@@ -185,7 +205,7 @@
                                                Foreground="{DynamicResource Text.Tertiary}" />
                                 </StackPanel>
 
-                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
                                     <TextBlock Text="{Binding StateText}"
                                                FontSize="11"
                                                VerticalAlignment="Center"
@@ -194,7 +214,7 @@
                                              Fill="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}" />
                                 </StackPanel>
 
-                                <Button Grid.Column="3"
+                                <Button Grid.Column="4"
                                         Style="{StaticResource Button.Icon}"
                                         Width="26" Height="26"
                                         Margin="8,0,-4,0"
@@ -211,15 +231,35 @@
                             <Grid Margin="6,0" MinHeight="38" Background="Transparent">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <Image Grid.Column="0" Style="{StaticResource DeviceIcon.Image}"
+                                <!-- 拖动手柄：按住上下拖动调整顺序（行本身的单击仍是切换会话） -->
+                                <Border Grid.Column="0" Width="16" Height="30" Background="Transparent"
+                                        Cursor="SizeNS" Margin="-4,0,2,0"
+                                        ToolTip="拖动调整顺序"
+                                        PreviewMouseLeftButtonDown="OnGripMouseDown">
+                                    <Path Fill="{DynamicResource Text.Tertiary}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Path.Data>
+                                            <GeometryGroup>
+                                                <EllipseGeometry Center="2,2" RadiusX="1.2" RadiusY="1.2" />
+                                                <EllipseGeometry Center="6,2" RadiusX="1.2" RadiusY="1.2" />
+                                                <EllipseGeometry Center="2,6" RadiusX="1.2" RadiusY="1.2" />
+                                                <EllipseGeometry Center="6,6" RadiusX="1.2" RadiusY="1.2" />
+                                                <EllipseGeometry Center="2,10" RadiusX="1.2" RadiusY="1.2" />
+                                                <EllipseGeometry Center="6,10" RadiusX="1.2" RadiusY="1.2" />
+                                            </GeometryGroup>
+                                        </Path.Data>
+                                    </Path>
+                                </Border>
+
+                                <Image Grid.Column="1" Style="{StaticResource DeviceIcon.Image}"
                                        Width="20" Height="20" VerticalAlignment="Center"
                                        Source="{Binding DeviceIconKey, Converter={StaticResource KeyToImageSource}}" />
 
-                                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <StackPanel Grid.Column="2" Margin="10,0,0,0" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding Title}"
                                                FontSize="13"
                                                TextTrimming="CharacterEllipsis"
@@ -232,7 +272,7 @@
                                                Foreground="{DynamicResource Text.Tertiary}" />
                                 </StackPanel>
 
-                                <Button Grid.Column="2"
+                                <Button Grid.Column="3"
                                         Style="{StaticResource Button.Icon}"
                                         Width="26" Height="26"
                                         Margin="8,0,-4,0"

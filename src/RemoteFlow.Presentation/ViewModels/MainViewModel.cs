@@ -216,6 +216,29 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         return true;
     }
 
+    /// <summary>
+    /// 相对移动：<paramref name="delta"/> 为 -1（前移 / 上移 / 左移）或 +1。
+    /// 只在可移动标签（会话 / 文件传输）之间换位，已在边界时返回 false。
+    /// </summary>
+    public bool MoveTabBy(WorkspaceTabViewModel tab, int delta)
+        => TryGetNeighbor(tab, delta) is { } neighbor && MoveTab(tab, Tabs.IndexOf(neighbor));
+
+    /// <summary>该标签在 <paramref name="delta"/> 方向上是否还能移动（菜单项可用状态）。</summary>
+    public bool CanMoveTabBy(WorkspaceTabViewModel tab, int delta) => TryGetNeighbor(tab, delta) is not null;
+
+    private WorkspaceTabViewModel? TryGetNeighbor(WorkspaceTabViewModel tab, int delta)
+    {
+        if (tab is PageTabViewModel || delta == 0)
+        {
+            return null;
+        }
+
+        var movable = Tabs.Where(static t => t is not PageTabViewModel).ToList();
+        var position = movable.IndexOf(tab);
+        var target = position + Math.Sign(delta);
+        return position >= 0 && target >= 0 && target < movable.Count ? movable[target] : null;
+    }
+
     [ObservableProperty]
     private WorkspaceTabViewModel? _selectedTab;
 

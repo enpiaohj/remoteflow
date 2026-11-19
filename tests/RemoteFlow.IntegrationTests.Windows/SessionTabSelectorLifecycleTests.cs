@@ -142,6 +142,57 @@ public sealed class SessionTabSelectorLifecycleTests
         });
     }
 
+    [Fact]
+    public void Reordering_KeepsListMirrorInSyncAndSurvivesRemoval()
+    {
+        UiTestHost.RunOnSta(() =>
+        {
+            UiTestHost.LoadAppResources();
+            Window? window = null;
+            try
+            {
+                var main = CreateMainViewModel();
+                main.Tabs.Add(new PageTabViewModel());
+                var first = NewSessionTab("甲");
+                var second = NewSessionTab("乙");
+                var third = NewSessionTab("丙");
+                main.Tabs.Add(first);
+                main.Tabs.Add(second);
+                main.Tabs.Add(third);
+                var selector = new SessionTabSelector { DataContext = main };
+                var list = (ListBox)selector.FindName("SessionsList");
+                window = new Window
+                {
+                    ShowInTaskbar = false, ShowActivated = false, Left = -10000, Top = -10000,
+                    Width = 400, Height = 300, Content = selector
+                };
+                window.Show();
+                Flush();
+                ((System.Windows.Controls.Primitives.Popup)selector.FindName("SelectorPopup")).IsOpen = true;
+                Flush();
+
+                var thirdRow = list.ItemContainerGenerator.ContainerFromItem(third);
+                Assert.NotNull(thirdRow);
+
+                Assert.True(main.MoveTabBy(third, -1));
+                Flush();
+
+                Assert.Equal(new WorkspaceTabViewModel[] { first, third, second }, list.Items.Cast<WorkspaceTabViewModel>().ToArray());
+                // 换位只移动镜像里的一项（不整表重建），选中与滚动位置因此不丢。
+                Assert.NotNull(list.ItemContainerGenerator.ContainerFromItem(third));
+
+                main.Tabs.Remove(second);
+                Flush();
+                Assert.Equal(new WorkspaceTabViewModel[] { first, third }, list.Items.Cast<WorkspaceTabViewModel>().ToArray());
+            }
+            finally
+            {
+                window?.Close();
+                UiTestHost.RestoreAppResources();
+            }
+        });
+    }
+
     private static void Flush() =>
         Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ContextIdle);
 

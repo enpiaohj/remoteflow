@@ -91,6 +91,36 @@ public sealed class ReportedFixesTests
         Assert.Equal(new WorkspaceTabViewModel[] { page, c, a, b }, tabs.ToArray());
     }
 
+    [Fact]
+    public void 相对移动在边界停住且跳过页面标签()
+    {
+        var main = (MainViewModel)RuntimeHelpers.GetUninitializedObject(typeof(MainViewModel));
+        var tabs = new ObservableCollection<WorkspaceTabViewModel>();
+        typeof(MainViewModel).GetField("<Tabs>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(main, tabs);
+        var page = new PageTabViewModel();
+        using var a = NewSessionTab();
+        using var b = NewSessionTab();
+        using var c = NewSessionTab();
+        foreach (var tab in new WorkspaceTabViewModel[] { page, a, b, c })
+        {
+            tabs.Add(tab);
+        }
+
+        Assert.False(main.CanMoveTabBy(a, -1));  // 第一个会话前面只有页面标签
+        Assert.False(main.CanMoveTabBy(c, 1));
+        Assert.False(main.CanMoveTabBy(page, 1));
+        Assert.True(main.CanMoveTabBy(b, -1));
+
+        Assert.True(main.MoveTabBy(b, -1));
+        Assert.Equal(new WorkspaceTabViewModel[] { page, b, a, c }, tabs.ToArray());
+        Assert.False(main.MoveTabBy(b, -1));
+        Assert.True(main.MoveTabBy(b, 1));
+        Assert.True(main.MoveTabBy(b, 1));
+        Assert.Equal(new WorkspaceTabViewModel[] { page, a, c, b }, tabs.ToArray());
+        Assert.False(main.MoveTabBy(b, 1));
+    }
+
     private static SessionTabViewModel NewSessionTab() => new(
         new FakeSession(), _ => Task.CompletedTask, _ => Task.CompletedTask,
         SynchronousUiDispatcher.Instance, new ManualTimerFactory());

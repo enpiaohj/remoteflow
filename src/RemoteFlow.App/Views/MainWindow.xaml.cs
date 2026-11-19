@@ -1,4 +1,4 @@
-using System.Collections.Specialized;
+﻿using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -744,10 +744,55 @@ public partial class MainWindow : Window
     }
 
     // ── 拖动调整标签顺序 ─────────────────────────────────────────
+    // 体验要点：被拖标签跟手移动（带抬起感），邻居平滑让位，越过邻居一半宽度才换位，
+    // 拖到边缘自动滚动，松手后平滑落位；捕获鼠标，拖出标签条也不中断。
 
     private WorkspaceTabViewModel? _dragTab;
-    private System.Windows.Point _dragStart;
+    private double _dragStartX;
+    private double _dragGrabOffset;
     private bool _dragging;
+
+    private FrameworkElement? TabContainer(int index)
+        => TabHeadersItemsControl.ItemContainerGenerator.ContainerFromIndex(index) as FrameworkElement;
+
+    /// <summary>第 <paramref name="index"/> 个标签在没有任何位移时的左边缘（横向 StackPanel：前面各项宽度之和）。</summary>
+    private double TabNaturalLeft(int index)
+    {
+        var left = 0d;
+        for (var i = 0; i < index; i++)
+        {
+            left += TabContainer(i)?.ActualWidth ?? 0;
+        }
+
+        return left;
+    }
+
+    private static TranslateTransform EnsureTranslate(FrameworkElement element)
+    {
+        if (element.RenderTransform is not TranslateTransform transform || transform.IsFrozen)
+        {
+            transform = new TranslateTransform();
+            element.RenderTransform = transform;
+        }
+
+        return transform;
+    }
+
+    private static void AnimateTranslate(FrameworkElement element, double from, double to, double milliseconds, Action? completed = null)
+    {
+        var transform = EnsureTranslate(element);
+        var animation = new System.Windows.Media.Animation.DoubleAnimation(from, to, TimeSpan.FromMilliseconds(milliseconds))
+        {
+            EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut },
+            FillBehavior = System.Windows.Media.Animation.FillBehavior.Stop
+        };
+        animation.Completed += (_, _) =>
+        {
+            transform.X = to;
+            completed?.Invoke();
+        };
+        transform.BeginAnimation(TranslateTransform.XProperty, animation);
+    }
 
     private void OnTabDragStart(object sender, MouseButtonEventArgs e)
     {
@@ -768,7 +813,8 @@ public partial class MainWindow : Window
             if (node is ContentPresenter { Content: WorkspaceTabViewModel tab } && tab is not PageTabViewModel)
             {
                 _dragTab = tab;
-                _dragStart = e.GetPosition(TabHeadersItemsControl);
+                _dragStartX = e.GetPosition(TabHeadersItemsControl).X;
+                _dragGrabOffset = _dragStartX - TabNaturalLeft(_viewModel.Tabs.IndexOf(tab));
                 return;
             }
         }
@@ -783,49 +829,175 @@ public partial class MainWindow : Window
 
         if (e.LeftButton != MouseButtonState.Pressed)
         {
-            OnTabDragEnd(sender, e);
+            EndTabDrag();
             return;
         }
 
-        var position = e.GetPosition(TabHeadersItemsControl);
-        if (!_dragging && Math.Abs(position.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance)
+        var x = e.GetPosition(TabHeadersItemsControl).X;
+        if (!_dragging)
+        {
+            if (Math.Abs(x - _dragStartX) < SystemParameters.MinimumHorizontalDragDistance)
+            {
+                return;
+            }
+
+            // 开始拖动：抬起被拖标签并接管鼠标；拖动即选中它（与浏览器标签一致）。
+            _dragging = true;
+            _viewModel.SelectedTab = _dragTab;
+            if (TabContainer(_viewModel.Tabs.IndexOf(_dragTab)) is { } lifted)
+            {
+                Panel.SetZIndex(lifted, 100);
+                lifted.Opacity = 0.9;
+                lifted.Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    BlurRadius = 10, ShadowDepth = 2, Opacity = 0.25, Direction = 270
+                };
+            }
+
+            TabHeadersItemsControl.CaptureMouse();
+            TabHeadersItemsControl.Cursor = Cursors.SizeWE;
+            e.Handled = true;
+        }
+
+        AutoScrollTabStrip(e);
+        FollowCursor(x);
+        e.Handled = true;
+    }
+
+    /// <summary>光标靠近标签条左右边缘时自动滚动，便于把标签拖到当前视口之外。</summary>
+    private void AutoScrollTabStrip(MouseEventArgs e)
+    {
+        if (TabScrollViewer.ScrollableWidth <= 0)
         {
             return;
         }
 
-        _dragging = true;
+        const double edge = 28;
+        var viewportX = e.GetPosition(TabScrollViewer).X;
+        if (viewportX < edge)
+        {
+            TabScrollViewer.ScrollToHorizontalOffset(Math.Max(0, TabScrollViewer.HorizontalOffset - 14));
+        }
+        else if (viewportX > TabScrollViewer.ViewportWidth - edge)
+        {
+            TabScrollViewer.ScrollToHorizontalOffset(
+                Math.Min(TabScrollViewer.ScrollableWidth, TabScrollViewer.HorizontalOffset + 14));
+        }
+    }
+
+    private void FollowCursor(double cursorX)
+    {
+        if (_dragTab is null)
+        {
+            return;
+        }
 
         var oldIndex = _viewModel.Tabs.IndexOf(_dragTab);
-        if (oldIndex < 0 || TabHeadersItemsControl.ItemContainerGenerator.ContainerFromIndex(oldIndex) is not FrameworkElement dragged)
+        if (oldIndex < 0 || TabContainer(oldIndex) is not { } dragged)
         {
             return;
         }
 
-        // 光标越过相邻标签、且被拖标签的边缘已越过它时才换位（避免宽窄不一时来回抖动）。
+        var firstMovable = _viewModel.Tabs.TakeWhile(static t => t is PageTabViewModel).Count();
+        var total = TabNaturalLeft(_viewModel.Tabs.Count);
+        var desiredLeft = Math.Clamp(cursorX - _dragGrabOffset, TabNaturalLeft(firstMovable), Math.Max(0, total - dragged.ActualWidth));
+        var center = desiredLeft + dragged.ActualWidth / 2;
+
+        // 新位置 = 中线左侧有多少个「其它标签的中点」（去掉被拖标签后的序号即最终序号）。
+        var newIndex = 0;
+        var running = 0d;
         for (var i = 0; i < _viewModel.Tabs.Count; i++)
         {
-            if (i == oldIndex
-                || TabHeadersItemsControl.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement target)
+            if (i == oldIndex)
             {
                 continue;
             }
 
-            var left = target.TranslatePoint(new System.Windows.Point(0, 0), TabHeadersItemsControl).X;
-            var right = left + target.ActualWidth;
-            var shouldMove = i > oldIndex
-                ? position.X > right - dragged.ActualWidth && position.X <= right
-                : position.X < left + dragged.ActualWidth && position.X >= left;
-            if (shouldMove && _viewModel.MoveTab(_dragTab, i))
+            var width = TabContainer(i)?.ActualWidth ?? 0;
+            if (running + width / 2 < center)
             {
-                break;
+                newIndex++;
             }
+
+            running += width;
+        }
+
+        newIndex = Math.Max(newIndex, firstMovable);
+
+        if (newIndex != oldIndex)
+        {
+            // 换位前记下各标签的左边缘，换位后让邻居从旧位置滑向新位置。
+            var before = new Dictionary<WorkspaceTabViewModel, double>();
+            for (var i = 0; i < _viewModel.Tabs.Count; i++)
+            {
+                before[_viewModel.Tabs[i]] = TabNaturalLeft(i);
+            }
+
+            if (!_viewModel.MoveTab(_dragTab, newIndex))
+            {
+                return;
+            }
+
+            TabHeadersItemsControl.UpdateLayout();
+            for (var i = 0; i < _viewModel.Tabs.Count; i++)
+            {
+                var tab = _viewModel.Tabs[i];
+                if (ReferenceEquals(tab, _dragTab) || TabContainer(i) is not { } neighbor)
+                {
+                    continue;
+                }
+
+                var delta = before[tab] - TabNaturalLeft(i);
+                if (Math.Abs(delta) > 0.5)
+                {
+                    AnimateTranslate(neighbor, delta, 0, 140);
+                }
+            }
+        }
+
+        if (TabContainer(_viewModel.Tabs.IndexOf(_dragTab)) is { } current)
+        {
+            var transform = EnsureTranslate(current);
+            transform.BeginAnimation(TranslateTransform.XProperty, null);
+            transform.X = desiredLeft - TabNaturalLeft(_viewModel.Tabs.IndexOf(_dragTab));
         }
     }
 
-    private void OnTabDragEnd(object sender, MouseEventArgs e)
+    private void OnTabDragEnd(object sender, MouseEventArgs e) => EndTabDrag();
+
+    private void OnTabDragLostCapture(object sender, MouseEventArgs e)
     {
+        if (_dragging)
+        {
+            EndTabDrag();
+        }
+    }
+
+    /// <summary>结束拖动：平滑落到最终位置，恢复外观并释放鼠标。</summary>
+    private void EndTabDrag()
+    {
+        var tab = _dragTab;
+        var wasDragging = _dragging;
         _dragTab = null;
         _dragging = false;
+        if (!wasDragging || tab is null)
+        {
+            return;
+        }
+
+        TabHeadersItemsControl.Cursor = null;
+        if (TabHeadersItemsControl.IsMouseCaptured)
+        {
+            TabHeadersItemsControl.ReleaseMouseCapture();
+        }
+
+        if (TabContainer(_viewModel.Tabs.IndexOf(tab)) is { } dropped)
+        {
+            var from = EnsureTranslate(dropped).X;
+            dropped.Opacity = 1;
+            dropped.Effect = null;
+            AnimateTranslate(dropped, from, 0, 120, () => Panel.SetZIndex(dropped, 0));
+        }
     }
 
     /// <summary>鼠标滚轮横向滚动标签条（竖直滚轮在标题栏上没有别的用途）。</summary>
@@ -1058,6 +1230,8 @@ public partial class MainWindow : Window
             return;
         }
 
+        ConfigureMoveItems(menu, tab);
+
         // 命令在菜单打开时绑定到右键目标，确认期间切换标签也不会改变操作对象。
         foreach (var item in menu.Items.OfType<MenuItem>())
         {
@@ -1094,6 +1268,61 @@ public partial class MainWindow : Window
                 Equals(item.Tag, "closeRight")) is { } closeRight)
         {
             closeRight.IsEnabled = hasRightSession;
+        }
+    }
+
+    private void OnTransferTabContextMenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is ContextMenu menu && ResolveTransferTab(menu) is { } tab)
+        {
+            ConfigureMoveItems(menu, tab);
+        }
+    }
+
+    /// <summary>
+    /// 按菜单所在位置给「移动」项定文案、图标与可用状态：标题栏标签是横向排列（左移 / 右移），
+    /// 折叠列表与折叠头部对应的是纵向列表（上移 / 下移）。
+    /// </summary>
+    private void ConfigureMoveItems(ContextMenu menu, WorkspaceTabViewModel tab)
+    {
+        var vertical = menu.PlacementTarget is not RadioButton;
+        foreach (var item in menu.Items.OfType<MenuItem>())
+        {
+            var back = Equals(item.Tag, "moveBack");
+            if (!back && !Equals(item.Tag, "moveForward"))
+            {
+                continue;
+            }
+
+            item.Header = (vertical, back) switch
+            {
+                (true, true) => "上移",
+                (true, false) => "下移",
+                (false, true) => "左移",
+                _ => "右移"
+            };
+            MenuItemAssist.SetIconKey(item, (vertical, back) switch
+            {
+                (true, true) => "Ui.ArrowUp",
+                (true, false) => "Ui.ChevronDown",
+                (false, true) => "Ui.ChevronLeft",
+                _ => "Ui.ChevronRight"
+            });
+            item.IsEnabled = _viewModel.CanMoveTabBy(tab, back ? -1 : 1);
+        }
+    }
+
+    private void OnTabMoveBackClick(object sender, RoutedEventArgs e) => MoveFromMenu(sender, -1);
+
+    private void OnTabMoveForwardClick(object sender, RoutedEventArgs e) => MoveFromMenu(sender, 1);
+
+    private void MoveFromMenu(object sender, int delta)
+    {
+        WorkspaceTabViewModel? tab = ResolveTransferTab(sender);
+        tab ??= ResolveTab(sender);
+        if (tab is not null)
+        {
+            _viewModel.MoveTabBy(tab, delta);
         }
     }
 

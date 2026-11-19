@@ -84,6 +84,10 @@
             <MenuItem Header="复制地址" views:MenuItemAssist.IconKey="Ui.Copy" Click="OnTabCopyAddressClick" />
             <MenuItem Header="全屏" InputGestureText="F11" views:MenuItemAssist.IconKey="Ui.FullScreen" Click="OnTabFullScreenClick" />
             <Separator />
+            <!-- 标题栏里横向排列叫「左移 / 右移」，折叠列表里纵向排列叫「上移 / 下移」，文案与图标打开时按位置切换 -->
+            <MenuItem Tag="moveBack" Header="左移" views:MenuItemAssist.IconKey="Ui.ChevronLeft" Click="OnTabMoveBackClick" />
+            <MenuItem Tag="moveForward" Header="右移" views:MenuItemAssist.IconKey="Ui.ChevronRight" Click="OnTabMoveForwardClick" />
+            <Separator />
             <MenuItem Header="关闭会话" InputGestureText="Ctrl+W" views:MenuItemAssist.IconKey="Ui.Close" Click="OnTabCloseClick" />
             <MenuItem Tag="closeOthers"
                       Header="关闭其他会话"
@@ -111,8 +115,11 @@
         </ContextMenu>
 
         <!-- 文件传输 Tab 右键菜单：它不是会话，只有复制地址与关闭 -->
-        <ContextMenu x:Key="FileTransferTabContextMenu" x:Shared="False">
+        <ContextMenu x:Key="FileTransferTabContextMenu" x:Shared="False" Opened="OnTransferTabContextMenuOpened">
             <MenuItem Header="复制地址" views:MenuItemAssist.IconKey="Ui.Copy" Click="OnTransferTabCopyAddressClick" />
+            <Separator />
+            <MenuItem Tag="moveBack" Header="左移" views:MenuItemAssist.IconKey="Ui.ChevronLeft" Click="OnTabMoveBackClick" />
+            <MenuItem Tag="moveForward" Header="右移" views:MenuItemAssist.IconKey="Ui.ChevronRight" Click="OnTabMoveForwardClick" />
             <Separator />
             <MenuItem Header="关闭文件传输" InputGestureText="Ctrl+W" views:MenuItemAssist.IconKey="Ui.Close" Click="OnTransferTabCloseClick" />
         </ContextMenu>
@@ -484,7 +491,8 @@
                                                   ItemsSource="{Binding Tabs}"
                                                   PreviewMouseLeftButtonDown="OnTabDragStart"
                                                   PreviewMouseMove="OnTabDragMove"
-                                                  PreviewMouseLeftButtonUp="OnTabDragEnd">
+                                                  PreviewMouseLeftButtonUp="OnTabDragEnd"
+                                                  LostMouseCapture="OnTabDragLostCapture">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
                                                 <StackPanel Orientation="Horizontal" />
