@@ -1432,6 +1432,13 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             }
         }
 
+        // 必须在清空树之前记住当前分组：左树的 SelectedItem 是双向绑定，节点一清空，
+        // 控件就把「未选中」写回 SelectedGroupNode，事后再读已经是 null（表现为刷新后跳回「所有设备」）。
+        // 重建期间同时抑制这个回写触发的视图切换。
+        var previous = SelectedGroupNode;
+        var wasSyncing = _syncingSmartView;
+        _syncingSmartView = true;
+
         GroupNodes.Clear();
 
         ConnectionGroupNodeViewModel? Build(ConnectionGroup group, int depth)
@@ -1509,7 +1516,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         FlattenTree();
 
         // 重建后按 GroupId 恢复分组选中（旧节点对象已失效）。
-        if (SelectedGroupNode is { } previous)
+        if (previous is not null)
         {
             ConnectionGroupNodeViewModel? Find(IEnumerable<ConnectionGroupNodeViewModel> nodes)
             {
@@ -1531,16 +1538,19 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
             }
 
             var restored = Find(GroupNodes);
-            _syncingSmartView = true;
-            SelectedGroupNode = restored; // 分组被删 → 回落 null，OnChanged 会回到全部视图
-            _syncingSmartView = false;
+            SelectedGroupNode = restored; // 分组被删 → 回落 null，下面切回全部视图
+            _syncingSmartView = wasSyncing;
             if (restored is null)
             {
                 SelectedSmartView = SmartViews[0];
-                OnPropertyChanged(nameof(HasGroupFilter));
-                OnPropertyChanged(nameof(ViewTitle));
             }
+
+            OnPropertyChanged(nameof(HasGroupFilter));
+            OnPropertyChanged(nameof(ViewTitle));
+            return;
         }
+
+        _syncingSmartView = wasSyncing;
     }
 
     /// <summary>把分组树按展开状态摊平成左树节点序列；折叠的分组不展开子级。</summary>
