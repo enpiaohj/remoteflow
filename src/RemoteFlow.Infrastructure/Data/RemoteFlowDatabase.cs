@@ -84,6 +84,7 @@ public sealed class RemoteFlowDatabase
         if (currentVersion == CurrentSchemaVersion)
         {
             _logger.LogInformation("数据库 Schema 已是最新版本 {Version}", currentVersion);
+            EnsureAdditiveColumns(connection);
             return;
         }
 
@@ -117,6 +118,30 @@ public sealed class RemoteFlowDatabase
             _logger.LogError(ex, "数据库 Schema 迁移失败，已回滚");
             throw;
         }
+
+        EnsureAdditiveColumns(connection);
+    }
+
+    /// <summary>
+    /// 补齐「旧版本可以安全忽略」的列：带默认值、旧版本按列名读写时用不到。
+    /// <para>
+    /// 这类改动<b>刻意不提升 <c>user_version</c></b>：旧版本见到更高的版本号会拒绝启动，
+    /// 为一个展示用的字段让用户退不回上一版不值得。会改变既有数据含义的改动仍必须走版本化迁移。
+    /// </para>
+    /// </summary>
+    private void EnsureAdditiveColumns(SqliteConnection connection)
+    {
+        using var check = connection.CreateCommand();
+        check.CommandText = "SELECT COUNT(*) FROM pragma_table_info('connection_history') WHERE name = 'session_kind';";
+        if (Convert.ToInt32(check.ExecuteScalar()) > 0)
+        {
+            return;
+        }
+
+        using var alter = connection.CreateCommand();
+        alter.CommandText = "ALTER TABLE connection_history ADD COLUMN session_kind INTEGER NOT NULL DEFAULT 0;";
+        alter.ExecuteNonQuery();
+        _logger.LogInformation("已为连接历史补充会话种类列");
     }
 
     /// <summary>

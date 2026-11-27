@@ -542,12 +542,14 @@ public sealed class HistoryItemViewModel(ConnectionHistoryEntry entry)
     /// <summary>主机 + 协议，用于活动列表的副标题。</summary>
     public string HostProtocolLine => $"{entry.Host} · {ProtocolName}";
 
-    public string ProtocolName => entry.Protocol switch
-    {
-        ProtocolType.Rdp => "RDP",
-        ProtocolType.Ssh => "SSH",
-        _ => "VNC"
-    };
+    public string ProtocolName => entry.SessionKind == RemoteFlow.Core.Sessions.SessionKind.PowerShell
+        ? "PowerShell"
+        : entry.Protocol switch
+        {
+            ProtocolType.Rdp => "RDP",
+            ProtocolType.Ssh => "SSH",
+            _ => "VNC"
+        };
 
     public string StartedAtDisplay => RemoteFlow.Presentation.Services.DateTimeDisplay.HistoryTimestamp(entry.StartedAt);
 

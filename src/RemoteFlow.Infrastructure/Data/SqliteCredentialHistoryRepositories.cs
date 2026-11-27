@@ -175,6 +175,7 @@ public sealed class SqliteHistoryRepository(RemoteFlowDatabase database) : IHist
                 ConnectionName = reader.GetString(reader.GetOrdinal("connection_name")),
                 Host = reader.GetString(reader.GetOrdinal("host")),
                 Protocol = (ProtocolType)reader.GetInt32(reader.GetOrdinal("protocol")),
+                SessionKind = (RemoteFlow.Core.Sessions.SessionKind)reader.GetInt32(reader.GetOrdinal("session_kind")),
                 StartedAt = DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("started_at"))),
                 EndedAt = SqliteConnectionRepository.ReadNullableDate(reader, "ended_at"),
                 Result = (ConnectionResult)reader.GetInt32(reader.GetOrdinal("result")),
@@ -190,15 +191,16 @@ public sealed class SqliteHistoryRepository(RemoteFlowDatabase database) : IHist
         await using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO connection_history
-                (id, connection_id, connection_name, host, protocol, started_at, ended_at, result, error_code)
+                (id, connection_id, connection_name, host, protocol, session_kind, started_at, ended_at, result, error_code)
             VALUES
-                ($id, $connectionId, $name, $host, $protocol, $startedAt, $endedAt, $result, $errorCode);
+                ($id, $connectionId, $name, $host, $protocol, $sessionKind, $startedAt, $endedAt, $result, $errorCode);
             """;
         command.Parameters.AddWithValue("$id", entry.Id.ToString());
         command.Parameters.AddWithValue("$connectionId", entry.ConnectionId.ToString());
         command.Parameters.AddWithValue("$name", entry.ConnectionName);
         command.Parameters.AddWithValue("$host", entry.Host);
         command.Parameters.AddWithValue("$protocol", (int)entry.Protocol);
+        command.Parameters.AddWithValue("$sessionKind", (int)entry.SessionKind);
         command.Parameters.AddWithValue("$startedAt", entry.StartedAt.ToString("O"));
         command.Parameters.AddWithValue("$endedAt", (object?)entry.EndedAt?.ToString("O") ?? DBNull.Value);
         command.Parameters.AddWithValue("$result", (int)entry.Result);

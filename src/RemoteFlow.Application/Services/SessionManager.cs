@@ -329,8 +329,9 @@ public sealed class SessionManager : IAsyncDisposable
         session.StateChanged += OnSessionStateChanged;
 
         _logger.LogInformation(
-            "已创建会话 {SessionId}：{ConnectionName} ({Protocol} {Host}:{Port})",
-            session.SessionId, profile.Name, profile.Protocol, profile.Host, profile.Port);
+            "已创建会话 {SessionId}：{ConnectionName} ({SessionType} {Host}:{Port})",
+            session.SessionId, profile.Name, DescribeSessionType(session), profile.Host,
+            session.Kind == SessionKind.PowerShell ? PowerShellEndpoint.DefaultPort : profile.Port);
 
         SessionCreated?.Invoke(this, session);
         RaiseSessionsChanged();
@@ -565,6 +566,8 @@ public sealed class SessionManager : IAsyncDisposable
                 // SessionsChanged 在状态跳变的同一刻就已触发，早于上面这次落库；界面据此重读「最近连接」
                 // 会读到旧值。落库完成后再单独通知一次，让各页面刷新最近连接时间与排序。
                 RaiseLastConnectedUpdated(session.Profile.Id);
+                _logger.LogInformation("会话 {SessionId} 已连接：{Host} {SessionType}",
+                    session.SessionId, session.Profile.Host, DescribeSessionType(session));
                 break;
 
             case ConnectionState.Failed:
@@ -574,8 +577,8 @@ public sealed class SessionManager : IAsyncDisposable
                     e.ErrorCode);
 
                 _logger.LogWarning(
-                    "会话 {SessionId} 连接失败：{Host} 协议 {Protocol} 错误码 {ErrorCode}",
-                    session.SessionId, session.Profile.Host, session.Profile.Protocol, e.ErrorCode);
+                    "会话 {SessionId} 连接失败：{Host} {SessionType} 错误码 {ErrorCode}",
+                    session.SessionId, session.Profile.Host, DescribeSessionType(session), e.ErrorCode);
                 break;
 
             case ConnectionState.Disconnected:
@@ -605,6 +608,9 @@ public sealed class SessionManager : IAsyncDisposable
     /// 开始一条历史记录并回填 HistoryId。返回回填任务并登记到条目上：
     /// 供 <see cref="CompleteHistoryAsync"/> 在 HistoryId 尚未就绪时 await，避免竞态产生悬空行。
     /// </summary>
+    private static string DescribeSessionType(IRemoteSession session)
+        => session.Kind == SessionKind.Default ? session.Profile.Protocol.ToString() : session.Kind.ToString();
+
     private Task StartHistoryAsync(SessionEntry entry, IRemoteSession session)
     {
         var startTask = DoStartHistoryAsync(entry, session);
@@ -620,6 +626,7 @@ public sealed class SessionManager : IAsyncDisposable
             ConnectionName = session.Profile.Name,
             Host = session.Profile.Host,
             Protocol = session.Profile.Protocol,
+            SessionKind = session.Kind,
             StartedAt = DateTimeOffset.Now,
             Result = ConnectionResult.Failed,
             ErrorCode = ConnectionErrorCode.None

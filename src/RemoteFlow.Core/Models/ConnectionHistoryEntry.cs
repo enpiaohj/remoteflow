@@ -22,6 +22,9 @@ public sealed class ConnectionHistoryEntry
 
     public ProtocolType Protocol { get; set; }
 
+    /// <summary>附加会话种类（如挂在 RDP 主机上的 PowerShell）；协议仍记连接本身的协议。</summary>
+    public RemoteFlow.Core.Sessions.SessionKind SessionKind { get; set; }
+
     public DateTimeOffset StartedAt { get; set; }
 
     public DateTimeOffset? EndedAt { get; set; }
