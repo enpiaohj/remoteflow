@@ -51,6 +51,24 @@
 - 从 v0.32.0 升级：先正常退出旧版，再运行本版 EXE；ZIP 解压后包含同一份 EXE。数据库、凭据保险库与配置格式均未改动。工作台不再分页，原先选的「每页条数」不再生效。
 - 回退：正常退出本版，运行保留的 v0.32.0 EXE 即可，数据照常可用。升级前仍建议在程序完全退出后备份 `%LOCALAPPDATA%\RemoteFlow`（使用 `REMOTEFLOW_DATA_DIR` 时备份对应目录）。
 
+### Verification
+- `dotnet build RemoteFlow.slnx -c Release`：通过，0 警告、0 错误。
+- Release 测试：Core 151 项通过；Integration 713 项通过、5 项外部云服务测试跳过；Windows 348 项通过、7 项需本机 WinRM 的测试跳过。合计 1,212 项通过，0 失败。PowerShell 本机回环端到端 13 项另行启用后全部通过，无残留远端会话。
+- 图标资源：`python scripts/build-appicon.py --check` 通过（ICO 7 个尺寸、Logo、macOS iconset 与 icns）。
+- 界面核对（隔离数据、47 台演示设备，应用自绘截图，不注入鼠标键盘）：工作台 1024 / 1600 宽列显示、远程桌面连接中提示、失败提示折叠与展开、会话标签与工具条、首页指标、状态栏、读屏可识别的控件名称与换页后的页面。
+- `dotnet publish src/RemoteFlow.App -c Release -r win-x64`：通过。最终正式 EXE：隔离数据目录启动，主界面正常、版本显示 v0.33.0、可进入设置、退出 code 0，未残留 SQLite WAL / SHM 文件。
+- 升级 / 回退（隔离数据）：v0.32.0 建库 → v0.33.0 打开 → 再用 v0.32.0 打开，三次均正常退出且无错误日志，连接与历史数据保留，数据库版本号保持 8。
+- 未执行：真实服务器上的远程桌面 / SSH / VNC 登录、深色主题下本批改动、复制按钮实点、移出信任主机的管理员确认、资源管理器 / 任务栏中的新图标显示、macOS 构建。
+
+### Artifacts
+- `RemoteFlow-v0.33.0-win-x64.exe`
+  - Size：75,461,268 bytes
+  - SHA-256：`4A3ABBA82EE5491D6607DD56147160D3B91357A609A755E8E581354F5C71BF1D`
+- `RemoteFlow-v0.33.0-win-x64.zip`
+  - Size：69,862,195 bytes
+  - SHA-256：`44C0D32A7B2EFE394B616EE4835F54E1F33E204517D7E86250626A3EB0531660`
+- `RemoteFlow-v0.33.0-source.zip`：由 Tag `v0.33.0` 经 `git archive` 导出的源码压缩包（SHA-256 见 GitHub Release 页面）。
+
 ---
 
 ## [0.32.0] — 2026-11-27
