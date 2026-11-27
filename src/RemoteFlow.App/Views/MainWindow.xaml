@@ -406,7 +406,7 @@
                     <!-- 左侧图标栏整列收起（选中会话 / 全屏档）时栏顶 LOGO 随之消失；
                          此时在品牌区补显示产品 LOGO，常态隐藏避免与栏顶重复 -->
                     <Image Width="20" Height="20"
-                           Source="pack://application:,,,/Assets/RemoteFlow-logo.png"
+                           Source="pack://application:,,,/Assets/RemoteFlow-logo-small.png"
                            RenderOptions.BitmapScalingMode="HighQuality"
                            VerticalAlignment="Center" Margin="10,0,7,0">
                         <Image.Visibility>
@@ -551,58 +551,71 @@
                                             </DataTemplate>
                                             <!-- 会话 Tab：图标 + 名称 + 状态点 + 关闭 -->
                                             <DataTemplate DataType="{x:Type vm:SessionTabViewModel}">
-                                                <RadioButton Style="{StaticResource WorkspaceTabHeader}"
+                                                <RadioButton x:Name="TabRoot" Style="{StaticResource WorkspaceTabHeader}"
                                                              IsChecked="{Binding IsActive, Mode=OneWay}"
                                                              Checked="OnTabHeaderChecked"
                                                              ContextMenuOpening="OnTabContextMenuOpening"
                                                              ContextMenu="{DynamicResource SessionTabContextMenu}">
-                                                    <!-- 会话标签用主机设备图标（同类会话多开时按形状区分），
-                                                         协议与状态放进悬停提示；未激活标签的图标略淡，突出当前会话 -->
-                                                    <StackPanel Orientation="Horizontal" Margin="12,0,8,0"
+                                                    <!-- 会话标签只留三样：类型标记（RDP / SSH / VNC / PS，已说明会话类型，不再另放设备图标）、
+                                                         名称、关闭。状态圆点只在没连上时出现（正常连接不打扰）；
+                                                         关闭按钮只在当前标签或悬停时显示，用 Hidden 保留占位，标签宽度不跳。 -->
+                                                    <StackPanel Orientation="Horizontal" Margin="12,0,6,0"
                                                                 ToolTip="{Binding TabToolTip}">
-                                                        <Image Width="16" Height="16" VerticalAlignment="Center"
-                                                               Source="{Binding DeviceIconKey, Converter={StaticResource KeyToImageSource}}">
-                                                            <Image.Style>
-                                                                <Style TargetType="Image" BasedOn="{StaticResource DeviceIcon.Image}">
-                                                                    <Setter Property="Opacity" Value="0.8" />
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                                                            <Setter Property="Opacity" Value="1" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </Image.Style>
-                                                        </Image>
                                                         <ContentControl Content="{Binding}"
                                                                         ContentTemplate="{StaticResource SessionKindBadge.Template}"
-                                                                        Margin="7,0,0,0" VerticalAlignment="Center"
+                                                                        VerticalAlignment="Center"
                                                                         Focusable="False" />
                                                         <TextBlock Text="{Binding TabTitle}"
                                                                    Style="{StaticResource Workspace.TabTitle}"
-                                                                   Margin="6,0,0,0"
-                                                                   MaxWidth="150"
+                                                                   Margin="7,0,0,0"
+                                                                   MaxWidth="160"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    VerticalAlignment="Center"
                                                                    FontSize="13" />
 
-                                                        <!-- 会话状态点：与状态文字一起出现在 Tab 提示中 -->
                                                         <Ellipse Width="7" Height="7" Margin="8,0,0,0" VerticalAlignment="Center"
                                                                  Fill="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}">
-                                                            <Ellipse.Visibility>
-                                                                <Binding Path="CanClose" Converter="{StaticResource BoolToVisibility}" />
-                                                            </Ellipse.Visibility>
+                                                            <Ellipse.Style>
+                                                                <Style TargetType="Ellipse">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding CanClose}" Value="False">
+                                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Ellipse.Style>
                                                             <Ellipse.ToolTip>
                                                                 <ToolTip Content="{Binding StateText}" />
                                                             </Ellipse.ToolTip>
                                                         </Ellipse>
 
-                                                        <Button Style="{StaticResource Button.Icon}"
-                                                                Width="26" Height="26" Margin="6,0,-2,0"
+                                                        <Button Width="26" Height="26" Margin="4,0,-2,0"
                                                                 FontSize="11"
                                                                 Content="{StaticResource Ui.Close}"
                                                                 ToolTip="关闭会话 (Ctrl+W)"
-                                                                Command="{Binding CloseCommand}"
-                                                                Visibility="{Binding CanClose, Converter={StaticResource BoolToVisibility}}" />
+                                                                AutomationProperties.Name="关闭会话"
+                                                                Command="{Binding CloseCommand}">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button" BasedOn="{StaticResource Button.Icon}">
+                                                                    <Setter Property="Visibility" Value="Hidden" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding IsMouseOver, ElementName=TabRoot}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding CanClose}" Value="False">
+                                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                        </Button>
                                                     </StackPanel>
                                                 </RadioButton>
                                             </DataTemplate>
@@ -800,14 +813,14 @@
                      图标栏有自己的底色（Bg.Sidebar）和右边框线，放进去会在标题栏中间画出一条竖线
                      并形成两块不同颜色，看起来像拼接。
                      RemoteFlow.ico 全部帧为 PNG 压缩，WPF ICO 解码器不支持，
-                     故使用从 ICO 提取的同源 PNG（Assets/RemoteFlow-logo.png） -->
+                     故使用同源 PNG；这么小的尺寸用简化字形（Assets/RemoteFlow-logo-small.png） -->
                 <Border Grid.Row="0" Grid.Column="0"
                         Background="{DynamicResource Bg.Sidebar}"
                         ClipToBounds="True"
                         ToolTip="RemoteFlow"
                         Visibility="{Binding IsScreenFull, Converter={StaticResource InverseBoolToVisibility}}">
                     <Image Width="24" Height="24"
-                           Source="pack://application:,,,/Assets/RemoteFlow-logo.png"
+                           Source="pack://application:,,,/Assets/RemoteFlow-logo-small.png"
                            RenderOptions.BitmapScalingMode="HighQuality"
                            HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
