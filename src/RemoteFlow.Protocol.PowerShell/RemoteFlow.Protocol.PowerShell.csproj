@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="bootstrap.ps1" LogicalName="RemoteFlow.Protocol.PowerShell.bootstrap.ps1" />
+    <EmbeddedResource Include="enable.ps1" LogicalName="RemoteFlow.Protocol.PowerShell.enable.ps1" />
   </ItemGroup>
 
 </Project>

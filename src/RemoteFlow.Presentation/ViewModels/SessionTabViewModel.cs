@@ -44,10 +44,12 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         ILogger? logger = null,
         Action<ConnectionProfile>? openFileTransferTab = null,
         string? account = null,
-        Func<ConnectionProfile, Task>? openPowerShell = null)
+        Func<ConnectionProfile, Task>? openPowerShell = null,
+        Func<SessionTabViewModel, Task>? enableRemoting = null)
     {
         Session = session;
         _openPowerShell = openPowerShell;
+        _enableRemoting = enableRemoting;
         AccountDisplay = string.IsNullOrWhiteSpace(account) ? "未提供账号" : account;
         _closeCallback = closeCallback;
         _reconnectCallback = reconnectCallback;
@@ -97,6 +99,30 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     public IRemoteSession Session { get; }
 
     private readonly Func<ConnectionProfile, Task>? _openPowerShell;
+    private readonly Func<SessionTabViewModel, Task>? _enableRemoting;
+
+    /// <summary>PowerShell 会话因 WinRM 端口不通而失败时，提供「远程启用」。</summary>
+    public bool CanEnableRemoting => _enableRemoting is not null
+                                     && Session.Kind == SessionKind.PowerShell
+                                     && Session.State == ConnectionState.Failed
+                                     && Session.ErrorCode == ConnectionErrorCode.NetworkUnreachable;
+
+    /// <summary>远程启用过程中的进度说明；空表示没有在进行。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasRemotingStatus))]
+    private string _remotingStatus = string.Empty;
+
+    public bool HasRemotingStatus => RemotingStatus.Length > 0;
+
+    /// <summary>异步命令执行期间自动禁用按钮，不会重复发起。</summary>
+    [RelayCommand]
+    private async Task EnableRemotingAsync()
+    {
+        if (CanEnableRemoting)
+        {
+            await _enableRemoting!(this);
+        }
+    }
 
     /// <summary>
     /// 界面按哪种协议呈现工具与行为。通常就是会话协议；终端类的附加会话（PowerShell 挂在 RDP 主机上）
@@ -491,6 +517,7 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         IsConnecting = state is ConnectionState.Connecting or ConnectionState.Reconnecting;
         IsConnected = state == ConnectionState.Connected;
         IsInterrupted = state is ConnectionState.Failed or ConnectionState.Disconnected;
+        OnPropertyChanged(nameof(CanEnableRemoting));
 
         switch (state)
         {

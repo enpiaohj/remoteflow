@@ -65,6 +65,46 @@ public sealed class PowerShellSessionTests
         => Assert.Equal(allowed, PowerShellSession.IsTerminalReply(Encoding.ASCII.GetBytes(input)));
 
     [Fact]
+    public void 启用脚本先检查公用网络_再做任何改动()
+    {
+        var script = PowerShellRemotingEnabler.LoadScript();
+        var gate = script.IndexOf("throw 'RF_PUBLIC_NETWORK'", StringComparison.Ordinal);
+        var firstChange = script.IndexOf("-MethodName Create", StringComparison.Ordinal);
+
+        Assert.True(gate > 0 && firstChange > gate);
+        // 只读检查模式不会进入任何改动分支。
+        var enableBranch = script.IndexOf("if ($mode -eq 'enable')", StringComparison.Ordinal);
+        Assert.True(enableBranch > 0 && enableBranch < gate);
+        foreach (var method in new[] { "-MethodName DeleteValue", "-MethodName SetDWORDValue" })
+        {
+            Assert.True(script.IndexOf(method, StringComparison.Ordinal) > enableBranch, method);
+        }
+    }
+
+    [Theory]
+    [InlineData("x;AccessDenied;HRESULT 0x80070005", 0, ConnectionErrorCode.AuthenticationFailed)]
+    [InlineData("x", unchecked((int)0x80070005), ConnectionErrorCode.AuthenticationFailed)]
+    [InlineData("x;Failed;HRESULT 0x800706ba", 0, ConnectionErrorCode.NetworkUnreachable)]
+    [InlineData("x", 0, ConnectionErrorCode.Unknown)]
+    public void 远程启用的错误按WMI错误码归类(string errorId, int hresult, ConnectionErrorCode expected)
+        => Assert.Equal(expected, PowerShellRemotingEnabler.MapError(errorId, hresult, "详情").ErrorCode);
+
+    [Fact]
+    public void 检查结果按键值解析()
+    {
+        var info = PowerShellRemotingEnabler.ParseTarget(new Dictionary<string, string>
+        {
+            ["before.name"] = "PC", ["before.os"] = "Windows 10", ["before.server"] = "False", ["before.domain"] = "False",
+            ["before.state"] = "Stopped", ["before.startMode"] = "Manual", ["before.public"] = "以太网|WLAN",
+            ["before.uac"] = "False", ["before.policy"] = ""
+        }, "before.");
+
+        Assert.Equal(["以太网", "WLAN"], info.PublicNetworks);
+        Assert.False(info.UacEnabled);
+        Assert.Null(info.TokenFilterPolicy);
+    }
+
+    [Fact]
     public void 认证被拒给出账号与权限提示()
     {
         var (code, message) = PowerShellErrorMapper.Map("AccessDenied,PSSessionOpenFailed", 5, "拒绝访问。", "host.example.test");

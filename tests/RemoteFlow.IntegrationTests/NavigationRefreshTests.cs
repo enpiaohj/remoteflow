@@ -24,6 +24,7 @@ public sealed class NavigationRefreshTests : IDisposable
     private readonly ScriptedSshProvider _provider = new();
     private readonly StubRdpProvider _rdpProvider = new();
     private readonly StubPowerShellProvider _powerShell = new();
+    private readonly FakeRemotingEnabler _remoting = new();
     private readonly NullDialogService _dialogs = new();
     private readonly FileTransferLauncher _launcher = new();
     private readonly FakeTransferConnector _connector = new();
@@ -90,7 +91,8 @@ public sealed class NavigationRefreshTests : IDisposable
             NullLogger<MainViewModel>.Instance,
             _launcher,
             _connector,
-            NullLoggerFactory.Instance);
+            NullLoggerFactory.Instance,
+            remotingEnabler: _remoting);
     }
 
     public void Dispose()
@@ -881,11 +883,143 @@ public sealed class NavigationRefreshTests : IDisposable
         public int CreatedCount { get; private set; }
         public bool CanOpen(ConnectionProfile profile) => profile.Protocol == ProtocolType.Rdp && !profile.Vmware.Enabled;
         public bool IsAvailable(out string? unavailableReason) { unavailableReason = null; return true; }
+        /// <summary>非 None 时，新建的会话连接后以该错误失败。</summary>
+        public ConnectionErrorCode FailWith { get; set; }
+
         public IRemoteSession CreateSession(SessionRequest request)
         {
             CreatedCount++;
-            return new TerminalKindSession(request.Profile);
+            return FailWith == ConnectionErrorCode.None
+                ? new TerminalKindSession(request.Profile)
+                : new FailingKindSession(request.Profile, FailWith);
         }
+    }
+
+    private sealed class FailingKindSession(ConnectionProfile profile, ConnectionErrorCode code)
+        : KindSession(profile, SessionKind.PowerShell)
+    {
+        public override Task ConnectAsync(CancellationToken cancellationToken = default)
+        {
+            SetState(ConnectionState.Connecting);
+            ErrorCode = code;
+            ErrorMessage = "测试失败";
+            SetState(ConnectionState.Failed);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeRemotingEnabler : IRemotingEnabler
+    {
+        public RemotingTargetInfo Target { get; set; } = Info();
+        public TokenFilterPolicyOutcome Outcome { get; set; } = TokenFilterPolicyOutcome.Unchanged;
+        public List<(string Host, string User)> Inspected { get; } = [];
+        public List<(string Host, string User)> Enabled { get; } = [];
+
+        public static RemotingTargetInfo Info(string[]? publicNetworks = null, bool uac = true, int? policy = null)
+            => new("TARGETPC", "Windows 10", false, false, "Stopped", "Manual", publicNetworks ?? [], uac, policy);
+
+        public Task<RemotingTargetInfo> InspectAsync(string host, ResolvedCredential credential, string? domain, CancellationToken ct = default)
+        {
+            Inspected.Add((host, credential.Username));
+            return Task.FromResult(Target);
+        }
+
+        public Task<RemotingEnableResult> EnableAsync(string host, ResolvedCredential credential, string? domain, CancellationToken ct = default)
+        {
+            Enabled.Add((host, credential.Username));
+            var after = Target with
+            {
+                WinRmState = "Running",
+                WinRmStartMode = "Auto",
+                TokenFilterPolicy = Outcome == TokenFilterPolicyOutcome.Kept ? 1 : Target.TokenFilterPolicy
+            };
+            return Task.FromResult(new RemotingEnableResult(Target, after, Outcome, PortOpen: true));
+        }
+    }
+
+    private async Task<SessionTabViewModel> FailedPowerShellTabAsync(ConnectionErrorCode code = ConnectionErrorCode.NetworkUnreachable)
+    {
+        _powerShell.FailWith = code;
+        _dialogs.SupportsConnectionCredentialPrompt = true;
+        _dialogs.CredentialAnswer = new ConnectionCredentialInput("admin", "", "test-password", false, null, null, CredentialType.LocalPassword);
+        await _main.OpenPowerShellAsync(WindowsHost());
+        var tab = Assert.Single(_main.Tabs.OfType<SessionTabViewModel>());
+        await tab.Session.ConnectAsync();
+        return tab;
+    }
+
+    // ── 远程启用 PowerShell 远程 ─────────────────────────────────
+
+    [Fact]
+    public async Task 远程启用按钮只在PowerShell端口不通时出现()
+    {
+        var tab = await FailedPowerShellTabAsync();
+        Assert.True(tab.CanEnableRemoting);
+        await _main.CloseAllSessionsCommand.ExecuteAsync(null);
+
+        _dialogs.ConfirmAnswer = true;
+        _dialogs.Confirms.Clear();
+        await _main.CloseAllSessionsCommand.ExecuteAsync(null);
+        var authFailed = await FailedPowerShellTabAsync(ConnectionErrorCode.AuthenticationFailed);
+        Assert.False(authFailed.CanEnableRemoting);
+    }
+
+    [Fact]
+    public async Task 目标有公用网络时不启用也不询问()
+    {
+        _remoting.Target = FakeRemotingEnabler.Info(publicNetworks: ["以太网"]);
+        var tab = await FailedPowerShellTabAsync();
+
+        await tab.EnableRemotingCommand.ExecuteAsync(null);
+
+        Assert.Single(_remoting.Inspected);
+        Assert.Empty(_remoting.Enabled);
+        Assert.Empty(_dialogs.Confirms);
+        Assert.Contains("没有做任何改动", _dialogs.Messages[^1].Message);
+        Assert.Empty(tab.RemotingStatus);
+    }
+
+    [Fact]
+    public async Task 取消确认不启用_确认内容如实说明会改什么()
+    {
+        var tab = await FailedPowerShellTabAsync();
+        _dialogs.ConfirmAnswer = false;
+
+        await tab.EnableRemotingCommand.ExecuteAsync(null);
+
+        var confirm = Assert.Single(_dialogs.Confirms);
+        Assert.Contains("TARGETPC", confirm.Message);
+        Assert.Contains("Enable-PSRemoting", confirm.Message);
+        Assert.Contains("LocalAccountTokenFilterPolicy", confirm.Message);
+        Assert.Contains("5985", confirm.Message);
+        Assert.Empty(_remoting.Enabled);
+    }
+
+    [Fact]
+    public async Task 确认后用同一目标与账号启用_保留的策略和撤销方法写在结果里()
+    {
+        _remoting.Outcome = TokenFilterPolicyOutcome.Kept;
+        var tab = await FailedPowerShellTabAsync();
+        var asked = 0;
+        _dialogs.ConfirmAnswers = () => ++asked == 1; // 同意启用，不重新连接
+
+        await tab.EnableRemotingCommand.ExecuteAsync(null);
+
+        Assert.Equal(_remoting.Inspected, _remoting.Enabled);
+        Assert.Equal(("win.example.test", "admin"), Assert.Single(_remoting.Enabled));
+        var result = _dialogs.Confirms[^1].Message;
+        Assert.Contains("已保留", result);
+        Assert.Contains("Remove-ItemProperty", result);
+        Assert.Contains("Disable-PSRemoting", result);
+        Assert.Equal(1, _powerShell.CreatedCount);
+    }
+
+    [Fact]
+    public void 目标未开UAC时确认文案说明会恢复_域电脑不提该策略()
+    {
+        Assert.Contains("自动恢复原状", RemotingMessages.Confirm("h", FakeRemotingEnabler.Info(uac: false)));
+        var domain = FakeRemotingEnabler.Info() with { PartOfDomain = true };
+        Assert.DoesNotContain("LocalAccountTokenFilterPolicy", RemotingMessages.Confirm("h", domain));
     }
 
     private class KindSession(ConnectionProfile profile, SessionKind kind) : RemoteSessionBase
@@ -1242,12 +1376,15 @@ public sealed class NavigationRefreshTests : IDisposable
         /// <summary>对 ConfirmAsync 的应答，默认「否」。</summary>
         public bool ConfirmAnswer { get; set; }
 
+        /// <summary>需要按次序给出不同应答时使用；优先于 <see cref="ConfirmAnswer"/>。</summary>
+        public Func<bool>? ConfirmAnswers { get; set; }
+
         public List<(string Title, string Message)> Confirms { get; } = [];
 
         public Task<bool> ConfirmAsync(string title, string message, string confirmText = "确定", bool isDanger = false)
         {
             Confirms.Add((title, message));
-            return Task.FromResult(ConfirmAnswer);
+            return Task.FromResult(ConfirmAnswers?.Invoke() ?? ConfirmAnswer);
         }
 
         public List<(string Title, string Message, DialogKind Kind)> Messages { get; } = [];

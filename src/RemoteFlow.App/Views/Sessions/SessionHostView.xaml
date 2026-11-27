@@ -122,6 +122,18 @@
                                    Style="{StaticResource Text.BodySecondary}"
                                    TextWrapping="Wrap"
                                    Margin="0,14,0,0" />
+                        <TextBlock Text="{Binding RemotingStatus}"
+                                   Style="{StaticResource Text.BodySecondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,14,0,0"
+                                   Visibility="{Binding HasRemotingStatus, Converter={StaticResource BoolToVisibility}}" />
+                        <!-- WinRM 端口不通时：确认后经 WMI 在目标上执行 Enable-PSRemoting。单独一行，不与常规按钮混排 -->
+                        <Button Style="{StaticResource Button.Secondary}"
+                                Content="远程启用 PowerShell 远程…"
+                                HorizontalAlignment="Left"
+                                Margin="0,16,0,0"
+                                Command="{Binding EnableRemotingCommand}"
+                                Visibility="{Binding CanEnableRemoting, Converter={StaticResource BoolToVisibility}}" />
                         <StackPanel Orientation="Horizontal" Margin="0,22,0,0" HorizontalAlignment="Right">
                             <Button Style="{StaticResource Button.Subtle}"
                                     Content="退出全屏"

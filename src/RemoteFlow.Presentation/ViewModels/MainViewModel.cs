@@ -66,6 +66,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private int _pageReloadVersion;
     private bool _activatingWorkspacePage;
 
+    /// <summary>远程启用 PowerShell 远程的平台能力；平台不提供时对应按钮不出现。</summary>
+    private readonly IRemotingEnabler? _remotingEnabler;
+
     /// <summary>正在创建会话的（连接 Id, 会话种类）。用于连点去重：会话 Tab 建出前，第二次请求不重复建。
     /// 按种类区分：同一主机的远程桌面与 PowerShell 互不阻挡。</summary>
     private readonly HashSet<(Guid ProfileId, SessionKind Kind)> _openingProfileIds = [];
@@ -87,8 +90,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         UpdateViewModel? update = null,
         VmwarePageViewModel? vmwarePage = null,
         JsonSettingsStore? settingsStore = null,
-        RememberedCredentialService? rememberedCredentials = null)
+        RememberedCredentialService? rememberedCredentials = null,
+        IRemotingEnabler? remotingEnabler = null)
     {
+        _remotingEnabler = remotingEnabler;
         _rememberedCredentials = rememberedCredentials;
         _sessions = sessions;
         _settings = settings;
@@ -1016,7 +1021,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 session, CloseSessionAsync, profile => ReconnectAsync(profile, kind), _ui, _timerFactory, _dialogs, _logger,
                 _fileTransferLauncher is null ? null : _fileTransferLauncher.Open,
                 account: _sessions.GetSessionAccount(session.SessionId),
-                openPowerShell: _sessions.SupportsSessionKind(session.Profile, SessionKind.PowerShell) ? OpenPowerShellAsync : null);
+                openPowerShell: _sessions.SupportsSessionKind(session.Profile, SessionKind.PowerShell) ? OpenPowerShellAsync : null,
+                enableRemoting: _remotingEnabler is null || kind != SessionKind.PowerShell ? null : EnableRemotingAsync);
 
             // 会话工具条里的「全屏」由主窗口层处理（隐藏导航/详情、窗口去边框铺满）；
             // 协议专属动作（缩放、Ctrl+Alt+Del 等）由各协议视图自己订阅处理。
@@ -1608,6 +1614,83 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ResetSessionView();
 
         SelectedTab = tab;
+    }
+
+    /// <summary>
+    /// 远程在目标电脑上启用 PowerShell 远程。顺序固定：取账号 → 只读检查 → 说明将发生的改动并征得确认 →
+    /// 启用 → 报告结果与撤销方法 → 可选重连。目标有「公用」网络时不做任何改动。
+    /// </summary>
+    private async Task EnableRemotingAsync(SessionTabViewModel tab)
+    {
+        if (_remotingEnabler is null)
+        {
+            return;
+        }
+
+        ResolvedCredential? credential = null;
+        try
+        {
+            var profile = (await _sessions.GetProfilesAsync([tab.Profile.Id])).FirstOrDefault() ?? tab.Profile;
+            var (proceed, entered) = await PromptCredentialIfNeededAsync(profile, SessionKind.PowerShell);
+            if (!proceed)
+            {
+                return;
+            }
+
+            credential = entered
+                         ?? (profile.CredentialId is { } id ? await _sessions.ResolveSavedCredentialAsync(id) : null);
+            if (credential is null)
+            {
+                await _dialogs.ShowMessageAsync("无法远程启用", "需要目标电脑的管理员账号和密码。请先给该连接分配凭据。", DialogKind.Warning);
+                return;
+            }
+
+            tab.RemotingStatus = "正在检查目标电脑（只读，不做改动）…";
+            var target = await _remotingEnabler.InspectAsync(profile.Host, credential, profile.Rdp.Domain);
+            if (target.PublicNetworks.Count > 0)
+            {
+                await _dialogs.ShowMessageAsync("未做改动", RemotingMessages.PublicNetwork(target), DialogKind.Warning);
+                return;
+            }
+
+            tab.RemotingStatus = "等待确认…";
+            if (!await _dialogs.ConfirmAsync(
+                    "远程启用 PowerShell 远程", RemotingMessages.Confirm(profile.Host, target), "启用", isDanger: true))
+            {
+                return;
+            }
+
+            tab.RemotingStatus = "正在启用，可能需要一两分钟…";
+            var result = await _remotingEnabler.EnableAsync(profile.Host, credential, profile.Rdp.Domain);
+            tab.RemotingStatus = string.Empty;
+
+            if (!result.PortOpen)
+            {
+                await _dialogs.ShowMessageAsync("已执行启用，但仍无法访问", RemotingMessages.Result(result), DialogKind.Warning);
+                return;
+            }
+
+            if (await _dialogs.ConfirmAsync(
+                    "PowerShell 远程已启用", RemotingMessages.Result(result) + "\n\n现在重新连接吗？", "重新连接"))
+            {
+                await tab.ReconnectCommand.ExecuteAsync(null);
+            }
+        }
+        catch (ConnectionException ex)
+        {
+            await _dialogs.ShowMessageAsync("无法远程启用", ex.Message, DialogKind.Error);
+        }
+        catch (Exception ex)
+        {
+            // 只记类型：异常内容可能带目标环境信息。
+            _logger.LogWarning("远程启用 PowerShell 远程失败：{ErrorType}", ex.GetType().Name);
+            await _dialogs.ShowMessageAsync("无法远程启用", "发生未知错误。如果启用步骤已经开始，请到目标电脑上确认当前状态。", DialogKind.Error);
+        }
+        finally
+        {
+            tab.RemotingStatus = string.Empty;
+            credential?.Dispose();
+        }
     }
 
     private async Task ReconnectAsync(ConnectionProfile profile, SessionKind kind)

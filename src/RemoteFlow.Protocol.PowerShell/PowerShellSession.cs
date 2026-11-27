@@ -1,11 +1,9 @@
 using System.IO.Pipes;
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Win32.SafeHandles;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Core.Sessions;
 
@@ -132,15 +130,15 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
         {
             throw new ConnectionException(ConnectionErrorCode.NetworkUnreachable,
                 $"无法连接到 {Profile.Host} 的 WinRM 端口 {Port}。请确认目标已启用 PowerShell 远程"
-                + "（在目标上以管理员运行 Enable-PSRemoting），且防火墙放行该端口。", ex);
+                + "（在目标上以管理员运行 Enable-PSRemoting），且防火墙放行该端口。"
+                + "Windows Server 默认已启用，Windows 10 / 11 默认未启用。", ex);
         }
     }
 
     private async Task StartRemoteSessionAsync(CancellationToken token)
     {
         var pipeName = $"RemoteFlow-ps-{Guid.NewGuid():N}";
-        var channel = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        var channel = PowerShellPipe.CreateServer(pipeName);
         _channel = channel;
 
         var terminal = ConPtyProcess.Start(BuildCommandLine(pipeName), _columns, _rows,
@@ -158,7 +156,7 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
         }
 
         await WaitOrProcessExitAsync(channel.WaitForConnectionAsync(token), terminal, PipeTimeout, token);
-        VerifyPeer(channel, terminal.ProcessId);
+        PowerShellPipe.VerifyPeer(channel, terminal.ProcessId);
         await SendParametersAsync(channel, token);
 
         var response = ReadResponseAsync(channel, token);
@@ -202,37 +200,14 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
         throw new ConnectionException(ConnectionErrorCode.Timeout, ConnectionException.Describe(ConnectionErrorCode.Timeout));
     }
 
-    internal static string LoadBootstrapScript()
-    {
-        using var stream = typeof(PowerShellSession).Assembly
-            .GetManifestResourceStream("RemoteFlow.Protocol.PowerShell.bootstrap.ps1")
-            ?? throw new InvalidOperationException("缺少 PowerShell 启动脚本资源。");
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        return reader.ReadToEnd();
-    }
+    internal static string LoadBootstrapScript() => PowerShellPipe.LoadScript("bootstrap.ps1");
 
     internal static string PowerShellPath => Path.Combine(
         Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
 
-    /// <summary>命令行里只有固定脚本与随机管道名。用 -EncodedCommand 是为了不依赖脚本执行策略、也无需落盘。</summary>
+    /// <summary>命令行里只有固定脚本与随机管道名。</summary>
     internal static string BuildCommandLine(string pipeName)
-    {
-        // 去掉注释与空行以缩短命令行；脚本内没有跨行字符串。
-        var lines = LoadBootstrapScript().ReplaceLineEndings("\n").Split('\n')
-            .Where(line => line.Trim() is { Length: > 0 } trimmed && !trimmed.StartsWith('#'));
-        var script = string.Join('\n', lines).Replace("__PIPE__", pipeName);
-        var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
-        return $"\"{PowerShellPath}\" -NoLogo -NoProfile -NoExit -EncodedCommand {encoded}";
-    }
-
-    private static void VerifyPeer(NamedPipeServerStream channel, int expectedProcessId)
-    {
-        // CurrentUserOnly 挡住其他用户；再核对对端就是刚启动的子进程，挡住同一用户下抢先连接的其他进程。
-        if (!GetNamedPipeClientProcessId(channel.SafePipeHandle, out var processId) || processId != (uint)expectedProcessId)
-        {
-            throw new ConnectionException(ConnectionErrorCode.Unknown, "PowerShell 启动通道校验失败，已中止连接。");
-        }
-    }
+        => $"\"{PowerShellPath}\" -NoLogo -NoProfile -NoExit -EncodedCommand {PowerShellPipe.Encode(LoadBootstrapScript(), pipeName)}";
 
     internal static string ComposeUserName(ResolvedCredential? credential, string? profileDomain)
     {
@@ -250,26 +225,17 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
 
     private async Task SendParametersAsync(Stream channel, CancellationToken token)
     {
-        var password = (_credential?.Password ?? string.Empty).ToCharArray();
-        using var buffer = new MemoryStream();
         try
         {
-            using (var writer = new BinaryWriter(buffer, new UTF8Encoding(false), leaveOpen: true))
+            await PowerShellPipe.SendAsync(channel, writer =>
             {
                 writer.Write(Profile.Host);
                 writer.Write(ComposeUserName(_credential, Profile.Rdp.Domain));
                 writer.Write(UseLoopbackNetworkAccess);
-                writer.Write(password.Length);
-                writer.Write(password);
-            }
-
-            await channel.WriteAsync(buffer.GetBuffer().AsMemory(0, (int)buffer.Length), token);
-            await channel.FlushAsync(token);
+            }, _credential?.Password, token);
         }
         finally
         {
-            Array.Clear(password);
-            Array.Clear(buffer.GetBuffer());
             DisposeCredential();
         }
     }
@@ -366,7 +332,4 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
 
     [GeneratedRegex(@"\A(\x1b\[[0-9;?>]*[Rc])+\z")]
     private static partial Regex TerminalReply();
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GetNamedPipeClientProcessId(SafePipeHandle pipe, out uint clientProcessId);
 }
