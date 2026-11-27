@@ -634,7 +634,7 @@
                     <Border Style="{StaticResource Surface.Card}" Padding="24,20">
                         <StackPanel Orientation="Horizontal">
                             <!-- 产品图标与标题栏 / 任务栏同源（Assets/RemoteFlow-logo.png） -->
-                            <Image Width="32" Height="32" Source="pack://application:,,,/Assets/RemoteFlow-logo.png"
+                            <Image Width="32" Height="32" Source="pack://application:,,,/Assets/RemoteFlow-logo-small.png"
                                    RenderOptions.BitmapScalingMode="HighQuality" />
                             <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
                                 <TextBlock Text="RemoteFlow" Style="{StaticResource Text.Body}" FontWeight="SemiBold" />

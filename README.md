@@ -314,7 +314,9 @@ dotnet test tests/RemoteFlow.IntegrationTests.Windows
 # 发布 win-x64 单文件
 dotnet publish src/RemoteFlow.App -c Release -r win-x64
 
-# 重新生成程序图标（Windows .ico / Logo PNG + macOS iconset / .icns，需 Python 3 + Pillow）
+# 重新生成程序图标（Windows .ico / Logo PNG + macOS iconset / .icns）
+# 设计源：scripts/appicon/AppIcon.xaml（大尺寸）与 AppIcon-small.xaml（16 / 24 / 32 px）
+# 仅 Windows：需 Python 3 + Pillow 与 PowerShell 7（用 WPF 从矢量渲染各尺寸）
 python scripts/build-appicon.py          # 生成并自校验
 python scripts/build-appicon.py --check  # 只校验
 
