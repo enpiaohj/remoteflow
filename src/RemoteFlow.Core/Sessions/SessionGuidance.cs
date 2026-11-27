@@ -19,4 +19,7 @@ public interface ISessionGuidanceSource
     string? ErrorDetail { get; }
 
     IReadOnlyList<SessionCommandHint> CommandHints { get; }
+
+    /// <summary>处理办法前的原因说明（较长，界面默认折叠）；没有时为 null。</summary>
+    string? GuidanceIntro => null;
 }

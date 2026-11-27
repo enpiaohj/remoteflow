@@ -20,6 +20,7 @@ public sealed class DeviceIconResourceTests
         "DeviceIcon.VirtualMachine",
         "DeviceIcon.Container",
         "DeviceIcon.CloudHost",
+        "DeviceIcon.Display", // VNC 未指定设备类型时的通用显示器
     ];
 
     private static readonly string[] ExpectedProtocolKeys =
@@ -37,7 +38,7 @@ public sealed class DeviceIconResourceTests
     ];
 
     [Fact]
-    public void 设备图标资源字典包含十二枚独立矢量图标()
+    public void 设备图标资源字典包含全部独立矢量图标()
     {
         var path = FindProjectFile("src", "RemoteFlow.App", "Themes", "DeviceIcons.xaml");
         var document = XDocument.Load(path);

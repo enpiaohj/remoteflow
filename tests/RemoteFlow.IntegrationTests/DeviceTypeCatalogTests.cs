@@ -25,7 +25,7 @@ public sealed class DeviceTypeCatalogTests
     [Theory]
     [InlineData(ProtocolType.Rdp, "DeviceIcon.WindowsPc")]
     [InlineData(ProtocolType.Ssh, "DeviceIcon.Linux")]
-    [InlineData(ProtocolType.Vnc, "DeviceIcon.Mac")]
+    [InlineData(ProtocolType.Vnc, "DeviceIcon.Display")]
     public void 未指定设备类型时按协议推断矢量图标(ProtocolType protocol, string expectedIconKey)
     {
         Assert.Equal(expectedIconKey, DeviceTypeCatalog.InferFromProtocol(protocol).IconResourceKey);
@@ -59,7 +59,7 @@ public sealed class DeviceTypeCatalogTests
     [Theory]
     [InlineData(ProtocolType.Rdp, "DeviceIcon.WindowsPc")]
     [InlineData(ProtocolType.Ssh, "DeviceIcon.Linux")]
-    [InlineData(ProtocolType.Vnc, "DeviceIcon.Mac")]
+    [InlineData(ProtocolType.Vnc, "DeviceIcon.Display")]
     public void 历史行按协议回退设备图标(ProtocolType protocol, string expectedIconKey)
     {
         var history = new HistoryItemViewModel(new ConnectionHistoryEntry

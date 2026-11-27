@@ -5,8 +5,10 @@ using RemoteFlow.Core.Sessions;
 namespace RemoteFlow.Protocol.PowerShell;
 
 /// <summary>一次连接失败的呈现内容：说明、可复制的命令、系统原始报错。</summary>
+/// <param name="Message">默认显示的一两句结论。</param>
+/// <param name="Intro">处理办法前的原因说明，界面折叠在「查看处理办法」里。</param>
 internal sealed record PowerShellFailure(
-    ConnectionErrorCode Code, string Message, string? Detail, IReadOnlyList<SessionCommandHint> Commands);
+    ConnectionErrorCode Code, string Message, string? Detail, IReadOnlyList<SessionCommandHint> Commands, string? Intro = null);
 
 /// <summary>把 <c>New-PSSession</c> 的失败翻译成标准错误码、可操作的中文说明和处理命令。</summary>
 internal static partial class PowerShellErrorMapper
@@ -69,12 +71,11 @@ internal static partial class PowerShellErrorMapper
                 detail, []);
         }
 
-        var message =
-            (isLocalTarget ? "连接本机被拒绝。" : "身份验证被拒绝。")
-            + "请先确认用户名和密码正确。\n\n"
-            + $"如果用的是{target}的本地账户：只要{target}开着 UAC，除内置 Administrator 外，即使密码正确、账户在管理员组，"
-            + "Windows 默认也会拒绝它远程登录（远程桌面不受影响）。确认属于这种情况后，在下面两种办法里选一种。\n\n"
-            + $"域账户则请确认它在{target}上属于 Administrators 或 Remote Management Users 组。";
+        var message = (isLocalTarget ? "连接本机被拒绝。" : "身份验证被拒绝。")
+                      + "请先确认用户名和密码正确；用的是本地账户时，也可能是 Windows 的 UAC 远程限制。";
+        var intro = $"如果用的是{target}的本地账户：只要{target}开着 UAC，除内置 Administrator 外，即使密码正确、账户在管理员组，"
+                    + "Windows 默认也会拒绝它远程登录（远程桌面不受影响）。确认属于这种情况后，在下面两种办法里选一种。\n"
+                    + $"域账户则请确认它在{target}上属于 Administrators 或 Remote Management Users 组。";
 
         var account = LocalAccountName(userName);
         return new PowerShellFailure(ConnectionErrorCode.AuthenticationFailed, message, detail,
@@ -88,7 +89,7 @@ internal static partial class PowerShellErrorMapper
                 $"办法二（只放开这一个账户，连上后没有管理员权限）：在{target}上以管理员身份运行",
                 $"Add-LocalGroupMember -SID S-1-5-32-580 -Member '{account}'",
                 $"撤销：Remove-LocalGroupMember -SID S-1-5-32-580 -Member '{account}'")
-        ]);
+        ], intro);
     }
 
     /// <summary>
@@ -102,8 +103,9 @@ internal static partial class PowerShellErrorMapper
 
     private static PowerShellFailure NotTrustedFailure(string host, string? detail)
     {
-        const string message = "用 IP 地址或非域环境连接时，Windows 要求目标启用 HTTPS（本版暂不支持），"
-                               + "或把它加入本机的 TrustedHosts。能用域内主机名连接时，请优先把主机地址改为主机名。";
+        const string message = "Windows 不信任这台电脑：用 IP 地址或非域方式连接时，需要先把它加入本机的信任列表。";
+        const string intro = "Windows 要求目标启用 HTTPS（本版暂不支持），或把它加入本机的 TrustedHosts。"
+                             + "能用域内主机名连接时，请优先把主机地址改为主机名。";
 
         // 只有主机地址由安全字符组成时才拼进可复制的命令，避免诱导用户执行夹带内容的命令。
         return new PowerShellFailure(ConnectionErrorCode.ProtocolNegotiationFailed, message, detail,
@@ -115,7 +117,7 @@ internal static partial class PowerShellErrorMapper
                         $"Set-Item WSMan:\\localhost\\Client\\TrustedHosts -Value '{host}' -Concatenate",
                         "该设置影响本机所有用户，且列表中的主机不会被验证身份。")
                 ]
-                : []);
+                : [], intro);
     }
 
     [GeneratedRegex(@"\A[A-Za-z0-9._:\-\[\]]+\z")]

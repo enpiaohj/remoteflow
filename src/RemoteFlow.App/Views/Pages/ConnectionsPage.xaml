@@ -15,7 +15,7 @@
              KeyDown="OnPageKeyDown">
 
     <UserControl.Resources>
-        <!-- 自适应列：列表变窄时按优先级收起（标签 → 分组 → 最近连接 → 地址 → 协议），名称、状态、操作始终保留。
+        <!-- 自适应列：列表变窄时按优先级收起（标签 → 分组 → 最近连接 → 协议 → 地址），名称、状态、操作始终保留。
              值由代码后置 ApplyColumnLayout 按列表宽度改写；列内元素收起后 Auto 列宽归零。 -->
         <Visibility x:Key="ConnCol.ProtoVis">Visible</Visibility>
         <Visibility x:Key="ConnCol.HostVis">Visible</Visibility>
@@ -27,6 +27,8 @@
         <sys:Double x:Key="ConnCol.RecentMin">70</sys:Double>
         <sys:Double x:Key="ConnCol.GroupMin">72</sys:Double>
         <sys:Double x:Key="ConnCol.TagsMin">48</sys:Double>
+        <!-- 名称文字上限：列表很窄时缩短，保证状态与操作列仍在可视区 -->
+        <sys:Double x:Key="ConnCol.NameMax">210</sys:Double>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
         <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
@@ -199,7 +201,8 @@
                         </Border>
                     </Grid>
                     <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" FontSize="12"
-                               Margin="9,0,7,0" MaxWidth="210" TextTrimming="CharacterEllipsis" />
+                               Margin="9,0,7,0" MaxWidth="{DynamicResource ConnCol.NameMax}" TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding Name}" />
                 </StackPanel>
 
                 <TextBlock Grid.Column="2" Visibility="{DynamicResource ConnCol.HostVis}" Text="{Binding HostDisplay}" Style="{StaticResource Text.BodySecondary}"

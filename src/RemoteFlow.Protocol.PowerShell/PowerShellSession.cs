@@ -57,11 +57,14 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
 
     public IReadOnlyList<SessionCommandHint> CommandHints { get; private set; } = [];
 
+    public string? GuidanceIntro { get; private set; }
+
     /// <summary>记下处理办法并返回要抛出的异常；两者必须在状态变为失败之前就位。</summary>
     private ConnectionException Report(PowerShellFailure failure, Exception? inner = null)
     {
         ErrorDetail = failure.Detail;
         CommandHints = failure.Commands;
+        GuidanceIntro = failure.Intro;
         return inner is null
             ? new ConnectionException(failure.Code, failure.Message)
             : new ConnectionException(failure.Code, failure.Message, inner);

@@ -115,8 +115,8 @@
                                 </Border>
                                 <TextBlock Grid.Column="1" Style="{StaticResource Help.Body}">
                                     <Run Text="在" /><Run Text="「首页」" Style="{StaticResource Help.Strong}" /><Run Text="或" />
-                                    <Run Text="「我的连接」" Style="{StaticResource Help.Strong}" />
-                                    <Run Text="点设备行（或右键 → 连接）发起连接；会话以标签页形式在顶部打开。" />
+                                    <Run Text="「连接工作台」" Style="{StaticResource Help.Strong}" />
+                                    <Run Text="双击设备行（或选中后按 Enter、右键 → 连接）发起连接；会话以标签页形式在顶部打开，标签前的 RDP / SSH / VNC / PS 标记表示会话类型。" />
                                 </TextBlock>
                             </Grid>
 
@@ -151,8 +151,8 @@
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="连接管理" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,10" />
                             <TextBlock Style="{StaticResource Help.Body}">
-                                <Run Text="「我的连接」" Style="{StaticResource Help.Strong}" />
-                                <Run Text="按分组组织：右键分组可管理分组；右键连接可 连接 / 编辑 / 测试连接 / 收藏 / 移动到分组。从分组菜单新建连接时会预选该分组。" />
+                                <Run Text="「连接工作台」" Style="{StaticResource Help.Strong}" />
+                                <Run Text="左侧按分组组织：右键分组可管理分组；右键连接可 连接 / PowerShell 会话 / 测试连接 / 文件传输 / 编辑 / 收藏 / 移动到分组。从分组菜单新建连接时会预选该分组。列表按窗口宽度自动收起次要列，状态与操作始终可见。" />
                             </TextBlock>
                             <TextBlock Style="{StaticResource Help.Body}">
                                 <Run Text="「收藏」" Style="{StaticResource Help.Strong}" />
@@ -160,9 +160,8 @@
                                 <Run Text="按时间回溯，附连接历史与结果。" />
                             </TextBlock>
                             <TextBlock Style="{StaticResource Help.Body}" Margin="0">
-                                <Run Text="凭据集中管理，支持" /><Run Text="密码" Style="{StaticResource Help.Strong}" />
-                                <Run Text="与" /><Run Text="SSH 密钥" Style="{StaticResource Help.Strong}" />
-                                <Run Text="两类，供多个连接复用。" />
+                                <Run Text="凭据集中管理，支持" /><Run Text="Windows 域账号、本地账号、SSH 口令、SSH 私钥、VNC 口令" Style="{StaticResource Help.Strong}" />
+                                <Run Text="五类，供多个连接复用。" />
                             </TextBlock>
                         </StackPanel>
                     </Grid>
@@ -224,8 +223,12 @@
                                 <Run Text="关闭当前会话，" /><Run Text="Ctrl+Tab" FontWeight="SemiBold" Foreground="{DynamicResource Text.Primary}" />
                                 <Run Text="往复切换；标签右键可关闭其他 / 右侧会话。" />
                             </TextBlock>
+                            <TextBlock Style="{StaticResource Help.Body}">
+                                <Run Text="断线时会话内出现轻量状态层，可一键重新连接；自动重连期间无需手动干预。连接失败时可「复制全部」带走原因与建议的命令。" />
+                            </TextBlock>
                             <TextBlock Style="{StaticResource Help.Body}" Margin="0">
-                                <Run Text="断线时会话内出现轻量状态层，可一键重新连接；自动重连期间无需手动干预。" />
+                                <Run Text="PowerShell 会话" Style="{StaticResource Help.Strong}" />
+                                <Run Text="：在 Windows 主机的右键菜单或「连接 ▾」里打开，走 WinRM（5985）。首次用 IP 连接某台电脑时，会经 Windows 管理员确认把它加入本机信任列表；已加入的主机可在 设置 →「安全」中查看和移除。" />
                             </TextBlock>
                         </StackPanel>
                     </Grid>
@@ -298,7 +301,7 @@
                             <TextBlock Text="凭据与安全" Style="{StaticResource Text.SectionTitle}" Margin="0,0,0,10" />
                             <TextBlock Style="{StaticResource Help.Body}">
                                 <Run Text="密码 / 私钥由 " /><Run Text="Windows DPAPI" Style="{StaticResource Help.Strong}" />
-                                <Run Text=" 加密后存入本机数据库；日志、导出文件与异常消息中都不会出现明文 Secret。" />
+                                <Run Text=" 加密后存入本机凭据保险库（vault.dat），数据库只保存引用；日志、导出文件与异常消息中都不会出现明文 Secret。" />
                             </TextBlock>
                             <TextBlock Style="{StaticResource Help.Body}">
                                 <Run Text="SSH 首次连接记录" /><Run Text="主机密钥指纹" Style="{StaticResource Help.Strong}" />

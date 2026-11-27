@@ -101,6 +101,12 @@
                                  Background="#2E2E2E"
                                  Foreground="{DynamicResource Brand.Default}"
                                  BorderThickness="0" />
+                    <!-- 离线主机要等到超时才失败：给出随时放弃的出口 -->
+                    <Button Style="{StaticResource Button.Secondary}"
+                            Content="取消连接"
+                            HorizontalAlignment="Center"
+                            Margin="0,22,0,0"
+                            Command="{Binding CloseCommand}" />
                 </StackPanel>
             </Border>
 
@@ -144,8 +150,15 @@
                                    TextWrapping="Wrap"
                                    Margin="0,14,0,0" />
 
-                        <ItemsControl ItemsSource="{Binding CommandHints}" Focusable="False"
-                                      Visibility="{Binding HasCommandHints, Converter={StaticResource BoolToVisibility}}">
+                        <!-- 默认只显示结论；原因说明与命令折叠起来，需要时再展开 -->
+                        <Expander Header="{Binding GuidanceHeader}" Margin="0,14,0,0"
+                                  Foreground="{DynamicResource Brand.Default}"
+                                  Visibility="{Binding HasCommandHints, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                        <TextBlock Text="{Binding GuidanceIntro}" Style="{StaticResource Text.BodySecondary}"
+                                   TextWrapping="Wrap" Margin="0,8,0,0"
+                                   Visibility="{Binding HasGuidanceIntro, Converter={StaticResource BoolToVisibility}}" />
+                        <ItemsControl ItemsSource="{Binding CommandHints}" Focusable="False">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Margin="0,14,0,0">
@@ -172,8 +185,10 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        </StackPanel>
+                        </Expander>
 
-                        <Expander Header="系统返回的详细信息" Margin="0,14,0,0"
+                        <Expander Header="系统返回的详细信息" Margin="0,10,0,0"
                                   Foreground="{DynamicResource Text.Secondary}"
                                   Visibility="{Binding HasErrorDetail, Converter={StaticResource BoolToVisibility}}">
                             <TextBox Text="{Binding ErrorDetail, Mode=OneWay}" IsReadOnly="True"

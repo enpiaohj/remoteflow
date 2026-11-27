@@ -135,8 +135,10 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         CredentialBackupService credentialBackup,
         LocalBackupService localBackup,
         CloudSyncViewModel cloudSync,
-        ILogger<SettingsPageViewModel> logger)
+        ILogger<SettingsPageViewModel> logger,
+        RemoteFlow.Core.Sessions.IPowerShellTrustedHosts? powerShellTrustedHosts = null)
     {
+        _powerShellTrustedHosts = powerShellTrustedHosts;
         Cloud = cloudSync;
         _settings = settings;
         _store = store;
@@ -521,6 +523,55 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         {
             TrustedHostKeys.Add(new HostKeyItemViewModel(record));
         }
+
+        LoadPowerShellTrustedHosts();
+    }
+
+    // ── PowerShell 信任的主机（本机 TrustedHosts，仅 Windows） ──────────
+
+    private readonly RemoteFlow.Core.Sessions.IPowerShellTrustedHosts? _powerShellTrustedHosts;
+
+    /// <summary>平台提供 PowerShell 会话时才显示这一块。</summary>
+    public bool SupportsPowerShellTrustedHosts => _powerShellTrustedHosts is not null;
+
+    public ObservableCollection<string> PowerShellTrustedHosts { get; } = [];
+
+    public void LoadPowerShellTrustedHosts()
+    {
+        PowerShellTrustedHosts.Clear();
+        foreach (var host in _powerShellTrustedHosts?.GetAll() ?? [])
+        {
+            PowerShellTrustedHosts.Add(host);
+        }
+    }
+
+    [RelayCommand]
+    private async Task RemovePowerShellTrustedHostAsync(string? host)
+    {
+        if (_powerShellTrustedHosts is null || string.IsNullOrEmpty(host))
+        {
+            return;
+        }
+
+        var confirmed = await _dialogs.ConfirmAsync(
+            "移出信任列表",
+            $"确定要把 {host} 移出本机的 PowerShell 信任列表吗？\n\n"
+            + "这是整台电脑共用的系统设置，需要在 Windows 管理员确认框中同意。移出后再用 IP 连接这台电脑时，会重新请求信任。",
+            "移出",
+            isDanger: true);
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var result = await _powerShellTrustedHosts.RemoveAsync(host);
+        LoadPowerShellTrustedHosts();
+        StatusMessage = result switch
+        {
+            RemoteFlow.Core.Sessions.TrustedHostChange.Done => $"已把 {host} 移出信任列表。",
+            RemoteFlow.Core.Sessions.TrustedHostChange.Declined => "已取消，信任列表没有改动。",
+            _ => $"没能移出 {host}。可以在管理员 PowerShell 中手动修改 TrustedHosts。"
+        };
     }
 
     // 任一设置变化后立即持久化，避免用户改完忘记保存。

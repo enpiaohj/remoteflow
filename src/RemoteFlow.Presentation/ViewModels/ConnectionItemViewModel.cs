@@ -16,6 +16,9 @@ public sealed partial class ConnectionItemViewModel(ConnectionProfile profile) :
 
     public string Name => Profile.Name;
 
+    /// <summary>列表项的无障碍名称（读屏读出的就是它）。</summary>
+    public override string ToString() => Name;
+
     public string Host => Profile.Host;
 
     /// <summary>端口（详情面板展示）。</summary>

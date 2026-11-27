@@ -50,7 +50,7 @@
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
     </UserControl.Resources>
 
-    <StackPanel MaxWidth="860" HorizontalAlignment="Left">
+    <StackPanel>
 
         <!-- ══ 产品 ══ -->
         <Border Style="{StaticResource Surface.Card}" Padding="20,18">

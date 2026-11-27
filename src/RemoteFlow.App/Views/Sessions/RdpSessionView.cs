@@ -83,6 +83,7 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
 
         _connectStarted = true;
         _connectCts = new CancellationTokenSource();
+        UpdateHostVisibility(_session.State);
 
         ApplyOpaqueSurface();
         if (ThemeService.Instance is { } theme)
@@ -111,8 +112,30 @@ public sealed partial class RdpSessionView : ContentControl, IDisposable
         ScheduleDisplayUpdate();
     }
 
+    /// <summary>
+    /// 连接阶段隐藏原生控件：ActiveX 窗口总在 WPF 内容之上（airspace），连上之前它只画一块白底，
+    /// 会盖住会话页的「正在连接」提示层。用 Hidden 而不是 Collapsed：保留布局尺寸，分辨率计算不受影响；
+    /// 控件句柄仍在，连接照常进行。自动重连期间控件自己画重连界面，保持显示。
+    /// </summary>
+    private void UpdateHostVisibility(ConnectionState state)
+    {
+        var visibility = state is ConnectionState.Idle or ConnectionState.Connecting ? Visibility.Hidden : Visibility.Visible;
+        if (_host.Visibility != visibility)
+        {
+            _host.Visibility = visibility;
+        }
+    }
+
     private void OnSessionStateChanged(object? sender, SessionStateChangedEventArgs e)
     {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (!_disposed)
+            {
+                UpdateHostVisibility(e.NewState);
+            }
+        });
+
         // 初始 SizeChanged 可能早于登录完成；之前的更新会被会话忽略，必须在登录/自动重连后补发。
         if (e.NewState == ConnectionState.Connected)
         {

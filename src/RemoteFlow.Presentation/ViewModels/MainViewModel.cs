@@ -447,10 +447,32 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         RequestPageReload(value);
     }
 
-    /// <summary>状态栏文案。</summary>
-    public string SessionStatusText => _sessions.ConnectedSessionCount == 0
-        ? "无活动会话"
-        : $"已连接 {_sessions.ConnectedSessionCount} 个会话";
+    /// <summary>
+    /// 状态栏文案。按标签里的会话计：开着会话却都没连上时，不能写「无活动会话」（与标签角标矛盾）。
+    /// </summary>
+    public string SessionStatusText => DescribeSessions(Tabs.OfType<SessionTabViewModel>().Select(t => t.Session.State).ToList());
+
+    public static string DescribeSessions(IReadOnlyList<ConnectionState> states)
+    {
+        if (states.Count == 0)
+        {
+            return "无会话";
+        }
+
+        var connected = states.Count(s => s == ConnectionState.Connected);
+        if (connected == states.Count)
+        {
+            return $"已连接 {connected} 个会话";
+        }
+
+        var parts = new List<string> { $"{states.Count} 个会话" };
+        if (connected > 0) parts.Add($"{connected} 个已连接");
+        var connecting = states.Count(s => s is ConnectionState.Idle or ConnectionState.Connecting or ConnectionState.Reconnecting);
+        if (connecting > 0) parts.Add($"{connecting} 个连接中");
+        var interrupted = states.Count(s => s is ConnectionState.Failed or ConnectionState.Disconnected);
+        if (interrupted > 0) parts.Add($"{interrupted} 个已中断");
+        return string.Join(" · ", parts);
+    }
 
     /// <summary>会话状态圆点的语义色键：有已连接会话时用「已连接」蓝（与列表一致），否则用中性灰。</summary>
     public string SessionStatusBrushKey => _sessions.ConnectedSessionCount == 0

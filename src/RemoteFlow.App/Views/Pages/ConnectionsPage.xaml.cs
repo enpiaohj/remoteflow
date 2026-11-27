@@ -55,14 +55,15 @@ public partial class ConnectionsPage : UserControl
 
     // ── 自适应列 ────────────────────────────────────────────────
     // 表格列宽由内容决定，列表变窄时右侧的状态与操作会被挤出可视区。按列表实际宽度决定显示哪些列：
-    // 名称、状态、操作始终保留；其余按优先级（协议 → 地址 → 最近连接 → 分组 → 标签）依次加入。
-    // 阈值按各列在常见内容下的宽度（含 28 的列间距）累加估算。
+    // 名称、状态、操作始终保留；其余按优先级（地址 → 协议 → 最近连接 → 分组 → 标签）依次加入。
+    // 地址排第一：设备图标已能看出类型，地址却没有别处可看。
+    // 阈值按各列在常见内容下的宽度（含 28 的列间距）累加估算，并经 1024 / 1600 / 1920 宽窗口截图核对。
 
     /// <summary>(资源键前缀, 显示该列需要的最小列表宽度, 列最小宽度)</summary>
     private static readonly (string Key, double Threshold, double MinWidth)[] AdaptiveColumns =
     [
-        ("Proto", 600, 42),
-        ("Host", 800, 100),
+        ("Host", 680, 100),
+        ("Proto", 820, 42),
         ("Recent", 890, 70),
         ("Group", 1060, 72),
         ("Tags", 1260, 48),
@@ -79,8 +80,17 @@ public partial class ConnectionsPage : UserControl
     internal static IReadOnlyList<string> VisibleAdaptiveColumns(double listWidth)
         => AdaptiveColumns.Where(c => listWidth >= c.Threshold).Select(c => c.Key).ToList();
 
+    /// <summary>列表窄于此值时缩短名称文字，给状态与操作列留出位置。</summary>
+    private const double NarrowNameThreshold = 560;
+
     private void ApplyColumnLayout(double listWidth)
     {
+        var nameMax = listWidth < NarrowNameThreshold ? 110d : 210d;
+        if (!Equals(Resources["ConnCol.NameMax"], nameMax))
+        {
+            Resources["ConnCol.NameMax"] = nameMax;
+        }
+
         foreach (var (key, threshold, minWidth) in AdaptiveColumns)
         {
             var show = listWidth >= threshold;

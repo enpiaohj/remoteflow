@@ -101,7 +101,10 @@
                                    Text="{Binding Name}"
                                    Style="{StaticResource Text.SectionTitle}"
                                    VerticalAlignment="Center"
+                                   TextWrapping="Wrap"
                                    TextTrimming="CharacterEllipsis"
+                                   MaxHeight="48"
+                                   ToolTip="{Binding Name}"
                                    Margin="12,0,8,0" />
 
                         <Button Grid.Column="2"
@@ -124,7 +127,7 @@
                             </Button.Style>
                         </Button>
 
-                        <!-- 更多：低频动作（复制地址 / 收藏 / 创建副本）收在名称行右侧，不再占动作行的位置 -->
+                        <!-- 更多：低频动作（创建副本 / 删除）收在名称行右侧，不再占动作行的位置 -->
                         <Button Grid.Column="3"
                                 Style="{StaticResource Button.Icon}"
                                 Width="30" Height="30" Margin="2,0,0,0"

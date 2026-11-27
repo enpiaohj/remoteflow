@@ -112,6 +112,12 @@ public sealed partial class CredentialEditorViewModel : ObservableObject
     /// <summary>校验并生成凭据元数据。校验不通过返回 null。</summary>
     public Credential? Build()
     {
+        // 名称留空时按用户名生成（有域时为「域\用户」）：类型和账号才是必须先想好的。
+        if (string.IsNullOrWhiteSpace(Name) && !string.IsNullOrWhiteSpace(Username))
+        {
+            Name = NeedsDomain && !string.IsNullOrWhiteSpace(Domain) ? $"{Domain.Trim()}\\{Username.Trim()}" : Username.Trim();
+        }
+
         if (string.IsNullOrWhiteSpace(Name))
         {
             ValidationMessage = "请填写凭据名称。";

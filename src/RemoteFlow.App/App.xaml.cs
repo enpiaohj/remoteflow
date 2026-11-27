@@ -79,6 +79,7 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        RemoteFlow.App.Services.AccessibleNames.Register();
 
         // 异常处理必须最先装好，否则启动过程中的失败会以无提示崩溃收场。
         RegisterGlobalExceptionHandlers();
@@ -323,7 +324,9 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IConnectionProvider, SshConnectionProvider>();
         services.AddSingleton<IConnectionProvider, VncConnectionProvider>();
         // 附加会话种类（仅 Windows）：RDP 主机上的 PowerShell 远程会话。
-        services.AddSingleton<RemoteFlow.Protocol.PowerShell.ITrustedHostsWriter, RemoteFlow.Protocol.PowerShell.ElevatedTrustedHostsWriter>();
+        services.AddSingleton<RemoteFlow.Protocol.PowerShell.ElevatedTrustedHostsWriter>();
+        services.AddSingleton<RemoteFlow.Protocol.PowerShell.ITrustedHostsWriter>(sp => sp.GetRequiredService<RemoteFlow.Protocol.PowerShell.ElevatedTrustedHostsWriter>());
+        services.AddSingleton<RemoteFlow.Core.Sessions.IPowerShellTrustedHosts>(sp => sp.GetRequiredService<RemoteFlow.Protocol.PowerShell.ElevatedTrustedHostsWriter>());
         services.AddSingleton<ISessionKindProvider, RemoteFlow.Protocol.PowerShell.PowerShellSessionProvider>();
         services.AddSingleton<IRemotingEnabler, RemoteFlow.Protocol.PowerShell.PowerShellRemotingEnabler>();
 

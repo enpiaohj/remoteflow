@@ -563,7 +563,7 @@ public sealed partial class SshSession : ITerminalSession, IFileTransferSession,
         ErrorCode = code;
         ErrorMessage = ex is ConnectionException connectionException
             ? connectionException.Message
-            : ConnectionException.Describe(code);
+            : (ex is null ? null : SshErrorMapper.DescribeSpecific(ex, code)) ?? ConnectionException.Describe(code);
 
         // 原始异常只进日志用于诊断，不会出现在面向用户的提示中。
         if (ex is not null)

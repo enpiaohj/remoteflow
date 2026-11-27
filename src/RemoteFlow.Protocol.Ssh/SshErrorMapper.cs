@@ -28,9 +28,17 @@ internal static class SshErrorMapper
             SocketException { SocketErrorCode: SocketError.TimedOut } => ConnectionErrorCode.Timeout,
             SocketException => ConnectionErrorCode.NetworkUnreachable,
             SshOperationTimeoutException => ConnectionErrorCode.Timeout,
-            SshConnectionException => ConnectionErrorCode.NetworkUnreachable,
+            // 走到这里时 TCP 已经连上（连不上是 SocketException）：对方随即断开或不是 SSH 服务，
+            // 不能再说「无法连接到目标主机」，否则会把人引去查网络和防火墙。
+            SshConnectionException => ConnectionErrorCode.ProtocolNegotiationFailed,
             SshException => ConnectionErrorCode.ProtocolNegotiationFailed,
             _ => ConnectionErrorCode.Unknown
         };
     }
+
+    /// <summary>需要比错误码的通用说明更具体的提示时返回文案，否则返回 null。</summary>
+    public static string? DescribeSpecific(Exception ex, ConnectionErrorCode code)
+        => ex is SshConnectionException && code == ConnectionErrorCode.ProtocolNegotiationFailed
+            ? "已连上目标端口，但对方随即断开，或这个端口上运行的不是 SSH 服务。请检查端口号、目标的 SSH 服务是否正常，以及对方是否限制了来源地址。"
+            : null;
 }

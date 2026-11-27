@@ -946,7 +946,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     public string StatusHeaderText => SortMode == ConnectionSortMode.Status ? "状态 ↑" : "状态";
 
     /// <summary>状态排序的先后：已有会话与在线在前，离线在后。</summary>
-    internal static int StatusRank(ConnectionItemViewModel item) => item.HasActiveSession ? 0 : item.Presence switch
+    public static int StatusRank(ConnectionItemViewModel item) => item.HasActiveSession ? 0 : item.Presence switch
     {
         PresenceState.Online => 1,
         PresenceState.Probing or PresenceState.Unknown => 2,
@@ -2145,12 +2145,16 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     private void RefreshPresenceCounts()
     {
         OnPropertyChanged(nameof(OnlineCount));
+        OnPropertyChanged(nameof(OfflineCount));
         OnPropertyChanged(nameof(TotalConnectionsDisplay));
         OnPropertyChanged(nameof(WorkbenchSubtitle));
     }
 
     /// <summary>状态栏 / 树徽章的全量计数。</summary>
     public int OnlineCount => _allItems.Count(i => i.IsConnected || i.Presence == PresenceState.Online);
+
+    /// <summary>探测为离线、且没有会话的设备数（尚未探测完的不计入）。</summary>
+    public int OfflineCount => _allItems.Count(i => !i.IsConnected && i.Presence == PresenceState.Offline);
 
     public int TotalConnectionCount => _allItems.Count;
 

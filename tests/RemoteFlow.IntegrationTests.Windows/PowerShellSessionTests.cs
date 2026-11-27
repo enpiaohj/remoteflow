@@ -117,7 +117,10 @@ public sealed class PowerShellSessionTests
         Assert.Equal(ConnectionErrorCode.AuthenticationFailed, failure.Code);
         Assert.Contains("UAC", failure.Message, StringComparison.Ordinal);
         Assert.Contains("用户名和密码", failure.Message, StringComparison.Ordinal);
-        Assert.Contains("Remote Management Users", failure.Message, StringComparison.Ordinal);
+        // 默认只显示结论；长说明放在折叠的原因说明里。
+        Assert.True(failure.Message.Length < 60, failure.Message);
+        Assert.Contains("Remote Management Users", failure.Intro, StringComparison.Ordinal);
+        Assert.Contains("内置 Administrator", failure.Intro, StringComparison.Ordinal);
         Assert.DoesNotContain("拒绝访问。", failure.Message, StringComparison.Ordinal); // 原始报错单独放
         Assert.Equal("拒绝访问。", failure.Detail);
         Assert.Equal(2, failure.Commands.Count);

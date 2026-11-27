@@ -1,4 +1,4 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -85,6 +85,7 @@ public partial class MainWindow : Window
 
         // 会话工具条的按钮与 F11 都只改 ViewMode，真正的窗口形态在这里响应。
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        Loaded += (_, _) => UpdateNewTabButtonVisibility();
 
         // 关闭会话是一次打断性的上下文切换（跳到另一个会话或回工作区）——退出全屏
         // 回到常驻条，让用户看清被切到哪。主动切换会话（不涉及移除）则保持全屏。
@@ -322,6 +323,14 @@ public partial class MainWindow : Window
                 ApplyViewMode(_viewModel.ViewMode);
                 break;
 
+            case nameof(MainViewModel.CurrentPage):
+                UpdateNewTabButtonVisibility();
+                // 侧栏换页时选中的标签不变，变的是标签里的页面内容：同样要刷新自动化树。
+                Dispatcher.BeginInvoke(
+                    RefreshContentAutomationTree,
+                    System.Windows.Threading.DispatcherPriority.Background);
+                break;
+
             case nameof(MainViewModel.SelectedTab):
                 // 新建 / 右键 / Ctrl+Tab / 关闭回退都可能选中视口外的标签。
                 // 等容器生成和布局完成后再请求 BringIntoView，原生滚动条保持隐藏，
@@ -329,7 +338,54 @@ public partial class MainWindow : Window
                 Dispatcher.BeginInvoke(
                     EnsureSelectedTabVisible,
                     System.Windows.Threading.DispatcherPriority.Loaded);
+                Dispatcher.BeginInvoke(
+                    RefreshContentAutomationTree,
+                    System.Windows.Threading.DispatcherPriority.Background);
+                UpdateNewTabButtonVisibility();
                 break;
+        }
+    }
+
+    /// <summary>
+    /// 标题栏「+」与页面自己的「新建连接 / 新建凭据」是同一件事：停在这两个页面时只留页面上的主按钮，
+    /// 其余场景（会话、首页、设置等）仍由「+」提供新建入口。
+    /// </summary>
+    private void UpdateNewTabButtonVisibility()
+    {
+        var pageHasOwnButton = _viewModel.SelectedTab is PageTabViewModel
+                               && _viewModel.CurrentPage is NavigationPage.Connections or NavigationPage.Favorites
+                                   or NavigationPage.Recent or NavigationPage.Credentials;
+        NewTabButton.Visibility = pageHasOwnButton ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>
+    /// 内容区的页面 / 会话一直保留，靠容器可见性切换。WPF 不会因可见性变化刷新自动化树，
+    /// 读屏软件和界面自动化于是看不到新显示的页面（切到设置后整页找不到控件）。切换后重建这一子树。
+    /// </summary>
+    private void RefreshContentAutomationTree()
+    {
+        var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(ContentHost);
+        if (peer is null)
+        {
+            return; // 没有自动化客户端在读：无需处理，首次读取时会现建
+        }
+
+        ResetSubtree(peer, depth: 0);
+    }
+
+    /// <summary>页面根元素在内容区下方第三、四层：往下重置几层缓存，再往下由各层按需重建。</summary>
+    private static void ResetSubtree(System.Windows.Automation.Peers.AutomationPeer peer, int depth)
+    {
+        peer.ResetChildrenCache();
+        peer.InvalidatePeer();
+        if (depth >= 4)
+        {
+            return;
+        }
+
+        foreach (var child in peer.GetChildren() ?? [])
+        {
+            ResetSubtree(child, depth + 1);
         }
     }
 

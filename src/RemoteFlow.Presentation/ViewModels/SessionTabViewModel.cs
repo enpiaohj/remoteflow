@@ -135,6 +135,15 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
 
     public bool HasCommandHints => CommandHints.Count > 0;
 
+    /// <summary>处理办法前的原因说明（默认折叠）。</summary>
+    public string GuidanceIntro
+        => IsInterrupted && Session is ISessionGuidanceSource guidance ? guidance.GuidanceIntro ?? string.Empty : string.Empty;
+
+    public bool HasGuidanceIntro => GuidanceIntro.Length > 0;
+
+    /// <summary>折叠区标题：写明有几种办法，展开前就知道里面有什么。</summary>
+    public string GuidanceHeader => CommandHints.Count > 1 ? $"查看处理办法（{CommandHints.Count} 种）" : "查看处理办法";
+
     /// <summary>系统返回的原始报错，默认折叠。</summary>
     public string ErrorDetail
         => IsInterrupted && Session is ISessionGuidanceSource guidance ? guidance.ErrorDetail ?? string.Empty : string.Empty;
@@ -147,6 +156,11 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         var text = new System.Text.StringBuilder()
             .AppendLine($"{Title}（{ProtocolName}，{Profile.Host}）— {StateText}")
             .AppendLine(InterruptionMessage);
+        if (HasGuidanceIntro)
+        {
+            text.AppendLine().AppendLine(GuidanceIntro);
+        }
+
         foreach (var hint in CommandHints)
         {
             text.AppendLine().AppendLine(hint.Title).AppendLine(hint.Command);
@@ -595,6 +609,9 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         OnPropertyChanged(nameof(CanEnableRemoting));
         OnPropertyChanged(nameof(CommandHints));
         OnPropertyChanged(nameof(HasCommandHints));
+        OnPropertyChanged(nameof(GuidanceIntro));
+        OnPropertyChanged(nameof(HasGuidanceIntro));
+        OnPropertyChanged(nameof(GuidanceHeader));
         OnPropertyChanged(nameof(ErrorDetail));
         OnPropertyChanged(nameof(HasErrorDetail));
 

@@ -67,8 +67,9 @@ public sealed class ConnectionCredentialDialogTests
                 // 账户名固定显示为文字，不提供可编辑的用户名框。
                 var account = Find<TextBlock>(dialog, "AccountText");
                 Assert.Equal(Visibility.Visible, account.Visibility);
-                Assert.Equal("admin", account.Text);
-                Assert.Equal("CORP\\admin", Find<TextBlock>(dialog, "FullAccountText").Text);
+                // 账号只在密码框上方带标签显示一次（之前上下各一遍、都没有标签）。
+                Assert.Equal("用户名：CORP\\admin", account.Text);
+                Assert.Equal(Visibility.Collapsed, Find<TextBlock>(dialog, "FullAccountText").Visibility);
                 Assert.Equal(Visibility.Collapsed, Find<StackPanel>(dialog, "UsernamePanel").Visibility);
                 dialog.Close();
             }

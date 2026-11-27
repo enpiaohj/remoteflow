@@ -537,6 +537,9 @@ public sealed class HistoryItemViewModel(ConnectionHistoryEntry entry)
     /// <summary>「最近活动」列表里的一行描述。</summary>
     public string ActivityText => $"连接到 {entry.ConnectionName}";
 
+    /// <summary>列表项的无障碍名称。</summary>
+    public override string ToString() => ActivityText;
+
     public string Host => entry.Host;
 
     /// <summary>主机 + 协议，用于活动列表的副标题。</summary>

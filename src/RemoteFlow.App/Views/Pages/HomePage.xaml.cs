@@ -113,6 +113,18 @@ public partial class HomePage : UserControl
     /// 最近连接 / 收藏行右键菜单的统一入口：把动作名（MenuItem.Tag）与所在行一起抛给
     /// HomePageViewModel.ConnectionActionRequested，由 MainViewModel 桥接到「我的连接」既有命令。
     /// </summary>
+    /// <summary>首页「在线 / 离线」指标：跳到工作台并带上对应的状态筛选。</summary>
+    private void OnPresenceKpiClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string tag }
+            && Window.GetWindow(this)?.DataContext is MainViewModel main
+            && Enum.TryParse<PresenceFilterOption>(tag, out var filter))
+        {
+            main.ConnectionsPage.PresenceFilter = filter;
+            main.NavigateTo(NavigationPage.Connections);
+        }
+    }
+
     private void OnRowActionClick(object sender, RoutedEventArgs e)
     {
         if (sender is MenuItem { Tag: string action } menu

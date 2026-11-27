@@ -275,7 +275,7 @@
                 <!-- 分区标题已是「最近活动」，行内直接显示连接名，不再逐行重复「连接到」 -->
                 <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding ConnectionName}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{Binding HostProtocolLine}" Style="{StaticResource Text.Caption}" Margin="0,1,0,0" />
+                    <TextBlock Text="{Binding HostProtocolLine}" Style="{StaticResource Text.Caption}" FontFamily="{StaticResource MonoFont}" Margin="0,1,0,0" />
                 </StackPanel>
 
                 <!-- 成功是常态不标注；失败 / 取消用语义色胶囊明确写出，比图标角落的小点更易发现 -->
@@ -320,7 +320,7 @@
                                Foreground="{DynamicResource Text.Tertiary}" Margin="0,3,0,0" />
                 </StackPanel>
 
-                <!-- 指标块：连接总数 / 已连接会话 / 收藏数。已连接会话为 0 时数字用次级灰，不抢眼 -->
+                <!-- 指标块：在线 / 离线 / 已连接会话（收藏数在下方「收藏」卡片里已能看到）。已连接会话为 0 时数字用次级灰 -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
                     <StackPanel.Resources>
                         <Style x:Key="Home.KpiCard" TargetType="Border">
@@ -332,8 +332,51 @@
                             <Setter Property="MinWidth" Value="104" />
                             <Setter Property="Margin" Value="10,0,0,0" />
                         </Style>
+                        <!-- 可点击的指标块：外观与 KpiCard 一致，悬停换底色 -->
+                        <Style x:Key="Home.KpiButton" TargetType="Button">
+                            <Setter Property="Cursor" Value="Hand" />
+                            <Setter Property="Margin" Value="10,0,0,0" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="Card" Background="{DynamicResource Bg.Layer}" BorderBrush="{DynamicResource Stroke.Subtle}"
+                                                BorderThickness="1" CornerRadius="{StaticResource Radius.Large}" Padding="16,9" MinWidth="104">
+                                            <ContentPresenter />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Card" Property="Background" Value="{DynamicResource Bg.Hover}" />
+                                            </Trigger>
+                                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Brand.Default}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
                     </StackPanel.Resources>
-                    <Border Style="{StaticResource Home.KpiCard}">
+                    <!-- 在线 / 离线：点击跳到工作台并带上对应的状态筛选。探测关闭时退回显示连接总数 -->
+                    <Button Style="{StaticResource Home.KpiButton}" Tag="Online" Click="OnPresenceKpiClick"
+                            ToolTip="在工作台查看在线设备"
+                            Visibility="{Binding DataContext.ConnectionsPage.PresenceProbeEnabled, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <TextBlock Text="在线" Style="{StaticResource Text.Caption}" />
+                            <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource Status.Success}"
+                                       Text="{Binding DataContext.ConnectionsPage.OnlineCount, RelativeSource={RelativeSource AncestorType=Window}, Mode=OneWay}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Home.KpiButton}" Tag="Offline" Click="OnPresenceKpiClick"
+                            ToolTip="在工作台查看离线设备"
+                            Visibility="{Binding DataContext.ConnectionsPage.PresenceProbeEnabled, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <TextBlock Text="离线" Style="{StaticResource Text.Caption}" />
+                            <TextBlock FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource Text.Secondary}"
+                                       Text="{Binding DataContext.ConnectionsPage.OfflineCount, RelativeSource={RelativeSource AncestorType=Window}, Mode=OneWay}" />
+                        </StackPanel>
+                    </Button>
+                    <Border Style="{StaticResource Home.KpiCard}"
+                            Visibility="{Binding DataContext.ConnectionsPage.PresenceProbeEnabled, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource InverseBoolToVisibility}}">
                         <StackPanel>
                             <TextBlock Text="连接" Style="{StaticResource Text.Caption}" />
                             <TextBlock Text="{Binding TotalConnections, Mode=OneWay}" FontSize="22" FontWeight="SemiBold"
@@ -355,13 +398,6 @@
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Home.KpiCard}">
-                        <StackPanel>
-                            <TextBlock Text="收藏" Style="{StaticResource Text.Caption}" />
-                            <TextBlock Text="{Binding FavoriteItems.Count, Mode=OneWay}" FontSize="22" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource Text.Primary}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

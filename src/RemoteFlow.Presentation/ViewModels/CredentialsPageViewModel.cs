@@ -515,6 +515,9 @@ public sealed partial class CredentialItemViewModel(Credential credential, int u
 
     public string Name => Credential.Name;
 
+    /// <summary>列表项的无障碍名称。</summary>
+    public override string ToString() => Name;
+
     public string Username => string.IsNullOrEmpty(Credential.Domain)
         ? Credential.Username
         : $"{Credential.Domain}\\{Credential.Username}";

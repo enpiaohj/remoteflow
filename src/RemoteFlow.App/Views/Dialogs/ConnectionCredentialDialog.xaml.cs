@@ -61,10 +61,10 @@ public partial class ConnectionCredentialDialog : Window
             var full = string.IsNullOrEmpty(_requirement.Domain)
                 ? _requirement.Username
                 : $"{_requirement.Domain}\\{_requirement.Username}";
-            AccountText.Text = _requirement.Username;
+            // 只在密码框上方带标签显示一次（之前上下各显示一遍、都没有标签）；换账号用「更多选项」。
+            AccountText.Text = $"用户名：{full}";
             AccountText.Visibility = Visibility.Visible;
-            FullAccountText.Text = full;
-            FullAccountText.Visibility = Visibility.Visible;
+            FullAccountText.Visibility = Visibility.Collapsed;
             defaultTitle = _requirement.Username;
             defaultSubtitle = full;
         }

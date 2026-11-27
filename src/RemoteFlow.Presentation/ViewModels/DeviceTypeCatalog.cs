@@ -38,13 +38,21 @@ public static class DeviceTypeCatalog
     public static DeviceTypeInfo? Resolve(DeviceType type) =>
         type == DeviceType.Unknown ? null : All.FirstOrDefault(i => i.Type == type);
 
-    /// <summary>未指定设备类型时按协议推断：RDP → Windows 电脑，SSH → Linux 服务器，VNC → macOS 设备。</summary>
+    /// <summary>
+    /// 未指定设备类型时按协议推断：RDP → Windows 电脑，SSH → Linux 服务器，VNC → 通用显示器。
+    /// VNC 不只用于 Mac（也连 Linux 桌面、看板、工控屏），默认画苹果会让人误以为设备是 Mac。
+    /// macOS 端没有这枚图时回落到协议色块。
+    /// </summary>
     public static DeviceTypeInfo InferFromProtocol(ProtocolType protocol) => protocol switch
     {
         ProtocolType.Rdp => Resolve(DeviceType.WindowsPc)!,
         ProtocolType.Ssh => Resolve(DeviceType.Linux)!,
-        _ => Resolve(DeviceType.Mac)!,
+        _ => GenericDisplay,
     };
+
+    /// <summary>VNC 未指定类型时的通用显示器图标（不对应任何可选的设备类型）。</summary>
+    public static DeviceTypeInfo GenericDisplay { get; } =
+        new(DeviceType.Unknown, "显示器", "DeviceIcon.Display", "Protocol.Vnc");
 
     /// <summary>条目的显示文案（编辑器下拉、详情面板）。Unknown 显示「自动（按协议）」。</summary>
     public static string DisplayName(DeviceType type) =>

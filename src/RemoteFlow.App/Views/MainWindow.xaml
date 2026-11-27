@@ -682,6 +682,7 @@
                             Content="{StaticResource Ui.Add}"
                             Click="OnNewTabButtonClick"
                             ToolTip="新建（连接 / 凭据 / 分组 / 虚拟化来源）"
+                            ToolTipService.Placement="Left"
                             AutomationProperties.Name="新建" />
                     <Button Style="{StaticResource CaptionButton}" Content="{StaticResource Ui.WindowMinimize}"
                             Click="OnMinimizeClick" ToolTip="最小化" />
@@ -750,7 +751,7 @@
                         </Border>
 
                         <!-- 画面宿主绑 HostTabs（顺序固定）：标签换位不能让会话画面重建，否则 RDP / 终端 / VNC 会黑屏 -->
-                        <ItemsControl ItemsSource="{Binding HostTabs}"
+                        <ItemsControl x:Name="ContentHost" ItemsSource="{Binding HostTabs}"
                                       HorizontalContentAlignment="Stretch"
                                       VerticalContentAlignment="Stretch">
                             <ItemsControl.ItemsPanel>

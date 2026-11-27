@@ -111,10 +111,30 @@
     <DrawingImage x:Key="DeviceIcon.FileServer">
         <DrawingImage.Drawing>
             <DrawingGroup>
-                <GeometryDrawing Brush="#26002B78" Geometry="M5,19 C5,15 8,12 12,12 H27 L33,18 H53 C57,18 60,21 60,25 V51 C60,56 57,59 52,59 H12 C7,59 4,56 4,51 Z" />
-                <GeometryDrawing Brush="#3C94F2" Geometry="M5,16 C5,12 8,10 12,10 H28 L34,16 H52 C56,16 58,19 58,23 V29 H5 Z" />
-                <GeometryDrawing Brush="{StaticResource DeviceIcon.Blue}" Geometry="M4,24 C4,20 7,18 11,18 H54 C59,18 61,22 60,27 L57,51 C56,55 53,57 49,57 H11 C7,57 5,54 5,50 Z" />
-                <GeometryDrawing Brush="#80D9FF" Geometry="M8,24 C9,21 12,21 16,21 H54 C56,21 57,23 57,25 Z" />
+                <!-- 存储柜：三层硬盘仓 + 指示灯，右下角小文件夹标识共享。不用整只文件夹，避免与分组图标混淆 -->
+                <GeometryDrawing Brush="#26002B78"><GeometryDrawing.Geometry><RectangleGeometry Rect="9,7,44,53" RadiusX="7" RadiusY="7" /></GeometryDrawing.Geometry></GeometryDrawing>
+                <GeometryDrawing Brush="{StaticResource DeviceIcon.Blue}"><GeometryDrawing.Geometry><RectangleGeometry Rect="7,4,44,53" RadiusX="7" RadiusY="7" /></GeometryDrawing.Geometry></GeometryDrawing>
+                <GeometryDrawing Brush="#EAF8FF"><GeometryDrawing.Geometry><RectangleGeometry Rect="12,10,34,11" RadiusX="2.5" RadiusY="2.5" /></GeometryDrawing.Geometry></GeometryDrawing>
+                <GeometryDrawing Brush="#EAF8FF"><GeometryDrawing.Geometry><RectangleGeometry Rect="12,25,34,11" RadiusX="2.5" RadiusY="2.5" /></GeometryDrawing.Geometry></GeometryDrawing>
+                <GeometryDrawing Brush="#EAF8FF"><GeometryDrawing.Geometry><RectangleGeometry Rect="12,40,20,11" RadiusX="2.5" RadiusY="2.5" /></GeometryDrawing.Geometry></GeometryDrawing>
+                <GeometryDrawing Brush="#3DD68C"><GeometryDrawing.Geometry><EllipseGeometry Center="40,15.5" RadiusX="2.2" RadiusY="2.2" /></GeometryDrawing.Geometry></GeometryDrawing>
+                <GeometryDrawing Brush="#3DD68C"><GeometryDrawing.Geometry><EllipseGeometry Center="40,30.5" RadiusX="2.2" RadiusY="2.2" /></GeometryDrawing.Geometry></GeometryDrawing>
+                <GeometryDrawing Brush="#F2B234" Geometry="M36,44 C36,42.3 37.3,41 39,41 H45 L48,44 H57 C58.7,44 60,45.3 60,47 V57 C60,58.7 58.7,60 57,60 H39 C37.3,60 36,58.7 36,57 Z" />
+                <GeometryDrawing Brush="#FFD36B" Geometry="M36,48 H60 V57 C60,58.7 58.7,60 57,60 H39 C37.3,60 36,58.7 36,57 Z" />
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <!-- 通用显示器：VNC 设备未指定类型时使用（VNC 不只连 Mac，也常用于 Linux 桌面、看板、工控屏） -->
+    <DrawingImage x:Key="DeviceIcon.Display">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="#22002A64"><GeometryDrawing.Geometry><RectangleGeometry Rect="5,9,56,38" RadiusX="6" RadiusY="6" /></GeometryDrawing.Geometry></GeometryDrawing>
+                <GeometryDrawing Brush="{StaticResource DeviceIcon.Purple}"><GeometryDrawing.Geometry><RectangleGeometry Rect="3,6,56,38" RadiusX="6" RadiusY="6" /></GeometryDrawing.Geometry></GeometryDrawing>
+                <GeometryDrawing Brush="#F3EEFF"><GeometryDrawing.Geometry><RectangleGeometry Rect="7,10,48,28" RadiusX="2.5" RadiusY="2.5" /></GeometryDrawing.Geometry></GeometryDrawing>
+                <GeometryDrawing Brush="#80FFFFFF" Geometry="M10,13 H30 L14,35 H10 Z" />
+                <GeometryDrawing Brush="{StaticResource DeviceIcon.Purple}" Geometry="M25,44 H37 L39,52 H23 Z" />
+                <GeometryDrawing Brush="{StaticResource DeviceIcon.Purple}"><GeometryDrawing.Geometry><RectangleGeometry Rect="16,51,30,5" RadiusX="2.5" RadiusY="2.5" /></GeometryDrawing.Geometry></GeometryDrawing>
             </DrawingGroup>
         </DrawingImage.Drawing>
     </DrawingImage>
