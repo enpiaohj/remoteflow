@@ -32,6 +32,15 @@ public interface ITerminalSession : IRemoteSession
     void Resize(int columns, int rows, int pixelWidth, int pixelHeight);
 }
 
+/// <summary>连接过程中需要告诉用户在发生什么（例如即将弹出系统确认框）的会话。</summary>
+public interface IConnectNoticeSource
+{
+    /// <summary>当前提示；没有时为空字符串。</summary>
+    string ConnectNotice { get; }
+
+    event EventHandler? ConnectNoticeChanged;
+}
+
 /// <summary>默认会话之外的会话工厂。按 <see cref="Kind"/> 注册，平台不支持时不注册。</summary>
 public interface ISessionKindProvider
 {

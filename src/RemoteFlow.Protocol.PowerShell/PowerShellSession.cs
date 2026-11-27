@@ -1,5 +1,6 @@
 using System.IO.Pipes;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -23,7 +24,7 @@ namespace RemoteFlow.Protocol.PowerShell;
 /// </list>
 /// </para>
 /// </summary>
-public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSession
+public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSession, IConnectNoticeSource
 {
     private static readonly TimeSpan PipeTimeout = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan ResponseTimeout = TimeSpan.FromSeconds(60);
@@ -36,13 +37,21 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
     private NamedPipeServerStream? _channel;
     private int _columns = 120;
     private int _rows = 30;
+    private readonly ITrustedHostsWriter? _trustedHosts;
+    private bool _trustAttempted;
+    private bool _isLocalTarget;
 
-    public PowerShellSession(SessionRequest request, ILogger logger)
+    public PowerShellSession(SessionRequest request, ILogger logger, ITrustedHostsWriter? trustedHosts = null)
     {
         _request = request;
         _credential = request.Credential;
         _logger = logger;
+        _trustedHosts = trustedHosts;
     }
+
+    public string ConnectNotice { get; private set; } = string.Empty;
+
+    public event EventHandler? ConnectNoticeChanged;
 
     /// <summary>协议沿用主机连接的协议（RDP）；界面按终端呈现，由 <see cref="Kind"/> 与终端接口区分。</summary>
     public override ProtocolType Protocol => _request.Profile.Protocol;
@@ -58,6 +67,29 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
 
     /// <summary>用当前 Windows 身份连本机回环。仅自动化测试使用。</summary>
     internal bool UseLoopbackNetworkAccess { get; init; }
+
+    /// <summary>判断解析出的地址是不是本机。测试可替换。</summary>
+    internal Func<IReadOnlyList<IPAddress>, bool> LocalAddressCheck { get; init; } = IsThisMachine;
+
+    /// <summary>
+    /// 实际交给 WinRM 的计算机名。目标是本机时用 <c>localhost</c>：用本机自己的 IP 连接，
+    /// Windows 会按「不受信任的远程主机」拒绝，而 localhost 不需要信任列表。
+    /// </summary>
+    internal string ConnectionTarget => _isLocalTarget ? "localhost" : Profile.Host;
+
+    internal static bool IsThisMachine(IReadOnlyList<IPAddress> addresses)
+    {
+        if (addresses.Any(IPAddress.IsLoopback))
+        {
+            return true;
+        }
+
+        var own = NetworkInterface.GetAllNetworkInterfaces()
+            .SelectMany(nic => nic.GetIPProperties().UnicastAddresses)
+            .Select(unicast => unicast.Address)
+            .ToHashSet();
+        return addresses.Count > 0 && addresses.All(own.Contains);
+    }
 
     /// <summary>伪终端进程号。仅测试使用。</summary>
     internal int? ProcessId => _terminal?.ProcessId;
@@ -97,7 +129,17 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
         }
         finally
         {
+            SetNotice(string.Empty);
             DisposeCredential();
+        }
+    }
+
+    private void SetNotice(string notice)
+    {
+        if (ConnectNotice != notice)
+        {
+            ConnectNotice = notice;
+            ConnectNoticeChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -118,6 +160,8 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
                 ConnectionException.Describe(ConnectionErrorCode.HostNotFound), ex);
         }
 
+        _isLocalTarget = LocalAddressCheck(addresses);
+
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(8));
         try
@@ -128,6 +172,14 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
         catch (Exception ex) when (ex is SocketException or ArgumentException
                                    || (ex is OperationCanceledException && !token.IsCancellationRequested))
         {
+            if (_isLocalTarget)
+            {
+                // 与远程目标分开：经 WMI「远程启用」不适用于本机。
+                throw new ConnectionException(ConnectionErrorCode.ComponentUnavailable,
+                    $"这是本机，但本机尚未启用 PowerShell 远程（WinRM 端口 {Port} 不通）。"
+                    + "请以管理员身份运行 PowerShell 执行 Enable-PSRemoting，然后重新连接。", ex);
+            }
+
             throw new ConnectionException(ConnectionErrorCode.NetworkUnreachable,
                 $"无法连接到 {Profile.Host} 的 WinRM 端口 {Port}。请确认目标已启用 PowerShell 远程"
                 + "（在目标上以管理员运行 Enable-PSRemoting），且防火墙放行该端口。"
@@ -165,12 +217,55 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
 
         if (!connected)
         {
-            var (code, message) = PowerShellErrorMapper.Map(errorId, errorCode, detail, Profile.Host);
             _logger.LogWarning("PowerShell 会话 {SessionId} 连接失败：{ErrorId} / {WinRmCode}", SessionId, errorId, errorCode);
+
+            if (ShouldTrust(errorId, errorCode))
+            {
+                await TrustHostAsync(token);
+
+                // 凭据已随第一次尝试发出并清除，信任后从请求方重新取一份。
+                terminal.Dispose();
+                channel.Dispose();
+                await StartRemoteSessionAsync(token);
+                return;
+            }
+
+            var (code, message) = PowerShellErrorMapper.Map(errorId, errorCode, detail, Profile.Host);
+            if (_isLocalTarget && code == ConnectionErrorCode.AuthenticationFailed)
+            {
+                message = "连接本机被拒绝。开启 UAC 时，Windows 会限制本地账户这样登录（内置 Administrator 除外）。\n" + message;
+            }
+
             throw new ConnectionException(code, message);
         }
 
         SetState(ConnectionState.Connected);
+    }
+
+    /// <summary>只在 Windows 明确以「对方不受信任」拒绝时处理，且每次连接最多一次。</summary>
+    private bool ShouldTrust(string errorId, int errorCode)
+        => _trustedHosts is not null && !_trustAttempted && !_isLocalTarget
+           && PowerShellErrorMapper.IsNotTrusted(errorId, errorCode)
+           && ElevatedTrustedHostsWriter.IsSafeHost(Profile.Host);
+
+    private async Task TrustHostAsync(CancellationToken token)
+    {
+        _trustAttempted = true;
+        SetNotice($"首次连接这台电脑：正在把 {Profile.Host} 加入本机的 PowerShell 信任列表。\n"
+                  + "请在 Windows 管理员确认框中选择“是”（每台电脑只需一次）。");
+
+        switch (await _trustedHosts!.AddAsync(Profile.Host, token))
+        {
+            case HostTrustOutcome.Declined:
+                throw new ConnectionException(ConnectionErrorCode.Cancelled,
+                    $"没有把 {Profile.Host} 加入本机的信任列表（管理员确认框被取消），无法用 PowerShell 连接它。"
+                    + "点“重新连接”可以再次确认。");
+            case HostTrustOutcome.Failed:
+                var (code, message) = PowerShellErrorMapper.Map("ServerNotTrusted", 0, "自动添加没有成功", Profile.Host);
+                throw new ConnectionException(code, message);
+        }
+
+        SetNotice(string.Empty);
     }
 
     private static async Task WaitOrProcessExitAsync(Task work, ConPtyProcess terminal, TimeSpan timeout, CancellationToken token)
@@ -225,19 +320,12 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
 
     private async Task SendParametersAsync(Stream channel, CancellationToken token)
     {
-        try
+        await PowerShellPipe.SendAsync(channel, writer =>
         {
-            await PowerShellPipe.SendAsync(channel, writer =>
-            {
-                writer.Write(Profile.Host);
-                writer.Write(ComposeUserName(_credential, Profile.Rdp.Domain));
-                writer.Write(UseLoopbackNetworkAccess);
-            }, _credential?.Password, token);
-        }
-        finally
-        {
-            DisposeCredential();
-        }
+            writer.Write(ConnectionTarget);
+            writer.Write(ComposeUserName(_credential, Profile.Rdp.Domain));
+            writer.Write(UseLoopbackNetworkAccess);
+        }, _credential?.Password, token);
     }
 
     private static Task<(bool Connected, string ErrorId, int ErrorCode, string Detail)> ReadResponseAsync(
@@ -254,7 +342,8 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
     {
         await terminal.Exited;
 
-        if (IsClosing || State != ConnectionState.Connected)
+        // 信任主机后会换一个新进程重连，旧进程的退出与当前会话无关。
+        if (IsClosing || State != ConnectionState.Connected || !ReferenceEquals(terminal, _terminal))
         {
             return; // 主动关闭，或连接阶段（由 ConnectAsync 给出具体原因）
         }

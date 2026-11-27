@@ -87,6 +87,14 @@
                         <Run Text="  " />
                         <Run Text="{Binding Profile.Host, Mode=OneWay}" />
                     </TextBlock>
+                    <TextBlock Text="{Binding ConnectNotice}"
+                               Style="{StaticResource Text.Caption}"
+                               Foreground="#E6E6E6"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               MaxWidth="420"
+                               Margin="0,14,0,0"
+                               Visibility="{Binding HasConnectNotice, Converter={StaticResource BoolToVisibility}}" />
                     <ProgressBar IsIndeterminate="True"
                                  Width="180" Height="2"
                                  Margin="0,18,0,0"

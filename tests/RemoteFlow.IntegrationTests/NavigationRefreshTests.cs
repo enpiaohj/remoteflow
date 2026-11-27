@@ -1045,6 +1045,37 @@ public sealed class NavigationRefreshTests : IDisposable
         public void Resize(int columns, int rows, int pixelWidth, int pixelHeight) { }
     }
 
+    private sealed class NoticeSession(ConnectionProfile profile)
+        : KindSession(profile, SessionKind.PowerShell), IConnectNoticeSource
+    {
+        public string ConnectNotice { get; private set; } = string.Empty;
+        public event EventHandler? ConnectNoticeChanged;
+        public bool HasSubscribers => ConnectNoticeChanged is not null;
+
+        public void Announce(string text)
+        {
+            ConnectNotice = text;
+            ConnectNoticeChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    [Fact]
+    public void 连接过程提示显示在标签上_关闭后解除订阅()
+    {
+        var session = new NoticeSession(WindowsHost());
+        var tab = new SessionTabViewModel(session, _ => Task.CompletedTask, _ => Task.CompletedTask,
+            SynchronousUiDispatcher.Instance, new ManualTimerFactory());
+
+        session.Announce("请在管理员确认框中选择“是”");
+        Assert.True(tab.HasConnectNotice);
+        Assert.Equal("请在管理员确认框中选择“是”", tab.ConnectNotice);
+        session.Announce(string.Empty);
+        Assert.False(tab.HasConnectNotice);
+
+        tab.Dispose();
+        Assert.False(session.HasSubscribers);
+    }
+
     private ConnectionProfile WindowsHost()
     {
         var profile = new ConnectionProfile { Name = "Windows 主机", Host = "win.example.test", Port = 3389, Protocol = ProtocolType.Rdp };

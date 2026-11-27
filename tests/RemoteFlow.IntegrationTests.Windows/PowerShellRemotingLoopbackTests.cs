@@ -1,3 +1,4 @@
+using System.Net.NetworkInformation;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
@@ -178,6 +179,87 @@ public sealed class PowerShellRemotingLoopbackTests
         Assert.Equal(ConnectionErrorCode.AuthenticationFailed, session.ErrorCode);
         Assert.DoesNotContain("???", session.ErrorMessage, StringComparison.Ordinal); // 中文错误详情不乱码
         lock (output) Assert.DoesNotMatch(@"PS [A-Z]:\\", output.ToString());
+    }
+
+    /// <summary>
+    /// 用本机网卡 IP 并强制当作远程目标，Windows 会给出与连其他机器相同的「不受信任」拒绝。
+    /// 信任写入器是假的，不改任何系统设置。
+    /// </summary>
+    [PsRemotingTheory]
+    [InlineData(HostTrustOutcome.Trusted, ConnectionErrorCode.ProtocolNegotiationFailed)] // 假写入器没有真的添加：重试一次后如实报错
+    [InlineData(HostTrustOutcome.Declined, ConnectionErrorCode.Cancelled)]
+    [InlineData(HostTrustOutcome.Failed, ConnectionErrorCode.ProtocolNegotiationFailed)]
+    public async Task 不受信任时自动请求信任该主机_且只请求一次(HostTrustOutcome outcome, ConnectionErrorCode expected)
+    {
+        var ownAddress = NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n => n.OperationalStatus == OperationalStatus.Up && n.GetIPProperties().GatewayAddresses.Count > 0)
+            .SelectMany(n => n.GetIPProperties().UnicastAddresses)
+            .Select(a => a.Address)
+            .First(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+            .ToString();
+        var writer = new FakeTrustedHosts(outcome);
+        await using var session = new PowerShellSession(
+            new SessionRequest
+            {
+                Profile = new ConnectionProfile { Protocol = ProtocolType.Rdp, Host = ownAddress },
+                Credential = FakeCredential()
+            }, NullLogger.Instance, writer) { LocalAddressCheck = _ => false };
+        AnswerCursorQueries(session);
+        var notices = new List<string>();
+        session.ConnectNoticeChanged += (_, _) => notices.Add(session.ConnectNotice);
+
+        await session.ConnectAsync();
+
+        Assert.Equal(ownAddress, Assert.Single(writer.Requested));
+        Assert.True(session.ErrorCode == expected, $"{session.ErrorCode}: {session.ErrorMessage}");
+        Assert.Contains("管理员确认框", notices[0], StringComparison.Ordinal);
+        Assert.Equal(string.Empty, notices[^1]);
+    }
+
+    [PsRemotingFact]
+    public async Task 用本机网卡IP连接时自动走localhost_不需要信任列表()
+    {
+        var ownAddress = System.Net.Dns.GetHostAddresses(System.Net.Dns.GetHostName())
+            .First(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).ToString();
+        var writer = new FakeTrustedHosts(HostTrustOutcome.Failed);
+        await using var session = new PowerShellSession(
+            new SessionRequest
+            {
+                Profile = new ConnectionProfile { Protocol = ProtocolType.Rdp, Host = ownAddress },
+                Credential = FakeCredential()
+            }, NullLogger.Instance, writer);
+        AnswerCursorQueries(session);
+
+        await session.ConnectAsync();
+
+        // 越过了「不受信任」，走到账号校验（账号是假的，所以认证失败）。
+        Assert.Equal("localhost", session.ConnectionTarget);
+        Assert.True(session.ErrorCode == ConnectionErrorCode.AuthenticationFailed, $"{session.ErrorCode}: {session.ErrorMessage}");
+        Assert.Empty(writer.Requested);
+    }
+
+    private static ResolvedCredential FakeCredential() => new()
+    {
+        Type = CredentialType.LocalPassword,
+        Username = ".\\rf-test-no-such-user",
+        Password = "not-a-real-password-" + Guid.NewGuid()
+    };
+
+    private static void AnswerCursorQueries(PowerShellSession session)
+        => session.DataReceived += (_, data) =>
+        {
+            if (Encoding.UTF8.GetString(data).Contains("\x1b[6n")) session.SendInput("\x1b[1;1R");
+        };
+
+    private sealed class FakeTrustedHosts(HostTrustOutcome outcome) : ITrustedHostsWriter
+    {
+        public List<string> Requested { get; } = [];
+
+        public Task<HostTrustOutcome> AddAsync(string host, CancellationToken ct = default)
+        {
+            Requested.Add(host);
+            return Task.FromResult(outcome);
+        }
     }
 
     private static bool IsRemoteAlive(int id)

@@ -323,6 +323,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IConnectionProvider, SshConnectionProvider>();
         services.AddSingleton<IConnectionProvider, VncConnectionProvider>();
         // 附加会话种类（仅 Windows）：RDP 主机上的 PowerShell 远程会话。
+        services.AddSingleton<RemoteFlow.Protocol.PowerShell.ITrustedHostsWriter, RemoteFlow.Protocol.PowerShell.ElevatedTrustedHostsWriter>();
         services.AddSingleton<ISessionKindProvider, RemoteFlow.Protocol.PowerShell.PowerShellSessionProvider>();
         services.AddSingleton<IRemotingEnabler, RemoteFlow.Protocol.PowerShell.PowerShellRemotingEnabler>();
 

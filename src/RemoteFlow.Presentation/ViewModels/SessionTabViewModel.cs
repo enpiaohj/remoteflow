@@ -87,6 +87,11 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         }
 
         session.StateChanged += OnSessionStateChanged;
+        if (session is IConnectNoticeSource noticeSource)
+        {
+            noticeSource.ConnectNoticeChanged += OnConnectNoticeChanged;
+        }
+
         UpdateStateDisplay(session.State, session.ErrorCode, session.ErrorMessage);
 
         // VNC 会话打开时按该连接记住的档位初始化（RDP 不读此项）。
@@ -106,6 +111,23 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
                                      && Session.Kind == SessionKind.PowerShell
                                      && Session.State == ConnectionState.Failed
                                      && Session.ErrorCode == ConnectionErrorCode.NetworkUnreachable;
+
+    /// <summary>连接过程中的说明（例如即将弹出系统确认框），显示在连接中遮罩上。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasConnectNotice))]
+    private string _connectNotice = string.Empty;
+
+    public bool HasConnectNotice => ConnectNotice.Length > 0;
+
+    private void OnConnectNoticeChanged(object? sender, EventArgs e)
+    {
+        if (_ui.RequeueIfNeeded(() => OnConnectNoticeChanged(sender, e)))
+        {
+            return;
+        }
+
+        ConnectNotice = ((IConnectNoticeSource)sender!).ConnectNotice;
+    }
 
     /// <summary>远程启用过程中的进度说明；空表示没有在进行。</summary>
     [ObservableProperty]
@@ -615,6 +637,10 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
 
         _disposed = true;
         Session.StateChanged -= OnSessionStateChanged;
+        if (Session is IConnectNoticeSource noticeSource)
+        {
+            noticeSource.ConnectNoticeChanged -= OnConnectNoticeChanged;
+        }
         Quality.PropertyChanged -= OnQualityPropertyChanged;
         Quality.Dispose();
         FileTransfer?.Dispose();

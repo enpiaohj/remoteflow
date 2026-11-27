@@ -25,7 +25,7 @@ internal static partial class PowerShellErrorMapper
         }
 
         // 调用前已确认主机名能解析，因此走到这里是认证方式的限制，而不是名字写错。
-        if (code == NotTrusted || errorId.Contains("ServerNotTrusted", StringComparison.OrdinalIgnoreCase))
+        if (IsNotTrusted(errorId, code))
         {
             return (ConnectionErrorCode.ProtocolNegotiationFailed, NotTrustedMessage(host, detail));
         }
@@ -40,6 +40,9 @@ internal static partial class PowerShellErrorMapper
             string.IsNullOrWhiteSpace(detail) ? ConnectionException.Describe(ConnectionErrorCode.Unknown) : $"PowerShell 远程连接失败：{detail}");
     }
 
+    public static bool IsNotTrusted(string errorId, int code)
+        => code == NotTrusted || errorId.Contains("ServerNotTrusted", StringComparison.OrdinalIgnoreCase);
+
     private static string NotTrustedMessage(string host, string detail)
     {
         var message = "用 IP 地址或非域环境连接时，Windows 要求目标启用 HTTPS，或把它加入本机的 TrustedHosts"
@@ -50,7 +53,7 @@ internal static partial class PowerShellErrorMapper
         {
             message += "\n如确认目标可信，可在本机以管理员身份运行 PowerShell 执行：\n"
                        + $"Set-Item WSMan:\\localhost\\Client\\TrustedHosts -Value '{host}' -Concatenate\n"
-                       + "注意：该设置影响本机所有用户，且列表中的主机不会被验证身份。RemoteFlow 不会替你修改它。";
+                       + "注意：该设置影响本机所有用户，且列表中的主机不会被验证身份。";
         }
 
         return $"{message}\n详细信息：{detail}";

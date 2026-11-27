@@ -5,7 +5,8 @@ using RemoteFlow.Core.Sessions;
 namespace RemoteFlow.Protocol.PowerShell;
 
 /// <summary>在 Windows 主机（RDP 连接）上开 PowerShell 远程会话。沿用该连接的主机地址与凭据。</summary>
-public sealed class PowerShellSessionProvider(ILoggerFactory loggerFactory) : ISessionKindProvider
+public sealed class PowerShellSessionProvider(ILoggerFactory loggerFactory, ITrustedHostsWriter? trustedHosts = null)
+    : ISessionKindProvider
 {
     public SessionKind Kind => SessionKind.PowerShell;
 
@@ -32,5 +33,5 @@ public sealed class PowerShellSessionProvider(ILoggerFactory loggerFactory) : IS
     }
 
     public IRemoteSession CreateSession(SessionRequest request)
-        => new PowerShellSession(request, loggerFactory.CreateLogger<PowerShellSession>());
+        => new PowerShellSession(request, loggerFactory.CreateLogger<PowerShellSession>(), trustedHosts);
 }

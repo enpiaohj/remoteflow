@@ -119,7 +119,51 @@ public sealed class PowerShellSessionTests
         Assert.Equal(ConnectionErrorCode.ProtocolNegotiationFailed, code);
         Assert.Contains("-Value '192.0.2.10' -Concatenate", message, StringComparison.Ordinal);
         Assert.Contains("不会被验证身份", message, StringComparison.Ordinal);
-        Assert.Contains("不会替你修改", message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("192.0.2.10", true)]
+    [InlineData("srv01.corp.example.test", true)]
+    [InlineData("[2001:db8::1]", true)]
+    [InlineData("*", false)]
+    [InlineData("192.0.2.*", false)]
+    [InlineData("a,b", false)]
+    [InlineData("x'; Start-Process calc; '", false)]
+    [InlineData("host$(calc)", false)]
+    [InlineData("a\r\nb", false)]
+    [InlineData("", false)]
+    public void 提权脚本只接受单个主机地址(string host, bool accepted)
+    {
+        Assert.Equal(accepted, ElevatedTrustedHostsWriter.IsSafeHost(host));
+        if (accepted)
+        {
+            var script = ElevatedTrustedHostsWriter.BuildScript(host);
+            Assert.Contains($"$name = '{host}'", script, StringComparison.Ordinal);
+            // 只追加，从不覆盖原有条目；临时启动的服务要停回去。
+            Assert.Contains("-Value $name -Concatenate -Force", script, StringComparison.Ordinal);
+            Assert.Contains("if ($started) { Stop-Service WinRM }", script, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Throws<ArgumentException>(() => ElevatedTrustedHostsWriter.BuildScript(host));
+        }
+    }
+
+    [Fact]
+    public void 本机地址识别_回环与本机网卡地址算本机_其他不算()
+    {
+        Assert.True(PowerShellSession.IsThisMachine([System.Net.IPAddress.Loopback]));
+        Assert.True(PowerShellSession.IsThisMachine([System.Net.IPAddress.IPv6Loopback]));
+        Assert.False(PowerShellSession.IsThisMachine([System.Net.IPAddress.Parse("192.0.2.10")]));
+        Assert.False(PowerShellSession.IsThisMachine([]));
+
+        var own = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+            .SelectMany(nic => nic.GetIPProperties().UnicastAddresses).Select(a => a.Address)
+            .FirstOrDefault(a => !System.Net.IPAddress.IsLoopback(a));
+        if (own is not null)
+        {
+            Assert.True(PowerShellSession.IsThisMachine([own]));
+        }
     }
 
     [Theory]
@@ -178,12 +222,31 @@ public sealed class PowerShellSessionTests
         listener.Stop();
         await using var session = new PowerShellSession(
             new SessionRequest { Profile = new ConnectionProfile { Protocol = ProtocolType.Rdp, Host = "127.0.0.1" } },
-            NullLogger.Instance) { Port = closedPort };
+            NullLogger.Instance) { Port = closedPort, LocalAddressCheck = _ => false };
 
         await session.ConnectAsync();
 
         Assert.Equal(ConnectionErrorCode.NetworkUnreachable, session.ErrorCode);
         Assert.Contains("Enable-PSRemoting", session.ErrorMessage, StringComparison.Ordinal);
         Assert.Null(session.ProcessId);
+    }
+
+    [Fact]
+    public async Task 本机未启用远程时单独提示_不提供远程启用()
+    {
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var closedPort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        await using var session = new PowerShellSession(
+            new SessionRequest { Profile = new ConnectionProfile { Protocol = ProtocolType.Rdp, Host = "127.0.0.1" } },
+            NullLogger.Instance) { Port = closedPort };
+
+        await session.ConnectAsync();
+
+        // 错误码不是 NetworkUnreachable：界面据此不显示「远程启用」按钮（WMI 不支持对本机用账号密码）。
+        Assert.Equal(ConnectionErrorCode.ComponentUnavailable, session.ErrorCode);
+        Assert.Contains("这是本机", session.ErrorMessage, StringComparison.Ordinal);
+        Assert.Equal("localhost", session.ConnectionTarget);
     }
 }
