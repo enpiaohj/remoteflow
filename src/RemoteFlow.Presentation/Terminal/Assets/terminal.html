@@ -129,6 +129,9 @@
       margin: 5px 10px;
       background: #e3e3e3;
     }
+    /* Windows 11 终端外观：深色细滚动条（默认的浅色滚动条在黑底上是一条刺眼的白线） */
+    html.rf-wt { color-scheme: dark; }
+    html.rf-wt .xterm .xterm-viewport { scrollbar-color: #4a4a4a #0C0C0C; scrollbar-width: thin; background-color: #0C0C0C !important; }
   </style>
 </head>
 <body>
@@ -677,6 +680,38 @@
         terminal.options.theme = theme;
         document.body.style.background = theme.background;
         document.documentElement.style.background = theme.background;
+      },
+
+      /**
+       * 套用 Windows 11 终端（Windows Terminal）里 PowerShell 的默认外观。数值取自其官方默认配置：
+       * Campbell 配色、Cascadia Mono 12 磅（96 DPI 下 16px）、8px 内边距、竖线光标。
+       * Cascadia Mono 不含中文字形，中文回退到雅黑。
+       */
+      useWindowsTerminalLook() {
+        const campbell = {
+          background: '#0C0C0C', foreground: '#CCCCCC', cursor: '#FFFFFF',
+          cursorAccent: '#0C0C0C', selectionBackground: 'rgba(255, 255, 255, 0.30)',
+          black: '#0C0C0C', red: '#C50F1F', green: '#13A10E', yellow: '#C19C00',
+          blue: '#0037DA', magenta: '#881798', cyan: '#3A96DD', white: '#CCCCCC',
+          brightBlack: '#767676', brightRed: '#E74856', brightGreen: '#16C60C',
+          brightYellow: '#F9F1A5', brightBlue: '#3B78FF', brightMagenta: '#B4009E',
+          brightCyan: '#61D6D6', brightWhite: '#F2F2F2'
+        };
+        terminal.options.theme = campbell;
+        terminal.options.fontFamily = '"Cascadia Mono", Consolas, "Microsoft YaHei", monospace';
+        terminal.options.fontSize = 16;
+        terminal.options.cursorStyle = 'bar';
+        terminal.options.cursorBlink = true;
+        // 对比度保持原样：不让终端控件自动改写配色。
+        terminal.options.minimumContrastRatio = 1;
+        document.body.style.background = campbell.background;
+        document.documentElement.style.background = campbell.background;
+        document.getElementById('terminal').parentElement.style.background = campbell.background;
+        document.documentElement.classList.add('rf-wt');
+        const host = document.getElementById('terminal');
+        host.style.padding = '8px';
+        host.style.boxSizing = 'border-box';
+        fit();
       },
 
       setFont(family, size) {

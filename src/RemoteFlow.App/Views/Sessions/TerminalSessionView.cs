@@ -73,7 +73,13 @@ public sealed class TerminalSessionView : ContentControl, IDisposable
         _dialogs = dialogs;
         _logger = logger;
 
-        _webView = new WebView2 { DefaultBackgroundColor = System.Drawing.Color.FromArgb(30, 30, 30) };
+        _webView = new WebView2
+        {
+            // 页面加载完成前显示的底色与终端一致，避免闪一下别的颜色。
+            DefaultBackgroundColor = UsesWindowsTerminalLook
+                ? System.Drawing.Color.FromArgb(12, 12, 12)
+                : System.Drawing.Color.FromArgb(30, 30, 30)
+        };
         Content = _webView;
 
         // 视图与终端一并铺满容器，全屏时终端跟随扩展。
@@ -258,10 +264,24 @@ public sealed class TerminalSessionView : ContentControl, IDisposable
         }
     }
 
+    /// <summary>
+    /// PowerShell 会话固定用 Windows 11 终端的默认外观（黑底、Cascadia Mono、竖线光标），
+    /// 不跟随应用深浅主题，也不受「设置 → SSH」的终端主题与字体影响——套上浅色主题会很不像 PowerShell。
+    /// </summary>
+    private bool UsesWindowsTerminalLook => _session.Kind == SessionKind.PowerShell;
+
     private async Task ApplyTerminalOptionsAsync()
     {
-        await ApplyTerminalThemeAsync();
-        await InvokeTerminalAsync("setFont", _settings.SshFontFamily, _settings.SshFontSize);
+        if (UsesWindowsTerminalLook)
+        {
+            await InvokeTerminalAsync("useWindowsTerminalLook");
+        }
+        else
+        {
+            await ApplyTerminalThemeAsync();
+            await InvokeTerminalAsync("setFont", _settings.SshFontFamily, _settings.SshFontSize);
+        }
+
         await InvokeTerminalAsync("setBracketedPaste", _settings.SshBracketedPaste);
     }
 
@@ -528,7 +548,7 @@ public sealed class TerminalSessionView : ContentControl, IDisposable
     private async void OnThemeChanged(object? sender, EventArgs e)
     {
         // 应用深浅切换只联动「跟随应用」；固定预设不因应用主题改变而变化。
-        if (_terminalReady && _settings.SshTerminalTheme == SshTerminalTheme.FollowApp)
+        if (_terminalReady && !UsesWindowsTerminalLook && _settings.SshTerminalTheme == SshTerminalTheme.FollowApp)
         {
             await InvokeTerminalAsync("setTheme", "follow", _theme.IsDark);
         }
