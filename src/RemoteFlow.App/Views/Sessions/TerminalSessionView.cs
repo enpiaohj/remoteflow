@@ -52,6 +52,7 @@ public sealed class TerminalSessionView : ContentControl, IDisposable
     private readonly Lock _outputLock = new();
 
     private bool _terminalReady;
+    private readonly TerminalSizeSync _size;
     private bool _connectStarted;
     private bool _disposed;
 
@@ -67,6 +68,7 @@ public sealed class TerminalSessionView : ContentControl, IDisposable
         ILogger logger)
     {
         _session = session;
+        _size = new TerminalSizeSync(session.Resize);
         _viewModel = viewModel;
         _settings = settings;
         _theme = theme;
@@ -190,7 +192,7 @@ public sealed class TerminalSessionView : ContentControl, IDisposable
                     break;
 
                 case "resize":
-                    _session.Resize(
+                    _size.Report(
                         root.GetProperty("cols").GetInt32(),
                         root.GetProperty("rows").GetInt32(),
                         root.GetProperty("width").GetInt32(),
@@ -235,25 +237,23 @@ public sealed class TerminalSessionView : ContentControl, IDisposable
     {
         _terminalReady = true;
 
-        await ApplyTerminalOptionsAsync();
-        _flushTimer.Start();
-
-        // 连接前先告知终端尺寸：PowerShell 远程按「连接那一刻」的宽度排版表格。
-        _session.Resize(
+        // 必须在套用外观之前记下就绪时的尺寸：套用字体 / 字号会改变行列数，页面随即上报新值，
+        // 之后任何重发都只能用最新值（见 TerminalSizeSync）。
+        _size.Report(
             message.GetProperty("cols").GetInt32(),
             message.GetProperty("rows").GetInt32(),
             (int)ActualWidth,
             (int)ActualHeight);
 
+        await ApplyTerminalOptionsAsync();
+        _flushTimer.Start();
+
+        // 连接前终端尺寸已下发：PowerShell 远程按「连接那一刻」的宽度排版表格。
         await _session.ConnectAsync();
 
         if (_session.State == ConnectionState.Connected)
         {
-            _session.Resize(
-                message.GetProperty("cols").GetInt32(),
-                message.GetProperty("rows").GetInt32(),
-                (int)ActualWidth,
-                (int)ActualHeight);
+            _size.Reapply();
 
             await InvokeTerminalAsync("focus");
         }
