@@ -265,7 +265,7 @@ public partial class SessionHostView : UserControl
         _tab = tab;
         tab.PropertyChanged += OnTabPropertyChanged;
         ApplyFileTransferLayout(tab.IsFileTransferOpen);
-        ShowToolsFor(tab.Protocol);
+        ShowToolsFor(tab.ToolProtocol);
         // 标题栏工具条的状态入口 → 打开质量详情 Flyout（锚定在会话内容顶沿）
         tab.StatusEntryRequested += OnStatusEntryRequested;
 
@@ -961,7 +961,7 @@ public partial class SessionHostView : UserControl
                 IsChecked = ReferenceEquals(current, _main.SelectedTab),
                 FontWeight = ReferenceEquals(current, _main.SelectedTab) ? FontWeights.SemiBold : FontWeights.Normal
             };
-            MenuItemAssist.SetIconKey(item, UiIconResources.ProtocolKey(current.Protocol));
+            MenuItemAssist.SetIconKey(item, UiIconResources.ProtocolKey(current.ToolProtocol));
             item.Click += (_, _) => _main.SelectedTab = current;
             _sessionMenu.Items.Add(item);
         }

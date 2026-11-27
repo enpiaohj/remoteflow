@@ -93,6 +93,11 @@ public partial class HomePage : UserControl
             MenuItemAssist.SetIconKey(favorite, item?.IsFavorite == true ? "Ui.Favorite.Filled" : "Ui.Favorite");
         }
 
+        if (menu.Items.OfType<MenuItem>().FirstOrDefault(m => (m.Tag as string) == HomeRowActions.PowerShell) is { } powerShell)
+        {
+            powerShell.Visibility = ViewModel?.CanOpenPowerShell(item) == true ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         // VNC 没有文件传输通道：置灰并说明原因，而不是隐藏。
         if (menu.Items.OfType<MenuItem>().FirstOrDefault(m => (m.Tag as string) == HomeRowActions.FileTransfer) is { } transfer)
         {

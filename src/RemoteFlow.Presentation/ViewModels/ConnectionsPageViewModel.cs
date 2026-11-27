@@ -1649,6 +1649,23 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     /// <summary>详情「打开会话 ▾ → 新建会话」：跳过去重聚焦，强制为该设备再开一个会话。</summary>
     public event EventHandler<ConnectionProfile>? NewSessionRequested;
 
+    /// <summary>请求打开该主机的 PowerShell 远程会话。</summary>
+    public event EventHandler<ConnectionProfile>? OpenPowerShellRequested;
+
+    /// <summary>该行是否提供「PowerShell 会话」入口（Windows 版上的 RDP 主机）。</summary>
+    public bool CanOpenPowerShell(ConnectionItemViewModel? item)
+        => item is not null && _sessions?.SupportsSessionKind(item.Profile, SessionKind.PowerShell) == true;
+
+    [RelayCommand]
+    private void OpenPowerShell(ConnectionItemViewModel? item)
+    {
+        item ??= SelectedItem;
+        if (item is not null && CanOpenPowerShell(item))
+        {
+            OpenPowerShellRequested?.Invoke(this, item.Profile);
+        }
+    }
+
     [RelayCommand]
     private Task NewSessionAsync(ConnectionItemViewModel? item)
     {

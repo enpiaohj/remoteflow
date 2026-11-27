@@ -12,21 +12,21 @@ using RemoteFlow.App.Services;
 using RemoteFlow.Presentation.Terminal;
 using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.Core.Models;
-using RemoteFlow.Protocol.Ssh;
+using RemoteFlow.Core.Sessions;
 using RemoteFlow.Presentation.Services;
 
 namespace RemoteFlow.App.Views.Sessions;
 
 /// <summary>
-/// SSH 会话视图。用 WebView2 承载 xterm.js 作为终端渲染层。
+/// 终端会话视图（SSH 与 PowerShell 远程共用）。用 WebView2 承载 xterm.js 作为终端渲染层。
 /// <para>
 /// 之所以不自绘终端：ANSI 转义序列、东亚宽字符排版、滚动缓冲、选区复制
 /// 这些细节的正确实现成本极高，而 xterm.js 是被 VS Code 等产品长期验证过的方案。
-/// 协议层（SSH.NET）与渲染层（xterm.js）之间只交换<b>原始字节</b>，
+/// 会话层（<see cref="ITerminalSession"/>）与渲染层（xterm.js）之间只交换<b>原始字节</b>，
 /// 因此多字节字符被 TCP 分包切断也不会产生乱码。
 /// </para>
 /// </summary>
-public sealed class SshSessionView : ContentControl, IDisposable
+public sealed class TerminalSessionView : ContentControl, IDisposable
 {
     /// <summary>虚拟主机名。WebView2 通过它以 https 方式加载本地终端资源，避免 file:// 的安全限制。</summary>
     private const string VirtualHost = "remoteflow.terminal";
@@ -37,7 +37,7 @@ public sealed class SshSessionView : ContentControl, IDisposable
     /// <summary>粘贴大文本的字符数阈值，超过即触发「大文本粘贴警告」。</summary>
     private const int LargePasteThreshold = 4096;
 
-    private readonly SshSession _session;
+    private readonly ITerminalSession _session;
     private readonly SessionTabViewModel _viewModel;
     private readonly AppSettings _settings;
     private readonly ThemeService _theme;
@@ -58,8 +58,8 @@ public sealed class SshSessionView : ContentControl, IDisposable
     /// <summary>是否已从 <see cref="SharedWebView2Environment"/> 取得共享环境引用（Dispose 时归还）。</summary>
     private bool _holdsSharedEnvironment;
 
-    public SshSessionView(
-        SshSession session,
+    public TerminalSessionView(
+        ITerminalSession session,
         SessionTabViewModel viewModel,
         AppSettings settings,
         ThemeService theme,
@@ -231,6 +231,13 @@ public sealed class SshSessionView : ContentControl, IDisposable
 
         await ApplyTerminalOptionsAsync();
         _flushTimer.Start();
+
+        // 连接前先告知终端尺寸：PowerShell 远程按「连接那一刻」的宽度排版表格。
+        _session.Resize(
+            message.GetProperty("cols").GetInt32(),
+            message.GetProperty("rows").GetInt32(),
+            (int)ActualWidth,
+            (int)ActualHeight);
 
         await _session.ConnectAsync();
 

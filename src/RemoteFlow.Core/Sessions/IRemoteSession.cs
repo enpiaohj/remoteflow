@@ -23,6 +23,9 @@ public interface IRemoteSession : IAsyncDisposable
     /// <summary>会话对应的协议类型。</summary>
     ProtocolType Protocol { get; }
 
+    /// <summary>会话种类。默认按连接协议建立。</summary>
+    SessionKind Kind => SessionKind.Default;
+
     /// <summary>会话对应的连接配置快照。</summary>
     ConnectionProfile Profile { get; }
 

@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\src\RemoteFlow.Infrastructure.Windows\RemoteFlow.Infrastructure.Windows.csproj" />
     <ProjectReference Include="..\..\src\RemoteFlow.App\RemoteFlow.App.csproj" />
     <ProjectReference Include="..\..\src\RemoteFlow.Protocol.Rdp\RemoteFlow.Protocol.Rdp.csproj" />
+    <ProjectReference Include="..\..\src\RemoteFlow.Protocol.PowerShell\RemoteFlow.Protocol.PowerShell.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -89,6 +89,8 @@
             <MenuItem Tag="newsession" Header="新建会话" views:MenuItemAssist.IconKey="Ui.Add" Click="OnNewSessionMenuClick" />
             <MenuItem Tag="reconnect" Header="重新连接" views:MenuItemAssist.IconKey="Ui.Refresh" Click="OnReconnectMenuClick" />
             <MenuItem Tag="disconnect" Header="断开连接" views:MenuItemAssist.IconKey="Ui.Disconnected" Click="OnDisconnectMenuClick" />
+            <!-- 仅 Windows 版上的 RDP 主机显示 -->
+            <MenuItem Tag="powershell" Header="PowerShell 会话" views:MenuItemAssist.IconKey="Ui.ProtocolSsh" Click="OnPowerShellMenuClick" />
             <Separator />
             <MenuItem Tag="test" Header="测试连接" views:MenuItemAssist.IconKey="Ui.Pending" Click="OnTestMenuClick" />
             <MenuItem Tag="filetransfer" Header="文件传输…" views:MenuItemAssist.IconKey="Ui.FileTransfer" Click="OnFileTransferMenuClick" />

@@ -46,6 +46,9 @@ public abstract class RemoteSessionBase : IRemoteSession
     /// <summary>本会话的协议类型。子类返回固定值。</summary>
     public abstract ProtocolType Protocol { get; }
 
+    /// <summary>会话种类。附加会话（如 PowerShell 远程）覆盖它。</summary>
+    public virtual SessionKind Kind => SessionKind.Default;
+
     /// <summary>本会话对应的连接配置快照。子类返回其持有的 Profile。</summary>
     public abstract ConnectionProfile Profile { get; }
 

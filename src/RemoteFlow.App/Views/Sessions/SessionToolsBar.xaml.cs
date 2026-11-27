@@ -37,9 +37,9 @@ public sealed partial class SessionToolsBar : UserControl
             return;
         }
 
-        RdpToolsDock.Visibility = tab.Protocol == ProtocolType.Rdp ? Visibility.Visible : Visibility.Collapsed;
-        SshToolsDock.Visibility = tab.Protocol == ProtocolType.Ssh ? Visibility.Visible : Visibility.Collapsed;
-        VncToolsDock.Visibility = tab.Protocol == ProtocolType.Vnc ? Visibility.Visible : Visibility.Collapsed;
+        RdpToolsDock.Visibility = tab.ToolProtocol == ProtocolType.Rdp ? Visibility.Visible : Visibility.Collapsed;
+        SshToolsDock.Visibility = tab.ToolProtocol == ProtocolType.Ssh ? Visibility.Visible : Visibility.Collapsed;
+        VncToolsDock.Visibility = tab.ToolProtocol == ProtocolType.Vnc ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnStatusEntryClick(object sender, RoutedEventArgs e)

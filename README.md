@@ -161,6 +161,7 @@ macOS 版的功能进度落后于 Windows 版：文件传输、应用内更新�
 | 连接质量详情 | 常驻条 / 胶囊的状态入口打开：连接状态、会话时长、重连次数、质量指标，可重新检测 |
 | RDP 工具 | 发送 `Ctrl+Alt+Del`、启动远端任务管理器、缩放 / 适应窗口、文件传输入口；Windows 版按本机 DPI 协商远端缩放，登录、跨屏与切回会话后同步显示；按连接设置颜色深度（32 / 24 / 16 / 15 位，Windows）；兼容 Windows Server 2003 等较老系统 |
 | SSH 终端 | xterm.js（WebView2 / WKWebView 承载）：WebGL 渲染、六套主题、字体 / 字号、右键菜单（复制 / 粘贴 / 粘贴选中 / 查找 / 清屏）、输出内搜索（`Ctrl+Shift+F`）、粘贴安全（多行 / 大文本确认）、括号粘贴开关、中文输入法直输 |
+| PowerShell 会话（Windows） | 在远程桌面（RDP 类型）主机上另开 PowerShell 远程会话：连接行 / 首页右键菜单「PowerShell 会话」，或远程桌面会话工具条按钮。沿用该连接的主机地址与凭据，走 WinRM（HTTP 5985，暂不支持 HTTPS）。目标须已启用 PowerShell 远程（`Enable-PSRemoting`），账号须有远程管理权限；**用 IP 或非域环境连接时，Windows 要求目标先加入本机 TrustedHosts**（需管理员、影响本机所有用户，应用只给出命令、不会替你修改），能用域内主机名时优先用主机名。由系统自带的 `powershell.exe` 执行，一旦离开远程会话进程立即结束，不会回到本机命令行；密码经一次性管道传递，远程命令不写入本机 PowerShell 历史。表格按连接那一刻的终端宽度排版，调整窗口后需重新连接才会更新 |
 | VNC 画面 | 三档缩放（等比 / 拉伸 / 1:1）、本地零延迟光标、剪贴板远端→本机 |
 | 文件传输（Windows） | SSH 会话内右侧 SFTP 侧栏；也可**不建会话**，在主窗口 Tab 里直接对主机传文件（SSH 走 SFTP，RDP 主机走 **SMB 管理共享**或 SFTP，按连接选择，VNC 不支持）。浏览 / 上传下载文件与文件夹 / 进度队列与取消 / 新建、重命名、删除 / 覆盖确认 / 复制路径；下载先写 `.rfpart` 再原子改名、远端文件名净化防路径穿越、不跟随符号链接。SFTP / SMB 通道未在全部环境验证，macOS 版暂无（详见 [文件传输说明](docs/2026-09-30-RemoteFlow-v0.24.0-文件传输说明-v1.1.md)） |
 | 连接测试 | 统一对话框：DNS / Ping / TCP 三步诊断，失败给原因与详情 |
@@ -270,6 +271,7 @@ RemoteFlow.slnx  （不含 RemoteFlow.App.Mac —— net10.0-macos 无法跨平�
 │  ├─ RemoteFlow.Protocol.Rdp/           # RDP ActiveX 互操作与会话（Windows）
 │  ├─ RemoteFlow.Protocol.Rdp.Mac/       # FreeRDP 封装与会话（macOS）
 │  ├─ RemoteFlow.Protocol.Ssh/           # SSH 协议层 + SFTP 文件系统（协议与终端渲染分离，跨平台）
+│  ├─ RemoteFlow.Protocol.PowerShell/    # PowerShell 远程会话：伪终端承载系统 powershell.exe（仅 Windows）
 │  ├─ RemoteFlow.Protocol.Vnc/           # VNC / RFB 会话与渲染目标（跨平台）
 │  ├─ RemoteFlow.App/                    # WPF UI / Startup / Composition Root（Windows）
 │  └─ RemoteFlow.App.Mac/                # AppKit UI / Composition Root（macOS）

@@ -22,6 +22,8 @@ public sealed class NavigationRefreshTests : IDisposable
     private readonly MainViewModel _main;
     private readonly SessionManager _sessions;
     private readonly ScriptedSshProvider _provider = new();
+    private readonly StubRdpProvider _rdpProvider = new();
+    private readonly StubPowerShellProvider _powerShell = new();
     private readonly NullDialogService _dialogs = new();
     private readonly FileTransferLauncher _launcher = new();
     private readonly FakeTransferConnector _connector = new();
@@ -46,12 +48,13 @@ public sealed class NavigationRefreshTests : IDisposable
             NullLogger<CredentialService>.Instance);
         var history = new EmptyHistoryRepository();
         var sessions = _sessions = new SessionManager(
-            new IConnectionProvider[] { _provider },
+            new IConnectionProvider[] { _provider, _rdpProvider },
             credentials,
             connectionsRepository,
             history,
             new NoOpSshHostKeyPolicy(),
-            NullLogger<SessionManager>.Instance);
+            NullLogger<SessionManager>.Instance,
+            [_powerShell]);
         var settings = _settings;
         var settingsStore = new JsonSettingsStore(
             Path.Combine(_workspace.Root, "settings.json"),
@@ -862,6 +865,165 @@ public sealed class NavigationRefreshTests : IDisposable
         }
 
         protected override ValueTask PerformTeardownAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class StubRdpProvider : IConnectionProvider
+    {
+        public ProtocolType Protocol => ProtocolType.Rdp;
+        public int DefaultPort => 3389;
+        public bool IsAvailable(out string? unavailableReason) { unavailableReason = null; return true; }
+        public IRemoteSession CreateSession(SessionRequest request) => new KindSession(request.Profile, SessionKind.Default);
+    }
+
+    private sealed class StubPowerShellProvider : ISessionKindProvider
+    {
+        public SessionKind Kind => SessionKind.PowerShell;
+        public int CreatedCount { get; private set; }
+        public bool CanOpen(ConnectionProfile profile) => profile.Protocol == ProtocolType.Rdp && !profile.Vmware.Enabled;
+        public bool IsAvailable(out string? unavailableReason) { unavailableReason = null; return true; }
+        public IRemoteSession CreateSession(SessionRequest request)
+        {
+            CreatedCount++;
+            return new TerminalKindSession(request.Profile);
+        }
+    }
+
+    private class KindSession(ConnectionProfile profile, SessionKind kind) : RemoteSessionBase
+    {
+        public override ProtocolType Protocol => profile.Protocol;
+        public override ConnectionProfile Profile => profile;
+        public override SessionKind Kind => kind;
+        public override Task ConnectAsync(CancellationToken cancellationToken = default)
+        {
+            SetState(ConnectionState.Connecting);
+            SetState(ConnectionState.Connected);
+            return Task.CompletedTask;
+        }
+        protected override ValueTask PerformTeardownAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class TerminalKindSession(ConnectionProfile profile)
+        : KindSession(profile, SessionKind.PowerShell), ITerminalSession
+    {
+        public event EventHandler<byte[]>? DataReceived { add { } remove { } }
+        public void SendInput(byte[] data) { }
+        public void SendInput(string text) { }
+        public void Resize(int columns, int rows, int pixelWidth, int pixelHeight) { }
+    }
+
+    private ConnectionProfile WindowsHost()
+    {
+        var profile = new ConnectionProfile { Name = "Windows 主机", Host = "win.example.test", Port = 3389, Protocol = ProtocolType.Rdp };
+        _connectionRepository.Items[profile.Id] = profile;
+        return profile;
+    }
+
+    // ── PowerShell 会话与远程桌面相互独立 ─────────────────────────
+
+    [Fact]
+    public async Task 同一主机的远程桌面与PowerShell各开各的_再次打开只聚焦同种类()
+    {
+        var host = WindowsHost();
+        await _main.OpenSessionAsync(host);
+        await _main.OpenPowerShellAsync(host);
+
+        var tabs = _main.Tabs.OfType<SessionTabViewModel>().ToList();
+        Assert.Equal([SessionKind.Default, SessionKind.PowerShell], tabs.Select(t => t.Session.Kind).ToArray());
+        Assert.Same(tabs[1], _main.SelectedTab);
+
+        await _main.OpenSessionAsync(host);
+        Assert.Same(tabs[0], _main.SelectedTab);
+        await _main.OpenPowerShellAsync(host);
+        Assert.Same(tabs[1], _main.SelectedTab);
+        Assert.Equal(2, _main.Tabs.OfType<SessionTabViewModel>().Count());
+    }
+
+    [Fact]
+    public async Task 只开着PowerShell时打开主机仍会建立远程桌面()
+    {
+        var host = WindowsHost();
+        await _main.OpenPowerShellAsync(host);
+        await _main.OpenSessionAsync(host);
+
+        Assert.Equal(SessionKind.Default, ((SessionTabViewModel)_main.SelectedTab!).Session.Kind);
+        Assert.Equal(2, _main.Tabs.OfType<SessionTabViewModel>().Count());
+    }
+
+    [Fact]
+    public async Task PowerShell标签按终端呈现_不套用远程桌面的行为()
+    {
+        var host = WindowsHost();
+        host.Rdp.StartFullScreen = true;
+        await _main.OpenPowerShellAsync(host);
+        var tab = Assert.Single(_main.Tabs.OfType<SessionTabViewModel>());
+        var requested = new List<SessionAction>();
+        tab.ActionRequested += (_, action) => requested.Add(action);
+
+        await tab.Session.ConnectAsync();
+
+        Assert.Equal(ProtocolType.Ssh, tab.ToolProtocol);   // 终端工具组：没有 Ctrl+Alt+Del
+        Assert.Equal("PowerShell", tab.ProtocolName);
+        Assert.Equal("Windows 主机 · PowerShell", tab.Title);
+        Assert.Equal("win.example.test", tab.HostPortLine); // 不显示 RDP 端口
+        Assert.False(tab.CanOpenPowerShell);
+        Assert.DoesNotContain(SessionAction.EnterScreenFull, requested);
+    }
+
+    [Fact]
+    public async Task 远程桌面标签上可以另开PowerShell_且重新连接保持各自种类()
+    {
+        var host = WindowsHost();
+        await _main.OpenSessionAsync(host);
+        var rdp = Assert.Single(_main.Tabs.OfType<SessionTabViewModel>());
+        Assert.True(rdp.CanOpenPowerShell);
+
+        await rdp.OpenPowerShellSessionCommand.ExecuteAsync(null);
+        var shell = Assert.IsType<SessionTabViewModel>(_main.SelectedTab);
+        Assert.Equal(SessionKind.PowerShell, shell.Session.Kind);
+
+        await shell.ReconnectCommand.ExecuteAsync(null);
+
+        var tabs = _main.Tabs.OfType<SessionTabViewModel>().ToList();
+        Assert.Equal(2, tabs.Count);
+        Assert.Contains(tabs, t => ReferenceEquals(t, rdp));
+        Assert.Single(tabs, t => t.Session.Kind == SessionKind.PowerShell && !ReferenceEquals(t, shell));
+        Assert.Equal(2, _powerShell.CreatedCount);
+    }
+
+    [Fact]
+    public async Task 恢复上次会话不记PowerShell()
+    {
+        var host = WindowsHost();
+        await _main.OpenPowerShellAsync(host);
+        _main.SaveSessionSnapshot();
+        Assert.Empty(_settings.LastSessionProfileIds);
+
+        await _main.OpenSessionAsync(host);
+        _main.SaveSessionSnapshot();
+        Assert.Equal([host.Id.ToString()], _settings.LastSessionProfileIds);
+    }
+
+    [Fact]
+    public async Task 凭据输入框对PowerShell不写远程桌面端口()
+    {
+        var host = WindowsHost();
+        _dialogs.SupportsConnectionCredentialPrompt = true;
+        _dialogs.CredentialAnswer = null; // 用户取消：只检查弹框内容
+
+        await _main.OpenPowerShellAsync(host);
+        await _main.OpenSessionAsync(host);
+
+        Assert.Equal(["win.example.test（PowerShell 远程）", "win.example.test:3389"],
+            _dialogs.CredentialRequests.Select(r => r.Target).ToArray());
+        Assert.Equal(0, _powerShell.CreatedCount);
+    }
+
+    [Fact]
+    public void 只有Windows主机连接提供PowerShell会话()
+    {
+        Assert.True(_sessions.SupportsSessionKind(WindowsHost(), SessionKind.PowerShell));
+        Assert.False(_sessions.SupportsSessionKind(new ConnectionProfile { Protocol = ProtocolType.Ssh }, SessionKind.PowerShell));
+        Assert.False(_sessions.SupportsSessionKind(WindowsHost(), SessionKind.Default));
     }
 
     private sealed class ScriptedSshProvider : IConnectionProvider

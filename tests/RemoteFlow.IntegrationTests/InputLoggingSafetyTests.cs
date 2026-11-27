@@ -14,7 +14,8 @@ public sealed class InputLoggingSafetyTests
         "src/RemoteFlow.Protocol.Vnc/VncSession.cs",
         "src/RemoteFlow.App/Views/Sessions/VncSessionView.cs",
         "src/RemoteFlow.App/Views/Sessions/RdpSessionView.cs",
-        "src/RemoteFlow.App/Views/Sessions/SshSessionView.cs",
+        "src/RemoteFlow.App/Views/Sessions/TerminalSessionView.cs",
+        "src/RemoteFlow.Protocol.PowerShell/PowerShellSession.cs",
     ];
 
     private static string ReadSource(string relative)

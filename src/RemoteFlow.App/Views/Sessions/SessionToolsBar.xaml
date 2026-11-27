@@ -79,6 +79,12 @@
                         Command="{Binding OpenFileTransferTabCommand}"
                         Visibility="{Binding CanOpenFileTransferTab, Converter={StaticResource BoolToVisibility}}" />
                 <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
+                        Content="{StaticResource Ui.ProtocolSsh}"
+                        ToolTip="在此主机上打开 PowerShell 会话（新标签页）"
+                        AutomationProperties.Name="打开 PowerShell 会话"
+                        Command="{Binding OpenPowerShellSessionCommand}"
+                        Visibility="{Binding CanOpenPowerShell, Converter={StaticResource BoolToVisibility}}" />
+                <Button Style="{StaticResource Button.Icon}" Height="30" Width="30" FontSize="14"
                         Content="{StaticResource Ui.TaskManager}"
                         ToolTip="启动任务管理器"
                         Command="{Binding SendTaskManagerCommand}" />

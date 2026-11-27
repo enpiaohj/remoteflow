@@ -25,6 +25,7 @@ namespace RemoteFlow.Application.Services;
 public sealed class SessionManager : IAsyncDisposable
 {
     private readonly IReadOnlyDictionary<ProtocolType, IConnectionProvider> _providers;
+    private readonly IReadOnlyDictionary<SessionKind, ISessionKindProvider> _kindProviders;
     private readonly CredentialService _credentials;
     private readonly IConnectionRepository _connections;
     private readonly IHistoryRepository _history;
@@ -48,9 +49,11 @@ public sealed class SessionManager : IAsyncDisposable
         IConnectionRepository connections,
         IHistoryRepository history,
         ISshHostKeyPolicy hostKeyPolicy,
-        ILogger<SessionManager> logger)
+        ILogger<SessionManager> logger,
+        IEnumerable<ISessionKindProvider>? kindProviders = null)
     {
         _providers = providers.ToDictionary(p => p.Protocol);
+        _kindProviders = (kindProviders ?? []).ToDictionary(p => p.Kind);
         _credentials = credentials;
         _connections = connections;
         _history = history;
@@ -156,6 +159,12 @@ public sealed class SessionManager : IAsyncDisposable
         return provider.IsAvailable(out reason);
     }
 
+    /// <summary>该连接能否开出指定种类的会话（平台未提供时恒为 false，对应入口应隐藏）。</summary>
+    public bool SupportsSessionKind(ConnectionProfile profile, SessionKind kind)
+        => kind != SessionKind.Default
+           && _kindProviders.TryGetValue(kind, out var provider)
+           && provider.CanOpen(profile);
+
     /// <summary>
     /// 创建一个尚未连接的会话。
     /// <para>
@@ -221,7 +230,8 @@ public sealed class SessionManager : IAsyncDisposable
     /// 会话创建成功后由会话接管并负责释放，创建失败时本方法负责释放。
     /// </param>
     public async Task<IRemoteSession> CreateSessionAsync(
-        ConnectionProfile profile, CancellationToken ct = default, ResolvedCredential? credentialOverride = null)
+        ConnectionProfile profile, CancellationToken ct = default, ResolvedCredential? credentialOverride = null,
+        SessionKind kind = SessionKind.Default)
     {
         if (_sessions.Count >= MaxConcurrentSessions)
         {
@@ -229,18 +239,41 @@ public sealed class SessionManager : IAsyncDisposable
                 $"已达到并发会话上限（{MaxConcurrentSessions} 个），请先关闭部分会话再新建连接。");
         }
 
-        if (!_providers.TryGetValue(profile.Protocol, out var provider))
+        // 默认会话按协议选 Provider；其它种类按种类选。两条路径只在「由谁创建会话」上不同，
+        // 凭据解析、历史记录、并发上限与生命周期完全一致。
+        Func<SessionRequest, IRemoteSession> createSession;
+        if (kind == SessionKind.Default)
         {
-            throw ConnectionException.FromCode(ConnectionErrorCode.ComponentUnavailable);
-        }
+            if (!_providers.TryGetValue(profile.Protocol, out var provider))
+            {
+                throw ConnectionException.FromCode(ConnectionErrorCode.ComponentUnavailable);
+            }
 
-        if (!provider.IsAvailable(out var unavailableReason))
+            if (!provider.IsAvailable(out var unavailableReason))
+            {
+                throw new ConnectionException(
+                    ConnectionErrorCode.ComponentUnavailable,
+                    unavailableReason ?? ConnectionException.Describe(ConnectionErrorCode.ComponentUnavailable));
+            }
+
+            createSession = provider.CreateSession;
+        }
+        else
         {
-            throw new ConnectionException(
-                ConnectionErrorCode.ComponentUnavailable,
-                unavailableReason ?? ConnectionException.Describe(ConnectionErrorCode.ComponentUnavailable));
-        }
+            if (!_kindProviders.TryGetValue(kind, out var provider) || !provider.CanOpen(profile))
+            {
+                throw ConnectionException.FromCode(ConnectionErrorCode.ComponentUnavailable);
+            }
 
+            if (!provider.IsAvailable(out var unavailableReason))
+            {
+                throw new ConnectionException(
+                    ConnectionErrorCode.ComponentUnavailable,
+                    unavailableReason ?? ConnectionException.Describe(ConnectionErrorCode.ComponentUnavailable));
+            }
+
+            createSession = provider.CreateSession;
+        }
         // 凭据在此刻才解析，且只在会话存续期间持有。
         ResolvedCredential? credential = credentialOverride;
         if (credential is null && profile.CredentialId is { } credentialId)
@@ -276,7 +309,7 @@ public sealed class SessionManager : IAsyncDisposable
         IRemoteSession session;
         try
         {
-            session = provider.CreateSession(new SessionRequest
+            session = createSession(new SessionRequest
             {
                 Profile = profile,
                 Credential = credential,

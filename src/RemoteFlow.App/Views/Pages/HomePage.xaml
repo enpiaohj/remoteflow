@@ -48,6 +48,7 @@
             <MenuItem Tag="newsession" Header="新建会话" views:MenuItemAssist.IconKey="Ui.Add" Click="OnRowActionClick" />
             <MenuItem Tag="reconnect" Header="重新连接" views:MenuItemAssist.IconKey="Ui.Refresh" Click="OnRowActionClick" />
             <MenuItem Tag="disconnect" Header="断开连接" views:MenuItemAssist.IconKey="Ui.Disconnected" Click="OnRowActionClick" />
+            <MenuItem Tag="powershell" Header="PowerShell 会话" views:MenuItemAssist.IconKey="Ui.ProtocolSsh" Click="OnRowActionClick" />
             <Separator />
             <MenuItem Tag="test" Header="测试连接" views:MenuItemAssist.IconKey="Ui.Pending" Click="OnRowActionClick" />
             <MenuItem Tag="filetransfer" Header="文件传输…" views:MenuItemAssist.IconKey="Ui.FileTransfer" Click="OnRowActionClick" />

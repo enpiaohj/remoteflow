@@ -514,6 +514,10 @@ public sealed partial class HomePageViewModel : ObservableObject
     /// 行右键动作的统一入口（由视图 code-behind 调用）。事件从本类内部触发，
     /// MainViewModel 订阅后桥接到「我的连接」既有命令。
     /// </summary>
+    /// <summary>该行是否提供「PowerShell 会话」入口（Windows 版上的 RDP 主机）。</summary>
+    public bool CanOpenPowerShell(ConnectionItemViewModel? item)
+        => item is not null && _sessions.SupportsSessionKind(item.Profile, SessionKind.PowerShell);
+
     public void RequestConnectionAction(ConnectionItemViewModel? item, string action)
     {
         if (item is null)
@@ -628,6 +632,7 @@ public static class HomeRowActions
     public const string Edit = "edit";
     public const string Test = "test";
     public const string FileTransfer = "filetransfer";
+    public const string PowerShell = "powershell";
     public const string Favorite = "favorite";
     public const string Manage = "manage";
 }

@@ -4,7 +4,7 @@ using RemoteFlow.Presentation.ViewModels;
 using RemoteFlow.App.Views.Sessions;
 using RemoteFlow.Core.Models;
 using RemoteFlow.Protocol.Rdp;
-using RemoteFlow.Protocol.Ssh;
+using RemoteFlow.Core.Sessions;
 using RemoteFlow.Protocol.Vnc;
 using RemoteFlow.Presentation.Services;
 
@@ -33,8 +33,9 @@ public sealed class SessionViewFactory(
     {
         RdpSession rdp => new RdpSessionView(rdp, tab, loggerFactory.CreateLogger<RdpSessionView>()),
 
-        SshSession ssh => new SshSessionView(
-            ssh, tab, settings, theme, dialogs, loggerFactory.CreateLogger<SshSessionView>()),
+        // SSH 与 PowerShell 远程都是字节流终端，共用一个视图。
+        ITerminalSession terminal => new TerminalSessionView(
+            terminal, tab, settings, theme, dialogs, loggerFactory.CreateLogger<TerminalSessionView>()),
 
         VncSession vnc => new VncSessionView(vnc, tab, loggerFactory.CreateLogger<VncSessionView>()),
 

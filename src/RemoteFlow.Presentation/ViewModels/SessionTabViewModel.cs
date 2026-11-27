@@ -43,9 +43,11 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         IDialogService? dialogs = null,
         ILogger? logger = null,
         Action<ConnectionProfile>? openFileTransferTab = null,
-        string? account = null)
+        string? account = null,
+        Func<ConnectionProfile, Task>? openPowerShell = null)
     {
         Session = session;
+        _openPowerShell = openPowerShell;
         AccountDisplay = string.IsNullOrWhiteSpace(account) ? "未提供账号" : account;
         _closeCallback = closeCallback;
         _reconnectCallback = reconnectCallback;
@@ -53,8 +55,9 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         _ui = uiDispatcher;
         InitializePowerActions(dialogs, logger);
 
-        Title = session.Profile.Name;
-        Icon = session.Protocol switch
+        // 同一主机可能同时开着远程桌面与 PowerShell，标题要能分清。
+        Title = session.Kind == SessionKind.PowerShell ? $"{session.Profile.Name} · PowerShell" : session.Profile.Name;
+        Icon = ToolProtocol switch
         {
             ProtocolType.Rdp => "\uE7F4",
             ProtocolType.Ssh => "\uE756",
@@ -63,7 +66,8 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
 
         // 连接质量详情（Flyout 数据源）。同一实例贯穿整个会话生命周期，
         // 由宿主视图在点击状态入口时读取；探测只在打开 / 重新检测时执行。
-        Quality = new SessionQualityState(this, session.Profile.Host, session.Profile.Port);
+        Quality = new SessionQualityState(this, session.Profile.Host,
+            session.Kind == SessionKind.PowerShell ? PowerShellEndpoint.DefaultPort : session.Profile.Port);
         Quality.PropertyChanged += OnQualityPropertyChanged;
 
         _durationTimer = timerFactory.Create(TimeSpan.FromSeconds(1));
@@ -91,6 +95,26 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     }
 
     public IRemoteSession Session { get; }
+
+    private readonly Func<ConnectionProfile, Task>? _openPowerShell;
+
+    /// <summary>
+    /// 界面按哪种协议呈现工具与行为。通常就是会话协议；终端类的附加会话（PowerShell 挂在 RDP 主机上）
+    /// 按终端呈现——否则会出现「发送 Ctrl+Alt+Del」、按 RDP 配置自动全屏等不适用的行为。
+    /// </summary>
+    public ProtocolType ToolProtocol => Session is ITerminalSession ? ProtocolType.Ssh : Session.Protocol;
+
+    /// <summary>在当前主机上另开 PowerShell 会话的入口（仅远程桌面会话上、且平台支持时出现）。</summary>
+    public bool CanOpenPowerShell => _openPowerShell is not null && Session.Kind == SessionKind.Default;
+
+    [RelayCommand]
+    private async Task OpenPowerShellSessionAsync()
+    {
+        if (CanOpenPowerShell)
+        {
+            await _openPowerShell!(Profile);
+        }
+    }
 
     /// <summary>
     /// 文件传输侧栏的视图模型；会话不支持文件传输（RDP / VNC）时为 null。
@@ -162,7 +186,7 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     /// <summary>设备类型配色资源键。</summary>
     public string DeviceBrushKey => DeviceVisual.AccentBrushKey;
 
-    public string ProtocolName => IsVmwareConsole ? "VMware 控制台（VNC）" : Protocol switch
+    public string ProtocolName => Session.Kind == SessionKind.PowerShell ? "PowerShell" : IsVmwareConsole ? "VMware 控制台（VNC）" : Protocol switch
     {
         ProtocolType.Rdp => "RDP",
         ProtocolType.Ssh => "SSH",
@@ -182,7 +206,7 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
     public SessionQualityState Quality { get; }
 
     /// <summary>Host:Port 摘要，供 Flyout 头部展示。</summary>
-    public string HostPortLine => $"{Profile.Host}:{Profile.Port}";
+    public string HostPortLine => Session.Kind == SessionKind.PowerShell ? Profile.Host : $"{Profile.Host}:{Profile.Port}";
 
     // ── Flyout 头部（统一连接状态，叠加「网络波动」派生）───────────
 
@@ -543,7 +567,7 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
             return;
         }
 
-        if (Protocol != ProtocolType.Rdp || !Profile.Rdp.StartFullScreen)
+        if (ToolProtocol != ProtocolType.Rdp || !Profile.Rdp.StartFullScreen)
         {
             return;
         }

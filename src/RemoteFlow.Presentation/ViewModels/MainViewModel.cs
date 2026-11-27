@@ -66,8 +66,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private int _pageReloadVersion;
     private bool _activatingWorkspacePage;
 
-    /// <summary>正在创建会话的连接 Profile.Id。用于连点去重：会话 Tab 建出前，第二次请求不重复建。</summary>
-    private readonly HashSet<Guid> _openingProfileIds = [];
+    /// <summary>正在创建会话的（连接 Id, 会话种类）。用于连点去重：会话 Tab 建出前，第二次请求不重复建。
+    /// 按种类区分：同一主机的远程桌面与 PowerShell 互不阻挡。</summary>
+    private readonly HashSet<(Guid ProfileId, SessionKind Kind)> _openingProfileIds = [];
 
     public MainViewModel(
         SessionManager sessions,
@@ -159,6 +160,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         // 详情「打开会话 ▾ → 新建会话」：跳过去重聚焦，强制为同一设备再开一个会话。
         ConnectionsPage.NewSessionRequested += async (_, profile) => await OpenSessionAsync(profile, forceNew: true);
+
+        // 同一主机的 PowerShell 远程会话：与远程桌面会话相互独立。
+        ConnectionsPage.OpenPowerShellRequested += async (_, profile) => await OpenPowerShellAsync(profile);
 
         // 凭据页 → 新建主机连接（可带「引用此凭据」「连接名称」预填）；连接页 → 新建凭据。
         // 两页互相只发请求，由主视图模型切页并打开对应编辑器，页面 VM 之间不互相引用。
@@ -805,7 +809,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                     await ConnectionsPage.ReconnectItemCommand.ExecuteAsync(item);
                     return;
 
-                case HomeRowActions.Manage:
+                case HomeRowActions.PowerShell:
+                await OpenPowerShellAsync(item.Profile);
+                break;
+            case HomeRowActions.Manage:
                     // 跳到「我的连接」全部视图并让该连接可见、选中。
                     GlobalSearchText = string.Empty;
                     NavigateTo(NavigationPage.Connections);
@@ -909,7 +916,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _settings.LastSessionProfileIds =
         [
             .. Tabs.OfType<SessionTabViewModel>()
-                .Where(t => !t.IsVmwareConsole)
+                // 附加会话（PowerShell）不记：快照只存连接 Id，恢复时会变成远程桌面。
+                .Where(t => !t.IsVmwareConsole && t.Session.Kind == SessionKind.Default)
                 .Select(t => t.Session.Profile.Id)
                 .Distinct()
                 .Select(id => id.ToString())
@@ -1003,10 +1011,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         SessionTabViewModel tab;
         try
         {
+            var kind = session.Kind;
             tab = new SessionTabViewModel(
-                session, CloseSessionAsync, ReconnectAsync, _ui, _timerFactory, _dialogs, _logger,
+                session, CloseSessionAsync, profile => ReconnectAsync(profile, kind), _ui, _timerFactory, _dialogs, _logger,
                 _fileTransferLauncher is null ? null : _fileTransferLauncher.Open,
-                account: _sessions.GetSessionAccount(session.SessionId));
+                account: _sessions.GetSessionAccount(session.SessionId),
+                openPowerShell: _sessions.SupportsSessionKind(session.Profile, SessionKind.PowerShell) ? OpenPowerShellAsync : null);
 
             // 会话工具条里的「全屏」由主窗口层处理（隐藏导航/详情、窗口去边框铺满）；
             // 协议专属动作（缩放、Ctrl+Alt+Del 等）由各协议视图自己订阅处理。
@@ -1021,7 +1031,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // 「已有会话」判断，却在工作区里看不到也关不掉；同时该连接的创建占位也不会释放，
             // 之后再点这台设备会被当成「正在创建」而静默忽略。
             _logger.LogError(ex, "为会话 {SessionId} 创建 Tab 失败，关闭该会话", session.SessionId);
-            _openingProfileIds.Remove(session.Profile.Id);
+            _openingProfileIds.Remove((session.Profile.Id, session.Kind));
             _ = CloseOrphanSessionAsync(session.SessionId);
             return;
         }
@@ -1030,7 +1040,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // 这里不再逐会话订阅 StateChanged；下方即时 OnPropertyChanged 可保留作立刻刷新（无害）。
 
         // 会话 Tab 已建出，放开该 Profile 的占位；此刻再点可再次触发（走“聚焦既有”分支）。
-        _openingProfileIds.Remove(session.Profile.Id);
+        _openingProfileIds.Remove((session.Profile.Id, session.Kind));
 
         OnPropertyChanged(nameof(SessionStatusText));
         OnPropertyChanged(nameof(SessionStatusBrushKey));
@@ -1249,7 +1259,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <paramref name="forceNew"/> 供「新建会话」动作跳过去重聚焦，强制再开一个会话。
     /// </summary>
     public Task OpenSessionAsync(ConnectionProfile profile, bool forceNew = false)
-        => OpenSessionCoreAsync(profile, forceNew, failures: null);
+        => OpenSessionCoreAsync(profile, forceNew, failures: null, SessionKind.Default);
+
+    /// <summary>打开该主机的 PowerShell 远程会话；已有则聚焦它。不影响同一主机的远程桌面会话。</summary>
+    public Task OpenPowerShellAsync(ConnectionProfile profile)
+        => OpenSessionCoreAsync(profile, forceNew: false, failures: null, SessionKind.PowerShell);
 
     /// <summary>一台主机在批量连接里没能打开的原因。</summary>
     private sealed record BatchFailure(string Name, string Reason);
@@ -1258,12 +1272,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// 非 null（批量连接）时，创建失败只记录到这里、不逐个弹框：模态框会卡住整批后面的连接，
     /// 失败几台就连弹几次。由批量流程在结束时统一汇总提示。null 时保持单个连接的原有弹框行为。
     /// </param>
-    private async Task OpenSessionCoreAsync(ConnectionProfile profile, bool forceNew, List<BatchFailure>? failures)
+    private async Task OpenSessionCoreAsync(
+        ConnectionProfile profile, bool forceNew, List<BatchFailure>? failures, SessionKind kind)
     {
         if (!forceNew)
         {
             var existing = Tabs.OfType<SessionTabViewModel>()
-                .FirstOrDefault(t => t.Session.Profile.Id == profile.Id);
+                .FirstOrDefault(t => t.Session.Profile.Id == profile.Id && t.Session.Kind == kind);
             if (existing is not null)
             {
                 SelectedTab = existing;
@@ -1271,7 +1286,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             }
         }
 
-        if (!_openingProfileIds.Add(profile.Id))
+        var placeholder = (profile.Id, kind);
+        if (!_openingProfileIds.Add(placeholder))
         {
             return; // 已有同设备的创建请求在跑，聚焦等它建完由 SessionCreated 切过去。
         }
@@ -1279,34 +1295,34 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ResolvedCredential? entered = null;
         try
         {
-            var (proceed, credential) = await PromptCredentialIfNeededAsync(profile);
+            var (proceed, credential) = await PromptCredentialIfNeededAsync(profile, kind);
             if (!proceed)
             {
-                _openingProfileIds.Remove(profile.Id); // 用户取消输入：放弃本次连接，不算失败。
+                _openingProfileIds.Remove(placeholder); // 用户取消输入：放弃本次连接，不算失败。
                 return;
             }
 
             entered = credential;
 
             // 成功路径不在此移除占位：等 OnSessionCreated 建出 Tab 时移除，堵住连点竞态。
-            await _sessions.CreateSessionAsync(profile, credentialOverride: entered);
+            await _sessions.CreateSessionAsync(profile, credentialOverride: entered, kind: kind);
         }
         catch (ConnectionException ex)
         {
             entered?.Dispose();
-            _openingProfileIds.Remove(profile.Id);
+            _openingProfileIds.Remove(placeholder);
             await ReportOpenFailureAsync(profile, ex.Message, DialogKind.Error, failures);
         }
         catch (InvalidOperationException ex)
         {
             entered?.Dispose();
-            _openingProfileIds.Remove(profile.Id);
+            _openingProfileIds.Remove(placeholder);
             await ReportOpenFailureAsync(profile, ex.Message, DialogKind.Warning, failures);
         }
         catch (Exception ex)
         {
             entered?.Dispose();
-            _openingProfileIds.Remove(profile.Id);
+            _openingProfileIds.Remove(placeholder);
             _logger.LogError(ex, "创建会话失败：{ConnectionName}", profile.Name);
             await ReportOpenFailureAsync(profile, "创建会话时发生未知错误，详情请查看日志。", DialogKind.Error, failures);
         }
@@ -1317,7 +1333,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <c>Proceed=false</c> 表示用户取消，调用方放弃本次连接。平台不提供该对话框（macOS）时原样放行。
     /// </summary>
     private async Task<(bool Proceed, ResolvedCredential? Credential)> PromptCredentialIfNeededAsync(
-        ConnectionProfile profile)
+        ConnectionProfile profile, SessionKind kind)
     {
         if (!_dialogs.SupportsConnectionCredentialPrompt)
         {
@@ -1339,7 +1355,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             .ToList();
 
         var input = await _dialogs.PromptConnectionCredentialAsync(
-            new ConnectionCredentialRequest(profile.Name, $"{profile.Host}:{profile.Port}", requirement, saved));
+            new ConnectionCredentialRequest(profile.Name,
+                // PowerShell 远程不走连接里填的 RDP 端口，别让输入框写错目标。
+                kind == SessionKind.PowerShell ? $"{profile.Host}（PowerShell 远程）" : $"{profile.Host}:{profile.Port}",
+                requirement, saved));
         if (input is null)
         {
             return (false, null);
@@ -1444,16 +1463,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // 已达并发上限：后面没有已开会话的设备都开不了，提前结束并统一说明，
             // 而不是对剩下的每一台都弹一次「已达到并发会话上限」。
             if (_sessions.ActiveSessionCount >= _sessions.MaxConcurrentSessions
-                && !Tabs.OfType<SessionTabViewModel>().Any(t => t.Session.Profile.Id == profile.Id))
+                && !Tabs.OfType<SessionTabViewModel>().Any(t => t.Session.Profile.Id == profile.Id && t.Session.Kind == SessionKind.Default))
             {
                 notOpened.AddRange(profiles.Skip(i)
-                    .Where(p => !Tabs.OfType<SessionTabViewModel>().Any(t => t.Session.Profile.Id == p.Id))
+                    .Where(p => !Tabs.OfType<SessionTabViewModel>().Any(t => t.Session.Profile.Id == p.Id && t.Session.Kind == SessionKind.Default))
                     .Select(p => p.Name));
                 break;
             }
 
             var before = Tabs.OfType<SessionTabViewModel>().ToHashSet();
-            await OpenSessionCoreAsync(profile, forceNew: false, failures);
+            await OpenSessionCoreAsync(profile, forceNew: false, failures, SessionKind.Default);
 
             // 本次新建出来的 Tab（聚焦已有会话 / 创建失败时没有新 Tab，直接下一个）。
             var created = Tabs.OfType<SessionTabViewModel>()
@@ -1591,11 +1610,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         SelectedTab = tab;
     }
 
-    private async Task ReconnectAsync(ConnectionProfile profile)
+    private async Task ReconnectAsync(ConnectionProfile profile, SessionKind kind)
     {
         // 与 OpenSessionAsync 共用创建占位：OnSessionCreated 无论来源都会释放该 Profile 的占位，
         // 重连若不登记，会把同一设备上正在进行的「打开」的占位提前放掉，连点就能再开出重复会话。
-        var registered = _openingProfileIds.Add(profile.Id);
+        var registered = _openingProfileIds.Add((profile.Id, kind));
         ResolvedCredential? entered = null;
         try
         {
@@ -1605,42 +1624,42 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 profile = latest;
             }
 
-            var (proceed, credential) = await PromptCredentialIfNeededAsync(profile);
+            var (proceed, credential) = await PromptCredentialIfNeededAsync(profile, kind);
             if (!proceed)
             {
-                ReleaseOpeningPlaceholder(profile.Id, registered);
+                ReleaseOpeningPlaceholder((profile.Id, kind), registered);
                 return;
             }
 
             entered = credential;
-            await _sessions.CreateSessionAsync(profile, credentialOverride: entered);
+            await _sessions.CreateSessionAsync(profile, credentialOverride: entered, kind: kind);
         }
         catch (ConnectionException ex)
         {
             entered?.Dispose();
-            ReleaseOpeningPlaceholder(profile.Id, registered);
+            ReleaseOpeningPlaceholder((profile.Id, kind), registered);
             await _dialogs.ShowMessageAsync("无法重新连接", ex.Message, DialogKind.Error);
         }
         catch (InvalidOperationException ex)
         {
             entered?.Dispose();
-            ReleaseOpeningPlaceholder(profile.Id, registered);
+            ReleaseOpeningPlaceholder((profile.Id, kind), registered);
             await _dialogs.ShowMessageAsync("无法重新连接", ex.Message, DialogKind.Warning);
         }
         catch
         {
             entered?.Dispose();
-            ReleaseOpeningPlaceholder(profile.Id, registered);
+            ReleaseOpeningPlaceholder((profile.Id, kind), registered);
             throw;
         }
     }
 
     /// <summary>仅释放本次调用自己登记的占位，不动别的创建请求留下的。</summary>
-    private void ReleaseOpeningPlaceholder(Guid profileId, bool registered)
+    private void ReleaseOpeningPlaceholder((Guid ProfileId, SessionKind Kind) placeholder, bool registered)
     {
         if (registered)
         {
-            _openingProfileIds.Remove(profileId);
+            _openingProfileIds.Remove(placeholder);
         }
     }
 

@@ -322,6 +322,8 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IConnectionProvider, RdpConnectionProvider>();
         services.AddSingleton<IConnectionProvider, SshConnectionProvider>();
         services.AddSingleton<IConnectionProvider, VncConnectionProvider>();
+        // 附加会话种类（仅 Windows）：RDP 主机上的 PowerShell 远程会话。
+        services.AddSingleton<ISessionKindProvider, RemoteFlow.Protocol.PowerShell.PowerShellSessionProvider>();
 
         // VMware ESXi / vCenter：来源仓储、连接器（证书指纹固定）、服务。VncConnectionProvider 通过可选参数拿到连接器。
         services.AddSingleton<IVmwareSourceRepository, SqliteVmwareSourceRepository>();

@@ -312,6 +312,9 @@ public partial class ConnectionsPage : UserControl
                     // 断开连接 / 新建会话只在存在活动会话时出现（前者关闭该连接全部活动会话，后者强制再开一个）。
                     item.Visibility = row?.HasActiveSession == true ? Visibility.Visible : Visibility.Collapsed;
                     break;
+                case "powershell":
+                    item.Visibility = vm.CanOpenPowerShell(row) ? Visibility.Visible : Visibility.Collapsed;
+                    break;
                 case "copyaddress":
                     item.IsEnabled = !string.IsNullOrEmpty(row?.Host);
                     break;
@@ -568,6 +571,14 @@ public partial class ConnectionsPage : UserControl
     }
 
     /// <summary>在工作区打开文件传输 Tab（不建立会话）。</summary>
+    private void OnPowerShellMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
+        {
+            viewModel.OpenPowerShellCommand.Execute(item);
+        }
+    }
+
     private void OnFileTransferMenuClick(object sender, RoutedEventArgs e)
     {
         if (ResolveItem(sender) is { } item && ViewModel is { } viewModel)
