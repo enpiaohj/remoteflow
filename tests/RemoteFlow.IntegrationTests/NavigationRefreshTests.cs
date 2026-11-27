@@ -1076,6 +1076,55 @@ public sealed class NavigationRefreshTests : IDisposable
         Assert.False(session.HasSubscribers);
     }
 
+    private sealed class GuidedFailureSession(ConnectionProfile profile)
+        : KindSession(profile, SessionKind.PowerShell), ISessionGuidanceSource
+    {
+        public string? ErrorDetail => "raw system error";
+        public IReadOnlyList<SessionCommandHint> CommandHints { get; } = [new("在目标上运行", "Do-Something", "撤销：Undo-Something")];
+
+        public override Task ConnectAsync(CancellationToken cancellationToken = default)
+        {
+            SetState(ConnectionState.Connecting);
+            ErrorCode = ConnectionErrorCode.AuthenticationFailed;
+            ErrorMessage = "身份验证被拒绝";
+            SetState(ConnectionState.Failed);
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task 失败时的命令与原始报错单独呈现_复制全部一次带齐()
+    {
+        var session = new GuidedFailureSession(WindowsHost());
+        using var tab = new SessionTabViewModel(session, _ => Task.CompletedTask, _ => Task.CompletedTask,
+            SynchronousUiDispatcher.Instance, new ManualTimerFactory());
+        Assert.False(tab.HasCommandHints);
+        Assert.False(tab.HasErrorDetail);
+
+        await session.ConnectAsync();
+
+        Assert.True(tab.HasCommandHints);
+        Assert.True(tab.HasErrorDetail);
+        var text = tab.BuildDiagnosticText();
+        foreach (var expected in new[] { "PowerShell", "身份验证被拒绝", "Do-Something", "Undo-Something", "raw system error" })
+        {
+            Assert.Contains(expected, text, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task 同一主机的远程桌面与PowerShell标签靠类型标记区分_名字不加后缀()
+    {
+        var profile = WindowsHost();
+        await _main.OpenSessionAsync(profile);
+        await _main.OpenPowerShellAsync(profile);
+
+        var tabs = _main.Tabs.OfType<SessionTabViewModel>().ToList();
+        Assert.Equal(["RDP", "PS"], tabs.Select(t => t.KindBadge));
+        Assert.All(tabs, t => Assert.Equal(profile.Name, t.TabTitle));
+        Assert.Equal(["Protocol.Rdp", "Protocol.PowerShell"], tabs.Select(t => t.KindBrushKey));
+    }
+
     private ConnectionProfile WindowsHost()
     {
         var profile = new ConnectionProfile { Name = "Windows 主机", Host = "win.example.test", Port = 3389, Protocol = ProtocolType.Rdp };

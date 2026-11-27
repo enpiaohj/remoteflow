@@ -42,6 +42,32 @@ public sealed class PowerShellRemotingEnabler(ILogger<PowerShellRemotingEnabler>
         return result;
     }
 
+    /// <summary>RPC 端点映射端口。仅测试会改它。</summary>
+    internal int RpcPort { get; init; } = 135;
+
+    /// <summary>
+    /// WMI（DCOM）要先连目标的 135 端口。Windows 10 / 11 的防火墙默认通常不放行，
+    /// 不先查的话只会得到一个看不懂的 WMI 错误码。
+    /// </summary>
+    private async Task EnsureRpcReachableAsync(string host, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        try
+        {
+            using var client = new TcpClient();
+            await client.ConnectAsync(host, RpcPort, timeout.Token);
+        }
+        catch (Exception ex) when (ex is SocketException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
+        {
+            logger.LogWarning("远程启用不可用：{Host} 的 RPC 端口 {Port} 不通", host, RpcPort);
+            throw new ConnectionException(ConnectionErrorCode.NetworkUnreachable,
+                $"这台电脑无法远程启用：连不上它的 {RpcPort} 端口（RPC）。远程启用依赖 WMI，"
+                + "Windows 10 / 11 的防火墙默认通常不放行。\n\n"
+                + "请到目标电脑上以管理员身份运行 PowerShell，执行 Enable-PSRemoting -Force（错误框里可以直接复制），然后重新连接。", ex);
+        }
+    }
+
     private static async Task<bool> ProbePortAsync(string host, CancellationToken ct)
     {
         for (var attempt = 0; attempt < 5; attempt++)
@@ -73,6 +99,8 @@ public sealed class PowerShellRemotingEnabler(ILogger<PowerShellRemotingEnabler>
         {
             throw new ConnectionException(ConnectionErrorCode.AuthenticationFailed, "远程启用需要目标电脑的管理员账号和密码。");
         }
+
+        await EnsureRpcReachableAsync(host, ct);
 
         var pipeName = $"RemoteFlow-ps-{Guid.NewGuid():N}";
         await using var channel = PowerShellPipe.CreateServer(pipeName);

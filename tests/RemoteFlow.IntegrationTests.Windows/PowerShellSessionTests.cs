@@ -104,21 +104,76 @@ public sealed class PowerShellSessionTests
         Assert.Null(info.TokenFilterPolicy);
     }
 
+    private const int NotTrustedCode = -2144108316;
+
+    private static PowerShellFailure Denied(string user, bool local = false)
+        => PowerShellErrorMapper.Map("AccessDenied,PSSessionOpenFailed", 5, "拒绝访问。", "host.example.test", user, local);
+
     [Fact]
-    public void 认证被拒给出账号与权限提示()
+    public void 本地账户被拒时说明UAC限制并给出两种处理命令()
     {
-        var (code, message) = PowerShellErrorMapper.Map("AccessDenied,PSSessionOpenFailed", 5, "拒绝访问。", "host.example.test");
-        Assert.Equal(ConnectionErrorCode.AuthenticationFailed, code);
-        Assert.Contains("Remote Management Users", message, StringComparison.Ordinal);
+        var failure = Denied("HOST\\zhang.san");
+
+        Assert.Equal(ConnectionErrorCode.AuthenticationFailed, failure.Code);
+        Assert.Contains("UAC", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("用户名和密码", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("Remote Management Users", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("拒绝访问。", failure.Message, StringComparison.Ordinal); // 原始报错单独放
+        Assert.Equal("拒绝访问。", failure.Detail);
+        Assert.Equal(2, failure.Commands.Count);
+        Assert.Contains("LocalAccountTokenFilterPolicy -Value 1", failure.Commands[0].Command, StringComparison.Ordinal);
+        Assert.Contains("风险", failure.Commands[0].Note, StringComparison.Ordinal);
+        Assert.Contains("撤销", failure.Commands[0].Note, StringComparison.Ordinal);
+        Assert.Contains("-Member 'zhang.san'", failure.Commands[1].Command, StringComparison.Ordinal);
+        Assert.Contains("没有管理员权限", failure.Commands[1].Title, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void 域账户UPN被拒时不提放开本地账户的命令()
+        => Assert.Empty(Denied("admin@corp.example.test").Commands);
+
+    [Fact]
+    public void 连本机被拒时文案指向本机()
+    {
+        var failure = Denied("admin", local: true);
+        Assert.StartsWith("连接本机被拒绝", failure.Message, StringComparison.Ordinal);
+        Assert.All(failure.Commands, c => Assert.Contains("本机", c.Title, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("HOST\\张三", "张三")]
+    [InlineData("admin", "admin")]
+    [InlineData("x'; Remove-Item C:\\ -Recurse; '", "<用户名>")]
+    [InlineData("a$(calc)", "<用户名>")]
+    [InlineData("", "<用户名>")]
+    public void 可疑用户名不拼进可复制命令(string user, string expected)
+        => Assert.Equal(expected, PowerShellErrorMapper.LocalAccountName(user));
 
     [Fact]
     public void 认证方式受限时给出可复制的TrustedHosts命令并说明风险()
     {
-        var (code, message) = PowerShellErrorMapper.Map("ServerNotTrusted,PSSessionOpenFailed", -2144108316, "x", "192.0.2.10");
-        Assert.Equal(ConnectionErrorCode.ProtocolNegotiationFailed, code);
-        Assert.Contains("-Value '192.0.2.10' -Concatenate", message, StringComparison.Ordinal);
-        Assert.Contains("不会被验证身份", message, StringComparison.Ordinal);
+        var failure = PowerShellErrorMapper.Map("ServerNotTrusted,PSSessionOpenFailed", NotTrustedCode, "x", "192.0.2.10");
+        Assert.Equal(ConnectionErrorCode.ProtocolNegotiationFailed, failure.Code);
+        var hint = Assert.Single(failure.Commands);
+        Assert.Contains("-Value '192.0.2.10' -Concatenate", hint.Command, StringComparison.Ordinal);
+        Assert.Contains("不会被验证身份", hint.Note, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RPC端口不通时直接说明无法远程启用()
+    {
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var closedPort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        var enabler = new PowerShellRemotingEnabler(NullLogger<PowerShellRemotingEnabler>.Instance) { RpcPort = closedPort };
+        using var credential = new ResolvedCredential { Type = CredentialType.LocalPassword, Username = "u", Password = "p" };
+
+        var ex = await Assert.ThrowsAsync<ConnectionException>(() => enabler.InspectAsync("127.0.0.1", credential, null));
+
+        Assert.Equal(ConnectionErrorCode.NetworkUnreachable, ex.ErrorCode);
+        Assert.Contains("无法远程启用", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Enable-PSRemoting -Force", ex.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -172,10 +227,7 @@ public sealed class PowerShellSessionTests
     [InlineData("*")]            // 通配会让 TrustedHosts 信任所有主机
     [InlineData("host$(calc)")]
     public void 主机地址含可疑字符时不生成可复制命令(string host)
-    {
-        var (_, message) = PowerShellErrorMapper.Map("ServerNotTrusted", -2144108316, "x", host);
-        Assert.DoesNotContain("Set-Item", message, StringComparison.Ordinal);
-    }
+        => Assert.Empty(PowerShellErrorMapper.Map("ServerNotTrusted", NotTrustedCode, "x", host).Commands);
 
     [Fact]
     public void 只在远程桌面主机上提供_虚拟机控制台除外()
@@ -227,7 +279,7 @@ public sealed class PowerShellSessionTests
         await session.ConnectAsync();
 
         Assert.Equal(ConnectionErrorCode.NetworkUnreachable, session.ErrorCode);
-        Assert.Contains("Enable-PSRemoting", session.ErrorMessage, StringComparison.Ordinal);
+        Assert.Equal("Enable-PSRemoting -Force", Assert.Single(session.CommandHints).Command);
         Assert.Null(session.ProcessId);
     }
 

@@ -573,9 +573,13 @@
                                                                 </Style>
                                                             </Image.Style>
                                                         </Image>
-                                                        <TextBlock Text="{Binding Title}"
+                                                        <ContentControl Content="{Binding}"
+                                                                        ContentTemplate="{StaticResource SessionKindBadge.Template}"
+                                                                        Margin="7,0,0,0" VerticalAlignment="Center"
+                                                                        Focusable="False" />
+                                                        <TextBlock Text="{Binding TabTitle}"
                                                                    Style="{StaticResource Workspace.TabTitle}"
-                                                                   Margin="8,0,0,0"
+                                                                   Margin="6,0,0,0"
                                                                    MaxWidth="150"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    VerticalAlignment="Center"

@@ -265,7 +265,9 @@ public sealed partial class SessionTabSelector : UserControl
     private void ShowSessionHeader(SessionTabViewModel session)
     {
         ShowDeviceIcon(session.DeviceIconKey);
-        HeaderTitle.Text = session.Title;
+        HeaderKindBadge.Content = session;
+        HeaderKindBadge.Visibility = Visibility.Visible;
+        HeaderTitle.Text = session.TabTitle;
         SelectorToggle.ToolTip = session.TabToolTip;
         if (TryFindResource(session.StateBrushKey) is Brush brush)
         {
@@ -285,6 +287,7 @@ public sealed partial class SessionTabSelector : UserControl
     /// </summary>
     private void ShowTransferHeader(FileTransferTabViewModel transfer)
     {
+        HideKindBadge();
         ShowDeviceIcon(transfer.DeviceIconKey);
         HeaderTitle.Text = transfer.Title;
         SelectorToggle.ToolTip = transfer.TabToolTip;
@@ -293,8 +296,15 @@ public sealed partial class SessionTabSelector : UserControl
         HeaderClose.Visibility = Visibility.Visible;
     }
 
+    private void HideKindBadge()
+    {
+        HeaderKindBadge.Visibility = Visibility.Collapsed;
+        HeaderKindBadge.Content = null;
+    }
+
     private void ShowWorkspaceHeader()
     {
+        HideKindBadge();
         HeaderDeviceIcon.Visibility = Visibility.Collapsed;
         HeaderIcon.Visibility = Visibility.Visible;
         HeaderIcon.Data = UiIconResources.Find("Ui.Sessions");

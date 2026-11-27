@@ -177,7 +177,9 @@ public sealed class PowerShellRemotingLoopbackTests
 
         Assert.Equal(ConnectionState.Failed, session.State);
         Assert.Equal(ConnectionErrorCode.AuthenticationFailed, session.ErrorCode);
-        Assert.DoesNotContain("???", session.ErrorMessage, StringComparison.Ordinal); // 中文错误详情不乱码
+        Assert.False(string.IsNullOrEmpty(session.ErrorDetail));
+        Assert.DoesNotContain("???", session.ErrorDetail, StringComparison.Ordinal); // 中文错误详情不乱码
+        Assert.Equal(2, session.CommandHints.Count);
         lock (output) Assert.DoesNotMatch(@"PS [A-Z]:\\", output.ToString());
     }
 

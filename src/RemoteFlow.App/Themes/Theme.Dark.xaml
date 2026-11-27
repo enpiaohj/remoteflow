@@ -57,6 +57,7 @@
     <SolidColorBrush x:Key="Protocol.Rdp" Color="#8098F5" />
     <SolidColorBrush x:Key="Protocol.Ssh" Color="#35BE8C" />
     <SolidColorBrush x:Key="Protocol.Vnc" Color="#A98BEA" />
+    <SolidColorBrush x:Key="Protocol.PowerShell" Color="#E8A15A" />
 
     <Color x:Key="Shadow.Cast">#000000</Color>
     <SolidColorBrush x:Key="Shadow.Color" Color="#40000000" />

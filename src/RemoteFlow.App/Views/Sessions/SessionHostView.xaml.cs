@@ -78,6 +78,51 @@ public partial class SessionHostView : UserControl
 
     private FrameworkElement? _protocolView;
     private SessionTabViewModel? _tab;
+
+    private void OnCopyCommandClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: RemoteFlow.Core.Sessions.SessionCommandHint hint } element)
+        {
+            CopyToClipboard(hint.Command, element as System.Windows.Controls.Button);
+        }
+    }
+
+    private void OnCopyDiagnosticsClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is SessionTabViewModel tab)
+        {
+            CopyToClipboard(tab.BuildDiagnosticText(), sender as System.Windows.Controls.Button);
+        }
+    }
+
+    private static void CopyToClipboard(string text, System.Windows.Controls.Button? button)
+    {
+        var feedback = "已复制";
+        try
+        {
+            System.Windows.Clipboard.SetText(text);
+        }
+        catch (System.Runtime.InteropServices.ExternalException)
+        {
+            // 剪贴板被其他程序占用：如实提示，用户可再点一次或选中文字复制。
+            feedback = "复制失败";
+        }
+
+        if (button is null || button.Content is "已复制" or "复制失败")
+        {
+            return; // 反馈文字还没换回去：别把它当成按钮原本的文字。
+        }
+
+        var label = button.Content;
+        button.Content = feedback;
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            button.Content = label;
+        };
+        timer.Start();
+    }
     private MainViewModel? _main;
     private Window? _window;
 

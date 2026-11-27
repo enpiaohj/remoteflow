@@ -55,6 +55,11 @@
                      换算标题上限（也就不会出现「99+」时算少了把箭头挤出去）。
                      标题区上限 272，头部上限 380；独立箭头不额外添加水平边距，
                      为角标和关闭按钮预留空间，常见会话名完整显示，更长的才省略。 -->
+                <ContentControl x:Name="HeaderKindBadge"
+                                ContentTemplate="{StaticResource SessionKindBadge.Template}"
+                                Margin="7,0,0,0" VerticalAlignment="Center"
+                                Focusable="False" IsHitTestVisible="False"
+                                Visibility="Collapsed" />
                 <Grid MaxWidth="272" VerticalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -193,10 +198,15 @@
                                        Source="{Binding DeviceIconKey, Converter={StaticResource KeyToImageSource}}" />
 
                                 <StackPanel Grid.Column="2" Margin="10,0,0,0" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Title}"
-                                               FontSize="13"
-                                               TextTrimming="CharacterEllipsis"
-                                               Foreground="{DynamicResource Text.Primary}" />
+                                    <DockPanel>
+                                        <ContentControl DockPanel.Dock="Left" Content="{Binding}"
+                                                        ContentTemplate="{StaticResource SessionKindBadge.Template}"
+                                                        Margin="0,0,6,0" VerticalAlignment="Center" Focusable="False" />
+                                        <TextBlock Text="{Binding TabTitle}"
+                                                   FontSize="13"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource Text.Primary}" />
+                                    </DockPanel>
                                     <TextBlock Text="{Binding TabHostLine}"
                                                FontSize="11"
                                                FontFamily="{StaticResource MonoFont}"

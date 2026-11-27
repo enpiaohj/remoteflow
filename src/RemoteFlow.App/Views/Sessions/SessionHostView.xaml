@@ -110,11 +110,20 @@
                     Background="{DynamicResource Bg.Session}"
                     Visibility="{Binding IsInterrupted, Converter={StaticResource BoolToVisibility}}">
                 <Border Style="{StaticResource Surface.Card}"
-                        MaxWidth="440"
+                        Background="{DynamicResource Bg.Popup}"
+                        MaxWidth="560"
+                        MinWidth="360"
+                        Margin="16"
                         Padding="28,24"
                         VerticalAlignment="Center"
                         HorizontalAlignment="Center">
-                    <StackPanel>
+                    <!-- 三行：标题固定、内容可滚动、按钮固定——内容再长按钮也不会被挤出窗口 -->
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource UiIcon}" Width="18" Height="18" Data="{Binding StateIconKey, Converter={StaticResource UiIconGeometry}}" Fill="{Binding StateBrushKey, Converter={StaticResource KeyToBrush}}" />
                             <TextBlock Text="{Binding StateText}"
@@ -122,6 +131,10 @@
                                        Margin="10,0,0,0"
                                        VerticalAlignment="Center" />
                         </StackPanel>
+                        <ScrollViewer Grid.Row="1"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
                         <TextBlock Text="{Binding Title}"
                                    Style="{StaticResource Text.BodySecondary}"
                                    TextWrapping="Wrap"
@@ -130,6 +143,45 @@
                                    Style="{StaticResource Text.BodySecondary}"
                                    TextWrapping="Wrap"
                                    Margin="0,14,0,0" />
+
+                        <ItemsControl ItemsSource="{Binding CommandHints}" Focusable="False"
+                                      Visibility="{Binding HasCommandHints, Converter={StaticResource BoolToVisibility}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,14,0,0">
+                                        <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Body}" TextWrapping="Wrap" />
+                                        <Border Margin="0,6,0,0" Padding="10,8" CornerRadius="6"
+                                                Background="{DynamicResource Bg.Hover}">
+                                            <DockPanel>
+                                                <Button DockPanel.Dock="Right" Style="{StaticResource Button.Subtle}"
+                                                        Content="复制" Margin="8,0,0,0" VerticalAlignment="Top"
+                                                        AutomationProperties.Name="复制命令"
+                                                        Click="OnCopyCommandClick" />
+                                                <!-- 只读文本框：可以选中部分内容复制 -->
+                                                <TextBox Text="{Binding Command, Mode=OneWay}" IsReadOnly="True"
+                                                         TextWrapping="Wrap" BorderThickness="0" Padding="0"
+                                                         Background="Transparent"
+                                                         Foreground="{DynamicResource Text.Primary}"
+                                                         FontFamily="{StaticResource MonoFont}" FontSize="12" />
+                                            </DockPanel>
+                                        </Border>
+                                        <TextBlock Text="{Binding Note}" Style="{StaticResource Text.Caption}"
+                                                   TextWrapping="Wrap" Margin="0,5,0,0"
+                                                   Visibility="{Binding HasNote, Converter={StaticResource BoolToVisibility}}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Expander Header="系统返回的详细信息" Margin="0,14,0,0"
+                                  Foreground="{DynamicResource Text.Secondary}"
+                                  Visibility="{Binding HasErrorDetail, Converter={StaticResource BoolToVisibility}}">
+                            <TextBox Text="{Binding ErrorDetail, Mode=OneWay}" IsReadOnly="True"
+                                     TextWrapping="Wrap" BorderThickness="0" Padding="0" Margin="0,6,0,0"
+                                     Background="Transparent" Foreground="{DynamicResource Text.Secondary}"
+                                     FontSize="12" />
+                        </Expander>
+
                         <TextBlock Text="{Binding RemotingStatus}"
                                    Style="{StaticResource Text.BodySecondary}"
                                    TextWrapping="Wrap"
@@ -142,7 +194,13 @@
                                 Margin="0,16,0,0"
                                 Command="{Binding EnableRemotingCommand}"
                                 Visibility="{Binding CanEnableRemoting, Converter={StaticResource BoolToVisibility}}" />
-                        <StackPanel Orientation="Horizontal" Margin="0,22,0,0" HorizontalAlignment="Right">
+                        </StackPanel>
+                        </ScrollViewer>
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,22,0,0" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource Button.Subtle}"
+                                    Content="复制全部"
+                                    Margin="0,0,8,0"
+                                    Click="OnCopyDiagnosticsClick" />
                             <Button Style="{StaticResource Button.Subtle}"
                                     Content="退出全屏"
                                     Margin="0,0,8,0"
@@ -156,7 +214,7 @@
                                     Margin="8,0,0,0"
                                     Command="{Binding ReconnectCommand}" />
                         </StackPanel>
-                    </StackPanel>
+                    </Grid>
                 </Border>
             </Border>
         </Grid>

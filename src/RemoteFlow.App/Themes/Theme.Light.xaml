@@ -76,6 +76,7 @@
     <SolidColorBrush x:Key="Protocol.Rdp" Color="#3352CE" />
     <SolidColorBrush x:Key="Protocol.Ssh" Color="#0E7C57" />
     <SolidColorBrush x:Key="Protocol.Vnc" Color="#7A4FC4" />
+    <SolidColorBrush x:Key="Protocol.PowerShell" Color="#A65300" />
 
     <!-- 卡片投影颜色（DropShadowEffect.Color 需要 Color 而非 Brush） -->
     <Color x:Key="Shadow.Cast">#1A1A1A</Color>

@@ -126,6 +126,18 @@
         <Setter Property="SnapsToDevicePixels" Value="False" />
     </Style>
 
+    <!-- 会话标签的类型标记（RDP / SSH / VNC / PS）：同一主机开着几种会话时一眼分清。
+         DataContext = SessionTabViewModel；固定最小宽度、不参与截断。 -->
+    <DataTemplate x:Key="SessionKindBadge.Template">
+        <!-- 实色底：浅色淡底配小字几乎看不出颜色。文字用弹层底色，深浅两套主题下对比都足够 -->
+        <Border CornerRadius="4" MinWidth="28"
+                Background="{Binding KindBrushKey, Converter={StaticResource Controls.KeyToBrush}}">
+            <TextBlock Text="{Binding KindBadge}" FontSize="9.5" FontWeight="Bold"
+                       Margin="4,1,4,2" HorizontalAlignment="Center"
+                       Foreground="{DynamicResource Bg.Popup}" />
+        </Border>
+    </DataTemplate>
+
     <!-- 协议徽章：协议色小方块内放白色独立矢量图标，右侧保留协议缩写。 -->
     <DataTemplate x:Key="ProtocolBadge.Template">
         <Border CornerRadius="8" BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="1"

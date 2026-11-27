@@ -129,6 +129,41 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         ConnectNotice = ((IConnectNoticeSource)sender!).ConnectNotice;
     }
 
+    /// <summary>失败时建议执行的命令（只提供复制，应用不替用户执行）。</summary>
+    public IReadOnlyList<SessionCommandHint> CommandHints
+        => IsInterrupted && Session is ISessionGuidanceSource guidance ? guidance.CommandHints : [];
+
+    public bool HasCommandHints => CommandHints.Count > 0;
+
+    /// <summary>系统返回的原始报错，默认折叠。</summary>
+    public string ErrorDetail
+        => IsInterrupted && Session is ISessionGuidanceSource guidance ? guidance.ErrorDetail ?? string.Empty : string.Empty;
+
+    public bool HasErrorDetail => ErrorDetail.Length > 0;
+
+    /// <summary>「复制全部」的内容：求助或记录时一次带齐。不含账号与密码。</summary>
+    public string BuildDiagnosticText()
+    {
+        var text = new System.Text.StringBuilder()
+            .AppendLine($"{Title}（{ProtocolName}，{Profile.Host}）— {StateText}")
+            .AppendLine(InterruptionMessage);
+        foreach (var hint in CommandHints)
+        {
+            text.AppendLine().AppendLine(hint.Title).AppendLine(hint.Command);
+            if (hint.HasNote)
+            {
+                text.AppendLine(hint.Note);
+            }
+        }
+
+        if (HasErrorDetail)
+        {
+            text.AppendLine().Append("详细信息：").AppendLine(ErrorDetail);
+        }
+
+        return text.ToString().TrimEnd();
+    }
+
     /// <summary>远程启用过程中的进度说明；空表示没有在进行。</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasRemotingStatus))]
@@ -243,6 +278,24 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
 
     /// <summary>本次连接实际使用的账号，仅含用户名 / 域，不持有解析后的凭据。</summary>
     public string AccountDisplay { get; }
+
+    /// <summary>标签上显示的名字。类型由前面的标记区分，不再拼在名字后面（会被截断）。</summary>
+    public string TabTitle => Profile.Name;
+
+    /// <summary>标签最前面的类型标记：短、定宽，名字再长也不会被挤掉。</summary>
+    public string KindBadge => Session.Kind == SessionKind.PowerShell ? "PS" : IsVmwareConsole ? "VM" : Protocol switch
+    {
+        ProtocolType.Rdp => "RDP",
+        ProtocolType.Ssh => "SSH",
+        _ => "VNC"
+    };
+
+    public string KindBrushKey => Session.Kind == SessionKind.PowerShell ? "Protocol.PowerShell" : Protocol switch
+    {
+        ProtocolType.Rdp => "Protocol.Rdp",
+        ProtocolType.Ssh => "Protocol.Ssh",
+        _ => "Protocol.Vnc"
+    };
 
     /// <summary>会话选择器第二行：主机 · 协议。</summary>
     public string TabHostLine => $"{Profile.Host} · {ProtocolName}";
@@ -540,6 +593,10 @@ public sealed partial class SessionTabViewModel : WorkspaceTabViewModel, IDispos
         IsConnected = state == ConnectionState.Connected;
         IsInterrupted = state is ConnectionState.Failed or ConnectionState.Disconnected;
         OnPropertyChanged(nameof(CanEnableRemoting));
+        OnPropertyChanged(nameof(CommandHints));
+        OnPropertyChanged(nameof(HasCommandHints));
+        OnPropertyChanged(nameof(ErrorDetail));
+        OnPropertyChanged(nameof(HasErrorDetail));
 
         switch (state)
         {

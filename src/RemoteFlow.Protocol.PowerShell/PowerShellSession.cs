@@ -24,7 +24,7 @@ namespace RemoteFlow.Protocol.PowerShell;
 /// </list>
 /// </para>
 /// </summary>
-public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSession, IConnectNoticeSource
+public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSession, IConnectNoticeSource, ISessionGuidanceSource
 {
     private static readonly TimeSpan PipeTimeout = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan ResponseTimeout = TimeSpan.FromSeconds(60);
@@ -52,6 +52,20 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
     public string ConnectNotice { get; private set; } = string.Empty;
 
     public event EventHandler? ConnectNoticeChanged;
+
+    public string? ErrorDetail { get; private set; }
+
+    public IReadOnlyList<SessionCommandHint> CommandHints { get; private set; } = [];
+
+    /// <summary>记下处理办法并返回要抛出的异常；两者必须在状态变为失败之前就位。</summary>
+    private ConnectionException Report(PowerShellFailure failure, Exception? inner = null)
+    {
+        ErrorDetail = failure.Detail;
+        CommandHints = failure.Commands;
+        return inner is null
+            ? new ConnectionException(failure.Code, failure.Message)
+            : new ConnectionException(failure.Code, failure.Message, inner);
+    }
 
     /// <summary>协议沿用主机连接的协议（RDP）；界面按终端呈现，由 <see cref="Kind"/> 与终端接口区分。</summary>
     public override ProtocolType Protocol => _request.Profile.Protocol;
@@ -175,15 +189,15 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
             if (_isLocalTarget)
             {
                 // 与远程目标分开：经 WMI「远程启用」不适用于本机。
-                throw new ConnectionException(ConnectionErrorCode.ComponentUnavailable,
-                    $"这是本机，但本机尚未启用 PowerShell 远程（WinRM 端口 {Port} 不通）。"
-                    + "请以管理员身份运行 PowerShell 执行 Enable-PSRemoting，然后重新连接。", ex);
+                throw Report(new PowerShellFailure(ConnectionErrorCode.ComponentUnavailable,
+                    $"这是本机，但本机尚未启用 PowerShell 远程（WinRM 端口 {Port} 不通）。启用后重新连接。",
+                    null, [PowerShellErrorMapper.EnableRemoting("本机")]), ex);
             }
 
-            throw new ConnectionException(ConnectionErrorCode.NetworkUnreachable,
-                $"无法连接到 {Profile.Host} 的 WinRM 端口 {Port}。请确认目标已启用 PowerShell 远程"
-                + "（在目标上以管理员运行 Enable-PSRemoting），且防火墙放行该端口。"
-                + "Windows Server 默认已启用，Windows 10 / 11 默认未启用。", ex);
+            throw Report(new PowerShellFailure(ConnectionErrorCode.NetworkUnreachable,
+                $"无法连接到 {Profile.Host} 的 WinRM 端口 {Port}。请确认目标已启用 PowerShell 远程，且防火墙放行该端口。"
+                + "Windows Server 默认已启用，Windows 10 / 11 默认未启用。",
+                null, [PowerShellErrorMapper.EnableRemoting("目标电脑上")]), ex);
         }
     }
 
@@ -214,6 +228,7 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
         var response = ReadResponseAsync(channel, token);
         await WaitOrProcessExitAsync(response, terminal, ResponseTimeout, token);
         var (connected, errorId, errorCode, detail) = await response;
+        var userName = ComposeUserName(_credential, Profile.Rdp.Domain);
 
         if (!connected)
         {
@@ -230,15 +245,10 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
                 return;
             }
 
-            var (code, message) = PowerShellErrorMapper.Map(errorId, errorCode, detail, Profile.Host);
-            if (_isLocalTarget && code == ConnectionErrorCode.AuthenticationFailed)
-            {
-                message = "连接本机被拒绝。开启 UAC 时，Windows 会限制本地账户这样登录（内置 Administrator 除外）。\n" + message;
-            }
-
-            throw new ConnectionException(code, message);
+            throw Report(PowerShellErrorMapper.Map(errorId, errorCode, detail, Profile.Host, userName, _isLocalTarget));
         }
 
+        _logger.LogInformation("PowerShell 会话 {SessionId} 已连接：{Host}", SessionId, Profile.Host);
         SetState(ConnectionState.Connected);
     }
 
@@ -261,8 +271,8 @@ public sealed partial class PowerShellSession : RemoteSessionBase, ITerminalSess
                     $"没有把 {Profile.Host} 加入本机的信任列表（管理员确认框被取消），无法用 PowerShell 连接它。"
                     + "点“重新连接”可以再次确认。");
             case HostTrustOutcome.Failed:
-                var (code, message) = PowerShellErrorMapper.Map("ServerNotTrusted", 0, "自动添加没有成功", Profile.Host);
-                throw new ConnectionException(code, message);
+                var failure = PowerShellErrorMapper.Map("ServerNotTrusted", 0, string.Empty, Profile.Host);
+                throw Report(failure with { Message = "自动加入信任列表没有成功。\n\n" + failure.Message });
         }
 
         SetNotice(string.Empty);
