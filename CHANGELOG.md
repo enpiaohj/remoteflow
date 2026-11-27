@@ -35,6 +35,24 @@
 - 用 VNC 连接 macOS 时在内网千兆下仍感觉较慢，本版未做改动。
 - 沿用此前版本：远程关机 / 重启未在真实远程设备执行；macOS 端未构建、未验证（本版改动了两端共享层）；Windows 产物未签名。
 
+### Verification
+- `dotnet build RemoteFlow.slnx -c Release`：通过，0 警告、0 错误。
+- Release 测试：Core 151 项通过；Integration 705 项通过、5 项外部云服务测试跳过；Windows 339 项通过、7 项需本机 WinRM 的测试跳过。合计 1,195 项通过，0 失败。
+- PowerShell 本机回环端到端 13 项（含上述跳过的 7 项）另行启用后全部通过，测试后无残留远端会话。
+- 真实环境（开发构建阶段）：Windows Server 账号密码登录；两台真实服务器走通「管理员确认 → 自动信任 → 重连」。
+- `dotnet publish src/RemoteFlow.App -c Release -r win-x64`：通过。最终正式 EXE：隔离数据目录启动，主界面正常、版本显示 v0.32.0、可进入设置、退出 code 0，未残留 SQLite WAL / SHM 文件；PowerShell 会话能启动并走到账号验证（用不存在的账号，按预期认证失败）。
+- 升级 / 回退（隔离数据）：v0.31.0 建库 → v0.32.0 打开 → 再用 v0.31.0 打开，三次均正常退出且无错误日志，连接与历史数据保留，数据库版本号保持 8。
+- 未执行：远程启用的实际启用步骤、深色主题与小窗口下的界面走查、复制按钮实点、macOS 构建。
+
+### Artifacts
+- `RemoteFlow-v0.32.0-win-x64.exe`
+  - Size：75,430,875 bytes
+  - SHA-256：`91550181C823285A2D207B5859555F15669A115FA429CC03A7E10753FAE229D0`
+- `RemoteFlow-v0.32.0-win-x64.zip`
+  - Size：69,831,764 bytes
+  - SHA-256：`7EC54DA15EABD7A73E44FC0654EAFE2B42E62B9F3A2126223D1BDAF729EC0579`
+- `RemoteFlow-v0.32.0-source.zip`：由 Tag `v0.32.0` 经 `git archive` 导出的源码压缩包（SHA-256 见 GitHub Release 页面）。
+
 ---
 
 ## [0.31.0] — 2026-11-26
