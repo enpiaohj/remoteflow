@@ -34,7 +34,10 @@ public enum ConnectionSortMode
 {
     Name,
     LastConnected,
-    Protocol
+    Protocol,
+
+    /// <summary>在线在前（探测中 / 未知居中，离线在后），同状态按名称。</summary>
+    Status
 }
 
 /// <summary>协议筛选选项。<see cref="All"/> 表示不筛选。</summary>
@@ -722,7 +725,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         [ProtocolFilterOption.All, ProtocolFilterOption.Rdp, ProtocolFilterOption.Ssh, ProtocolFilterOption.Vnc];
 
     public IReadOnlyList<ConnectionSortMode> SortModeOptions { get; } =
-        [ConnectionSortMode.Name, ConnectionSortMode.LastConnected, ConnectionSortMode.Protocol];
+        [ConnectionSortMode.Name, ConnectionSortMode.LastConnected, ConnectionSortMode.Protocol, ConnectionSortMode.Status];
 
     /// <summary>「最近连接」视图的时间范围选项（下拉胶囊用）。</summary>
     public IReadOnlyList<RecentRange> RecentRangeOptions { get; } =
@@ -914,6 +917,7 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
         OnPropertyChanged(nameof(NameHeaderText));
         OnPropertyChanged(nameof(ProtocolHeaderText));
         OnPropertyChanged(nameof(RecentHeaderText));
+        OnPropertyChanged(nameof(StatusHeaderText));
         ApplyFilter();
     }
 
@@ -938,6 +942,16 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
     public string NameHeaderText => SortMode == ConnectionSortMode.Name ? "名称 ↑" : "名称";
 
     public string ProtocolHeaderText => SortMode == ConnectionSortMode.Protocol ? "协议 ↑" : "协议";
+
+    public string StatusHeaderText => SortMode == ConnectionSortMode.Status ? "状态 ↑" : "状态";
+
+    /// <summary>状态排序的先后：已有会话与在线在前，离线在后。</summary>
+    internal static int StatusRank(ConnectionItemViewModel item) => item.HasActiveSession ? 0 : item.Presence switch
+    {
+        PresenceState.Online => 1,
+        PresenceState.Probing or PresenceState.Unknown => 2,
+        _ => 3
+    };
 
     public string RecentHeaderText => SortMode == ConnectionSortMode.LastConnected ? "最近连接 ↓" : "最近连接";
 
@@ -1259,6 +1273,8 @@ public sealed partial class ConnectionsPageViewModel : ObservableObject
                         .OrderByDescending(i => i.LastConnectedAt ?? DateTimeOffset.MinValue),
                     ConnectionSortMode.Protocol => source
                         .OrderBy(i => i.Profile.Protocol).ThenBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase),
+                    ConnectionSortMode.Status => source
+                        .OrderBy(i => StatusRank(i)).ThenBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase),
                     _ => source.OrderBy(i => i.Name, StringComparer.CurrentCultureIgnoreCase)
                 };
         }

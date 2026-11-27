@@ -5,6 +5,7 @@
              xmlns:conv="clr-namespace:RemoteFlow.App.Converters"
              xmlns:pages="clr-namespace:RemoteFlow.App.Views.Pages"
              xmlns:vm="clr-namespace:RemoteFlow.Presentation.ViewModels;assembly=RemoteFlow.Presentation"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
              d:DataContext="{d:DesignInstance Type=vm:ConnectionsPageViewModel}"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              mc:Ignorable="d"
@@ -14,6 +15,18 @@
              KeyDown="OnPageKeyDown">
 
     <UserControl.Resources>
+        <!-- 自适应列：列表变窄时按优先级收起（标签 → 分组 → 最近连接 → 地址 → 协议），名称、状态、操作始终保留。
+             值由代码后置 ApplyColumnLayout 按列表宽度改写；列内元素收起后 Auto 列宽归零。 -->
+        <Visibility x:Key="ConnCol.ProtoVis">Visible</Visibility>
+        <Visibility x:Key="ConnCol.HostVis">Visible</Visibility>
+        <Visibility x:Key="ConnCol.RecentVis">Visible</Visibility>
+        <Visibility x:Key="ConnCol.GroupVis">Visible</Visibility>
+        <Visibility x:Key="ConnCol.TagsVis">Visible</Visibility>
+        <sys:Double x:Key="ConnCol.ProtoMin">42</sys:Double>
+        <sys:Double x:Key="ConnCol.HostMin">100</sys:Double>
+        <sys:Double x:Key="ConnCol.RecentMin">70</sys:Double>
+        <sys:Double x:Key="ConnCol.GroupMin">72</sys:Double>
+        <sys:Double x:Key="ConnCol.TagsMin">48</sys:Double>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
         <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
@@ -134,12 +147,12 @@
                     <!-- 首列已并入名称列（勾选框插在名称列内部，凭据页同款），此列保留为空 → 0 宽 -->
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" MinWidth="150" MaxWidth="440" SharedSizeGroup="ColName" />
-                    <ColumnDefinition Width="Auto" MinWidth="100" SharedSizeGroup="ColHost" />
-                    <ColumnDefinition Width="Auto" MinWidth="42" SharedSizeGroup="ColProto" />
-                    <ColumnDefinition Width="Auto" MinWidth="48" SharedSizeGroup="ColTags" />
-                    <ColumnDefinition Width="Auto" MinWidth="72" MaxWidth="160" SharedSizeGroup="ColGroup" />
+                    <ColumnDefinition Width="Auto" MinWidth="{DynamicResource ConnCol.HostMin}" SharedSizeGroup="ColHost" />
+                    <ColumnDefinition Width="Auto" MinWidth="{DynamicResource ConnCol.ProtoMin}" SharedSizeGroup="ColProto" />
+                    <ColumnDefinition Width="Auto" MinWidth="{DynamicResource ConnCol.TagsMin}" SharedSizeGroup="ColTags" />
+                    <ColumnDefinition Width="Auto" MinWidth="{DynamicResource ConnCol.GroupMin}" MaxWidth="160" SharedSizeGroup="ColGroup" />
                     <ColumnDefinition Width="Auto" MinWidth="58" SharedSizeGroup="ColPresence" />
-                    <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="ColRecent" />
+                    <ColumnDefinition Width="Auto" MinWidth="{DynamicResource ConnCol.RecentMin}" SharedSizeGroup="ColRecent" />
                     <ColumnDefinition Width="*" MinWidth="0" />
                     <ColumnDefinition Width="26" />
                     <ColumnDefinition Width="26" />
@@ -189,15 +202,15 @@
                                Margin="9,0,7,0" MaxWidth="210" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
-                <TextBlock Grid.Column="2" Text="{Binding HostDisplay}" Style="{StaticResource Text.BodySecondary}"
+                <TextBlock Grid.Column="2" Visibility="{DynamicResource ConnCol.HostVis}" Text="{Binding HostDisplay}" Style="{StaticResource Text.BodySecondary}"
                            FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="28,0,0,0"
                            MaxWidth="170" TextTrimming="CharacterEllipsis" />
                 <!-- 统一协议徽章：协议色图标 + 协议缩写。 -->
-                <ContentControl Grid.Column="3" Content="{Binding}"
+                <ContentControl Grid.Column="3" Content="{Binding}" Visibility="{DynamicResource ConnCol.ProtoVis}"
                                 ContentTemplate="{StaticResource ProtocolBadge.Template}"
                                 VerticalAlignment="Center" HorizontalAlignment="Left" Margin="28,0,0,0" />
 
-                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="28,0,0,0">
+                <StackPanel Grid.Column="4" Visibility="{DynamicResource ConnCol.TagsVis}" Orientation="Horizontal" VerticalAlignment="Center" Margin="28,0,0,0">
                     <ItemsControl ItemsSource="{Binding Tags}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -224,7 +237,7 @@
                 </StackPanel>
 
                 <!-- 分组：次级灰文字，超长截断，tooltip 给出完整分组路径 -->
-                <TextBlock Grid.Column="5" Text="{Binding GroupName}" ToolTip="{Binding GroupPath}"
+                <TextBlock Grid.Column="5" Visibility="{DynamicResource ConnCol.GroupVis}" Text="{Binding GroupName}" ToolTip="{Binding GroupPath}"
                            Style="{StaticResource Text.BodySecondary}" FontSize="12" Margin="28,0,0,0"
                            VerticalAlignment="Center" MaxWidth="140" TextTrimming="CharacterEllipsis" />
 
@@ -256,7 +269,7 @@
 
                 <!-- 「最近连接」列：短时间格式（09-23 15:46）。连接状态已由「在线状态」列表达，
                      此处不再重复显示「已连接」，避免两列相邻出现双份文案。 -->
-                <StackPanel Grid.Column="7" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                <StackPanel Grid.Column="7" Visibility="{DynamicResource ConnCol.RecentVis}" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
                     <TextBlock Text="{Binding LastConnectedCompact}" Style="{StaticResource Text.Caption}" />
                 </StackPanel>
 
@@ -505,6 +518,9 @@
                                             <DataTrigger Binding="{Binding}" Value="Protocol">
                                                 <Setter Property="Text" Value="协议" />
                                             </DataTrigger>
+                                            <DataTrigger Binding="{Binding}" Value="Status">
+                                                <Setter Property="Text" Value="状态" />
+                                            </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </TextBlock.Style>
@@ -660,12 +676,12 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" MinWidth="150" MaxWidth="440" SharedSizeGroup="ColName" />
-                                <ColumnDefinition Width="Auto" MinWidth="100" SharedSizeGroup="ColHost" />
-                                <ColumnDefinition Width="Auto" MinWidth="42" SharedSizeGroup="ColProto" />
-                                <ColumnDefinition Width="Auto" MinWidth="48" SharedSizeGroup="ColTags" />
-                                <ColumnDefinition Width="Auto" MinWidth="72" MaxWidth="160" SharedSizeGroup="ColGroup" />
+                                <ColumnDefinition Width="Auto" MinWidth="{DynamicResource ConnCol.HostMin}" SharedSizeGroup="ColHost" />
+                                <ColumnDefinition Width="Auto" MinWidth="{DynamicResource ConnCol.ProtoMin}" SharedSizeGroup="ColProto" />
+                                <ColumnDefinition Width="Auto" MinWidth="{DynamicResource ConnCol.TagsMin}" SharedSizeGroup="ColTags" />
+                                <ColumnDefinition Width="Auto" MinWidth="{DynamicResource ConnCol.GroupMin}" MaxWidth="160" SharedSizeGroup="ColGroup" />
                                 <ColumnDefinition Width="Auto" MinWidth="58" SharedSizeGroup="ColPresence" />
-                                <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="ColRecent" />
+                                <ColumnDefinition Width="Auto" MinWidth="{DynamicResource ConnCol.RecentMin}" SharedSizeGroup="ColRecent" />
                                 <ColumnDefinition Width="*" MinWidth="8" />
                                 <ColumnDefinition Width="26" />
                                 <ColumnDefinition Width="26" />
@@ -705,14 +721,16 @@
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
-                            <TextBlock Grid.Column="2" Text="IP / 主机" Style="{StaticResource Text.Label}" Margin="32,0,0,0" />
-                            <TextBlock Grid.Column="3" Text="{Binding ProtocolHeaderText}" Style="{StaticResource Text.Label}" Margin="30,0,0,0"
+                            <TextBlock Grid.Column="2" Visibility="{DynamicResource ConnCol.HostVis}" Text="IP / 主机" Style="{StaticResource Text.Label}" Margin="32,0,0,0" />
+                            <TextBlock Grid.Column="3" Visibility="{DynamicResource ConnCol.ProtoVis}" Text="{Binding ProtocolHeaderText}" Style="{StaticResource Text.Label}" Margin="30,0,0,0"
                                        Background="Transparent" Cursor="Hand" ToolTip="按协议排序" Tag="Protocol"
                                        MouseLeftButtonUp="OnSortHeaderClick" />
-                            <TextBlock Grid.Column="4" Text="标签" Style="{StaticResource Text.Label}" Margin="30,0,0,0" />
-                            <TextBlock Grid.Column="5" Text="分组" Style="{StaticResource Text.Label}" Margin="28,0,0,0" />
-                            <TextBlock Grid.Column="6" Text="状态" Style="{StaticResource Text.Label}" Margin="28,0,28,0" />
-                            <TextBlock Grid.Column="7" Text="{Binding RecentHeaderText}" Style="{StaticResource Text.Label}" Margin="0,0,10,0"
+                            <TextBlock Grid.Column="4" Visibility="{DynamicResource ConnCol.TagsVis}" Text="标签" Style="{StaticResource Text.Label}" Margin="30,0,0,0" />
+                            <TextBlock Grid.Column="5" Visibility="{DynamicResource ConnCol.GroupVis}" Text="分组" Style="{StaticResource Text.Label}" Margin="28,0,0,0" />
+                            <TextBlock Grid.Column="6" Text="{Binding StatusHeaderText}" Style="{StaticResource Text.Label}" Margin="28,0,28,0"
+                                       Background="Transparent" Cursor="Hand" ToolTip="按状态排序（在线在前）" Tag="Status"
+                                       MouseLeftButtonUp="OnSortHeaderClick" />
+                            <TextBlock Grid.Column="7" Visibility="{DynamicResource ConnCol.RecentVis}" Text="{Binding RecentHeaderText}" Style="{StaticResource Text.Label}" Margin="0,0,10,0"
                                        Background="Transparent" Cursor="Hand" ToolTip="按最近连接排序" Tag="LastConnected"
                                        MouseLeftButtonUp="OnSortHeaderClick" />
                             <TextBlock Grid.Column="9" Grid.ColumnSpan="4" Text="操作" HorizontalAlignment="Center" Style="{StaticResource Text.Label}" />
@@ -825,6 +843,7 @@
                     <!-- ── 连接列表（恒扁平；分组维度在左树）──────────────── -->
                     <Grid Grid.Row="2" Background="Transparent" ContextMenu="{StaticResource ConnectionsBlankMenu}">
                         <ListBox x:Name="ConnectionList"
+                                 SizeChanged="OnConnectionListSizeChanged"
                                  ItemContainerStyle="{StaticResource ConnectionRow}"
                                  ItemTemplate="{StaticResource ConnRowTemplate}"
                                  SelectedItem="{Binding SelectedItem}"

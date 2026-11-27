@@ -49,15 +49,49 @@ public partial class ConnectionsPage : UserControl
             ConnectionList.ItemsSource = _connectionView;
             vm.PropertyChanged += OnVmPropertyChanged;
 
-            // 工作台列表默认每页 20 条（不分页是 VM 的默认值，供没有分页条的 macOS 端使用）。
-            if (vm.PageSize == 0)
-            {
-                vm.PageSize = DefaultPageSize;
-            }
+            // 工作台列表不分页（VM 默认 PageSize = 0）：设备靠滚动与搜索查找，翻页会打断查找、丢失滚动位置。
         }
     }
 
-    private const int DefaultPageSize = 20;
+    // ── 自适应列 ────────────────────────────────────────────────
+    // 表格列宽由内容决定，列表变窄时右侧的状态与操作会被挤出可视区。按列表实际宽度决定显示哪些列：
+    // 名称、状态、操作始终保留；其余按优先级（协议 → 地址 → 最近连接 → 分组 → 标签）依次加入。
+    // 阈值按各列在常见内容下的宽度（含 28 的列间距）累加估算。
+
+    /// <summary>(资源键前缀, 显示该列需要的最小列表宽度, 列最小宽度)</summary>
+    private static readonly (string Key, double Threshold, double MinWidth)[] AdaptiveColumns =
+    [
+        ("Proto", 600, 42),
+        ("Host", 800, 100),
+        ("Recent", 890, 70),
+        ("Group", 1060, 72),
+        ("Tags", 1260, 48),
+    ];
+
+    private void OnConnectionListSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.WidthChanged)
+        {
+            ApplyColumnLayout(e.NewSize.Width);
+        }
+    }
+
+    internal static IReadOnlyList<string> VisibleAdaptiveColumns(double listWidth)
+        => AdaptiveColumns.Where(c => listWidth >= c.Threshold).Select(c => c.Key).ToList();
+
+    private void ApplyColumnLayout(double listWidth)
+    {
+        foreach (var (key, threshold, minWidth) in AdaptiveColumns)
+        {
+            var show = listWidth >= threshold;
+            var visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            if (!Equals(Resources[$"ConnCol.{key}Vis"], visibility))
+            {
+                Resources[$"ConnCol.{key}Vis"] = visibility;
+                Resources[$"ConnCol.{key}Min"] = show ? minWidth : 0d;
+            }
+        }
+    }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
