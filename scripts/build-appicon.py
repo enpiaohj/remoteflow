@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""build-appicon.py —— RemoteFlow 程序图标（「玻璃双屏」）统一生成器。
+"""build-appicon.py —— RemoteFlow 程序图标（「立体双箭头」）统一生成器。
 
 一次生成 Windows 与 macOS 两端的全部图标资源，两端共用同一套图形：
   * Windows：src/RemoteFlow.App/Assets/RemoteFlow.ico（16/24/32/48/64/128/256）
@@ -7,8 +7,8 @@
              src/RemoteFlow.App/Assets/RemoteFlow-logo-small.png（64，标题栏 / 侧栏 / 设置页小 LOGO，简化字形）
   * macOS  ：src/RemoteFlow.App.Mac/Resources/AppIcon.iconset/*.png + AppIcon.icns
 
-设计源是矢量文件 scripts/appicon/AppIcon.xaml（大尺寸：蓝 → 靛立体底座、半透明后屏、
-白色机身深色前屏、屏内青色流光连接两个端点）与 AppIcon-small.xaml（16 / 24 / 32 px 的简化字形）。
+设计源是矢量文件 scripts/appicon/AppIcon.xaml（大尺寸：带厚度的蓝 → 靛底座，白色挤出前箭头 +
+青蓝玻璃后箭头，表达「连上、流动」）与 AppIcon-small.xaml（16 / 24 / 32 px 的加粗简化字形）。
 各尺寸由 scripts/render-appicon.ps1 用 WPF 直接从矢量渲染（每个尺寸单独渲染，不是缩放），
 本脚本负责打包与校验。
 

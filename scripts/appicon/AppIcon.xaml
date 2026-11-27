@@ -1,69 +1,39 @@
-<!-- RemoteFlow 程序图标（玻璃双屏）。1024 设计网格，圆角底座 824 居中（四周留白符合 macOS 图标规范）。
-     由 scripts/render-appicon.ps1 渲染为各尺寸 PNG，再由 scripts/build-appicon.py 打包；16 / 24 / 32 px 改用 AppIcon-small.xaml。 -->
-<!-- 圆角方块底座：蓝 → 靛立体渐变 + 顶部受光 + 底部压暗 + 内描边 -->
+<!-- RemoteFlow 程序图标「立体双箭头」。1024 设计网格，底座 824 居中（四周留白符合 macOS 图标规范）。
+     前箭头白色挤出 + 淡青辉光，后箭头青蓝玻璃作流动回声；底座有厚度侧面、顶边高光与弧形反光。
+     本文件由设计脚本展开生成（挤出侧面是逐层下移的同一路径）；由 scripts/render-appicon.ps1 渲染为各尺寸。 -->
 <Grid Width="1024" Height="1024" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
-  <Border Width="824" Height="824" CornerRadius="186" Margin="0,26,0,0">
-    <Border.Background><SolidColorBrush Color="#1A2370" /></Border.Background>
-    <Border.Effect><BlurEffect Radius="46" /></Border.Effect>
-    <Border.Opacity>0.55</Border.Opacity>
+  <!-- 落在桌面上的柔和阴影 -->
+  <Border Width="800" Height="800" CornerRadius="180" Margin="0,70,0,0" Background="#0E1550" Opacity="0.55">
+    <Border.Effect><BlurEffect Radius="60" /></Border.Effect>
   </Border>
-  <Border Width="824" Height="824" CornerRadius="186">
+  <!-- 底座侧面（厚度） -->
+  <Border Width="824" Height="824" CornerRadius="186" Margin="0,34,0,0">
+    <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#FF1B2384" Offset="0" /><GradientStop Color="#FF121864" Offset="1" /></LinearGradientBrush></Border.Background>
+  </Border>
+  <!-- 底座正面 -->
+  <Border Width="824" Height="824" CornerRadius="186" Margin="0,-10,0,0">
     <Border.Background>
-      <LinearGradientBrush StartPoint="0.15,0" EndPoint="0.85,1">
-        <GradientStop Color="#6F98FF" Offset="0" />
-        <GradientStop Color="#3E62F0" Offset="0.45" />
-        <GradientStop Color="#2B36B8" Offset="1" />
+      <LinearGradientBrush StartPoint="0.2,0" EndPoint="0.8,1">
+        <GradientStop Color="#FF7AA2FF" Offset="0" />
+        <GradientStop Color="#FF4468F2" Offset="0.42" />
+        <GradientStop Color="#FF2A33B0" Offset="1" />
       </LinearGradientBrush>
     </Border.Background>
     <Grid>
       <Grid.Clip><RectangleGeometry Rect="0,0,824,824" RadiusX="186" RadiusY="186" /></Grid.Clip>
-      <Ellipse Width="900" Height="700" Margin="-360,-420,0,0" HorizontalAlignment="Left" VerticalAlignment="Top">
-        <Ellipse.Fill><RadialGradientBrush><GradientStop Color="#66FFFFFF" Offset="0" /><GradientStop Color="#00FFFFFF" Offset="1" /></RadialGradientBrush></Ellipse.Fill>
-      </Ellipse>
-      <Rectangle VerticalAlignment="Bottom" Height="360">
-        <Rectangle.Fill><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#00101A60" Offset="0" /><GradientStop Color="#55101A60" Offset="1" /></LinearGradientBrush></Rectangle.Fill>
+      <!-- 弧形反光：上半部一道柔和的亮面 -->
+      <Path Data="M-40,-40 H 864 V 300 C 600,420 260,420 -40,330 Z" Opacity="0.9">
+        <Path.Fill><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#40FFFFFF" Offset="0" /><GradientStop Color="#08FFFFFF" Offset="1" /></LinearGradientBrush></Path.Fill>
+      </Path>
+      <!-- 底部压暗，增加体积感 -->
+      <Rectangle VerticalAlignment="Bottom" Height="420">
+        <Rectangle.Fill><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#000A1060" Offset="0" /><GradientStop Color="#660A1060" Offset="1" /></LinearGradientBrush></Rectangle.Fill>
       </Rectangle>
-      <Canvas Width="824" Height="824">
-        <!-- 后屏：半透明玻璃 -->
-        <Border Canvas.Left="150" Canvas.Top="150" Width="420" Height="300" CornerRadius="54" BorderThickness="4" BorderBrush="#66FFFFFF">
-          <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#55FFFFFF" Offset="0" /><GradientStop Color="#1AFFFFFF" Offset="1" /></LinearGradientBrush></Border.Background>
-        </Border>
-        <!-- 前屏机身投影 -->
-        <Border Canvas.Left="262" Canvas.Top="300" Width="430" Height="312" CornerRadius="56" Background="#0B1450" Opacity="0.55">
-          <Border.Effect><BlurEffect Radius="40" /></Border.Effect>
-        </Border>
-        <!-- 前屏：白色机身 -->
-        <Border Canvas.Left="252" Canvas.Top="270" Width="430" Height="312" CornerRadius="56">
-          <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#FFFFFFFF" Offset="0" /><GradientStop Color="#FFDCE6FF" Offset="1" /></LinearGradientBrush></Border.Background>
-        </Border>
-        <!-- 屏幕 -->
-        <Border Canvas.Left="282" Canvas.Top="300" Width="370" Height="252" CornerRadius="34" ClipToBounds="True">
-          <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#FF1E2C8E" Offset="0" /><GradientStop Color="#FF2B49D8" Offset="1" /></LinearGradientBrush></Border.Background>
-          <Canvas>
-            <Path Data="M0,0 L230,0 L110,252 L0,252 Z" Fill="#14FFFFFF" />
-          </Canvas>
-        </Border>
-        <!-- 流光：带辉光的曲线连接两个端点 -->
-        <Path Data="M335,505 C 420,505 420,360 520,360 S 600,360 600,360" StrokeThickness="44" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.55">
-          <Path.Stroke><SolidColorBrush Color="#7FE8FF" /></Path.Stroke>
-          <Path.Effect><BlurEffect Radius="26" /></Path.Effect>
-        </Path>
-        <Path Data="M335,505 C 420,505 420,360 520,360 S 600,360 600,360" StrokeThickness="26" StrokeStartLineCap="Round" StrokeEndLineCap="Round">
-          <Path.Stroke><LinearGradientBrush StartPoint="0,1" EndPoint="1,0"><GradientStop Color="#FF5EE3FF" Offset="0" /><GradientStop Color="#FFFFFFFF" Offset="1" /></LinearGradientBrush></Path.Stroke>
-        </Path>
-        <Ellipse Canvas.Left="309" Canvas.Top="479" Width="52" Height="52" Fill="#FF5EE3FF" Stroke="#FFFFFFFF" StrokeThickness="8" />
-        <Ellipse Canvas.Left="572" Canvas.Top="332" Width="56" Height="56" Fill="#FFFFFFFF" />
-        <!-- 支架与底座 -->
-        <Path Data="M432,582 L502,582 L516,640 L418,640 Z"><Path.Fill><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#FFC9D6FF" Offset="0" /><GradientStop Color="#FFF2F6FF" Offset="1" /></LinearGradientBrush></Path.Fill></Path>
-        <Border Canvas.Left="362" Canvas.Top="632" Width="210" Height="30" CornerRadius="15">
-          <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#FFFFFFFF" Offset="0" /><GradientStop Color="#FFD3DEFF" Offset="1" /></LinearGradientBrush></Border.Background>
-        </Border>
-      </Canvas>
+      <Canvas Width="824" Height="824"><Path Data="M430,246 L 586,402 L 430,558" Stroke="#9970E6FF" StrokeThickness="150" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.55"><Path.Effect><BlurEffect Radius="46" /></Path.Effect></Path><Path Data="M232,246 L 388,402 L 232,558" StrokeThickness="104" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#660A1050" Canvas.Top="42"><Path.Effect><BlurEffect Radius="38" /></Path.Effect></Path><Path Data="M232,246 L 388,402 L 232,558" StrokeThickness="104" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#CC2A78C8" Canvas.Top="16" /><Path Data="M232,246 L 388,402 L 232,558" StrokeThickness="104" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#CC2A78C8" Canvas.Top="14" /><Path Data="M232,246 L 388,402 L 232,558" StrokeThickness="104" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#CC2A78C8" Canvas.Top="12" /><Path Data="M232,246 L 388,402 L 232,558" StrokeThickness="104" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#CC2A78C8" Canvas.Top="10" /><Path Data="M232,246 L 388,402 L 232,558" StrokeThickness="104" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#CC2A78C8" Canvas.Top="8" /><Path Data="M232,246 L 388,402 L 232,558" StrokeThickness="104" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#CC2A78C8" Canvas.Top="6" /><Path Data="M232,246 L 388,402 L 232,558" StrokeThickness="104" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#CC2A78C8" Canvas.Top="4" /><Path Data="M232,246 L 388,402 L 232,558" StrokeThickness="104" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#CC2A78C8" Canvas.Top="2" /><Path Data="M232,246 L 388,402 L 232,558" StrokeThickness="104" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"><Path.Stroke><LinearGradientBrush StartPoint="0,0" EndPoint="0,1" MappingMode="RelativeToBoundingBox"><GradientStop Color="#E6C4F4FF" Offset="0" /><GradientStop Color="#CC56C8F2" Offset="1" /></LinearGradientBrush></Path.Stroke></Path><Path Data="M232,246 L 388,402 L 232,558" StrokeThickness="35" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#40FFFFFF" Canvas.Top="-23" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#660A1050" Canvas.Top="52"><Path.Effect><BlurEffect Radius="38" /></Path.Effect></Path><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#FF8197DE" Canvas.Top="26" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#FF8197DE" Canvas.Top="24" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#FF8197DE" Canvas.Top="22" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#FF8197DE" Canvas.Top="20" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#FF8197DE" Canvas.Top="18" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#FF8197DE" Canvas.Top="16" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#FF8197DE" Canvas.Top="14" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#FF8197DE" Canvas.Top="12" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#FF8197DE" Canvas.Top="10" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#FF8197DE" Canvas.Top="8" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#FF8197DE" Canvas.Top="6" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#FF8197DE" Canvas.Top="4" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#FF8197DE" Canvas.Top="2" /><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="112" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"><Path.Stroke><LinearGradientBrush StartPoint="0,0" EndPoint="0,1" MappingMode="RelativeToBoundingBox"><GradientStop Color="#FFFFFFFF" Offset="0" /><GradientStop Color="#FFD4DEFF" Offset="1" /></LinearGradientBrush></Path.Stroke></Path><Path Data="M430,246 L 586,402 L 430,558" StrokeThickness="29" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Stroke="#55FFFFFF" Canvas.Top="-25" /></Canvas>
     </Grid>
   </Border>
-  <Border Width="824" Height="824" CornerRadius="186" BorderThickness="3">
-    <Border.BorderBrush>
-      <LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#80FFFFFF" Offset="0" /><GradientStop Color="#10FFFFFF" Offset="0.5" /><GradientStop Color="#30FFFFFF" Offset="1" /></LinearGradientBrush>
-    </Border.BorderBrush>
+  <!-- 顶边高光 + 底边暗线：像倒角 -->
+  <Border Width="824" Height="824" CornerRadius="186" Margin="0,-10,0,0" BorderThickness="6">
+    <Border.BorderBrush><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#B0FFFFFF" Offset="0" /><GradientStop Color="#00FFFFFF" Offset="0.35" /><GradientStop Color="#00000000" Offset="0.7" /><GradientStop Color="#40000A40" Offset="1" /></LinearGradientBrush></Border.BorderBrush>
   </Border>
 </Grid>

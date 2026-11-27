@@ -1,24 +1,17 @@
 <!-- RemoteFlow 程序图标 · 小尺寸（16 / 24 / 32 px）。32 设计网格、满幅底座：
-     去掉后屏、高光与投影，屏框与流线加粗，保证小尺寸下轮廓清楚。由 scripts/render-appicon.ps1 渲染。 -->
+     去掉挤出、辉光与反光，双箭头加粗，后箭头用青色。由 scripts/render-appicon.ps1 渲染。 -->
 <Canvas Width="32" Height="32" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
   <Border Width="30" Height="30" Canvas.Left="1" Canvas.Top="1" CornerRadius="7">
     <Border.Background>
-      <LinearGradientBrush StartPoint="0.15,0" EndPoint="0.85,1">
-        <GradientStop Color="#6F98FF" Offset="0" />
-        <GradientStop Color="#3E62F0" Offset="0.45" />
-        <GradientStop Color="#2B36B8" Offset="1" />
+      <LinearGradientBrush StartPoint="0.2,0" EndPoint="0.8,1">
+        <GradientStop Color="#FF7AA2FF" Offset="0" />
+        <GradientStop Color="#FF4468F2" Offset="0.42" />
+        <GradientStop Color="#FF2A33B0" Offset="1" />
       </LinearGradientBrush>
     </Border.Background>
   </Border>
-  <!-- 屏幕：白框 + 深色屏 -->
-  <Border Canvas.Left="5.5" Canvas.Top="7" Width="21" Height="15" CornerRadius="3" Background="#FFFFFFFF" />
-  <Border Canvas.Left="7.5" Canvas.Top="9" Width="17" Height="11" CornerRadius="1.6" Background="#FF2338B8" />
-  <!-- 流线与两个端点 -->
-  <Path Data="M10.5,17.5 C 14,17.5 14,11.5 18,11.5 L 21.5,11.5" Stroke="#FF6FE6FF" StrokeThickness="2.2"
-        StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-  <Ellipse Canvas.Left="8.9" Canvas.Top="15.9" Width="3.2" Height="3.2" Fill="#FF6FE6FF" />
-  <Ellipse Canvas.Left="20.1" Canvas.Top="10" Width="3.2" Height="3.2" Fill="#FFFFFFFF" />
-  <!-- 支架与底座 -->
-  <Rectangle Canvas.Left="14.5" Canvas.Top="22" Width="3" Height="2.2" Fill="#FFE3EAFF" />
-  <Border Canvas.Left="11" Canvas.Top="24" Width="10" Height="2" CornerRadius="1" Background="#FFFFFFFF" />
+  <Path Data="M8.6,9.4 L 14.2,15.5 L 8.6,21.6" Stroke="#FF7FE4FF" StrokeThickness="4"
+        StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+  <Path Data="M16.2,9.4 L 21.8,15.5 L 16.2,21.6" Stroke="#FFFFFFFF" StrokeThickness="4.2"
+        StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
 </Canvas>

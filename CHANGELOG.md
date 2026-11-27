@@ -32,7 +32,7 @@
 - 帮助页更新：「连接工作台」名称、五类凭据、PowerShell 会话与信任列表、类型标记。
 
 ### Added
-- **新程序图标「玻璃双屏」**：蓝 → 靛立体底座、半透明后屏、白色机身深色前屏，屏内一道青色流光连接两个端点。各尺寸都从矢量直接渲染，16 / 24 / 32 px 用单独加粗的简化字形；Windows 与 macOS 共用同一套图形。设计源改为 `scripts/appicon/*.xaml`，由 `scripts/render-appicon.ps1` 渲染、`scripts/build-appicon.py` 打包（生成图标现在需要在 Windows 上进行）。
+- **新程序图标「立体双箭头」**：带厚度侧面、顶边高光与弧形反光的蓝 → 靛底座；白色挤出前箭头配淡青辉光，青蓝玻璃后箭头作流动回声，表达「连上、流动」。各尺寸都从矢量直接渲染，16 / 24 / 32 px 用单独加粗的简化字形；Windows 与 macOS 共用同一套图形。设计源改为 `scripts/appicon/*.xaml`，由 `scripts/render-appicon.ps1` 渲染、`scripts/build-appicon.py` 打包（生成图标现在需要在 Windows 上进行）。
 - **设置 → 安全「PowerShell 信任的主机」**：查看本机 TrustedHosts，逐项移出（需 Windows 管理员确认）。
 
 ### Fixed
